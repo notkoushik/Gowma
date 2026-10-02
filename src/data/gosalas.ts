@@ -14,6 +14,18 @@ export type GosalaCustomDetail = {
   value: string
 }
 
+export type GosalaOfferingCategory = "puja" | "feed" | "prasadam" | "decoration"
+
+export type GosalaOfferingItem = {
+  id: string
+  name: string
+  desc: string
+  price: number
+  category: GosalaOfferingCategory
+  inStock: boolean
+  maxQty?: number
+}
+
 export type Gosala = {
   id: string
   name: string
@@ -40,7 +52,80 @@ export type Gosala = {
   photo?: string
   photos?: string[]
   notes?: string
+  // Gaushala-Specific Offerings & Custom Base Pricing
+  items?: GosalaOfferingItem[]
+  baseCowPrice?: number
+  baseBullPrice?: number
+  baseCalfPrice?: number
+  governingAdminName?: string
+  governingAdminRole?: string
 }
+
+export const DEFAULT_GOSALA_OFFERINGS: GosalaOfferingItem[] = [
+  {
+    id: "item-mala",
+    name: "Marigold Pooja Mala",
+    desc: "Fresh consecrated floral garland for the holy cow",
+    price: 150,
+    category: "puja",
+    inStock: true,
+    maxQty: 5,
+  },
+  {
+    id: "item-fodder",
+    name: "Fresh Green Grass Fodder",
+    desc: "10 kg organic sweet grass basket (Grass Seva)",
+    price: 120,
+    category: "feed",
+    inStock: true,
+    maxQty: 10,
+  },
+  {
+    id: "item-chunni",
+    name: "Pure Silk Chunni & Vastra",
+    desc: "Ceremonial silk drape with golden zari border",
+    price: 300,
+    category: "decoration",
+    inStock: true,
+    maxQty: 3,
+  },
+  {
+    id: "item-jaggery",
+    name: "Devotional Jaggery & Chana",
+    desc: "Organic gur and roasted chana feeding plate",
+    price: 180,
+    category: "feed",
+    inStock: true,
+    maxQty: 5,
+  },
+  {
+    id: "item-ghee",
+    name: "Pure Vedic A2 Gir Cow Ghee (500ml)",
+    desc: "Traditional bilona churned Gaushala trust ghee",
+    price: 950,
+    category: "prasadam",
+    inStock: true,
+    maxQty: 4,
+  },
+  {
+    id: "item-dhoop",
+    name: "Natural Gomaye Hawan Dhoop",
+    desc: "Eco-friendly cow dung herbal dhoop cones (pack of 20)",
+    price: 200,
+    category: "puja",
+    inStock: true,
+    maxQty: 6,
+  },
+  {
+    id: "item-puja-kit",
+    name: "Gau Pooja Kalash & Tilak Kit",
+    desc: "Complete brass kalash, kumkum, akshata and bell set",
+    price: 450,
+    category: "puja",
+    inStock: true,
+    maxQty: 2,
+  },
+]
 
 export const GOSALA_FACILITY_OPTIONS = [
   "Padded Cattle Ambulance / Van",

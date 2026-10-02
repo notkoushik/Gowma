@@ -16,6 +16,8 @@ import {
   Crown,
   ShieldCheck,
   ShieldAlert,
+  ChevronRight,
+  Store,
 } from "lucide-react"
 import Overview from "./views/Overview"
 import Bookings from "./views/Bookings"
@@ -111,7 +113,7 @@ const VALID_ADMIN_VIEWS: View[] = [
   "settlements",
 ]
 
-function parseHash(): { role: RoleId | null | undefined; subview?: string } {
+function parseHash(): { role: RoleId | null | undefined; subview?: string; sector?: string } {
   if (typeof window === "undefined") return { role: undefined }
   const hash = window.location.hash.replace(/^#\/?/, "").toLowerCase()
   if (!hash) return { role: undefined }
@@ -119,9 +121,19 @@ function parseHash(): { role: RoleId | null | undefined; subview?: string } {
   const r = parts[0]
   if (r === "login") return { role: null }
   if (VALID_ROLES.includes(r as RoleId)) {
-    return { role: r as RoleId, subview: parts[1] }
+    return { role: r as RoleId, subview: parts[1], sector: parts[2] }
   }
   return { role: undefined }
+}
+
+function getInitialPricingSector(): "global" | "gosalas" {
+  const { subview, sector } = parseHash()
+  if (subview === "pricing" && sector === "gosalas") return "gosalas"
+  try {
+    const saved = localStorage.getItem("gomaa_pricing_sector")
+    if (saved === "gosalas" || saved === "global") return saved as "global" | "gosalas"
+  } catch (e) {}
+  return "global"
 }
 
 function getInitialAuth(): RoleId | null {
@@ -215,7 +227,22 @@ export default function App() {
   } = useStore()
   const [auth, setAuth] = useState<RoleId | null>(getInitialAuth)
   const [view, setView] = useState<View>(getInitialAdminView)
+  const [pricingSector, setPricingSector] = useState<"global" | "gosalas">(getInitialPricingSector)
   const [editAdminProfileOpen, setEditAdminProfileOpen] = useState(false)
+
+  const handleSetPricingSector = (sec: "global" | "gosalas") => {
+    setPricingSector(sec)
+    try {
+      localStorage.setItem("gomaa_pricing_sector", sec)
+      if (auth === "admin" || auth === "super_admin") {
+        if (sec === "gosalas") {
+          window.location.hash = `#${auth}/pricing/gosalas`
+        } else {
+          window.location.hash = `#${auth}/pricing`
+        }
+      }
+    } catch (e) {}
+  }
 
   const adminBookingsCount = bookings.length
   const adminReviewPending = bookings.filter(
@@ -250,7 +277,11 @@ export default function App() {
       if (role) {
         localStorage.setItem("gomaa_auth_role", role)
         if (role === "admin" || role === "super_admin") {
-          window.location.hash = `#${role}/${view}`
+          if (view === "pricing" && pricingSector === "gosalas") {
+            window.location.hash = `#${role}/pricing/gosalas`
+          } else {
+            window.location.hash = `#${role}/${view}`
+          }
         } else if (role === "manager") {
           const savedManagerView =
             localStorage.getItem("gomaa_manager_view") || "queue"
@@ -265,12 +296,23 @@ export default function App() {
     } catch (e) {}
   }
 
-  const handleSetAdminView = (v: View) => {
+  const handleSetAdminView = (v: View, targetSector?: "global" | "gosalas") => {
     setView(v)
+    if (v === "pricing" && targetSector) {
+      setPricingSector(targetSector)
+      try {
+        localStorage.setItem("gomaa_pricing_sector", targetSector)
+      } catch (e) {}
+    }
     try {
       localStorage.setItem("gomaa_admin_view", v)
       if (auth === "admin" || auth === "super_admin") {
-        window.location.hash = `#${auth}/${v}`
+        const effectiveSector = targetSector || pricingSector
+        if (v === "pricing" && effectiveSector === "gosalas") {
+          window.location.hash = `#${auth}/pricing/gosalas`
+        } else {
+          window.location.hash = `#${auth}/${v}`
+        }
       }
     } catch (e) {}
   }
@@ -286,7 +328,11 @@ export default function App() {
           .toLowerCase()
         if (auth === "admin" || auth === "super_admin") {
           if (!currentHash.startsWith(auth)) {
-            window.location.hash = `#${auth}/${view}`
+            if (view === "pricing" && pricingSector === "gosalas") {
+              window.location.hash = `#${auth}/pricing/gosalas`
+            } else {
+              window.location.hash = `#${auth}/${view}`
+            }
           }
         } else if (auth === "manager") {
           if (!currentHash.startsWith("manager")) {
@@ -304,12 +350,12 @@ export default function App() {
         window.location.hash = "#login"
       }
     } catch (e) {}
-  }, [auth, setCurrentRole, view])
+  }, [auth, setCurrentRole, view, pricingSector])
 
   // Listen to hash changes (back/forward or direct navigation)
   useEffect(() => {
     const onHashChange = () => {
-      const { role, subview } = parseHash()
+      const { role, subview, sector } = parseHash()
       if (role !== undefined) {
         setAuth(role)
         if (role) {
@@ -321,6 +367,13 @@ export default function App() {
           ) {
             setView(subview as View)
             localStorage.setItem("gomaa_admin_view", subview)
+            if (subview === "pricing") {
+              if (sector === "gosalas") {
+                setPricingSector("gosalas")
+              } else {
+                setPricingSector("global")
+              }
+            }
           }
         }
       }
@@ -474,6 +527,80 @@ export default function App() {
           <nav className="px-3 py-4 space-y-0.5 overflow-y-auto">
             {nav.map((n) => {
               const active = view === n.id
+
+              if (n.id === "pricing") {
+                return (
+                  <div key={n.id} className="relative group">
+                    <button
+                      onClick={() => handleSetAdminView("pricing")}
+                      className={`w-full flex items-center gap-3 rounded-sm px-3 py-2.5 text-[13.5px] transition-colors cursor-pointer ${
+                        active
+                          ? "bg-saffron-soft text-saffron-deep font-medium"
+                          : "text-ink-soft hover:bg-paper-deep hover:text-ink"
+                      }`}
+                    >
+                      <n.icon
+                        size={17}
+                        className={active ? "text-saffron" : "text-ink-faint"}
+                      />
+                      <span className="truncate">{n.label}</span>
+                      <ChevronRight
+                        size={13}
+                        className="ml-auto text-ink-faint group-hover:text-amber-600 group-hover:translate-x-0.5 transition-transform"
+                      />
+                    </button>
+
+                    {/* Hover Flyout Submenu with 2 Professional Sector Buttons */}
+                    <div className="hidden group-hover:flex flex-col absolute left-full top-0 ml-1.5 w-68 bg-card border border-amber-300 rounded-sm shadow-xl p-1.5 z-50 animate-in fade-in duration-150">
+                      <div className="px-2.5 py-1.5 border-b border-line/60 mb-1">
+                        <span className="font-mono text-[9.5px] uppercase tracking-wider text-amber-900 font-bold flex items-center gap-1">
+                          <Crown size={11} className="text-amber-600" /> Captain Pricing Sectors
+                        </span>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleSetAdminView("pricing", "global")
+                        }}
+                        className={`w-full text-left p-2 rounded-xs text-[12px] transition flex items-start gap-2.5 cursor-pointer ${
+                          active && pricingSector === "global"
+                            ? "bg-amber-50 text-amber-950 font-semibold border border-amber-200"
+                            : "hover:bg-paper-deep text-ink-soft hover:text-ink"
+                        }`}
+                      >
+                        <SlidersHorizontal size={14} className="text-saffron-deep shrink-0 mt-0.5" />
+                        <div>
+                          <div className="font-medium text-ink">1. Global Platform Economics</div>
+                          <div className="text-[10px] text-ink-faint leading-tight mt-0.5">
+                            Standard duration, per-km transit &amp; 20% commission
+                          </div>
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleSetAdminView("pricing", "gosalas")
+                        }}
+                        className={`w-full text-left p-2 rounded-xs text-[12px] transition flex items-start gap-2.5 cursor-pointer mt-0.5 ${
+                          active && pricingSector === "gosalas"
+                            ? "bg-amber-50 text-amber-950 font-semibold border border-amber-200"
+                            : "hover:bg-paper-deep text-ink-soft hover:text-ink"
+                        }`}
+                      >
+                        <Building2 size={14} className="text-amber-700 shrink-0 mt-0.5" />
+                        <div>
+                          <div className="font-medium text-ink">2. Individual Gaushala Pricing</div>
+                          <div className="text-[10px] text-ink-faint leading-tight mt-0.5">
+                            Cattle darshan rates &amp; store items per Gaushala
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                )
+              }
+
               return (
                 <button
                   key={n.id}
@@ -675,15 +802,12 @@ export default function App() {
           {view === "animals" && <Animals />}
           {view === "ledger" && <ManagerLedger />}
           {view === "availability" && <Availability />}
-          {view === "pricing" &&
-            (isSuperAdmin ? (
-              <Pricing />
-            ) : (
-              <CaptainAccessGate
-                feature="Master Pricing & Platform Economics"
-                onSwitchToCaptain={() => handleSetAuth("super_admin")}
-              />
-            ))}
+          {view === "pricing" && (
+            <Pricing
+              initialSector={pricingSector}
+              onSectorChange={handleSetPricingSector}
+            />
+          )}
           {view === "settlements" &&
             (isSuperAdmin ? (
               <Settlements />
