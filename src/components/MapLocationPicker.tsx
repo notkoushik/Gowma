@@ -163,15 +163,13 @@ export default function MapLocationPicker({
       zoomControl: false,
     })
 
-    // CartoDB Voyager / OpenStreetMap standard tiles
-    L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-      {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 19,
-      },
-    ).addTo(map)
+    // Free OpenStreetMap street tiles (No API key, zero watermarks)
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+      subdomains: ["a", "b", "c"],
+    }).addTo(map)
 
     // Position Zoom control top-right
     L.control.zoom({ position: "topright" }).addTo(map)
