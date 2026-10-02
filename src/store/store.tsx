@@ -63,6 +63,7 @@ export const useToast = () => useContext(ToastCtx)
 
 /* ---------------- Pricing Configuration ---------------- */
 export type PricingConfig = {
+  id?: number
   standardMin: number
   extraUnitMin: number
   extraUnitRate: number
@@ -73,6 +74,9 @@ export type PricingConfig = {
   maxDurationMin: number
   bufferMin: number
   rounding: string
+  updatedByRole?: string
+  updatedByName?: string
+  updatedAt?: string
 }
 
 export const defaultPricingConfig: PricingConfig = {
@@ -136,7 +140,7 @@ type Store = {
     },
   ) => void
   advanceTrip: (id: string) => void
-  updatePricing: (patch: Partial<PricingConfig>) => void
+  updatePricing: (patch: Partial<PricingConfig>) => Promise<void>
   toggleSlotBlock: (animal: string, date: string, time: string) => void
   updateAnimalStatus: (
     name: string,
@@ -288,8 +292,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [gosalas])
 
-  const [pricingConfig, setPricingConfig] =
-    useState<PricingConfig>(defaultPricingConfig)
+  const [pricingConfig, setPricingConfig] = useState<PricingConfig>(() => {
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        const saved = localStorage.getItem("gomaa_pricing_config")
+        if (saved) return JSON.parse(saved)
+      }
+    } catch {}
+    return defaultPricingConfig
+  })
   const [blockedSlots, setBlockedSlots] = useState<Record<string, string[]>>({})
   const [managers, setManagers] = useState<GosalaManager[]>(() => {
     try {
@@ -503,7 +514,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ])
         if (!active) return
         if (bkRes?.bookings && Array.isArray(bkRes.bookings)) setBookings(bkRes.bookings)
-        if (prRes?.config) setPricingConfig(prRes.config)
+        if (prRes?.config) {
+          setPricingConfig(prRes.config)
+          try {
+            if (typeof window !== "undefined" && window.localStorage) {
+              localStorage.setItem("gomaa_pricing_config", JSON.stringify(prRes.config))
+            }
+          } catch {}
+        }
         if (mgRes?.managers && Array.isArray(mgRes.managers)) setManagers(mgRes.managers)
         if (stRes?.settlements && Array.isArray(stRes.settlements)) setSettlements(stRes.settlements)
         if (profRes?.profiles) {
@@ -605,10 +623,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
   )
 
   const updatePricing = useCallback(
-    (patchData: Partial<PricingConfig>) => {
-      setPricingConfig((prev) => ({ ...prev, ...patchData }))
-      api.updatePricingConfig(patchData).catch(console.error)
-      notify("Pricing rules updated live across the platform", "ok")
+    async (patchData: Partial<PricingConfig>) => {
+      // Optimistic / fast local update
+      setPricingConfig((prev) => {
+        const next = { ...prev, ...patchData }
+        try {
+          if (typeof window !== "undefined" && window.localStorage) {
+            localStorage.setItem("gomaa_pricing_config", JSON.stringify(next))
+          }
+        } catch {}
+        return next
+      })
+
+      try {
+        const res = await api.updatePricingConfig(patchData, "super_admin")
+        if (res?.config) {
+          setPricingConfig(res.config)
+          try {
+            if (typeof window !== "undefined" && window.localStorage) {
+              localStorage.setItem("gomaa_pricing_config", JSON.stringify(res.config))
+            }
+          } catch {}
+        }
+        notify("Master Pricing & Platform Economics synchronized to PostgreSQL database", "ok")
+      } catch (err: any) {
+        console.error("Master pricing DB update error:", err)
+        notify(err?.message || "Failed to sync Master Pricing with database", "danger")
+      }
     },
     [notify],
   )

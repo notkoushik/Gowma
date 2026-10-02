@@ -1638,6 +1638,8 @@ export async function handleApiRequest(
     }
 
     const patch = body.patch || body
+    const callerName = body.updatedByName || body.callerName || "Vikramaditya Hegde"
+    const roleNormalized = (callerRole || "SUPER_ADMIN").toUpperCase()
     try {
       const cfg = await prisma.masterPricingConfig.upsert({
         where: { id: 1 },
@@ -1653,6 +1655,8 @@ export async function handleApiRequest(
           maxDurationMin: Number(patch.maxDurationMin) || 240,
           bufferMin: Number(patch.bufferMin) || 30,
           rounding: patch.rounding || "Nearest ₹10",
+          updatedByRole: roleNormalized,
+          updatedByName: callerName,
         },
         update: {
           standardMin: patch.standardMin !== undefined ? Number(patch.standardMin) : undefined,
@@ -1665,10 +1669,13 @@ export async function handleApiRequest(
           maxDurationMin: patch.maxDurationMin !== undefined ? Number(patch.maxDurationMin) : undefined,
           bufferMin: patch.bufferMin !== undefined ? Number(patch.bufferMin) : undefined,
           rounding: patch.rounding || undefined,
+          updatedByRole: roleNormalized,
+          updatedByName: callerName,
         },
       })
 
       db.pricingConfig = {
+        id: cfg.id,
         standardMin: cfg.standardMin,
         extraUnitMin: cfg.extraUnitMin,
         extraUnitRate: cfg.extraUnitRate,
@@ -1679,6 +1686,9 @@ export async function handleApiRequest(
         maxDurationMin: cfg.maxDurationMin,
         bufferMin: cfg.bufferMin,
         rounding: cfg.rounding,
+        updatedByRole: cfg.updatedByRole,
+        updatedByName: cfg.updatedByName,
+        updatedAt: cfg.updatedAt.toISOString(),
       }
 
       return { status: 200, body: { config: db.pricingConfig } }

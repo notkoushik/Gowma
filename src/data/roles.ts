@@ -5,6 +5,7 @@ import {
   User,
   Landmark,
   Building2,
+  Crown,
   type LucideIcon,
 } from "lucide-react"
 
@@ -40,18 +41,18 @@ export const roles: Role[] = [
   },
   {
     id: "super_admin",
-    name: "Super Admin",
-    scope: "Treasury & Master Pricing · web",
+    name: "Super Admin (Captain)",
+    scope: "Platform Captain & Master Authority",
     demoEmail: "superadmin@gomaa.in",
-    icon: Landmark,
+    icon: Crown,
     summary:
-      "Master financial authority and money arranger. Controls platform pricing rules, transport distance slabs, commission splits, and approves Gosala payout settlements.",
+      "The Platform Captain and supreme authority who controls everything in the application. Manages PostgreSQL Master Pricing configurations, distance formulas, commission splits, platform economics, and authorizes all treasury payout disbursements.",
     duties: [
-      "Arrange platform-wide pricing: 60-min base, extra-time rates (₹500/30m), transport distance slabs",
-      "Configure platform commission split (20% platform / 80% Gosala) and GST tax rates",
-      "Monitor gross revenue collection, net margins, and payment gateway health",
-      "Authorize and disburse Gosala settlement payout batches",
-      "Inspect immutable pricing snapshots and financial audit logs",
+      "Captain of Platform Economics: Controls Master Pricing live in PostgreSQL",
+      "Configure base duration, extra duration slabs (₹550/30m), and per-KM transport rates",
+      "Manage platform commission split (20% platform / 80% Gosala) and GST tax rates",
+      "Hold exclusive authority over Gosala escrow payouts and batch disbursements",
+      "Maintain supreme systemic oversight across all regional Operations Admins, Managers & Gosalas",
     ],
   },
   {

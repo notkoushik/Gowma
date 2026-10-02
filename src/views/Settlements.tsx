@@ -1,6 +1,7 @@
 import { inr, type Settlement } from "../data/mock"
 import { useStore } from "../store/store"
 import { Panel, PanelHead, Tag } from "../lib/ui"
+import { Crown, ShieldCheck, Landmark } from "lucide-react"
 
 const nextStatus: Record<Settlement["status"], Settlement["status"]> = {
   Pending: "Approved",
@@ -42,11 +43,18 @@ function SettleStatus({ s }: { s: Settlement["status"] }) {
 }
 
 export default function Settlements() {
-  const { settlements, advanceSettlement, approveSettlementBatch } = useStore()
+  const { settlements, advanceSettlement, approveSettlementBatch, currentRole } = useStore()
+  const isSuperAdmin = currentRole === "super_admin"
 
-  const advance = (gosala: string) => advanceSettlement(gosala)
+  const advance = (gosala: string) => {
+    if (!isSuperAdmin) return
+    advanceSettlement(gosala)
+  }
 
-  const approveBatch = () => approveSettlementBatch("SEP-W4")
+  const approveBatch = () => {
+    if (!isSuperAdmin) return
+    approveSettlementBatch("SEP-W4")
+  }
 
   const totalPayable = settlements.reduce(
     (a, s) => a + Math.round(s.gross * (1 - s.commissionPct / 100)),
@@ -59,6 +67,36 @@ export default function Settlements() {
 
   return (
     <div className="space-y-6">
+      {/* Super Admin Captain Disbursement Authority Banner */}
+      <div className="rounded-sm border border-amber-300/80 bg-linear-to-r from-amber-50 via-amber-100/50 to-amber-50/20 p-5 shadow-xs">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="h-10 w-10 rounded-sm bg-gradient-to-br from-amber-500 to-amber-700 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Crown size={20} className="stroke-[2.2]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-serif text-[17px] font-semibold text-amber-950">
+                  Treasury Payout & Disbursement Authority
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-amber-600 text-white shadow-2xs">
+                  <ShieldCheck size={11} /> Super Admin Captain
+                </span>
+              </div>
+              <p className="text-[12px] text-amber-900/80 mt-1 max-w-2xl leading-relaxed">
+                Only the Super Admin holds financial disbursement authority to release funds from escrow, approve batch payouts,
+                and enforce the platform 80/20 split between trust accounts and Gaushala trusts.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 bg-white/90 border border-amber-200/80 rounded px-3 py-1.5 text-[11px] font-mono text-ink shadow-2xs shrink-0 self-start md:self-center">
+            <Landmark size={13} className="text-forest shrink-0" />
+            <span>Escrow Clearance: <strong className="text-forest">Automated RBI NACH</strong></span>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           [
@@ -89,9 +127,14 @@ export default function Settlements() {
             settlements.length > 0 ? (
               <button
                 onClick={approveBatch}
-                className="bg-forest text-white rounded-sm px-3.5 py-2 text-[12.5px] font-medium hover:opacity-90 transition-opacity cursor-pointer"
+                disabled={!isSuperAdmin}
+                className={`rounded-sm px-3.5 py-2 text-[12.5px] font-medium transition-opacity ${
+                  isSuperAdmin
+                    ? "bg-forest text-white hover:opacity-90 cursor-pointer shadow-2xs"
+                    : "bg-paper-deep text-ink-faint border border-line cursor-not-allowed opacity-60"
+                }`}
               >
-                Approve batch SEP-W4
+                {isSuperAdmin ? "Approve batch SEP-W4" : "Captain Approval Required"}
               </button>
             ) : null
           }
@@ -167,7 +210,12 @@ export default function Settlements() {
                           {s.status !== "Paid" && (
                             <button
                               onClick={() => advance(s.gosala)}
-                              className="shrink-0 text-[11.5px] font-medium text-forest hover:underline whitespace-nowrap cursor-pointer"
+                              disabled={!isSuperAdmin}
+                              className={`shrink-0 text-[11.5px] font-medium whitespace-nowrap ${
+                                isSuperAdmin
+                                  ? "text-forest hover:underline cursor-pointer"
+                                  : "text-ink-faint opacity-50 cursor-not-allowed"
+                              }`}
                             >
                               {s.status === "Failed"
                                 ? "Retry"

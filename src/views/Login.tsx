@@ -27,30 +27,47 @@ function RoleCard({
   className?: string
 }) {
   const Icon = role.icon
+  const isSuperAdmin = role.id === "super_admin"
+
   return (
     <button
       type="button"
       onClick={onSelect}
       className={`text-left rounded-sm border p-3 sm:p-3.5 transition-all ${className} ${
         active
-          ? "border-saffron bg-saffron-soft/50 ring-2 ring-saffron/20"
-          : "border-line bg-card hover:border-line-strong"
+          ? isSuperAdmin
+            ? "border-amber-500 bg-amber-50/70 ring-2 ring-amber-400/30"
+            : "border-saffron bg-saffron-soft/50 ring-2 ring-saffron/20"
+          : isSuperAdmin
+            ? "border-amber-200/80 bg-gradient-to-br from-amber-50/40 to-card hover:border-amber-400"
+            : "border-line bg-card hover:border-line-strong"
       }`}
     >
       <div className="flex items-center gap-2.5">
         <span
           className={`h-8 w-8 grid place-items-center rounded-sm shrink-0 ${
-            active ? "bg-saffron text-white" : "bg-paper-deep text-ink-soft"
+            active
+              ? isSuperAdmin
+                ? "bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-xs"
+                : "bg-saffron text-white"
+              : isSuperAdmin
+                ? "bg-amber-100 text-amber-800"
+                : "bg-paper-deep text-ink-soft"
           }`}
         >
           <Icon size={16} />
         </span>
         <div className="min-w-0">
-          <div className="text-[12.5px] font-semibold text-ink leading-tight truncate">
-            {profileName || role.name}
+          <div className="text-[12.5px] font-semibold text-ink leading-tight truncate flex items-center gap-1.5">
+            <span>{profileName || role.name}</span>
+            {isSuperAdmin && (
+              <span className="font-mono text-[8.5px] uppercase font-bold tracking-wider px-1 py-0.2 bg-amber-600 text-white rounded">
+                CAPTAIN
+              </span>
+            )}
           </div>
           <div className="text-[10.5px] text-ink-faint leading-tight truncate mt-0.5">
-            {role.name} · {role.scope}
+            {isSuperAdmin ? "Supreme Authority · Treasury & Master Pricing" : `${role.name} · ${role.scope}`}
           </div>
         </div>
       </div>

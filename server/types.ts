@@ -46,6 +46,7 @@ export type Booking = {
 }
 
 export type PricingConfig = {
+  id?: number
   standardMin: number
   extraUnitMin: number
   extraUnitRate: number
@@ -56,6 +57,9 @@ export type PricingConfig = {
   maxDurationMin: number
   bufferMin: number
   rounding: string
+  updatedByRole?: string
+  updatedByName?: string
+  updatedAt?: string
 }
 
 export type GosalaManager = {
