@@ -17,6 +17,7 @@ import {
   type OperationalRegionHub,
 } from "../data/regions"
 import { reverseGeocodeCoords } from "../hooks/useDeviceLocation"
+import { createResilientTileLayer } from "../lib/mapTiles"
 
 export interface MapLocationPickerProps {
   initialLat?: number
@@ -163,13 +164,8 @@ export default function MapLocationPicker({
       zoomControl: false,
     })
 
-    // Free OpenStreetMap street tiles (No API key, zero watermarks)
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19,
-      subdomains: ["a", "b", "c"],
-    }).addTo(map)
+    // Resilient CARTO Voyager Basemap with OpenStreetMap Fallback
+    createResilientTileLayer(map)
 
     // Position Zoom control top-right
     L.control.zoom({ position: "topright" }).addTo(map)

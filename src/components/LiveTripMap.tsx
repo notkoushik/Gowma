@@ -17,6 +17,7 @@ import { fetchRoadRoute, RoadRoute } from "../services/routing"
 import { matchAndSliceRoute, LatLng } from "../utils/mapMatching"
 import { VehicleMarkerAnimator } from "../utils/vehicleAnimator"
 import { geocodeAddress } from "../hooks/useDeviceLocation"
+import { createResilientTileLayer } from "../lib/mapTiles"
 
 export interface LiveTripMapProps {
   bookingId: string
@@ -319,13 +320,8 @@ export default function LiveTripMap({
 
     mapInstanceRef.current = map
 
-    // Free OpenStreetMap street tiles (No API key, zero watermarks)
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      subdomains: ["a", "b", "c"],
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(map)
+    // Resilient CARTO Voyager Basemap with OpenStreetMap Fallback
+    createResilientTileLayer(map)
 
     // Polyline 1: Completed History Path (soft gray behind car)
     const historyPolyline = L.polyline([], {
