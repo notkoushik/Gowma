@@ -143,17 +143,18 @@ export default function LiveTracking() {
       )
       return !!b
     })
-    return firstActive?.name || animals[0]?.name || "Gauri"
+    return firstActive?.name || animals[0]?.name || ""
   })
 
   // Current selected animal object (100% reactive to selectedAnimalName)
-  const selectedAnimal: Animal = useMemo(() => {
+  const selectedAnimal: Animal | undefined = useMemo(() => {
     return (
       visibleAnimals.find(
         (a) => a.name.toLowerCase() === selectedAnimalName.toLowerCase(),
       ) ||
       visibleAnimals[0] ||
-      animals[0]
+      animals[0] ||
+      undefined
     )
   }, [visibleAnimals, animals, selectedAnimalName])
 
@@ -300,14 +301,16 @@ export default function LiveTracking() {
       await api.setTripStage(matchedBooking.id, nextStage)
       advanceTrip(matchedBooking.id)
 
-      if (nextStage >= 4 && nextStage <= 5) {
-        updateAnimalStatus(selectedAnimal.name, "In Transit")
-      } else if (nextStage === 6) {
-        updateAnimalStatus(selectedAnimal.name, "In Seva")
-      } else if (nextStage >= 7 && nextStage <= 8) {
-        updateAnimalStatus(selectedAnimal.name, "In Transit")
-      } else if (nextStage === 9) {
-        updateAnimalStatus(selectedAnimal.name, "Resting Buffer")
+      if (selectedAnimal) {
+        if (nextStage >= 4 && nextStage <= 5) {
+          updateAnimalStatus(selectedAnimal.name, "In Transit")
+        } else if (nextStage === 6) {
+          updateAnimalStatus(selectedAnimal.name, "In Seva")
+        } else if (nextStage >= 7 && nextStage <= 8) {
+          updateAnimalStatus(selectedAnimal.name, "In Transit")
+        } else if (nextStage === 9) {
+          updateAnimalStatus(selectedAnimal.name, "Resting Buffer")
+        }
       }
 
       notify(
@@ -323,9 +326,9 @@ export default function LiveTracking() {
 
   // Handler to start trip (cow leaves Gaushala for devotee house)
   const handleStartTrip = async () => {
-    if (!matchedBooking) {
+    if (!matchedBooking || !selectedAnimal) {
       notify(
-        `Please ensure a confirmed booking is assigned to ${selectedAnimal.name} before starting trip`,
+        `Please ensure a confirmed booking and cattle are assigned before starting trip`,
         "warn",
       )
       return
@@ -347,7 +350,7 @@ export default function LiveTracking() {
 
   // Handler to test/jump to a specific step
   const handleSetSpecificStage = async (targetStage: number) => {
-    if (!matchedBooking) return
+    if (!matchedBooking || !selectedAnimal) return
     try {
       await api.setTripStage(matchedBooking.id, targetStage)
       if (targetStage >= 4 && targetStage <= 5) {
@@ -366,6 +369,7 @@ export default function LiveTracking() {
   }
 
   const handleTriggerEmergencySOS = () => {
+    if (!selectedAnimal) return
     notify(
       `🚨 EMERGENCY HELP CALLED: Gaushala Senior Doctor and backup cattle vehicle alerted for ${selectedAnimal.name}.`,
       "danger",
@@ -617,7 +621,22 @@ export default function LiveTracking() {
       </div>
 
       {/* ----------------- MAIN TWO-COLUMN DASHBOARD ----------------- */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      {!selectedAnimal ? (
+        <div className="p-12 text-center bg-card border border-dashed border-line rounded-xl shadow-xs space-y-4 max-w-xl mx-auto my-8">
+          <div className="w-16 h-16 rounded-full bg-forest-soft text-forest mx-auto flex items-center justify-center">
+            <Radio size={28} />
+          </div>
+          <div>
+            <h3 className="font-serif text-[20px] font-semibold text-ink">
+              No Cattle Registered for Live Telemetry
+            </h3>
+            <p className="text-[13px] text-ink-faint mt-1 max-w-md mx-auto">
+              Live GPS road tracking, vehicle cabin vitals, and transit corridors will activate automatically as soon as cattle are onboarded and assigned to sevas.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: Animal Fleet Roster (4 Cols) */}
         <div className={`lg:col-span-4 space-y-3 ${mobileView === "roster" ? "block" : "hidden lg:block"}`}>
           <div className="flex items-center justify-between mb-1">
@@ -652,9 +671,14 @@ export default function LiveTracking() {
           </div>
 
           <div className="space-y-2.5 max-h-[720px] overflow-y-auto pr-1">
+            {filteredAnimals.length === 0 && (
+              <div className="text-center py-8 text-ink-faint text-[12px] bg-paper border border-line rounded-lg">
+                No cattle match this filter.
+              </div>
+            )}
             {filteredAnimals.map((a) => {
               const isSelected =
-                a.name.toLowerCase() === selectedAnimal.name.toLowerCase()
+                selectedAnimal ? a.name.toLowerCase() === selectedAnimal.name.toLowerCase() : false
               const tripForAnimal = bookings.find(
                 (b) =>
                   b.animal.toLowerCase() === a.name.toLowerCase() &&
@@ -1500,6 +1524,7 @@ export default function LiveTracking() {
           )}
         </div>
       </div>
+      )}
 
       {/* ----------------- EMERGENCY HELP MODAL (SIMPLE WORDS & HIGH Z-INDEX) ----------------- */}
       {sosModalOpen && (
@@ -1528,7 +1553,7 @@ export default function LiveTracking() {
                 this will immediately call our{" "}
                 <strong>Gaushala Veterinary Doctor</strong> and dispatch a
                 backup cattle carrier van for{" "}
-                <strong>{selectedAnimal.name}</strong>.
+                <strong>{selectedAnimal?.name || "cattle"}</strong>.
               </p>
 
               <div>
