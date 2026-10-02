@@ -413,25 +413,25 @@ export default function ManagerLedger() {
 
   // Dynamic Settlement Batches computed from actual volume and active shelter bank
   const dynamicBatches: SettlementBatch[] = useMemo(() => {
+    if (relevantBookings.length === 0 || totalGross === 0) {
+      return []
+    }
+
     const weeks = [
-      { label: "W4", date: "24 Sep 2026, 23:59 IST", utrSuffix: "8109281", multiplier: 1.0 },
-      { label: "W3", date: "17 Sep 2026, 23:59 IST", utrSuffix: "1048209", multiplier: 0.82 },
-      { label: "W2", date: "10 Sep 2026, 23:59 IST", utrSuffix: "4091218", multiplier: 0.91 },
-      { label: "W1", date: "03 Sep 2026, 23:59 IST", utrSuffix: "7012903", multiplier: 0.74 },
+      { label: "W4", date: "Current Week Dispatch", utrSuffix: "8109281", multiplier: 1.0 },
+      { label: "W3", date: "Previous Week Dispatch", utrSuffix: "1048209", multiplier: 0.82 },
+      { label: "W2", date: "Cycle -2 Dispatch", utrSuffix: "4091218", multiplier: 0.91 },
+      { label: "W1", date: "Cycle -3 Dispatch", utrSuffix: "7012903", multiplier: 0.74 },
     ]
 
-    const baseGross = totalGross > 0 ? totalGross : 140000
-    const baseNet = totalGaushalaNet > 0 ? totalGaushalaNet : 115000
-    const baseCount = relevantBookings.length > 0 ? relevantBookings.length : 15
-
     return weeks.map((w, idx) => {
-      const grossVal = Math.round(baseGross * w.multiplier)
-      const netVal = Math.round(baseNet * w.multiplier)
-      const countVal = Math.max(1, Math.round(baseCount * w.multiplier))
-      const utrPrefix = activeBank.ifsc.slice(0, 4)
+      const grossVal = Math.round(totalGross * w.multiplier)
+      const netVal = Math.round(totalGaushalaNet * w.multiplier)
+      const countVal = Math.max(1, Math.round(relevantBookings.length * w.multiplier))
+      const utrPrefix = (activeBank.ifsc || "HDFC").slice(0, 4)
 
       return {
-        id: `BTH-${activeGosalaFilter === "ALL" ? "PUN" : activeGosalaFilter.slice(0, 3).toUpperCase()}-2026-09-${w.label}`,
+        id: `BTH-${activeGosalaFilter === "ALL" ? "GMA" : activeGosalaFilter.slice(0, 3).toUpperCase()}-2026-${w.label}`,
         date: w.date,
         sevasCount: countVal,
         gross: grossVal,
@@ -2073,37 +2073,51 @@ export default function ManagerLedger() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {dynamicBatches.map((b) => (
-                <div
-                  key={b.id}
-                  className="rounded-lg border border-line bg-card p-3.5 space-y-2 hover:border-line-strong transition shadow-2xs"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-[11px] text-ink-faint font-semibold">
-                      {b.id}
-                    </span>
-                    <span className="text-[10px] font-mono bg-forest-soft text-forest px-1.5 py-0.5 rounded font-medium">
-                      {b.status}
-                    </span>
-                  </div>
-                  <div>
-                    <div className="font-serif text-[18px] text-ink font-bold tabular">
-                      {inr(b.gaushalaNet)}
-                    </div>
-                    <div className="text-[11px] text-ink-faint">
-                      {b.sevasCount} sevas · Gross {inr(b.gross)}
-                    </div>
-                  </div>
-                  <div className="pt-2 border-t border-line/60 text-[11px] text-ink-soft space-y-0.5 font-mono">
-                    <div className="truncate">UTR: {b.utr}</div>
-                    <div className="text-ink-faint text-[10.5px] font-sans">
-                      {b.date}
-                    </div>
-                  </div>
+            {dynamicBatches.length === 0 ? (
+              <div className="p-8 text-center border border-dashed border-line rounded-xl bg-paper/40 space-y-2">
+                <div className="w-10 h-10 rounded-full bg-forest-soft text-forest mx-auto flex items-center justify-center">
+                  <Clock size={20} />
                 </div>
-              ))}
-            </div>
+                <div className="font-serif text-[15px] font-semibold text-ink">
+                  No Settlement Payout Batches Dispatched Yet
+                </div>
+                <p className="text-[12px] text-ink-faint max-w-md mx-auto">
+                  Completed devotee sevas are aggregated into weekly Sunday midnight automated settlement batches and dispatched via direct RBI NEFT/IMPS to the verified Trust bank account.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {dynamicBatches.map((b) => (
+                  <div
+                    key={b.id}
+                    className="rounded-lg border border-line bg-card p-3.5 space-y-2 hover:border-line-strong transition shadow-2xs"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[11px] text-ink-faint font-semibold">
+                        {b.id}
+                      </span>
+                      <span className="text-[10px] font-mono bg-forest-soft text-forest px-1.5 py-0.5 rounded font-medium">
+                        {b.status}
+                      </span>
+                    </div>
+                    <div>
+                      <div className="font-serif text-[18px] text-ink font-bold tabular">
+                        {inr(b.gaushalaNet)}
+                      </div>
+                      <div className="text-[11px] text-ink-faint">
+                        {b.sevasCount} sevas · Gross {inr(b.gross)}
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-line/60 text-[11px] text-ink-soft space-y-0.5 font-mono">
+                      <div className="truncate">UTR: {b.utr}</div>
+                      <div className="text-ink-faint text-[10.5px] font-sans">
+                        {b.date}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </Panel>
