@@ -1,0 +1,10 @@
+{
+  "description": "Delivers a polished, enterprise-grade user interface designed for professionals seeking a seamless and sophisticated digital experience.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

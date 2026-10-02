@@ -1,0 +1,341 @@
+// GOMAA Master Relational Database Schema
+// Normalized 3NF Architecture & Anti-Corruption Shield for Booking Operations
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -------------------------------------------------------------
+// Enums
+// -------------------------------------------------------------
+
+enum UserRole {
+  SUPER_ADMIN
+  OPERATIONS_ADMIN
+  GOSALA_MANAGER
+  DRIVER
+  CUSTOMER
+}
+
+enum BookingStatus {
+  PAYMENT_VERIFIED
+  MANAGER_REVIEW
+  MANAGER_CONFIRMED
+  ADMIN_REVIEW
+  CONFIRMED
+  IN_SERVICE
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+enum AnimalType {
+  COW
+  CALF
+  BULL
+}
+
+enum HealthStatus {
+  HEALTHY
+  RESTING
+  MEDICAL_ATTENTION
+  INACTIVE
+}
+
+enum SettlementStatus {
+  PENDING
+  APPROVED
+  PROCESSING
+  PAID
+  FAILED
+}
+
+enum AuditAction {
+  CREATED
+  MANAGER_CONFIRMED
+  MANAGER_REJECTED
+  ADMIN_CONFIRMED
+  ADMIN_REJECTED
+  DRIVER_ASSIGNED
+  STAGE_ADVANCED
+  SLOT_BLOCKED
+  SLOT_UNBLOCKED
+}
+
+// -------------------------------------------------------------
+// Core Identity & Directory
+// -------------------------------------------------------------
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  name         String
+  phone        String
+  role         UserRole
+  avatar       String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relationships
+  customerBookings      Booking[]               @relation("CustomerBookings")
+  driverBookings        Booking[]               @relation("DriverBookings")
+  managerAssignments    GosalaManagerAssignment[]
+  auditTrails           ApprovalAuditTrail[]
+  createdBlocks         AnimalScheduleBlock[]
+  createdHolds          TemporarySlotHold[]
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model Gosala {
+  id           String    @id @default(uuid())
+  name         String    @unique
+  region       String
+  address      String
+  contactPhone String
+  contactEmail String
+  latitude     Float?
+  longitude    Float?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relationships
+  animals       Animal[]
+  managers      GosalaManagerAssignment[]
+  bookings      Booking[]
+  settlements   SettlementBatch[]
+
+  @@index([region])
+  @@map("gosalas")
+}
+
+model GosalaManagerAssignment {
+  id           String    @id @default(uuid())
+  userId       String
+  gosalaId     String
+  region       String
+  status       String    @default("Active") // "Active" | "Inactive"
+  assignedAt   DateTime  @default(now())
+
+  // Relationships
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gosala       Gosala    @relation(fields: [gosalaId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gosalaId])
+  @@index([gosalaId])
+  @@map("gosala_manager_assignments")
+}
+
+model Animal {
+  id           String       @id @default(uuid())
+  gosalaId     String
+  name         String
+  type         AnimalType
+  breed        String?
+  ageYears     Int?
+  healthStatus HealthStatus @default(HEALTHY)
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  // Relationships
+  gosala         Gosala                @relation(fields: [gosalaId], references: [id], onDelete: Cascade)
+  bookings       Booking[]
+  slotHolds      TemporarySlotHold[]
+  scheduleBlocks AnimalScheduleBlock[]
+
+  @@unique([gosalaId, name])
+  @@index([gosalaId])
+  @@index([type])
+  @@map("animals")
+}
+
+// -------------------------------------------------------------
+// Transactional Booking Entity (With Immutable Snapshots)
+// -------------------------------------------------------------
+
+model Booking {
+  id                   String        @id // "GMA-XXXXX"
+  customerId           String
+  gosalaId             String
+  animalId             String
+  driverId             String?
+
+  // Denormalized customer & animal display cache for performant retrieval
+  customerName         String
+  customerPhone        String
+  animalName           String
+  animalType           AnimalType
+  gosalaName           String
+
+  // Slot timing & distance
+  bookingDate          String        // "26 Sep 2026"
+  startTime            String        // "10:00"
+  endTime              String        // "12:00"
+  durationMin          Int           // 120
+  address              String
+  distanceKm           Float
+
+  // Financial Breakdown (All figures in INR whole currency)
+  baseRate             Int
+  extraTimeFee         Int
+  transportFee         Int
+  addonsFee            Int
+  taxFee               Int
+  discountFee          Int
+  totalAmount          Int
+  commissionPct        Float
+  commissionAmount     Int
+  gosalaPayable        Int
+
+  // Lifecycle & Field tracking
+  status               BookingStatus @default(PAYMENT_VERIFIED)
+  driverStage          Int           @default(0)
+  isPaid               Boolean       @default(true)
+
+  // Anti-Corruption Historical Snapshots (Protection from retroactive master price shifts)
+  freeKmSnapshot       Float         @default(5.0)
+  perKmSnapshot        Float         @default(50.0)
+  extraUnitRateSnapshot Int          @default(500)
+  commissionSnapshot   Int           @default(0)
+
+  // Review Remarks Cache
+  managerRemark        String?
+  adminRemark          String?
+
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  // Relationships
+  customer             User          @relation("CustomerBookings", fields: [customerId], references: [id])
+  gosala               Gosala        @relation(fields: [gosalaId], references: [id])
+  animal               Animal        @relation(fields: [animalId], references: [id])
+  driver               User?         @relation("DriverBookings", fields: [driverId], references: [id])
+  auditTrails          ApprovalAuditTrail[]
+
+  @@index([animalId, bookingDate, status])
+  @@index([gosalaId, bookingDate])
+  @@index([customerId])
+  @@index([driverId])
+  @@index([status])
+  @@map("bookings")
+}
+
+// -------------------------------------------------------------
+// Audit Trail & Governance (Immutable Ledger)
+// -------------------------------------------------------------
+
+model ApprovalAuditTrail {
+  id           String       @id @default(uuid())
+  bookingId    String
+  actorId      String
+  actorRole    UserRole
+  actorName    String
+  action       AuditAction
+  remark       String
+  createdAt    DateTime     @default(now())
+
+  // Relationships
+  booking      Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  actor        User         @relation(fields: [actorId], references: [id])
+
+  @@index([bookingId])
+  @@index([actorId])
+  @@map("approval_audit_trails")
+}
+
+// -------------------------------------------------------------
+// Concurrency & Operational Shield
+// -------------------------------------------------------------
+
+model TemporarySlotHold {
+  id           String       @id // "HOLD-XXXXX"
+  animalId     String
+  date         String       // "26 Sep 2026"
+  startTime    String       // "10:00"
+  durationMin  Int          // 60
+  customerName String
+  customerId   String?
+  expiresAt    DateTime     // Epoch timestamp for TTL eviction
+  createdAt    DateTime     @default(now())
+
+  // Relationships
+  animal       Animal       @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  customer     User?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([animalId, date, expiresAt])
+  @@map("temporary_slot_holds")
+}
+
+model AnimalScheduleBlock {
+  id           String       @id @default(uuid())
+  animalId     String
+  animalName   String
+  date         String       // "26 Sep 2026"
+  timeSlot     String       // "11:00"
+  reason       String?      // "Rest / Vet visit"
+  blockedById  String?
+  createdAt    DateTime     @default(now())
+
+  // Relationships
+  animal       Animal       @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  blockedBy    User?        @relation(fields: [blockedById], references: [id], onDelete: SetNull)
+
+  @@unique([animalId, date, timeSlot])
+  @@index([animalId, date])
+  @@map("animal_schedule_blocks")
+}
+
+// -------------------------------------------------------------
+// Financial & Treasury Configuration (Super Admin Domain)
+// -------------------------------------------------------------
+
+model MasterPricingConfig {
+  id             Int          @id @default(1)
+  standardMin    Int          @default(60)
+  extraUnitMin   Int          @default(30)
+  extraUnitRate  Int          @default(500)
+  freeKm         Float        @default(5.0)
+  perKm          Float        @default(50.0)
+  taxPct         Float        @default(12.0)
+  commissionPct  Float        @default(20.0)
+  maxDurationMin Int          @default(240)
+  bufferMin      Int          @default(30)
+  rounding       String       @default("Nearest ₹10")
+  updatedByRole  String       @default("SUPER_ADMIN")
+  updatedByName  String       @default("Vikramaditya Hegde")
+  updatedAt      DateTime     @updatedAt
+
+  @@map("master_pricing_config")
+}
+
+model SettlementBatch {
+  id               String           @id @default(uuid())
+  gosalaId         String
+  gosalaName       String
+  batch            String           // "SEP-W4"
+  bookingsCount    Int
+  grossAmount      Int
+  commissionPct    Float
+  commissionAmount Int
+  payableAmount    Int
+  status           SettlementStatus @default(PENDING)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  // Relationships
+  gosala           Gosala           @relation(fields: [gosalaId], references: [id], onDelete: Cascade)
+
+  @@index([gosalaId, batch])
+  @@index([status])
+  @@map("settlement_batches")
+}

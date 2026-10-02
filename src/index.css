@@ -1,0 +1,91 @@
+@import url('https://fonts.googleapis.com/css2?family=Spectral:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+@import 'leaflet/dist/leaflet.css';
+
+@theme {
+  --font-sans: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Spectral', ui-serif, Georgia, serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Warm paper ground */
+  --color-paper: #f4efe6;
+  --color-paper-deep: #ece5d8;
+  --color-ink: #201c16;
+  --color-ink-soft: #4a4339;
+  --color-ink-faint: #8a8070;
+
+  --color-card: #fbf9f4;
+  --color-line: #e2dacb;
+  --color-line-strong: #d3c9b4;
+
+  /* Saffron / marigold accent */
+  --color-saffron: #c2611b;
+  --color-saffron-deep: #a34e12;
+  --color-saffron-soft: #f6e7d3;
+
+  /* Institutional deep green */
+  --color-forest: #2f4f3e;
+  --color-forest-soft: #dfe8e0;
+
+  /* Status */
+  --color-ok: #3f7d4e;
+  --color-ok-soft: #e0ecdf;
+  --color-warn: #b8791a;
+  --color-warn-soft: #f6ecd6;
+  --color-danger: #a63a2f;
+  --color-danger-soft: #f2ddd8;
+  --color-info: #38607a;
+  --color-info-soft: #dde8ef;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: 'tnum' 1, 'cv01' 1;
+}
+
+::selection {
+  background-color: var(--color-saffron);
+  color: #fff;
+}
+
+/* Hide scrollbars until scrolling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover::-webkit-scrollbar-thumb,
+*:focus::-webkit-scrollbar-thumb {
+  background-color: var(--color-line-strong);
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 8px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes fadein {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
