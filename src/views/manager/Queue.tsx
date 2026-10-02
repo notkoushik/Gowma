@@ -549,6 +549,8 @@ export default function Queue({
   const {
     bookings: allBookings,
     activeGosalaFilter,
+    activeManagerGosala,
+    gosalas,
     managerDecide,
     assignDriver,
     assignPorterTransport,
@@ -559,10 +561,13 @@ export default function Queue({
   const { notify } = useToast()
 
   const assignedGosala =
-    profiles?.manager?.managerData?.gosala ||
+    activeManagerGosala ||
     (activeGosalaFilter && activeGosalaFilter !== "ALL"
       ? activeGosalaFilter
-      : "Shri Krishna Gaushala")
+      : "") ||
+    profiles?.manager?.managerData?.gosala ||
+    gosalas[0]?.name ||
+    ""
 
   const rows = useMemo(() => {
     // If user is a Gaushala Manager, strictly restrict to their assigned physical shelter

@@ -35,6 +35,8 @@ export default function Schedule() {
     bookings: allBookings,
     animals: allAnimals,
     activeGosalaFilter,
+    activeManagerGosala,
+    gosalas,
     updateAnimalStatus,
     currentRole,
     profiles,
@@ -42,10 +44,13 @@ export default function Schedule() {
   const { notify } = useToast()
 
   const assignedGosala =
-    profiles?.manager?.managerData?.gosala ||
+    activeManagerGosala ||
     (activeGosalaFilter && activeGosalaFilter !== "ALL"
       ? activeGosalaFilter
-      : "Shri Krishna Gaushala")
+      : "") ||
+    profiles?.manager?.managerData?.gosala ||
+    gosalas[0]?.name ||
+    ""
 
   const bookings = useMemo(() => {
     if (currentRole === "manager") {

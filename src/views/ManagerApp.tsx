@@ -25,6 +25,9 @@ import {
   MoreHorizontal,
   UserCheck,
   Building2,
+  ArrowRightLeft,
+  ArrowRight,
+  MapPin,
 } from "lucide-react"
 import Queue from "./manager/Queue"
 import LiveTracking from "./manager/LiveTracking"
@@ -170,28 +173,151 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
 
   const {
     bookings,
+    animals,
     notifications,
     markNotificationRead,
     markAllNotificationsRead,
     clearNotifications,
     profiles,
     gosalas,
+    managers,
+    activeGosalaFilter,
     setActiveGosalaFilter,
+    activeManagerGosala,
+    setActiveManagerGosala,
+    updateProfile,
   } = useStore()
   const meta = titles[view]
   const managerProfile = profiles?.manager || initialProfiles.manager
-  const currentGosala =
-    managerProfile?.managerData?.gosala || "Shri Krishna Gaushala"
+
+  // Find matching manager in managers roster if registered
+  const matchedManager = useMemo(() => {
+    return managers.find(
+      (m) =>
+        m.id === managerProfile.id ||
+        (m.email &&
+          managerProfile.email &&
+          m.email.toLowerCase() === managerProfile.email.toLowerCase()) ||
+        (m.name &&
+          managerProfile.name &&
+          m.name.toLowerCase() === managerProfile.name.toLowerCase()),
+    )
+  }, [managers, managerProfile])
+
+  // Extract all assigned Gaushalas for this manager
+  const assignedGosalaNames = useMemo(() => {
+    const list: string[] = []
+    if (matchedManager) {
+      if (matchedManager.gosalas && matchedManager.gosalas.length > 0) {
+        list.push(...matchedManager.gosalas)
+      } else if (
+        matchedManager.gosala &&
+        matchedManager.gosala !== "Unassigned"
+      ) {
+        list.push(matchedManager.gosala)
+      }
+    }
+    // Also check all Gaushalas in network for direct manager link
+    for (const g of gosalas) {
+      const isDirectManager =
+        (g.managerId &&
+          (g.managerId === managerProfile.id ||
+            g.managerId === matchedManager?.id)) ||
+        (g.managerName &&
+          g.managerName.toLowerCase() ===
+            managerProfile.name.toLowerCase()) ||
+        g.assignedManagers?.some(
+          (am) =>
+            am.id === managerProfile.id ||
+            am.id === matchedManager?.id ||
+            am.email === managerProfile.email,
+        )
+      if (
+        isDirectManager &&
+        !list.some((x) => x.toLowerCase() === g.name.toLowerCase())
+      ) {
+        list.push(g.name)
+      }
+    }
+    // Fallback to managerData if empty
+    if (list.length === 0) {
+      if (
+        managerProfile.managerData?.assignedGosalas &&
+        managerProfile.managerData.assignedGosalas.length > 0
+      ) {
+        list.push(...managerProfile.managerData.assignedGosalas)
+      } else if (
+        managerProfile.managerData?.gosala &&
+        managerProfile.managerData.gosala !== "Unassigned"
+      ) {
+        list.push(managerProfile.managerData.gosala)
+      }
+    }
+    return Array.from(new Set(list))
+  }, [matchedManager, gosalas, managerProfile])
+
+  // Selected Gaushala state (backed by localStorage and store)
+  const [selectedGosala, setSelectedGosalaState] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem("gomaa_active_manager_gosala")
+      if (saved) return saved
+    } catch {}
+    return activeManagerGosala || ""
+  })
+
+  // If user has exactly 1 Gaushala assigned, auto-select it immediately
+  useEffect(() => {
+    if (assignedGosalaNames.length === 1 && !selectedGosala) {
+      setSelectedGosalaState(assignedGosalaNames[0])
+      setActiveManagerGosala(assignedGosalaNames[0])
+    }
+  }, [assignedGosalaNames, selectedGosala, setActiveManagerGosala])
+
+  // Current Gaushala name to use throughout the manager portal
+  const currentGosala = useMemo(() => {
+    if (
+      selectedGosala &&
+      assignedGosalaNames.some(
+        (gn) => gn.toLowerCase() === selectedGosala.toLowerCase(),
+      )
+    ) {
+      return selectedGosala
+    }
+    if (assignedGosalaNames.length === 1) {
+      return assignedGosalaNames[0]
+    }
+    return selectedGosala || assignedGosalaNames[0] || ""
+  }, [selectedGosala, assignedGosalaNames])
 
   const currentGosalaObj = useMemo(() => {
+    if (!currentGosala) return null
     return (
       gosalas.find(
         (g) => g.name.toLowerCase() === currentGosala.toLowerCase(),
-      ) || gosalas[0]
+      ) || null
     )
   }, [gosalas, currentGosala])
 
-  // 1:1 Manager Scope Lock: Ensure store activeGosalaFilter is strictly pinned to the assigned facility
+  // Modal switcher state
+  const [showGosalaSelectorModal, setShowGosalaSelectorModal] = useState(false)
+
+  const handleSelectActiveGosala = (gName: string) => {
+    setSelectedGosalaState(gName)
+    setActiveManagerGosala(gName)
+    setActiveGosalaFilter(gName)
+    const baseManagerData =
+      managerProfile.managerData || initialProfiles.manager.managerData!
+    updateProfile("manager", {
+      managerData: {
+        ...baseManagerData,
+        gosala: gName,
+        assignedGosalas: assignedGosalaNames,
+      },
+    })
+    setShowGosalaSelectorModal(false)
+  }
+
+  // Strict Gaushala Isolation Lock: Ensure store activeGosalaFilter is strictly pinned to the active Gaushala
   useEffect(() => {
     if (currentGosala) {
       setActiveGosalaFilter(currentGosala)
@@ -311,6 +437,35 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
     },
     { id: "availability", label: "Slot Availability", icon: CalendarRange },
   ]
+
+  if (assignedGosalaNames.length === 0) {
+    return (
+      <div className="min-h-screen bg-paper flex items-center justify-center p-4">
+        <div className="w-full max-w-lg bg-card border border-line rounded-xl p-8 text-center shadow-lg space-y-4">
+          <div className="w-16 h-16 rounded-full bg-amber-500/10 text-amber-600 mx-auto flex items-center justify-center">
+            <Building2 size={32} />
+          </div>
+          <h2 className="font-serif text-[22px] text-ink font-semibold">
+            No Gaushala Assigned to Your Profile
+          </h2>
+          <p className="text-[13px] text-ink-soft leading-relaxed max-w-md mx-auto">
+            Welcome, <strong>{managerProfile.name}</strong>. Your manager account is active, but an Operations Admin has not assigned any physical Gaushala to your custody yet.
+          </p>
+          <div className="p-3.5 bg-paper rounded border border-line text-[12px] text-ink-faint">
+            Once your Regional Operations Admin assigns one or more Gaushalas to your profile, you will be able to manage their cattle, feasibility queue, live tracking, and net revenue here.
+          </div>
+          <div className="pt-2 flex justify-center gap-3">
+            <button
+              onClick={onSignOut}
+              className="px-4 py-2 bg-paper-deep text-ink border border-line rounded text-[13px] hover:bg-paper transition cursor-pointer"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-paper text-ink flex">
@@ -444,11 +599,28 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2.5">
-            {/* Physical Custodian Facility Badge */}
-            <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-forest-soft border border-forest/20 text-forest text-[12px] font-medium shrink-0">
-              <Building2 size={13} className="text-forest shrink-0" />
-              <span className="truncate max-w-[190px]">{currentGosala}</span>
-              <span className="font-mono text-[10px] text-forest/70 font-semibold">(Physical Custodian)</span>
+            {/* Active Gaushala Badge & Switcher */}
+            <div className="flex items-center gap-2 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-md bg-forest-soft border border-forest/25 text-forest text-[12px] font-medium shrink-0 shadow-2xs">
+              <Building2 size={15} className="text-forest shrink-0" />
+              <div className="text-left min-w-0">
+                <span className="font-semibold text-ink truncate max-w-[110px] sm:max-w-[180px] md:max-w-[240px] block leading-tight">
+                  {currentGosalaObj?.name || currentGosala || "Active Gaushala"}
+                </span>
+                <span className="text-[10px] text-ink-faint font-mono block leading-none">
+                  {currentGosalaObj?.region || "Operational Facility"}
+                </span>
+              </div>
+              {assignedGosalaNames.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setShowGosalaSelectorModal(true)}
+                  className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-forest text-white hover:bg-forest-deep text-[11px] font-mono font-medium transition cursor-pointer shadow-xs"
+                  title="Switch between your assigned Gaushalas"
+                >
+                  <ArrowRightLeft size={11} />
+                  <span className="hidden sm:inline">Switch</span>
+                </button>
+              )}
             </div>
 
             {/* Header Universal Search Input */}
@@ -1007,6 +1179,26 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
                   </div>
                 </button>
 
+                {assignedGosalaNames.length > 1 && (
+                  <button
+                    onClick={() => {
+                      setMobileMoreOpen(false)
+                      setShowGosalaSelectorModal(true)
+                    }}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg text-left hover:bg-forest-soft text-forest transition"
+                  >
+                    <ArrowRightLeft size={18} className="text-forest" />
+                    <div>
+                      <div className="text-[13px] font-medium">
+                        Switch Gaushala Facility
+                      </div>
+                      <div className="text-[11px] text-ink-faint">
+                        Currently: {currentGosalaObj?.name || currentGosala}
+                      </div>
+                    </div>
+                  </button>
+                )}
+
                 <div className="pt-2 border-t border-line mt-2">
                   <button
                     onClick={() => {
@@ -1021,6 +1213,147 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
                     </div>
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ----------------- GAUSHALA GATEWAY / SELECTOR MODAL ----------------- */}
+        {(showGosalaSelectorModal ||
+          (!currentGosala && assignedGosalaNames.length > 1)) && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-ink/75 backdrop-blur-md animate-fade-in overflow-y-auto">
+            <div className="bg-paper border border-line rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden relative z-[10000] my-auto">
+              <div className="p-6 border-b border-line bg-card/60 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-forest-soft text-forest flex items-center justify-center shrink-0">
+                    <Building2 size={22} />
+                  </div>
+                  <div>
+                    <h3 className="font-serif text-[20px] font-semibold text-ink">
+                      Select Gaushala to Manage
+                    </h3>
+                    <p className="text-[12.5px] text-ink-faint mt-0.5">
+                      You are authorized as Manager for multiple facilities. Select the Gaushala you want to oversee. Details and cattle records between Gaushalas are strictly isolated.
+                    </p>
+                  </div>
+                </div>
+                {currentGosala && (
+                  <button
+                    onClick={() => setShowGosalaSelectorModal(false)}
+                    className="p-1 rounded text-ink-faint hover:text-ink cursor-pointer"
+                    title="Close"
+                  >
+                    <X size={20} />
+                  </button>
+                )}
+              </div>
+
+              <div className="p-6 space-y-3 max-h-[60vh] overflow-y-auto">
+                {assignedGosalaNames.map((gName) => {
+                  const gObj = gosalas.find(
+                    (g) => g.name.toLowerCase() === gName.toLowerCase(),
+                  )
+                  const cowsCount = animals.filter(
+                    (a) => a.gosala.toLowerCase() === gName.toLowerCase(),
+                  ).length
+                  const queueCount = bookings.filter(
+                    (b) =>
+                      b.gosala.toLowerCase().includes(gName.toLowerCase()) &&
+                      (b.status === "Payment Verified" ||
+                        b.status === "Manager Review"),
+                  ).length
+                  const isCurrentlyActive =
+                    currentGosala &&
+                    currentGosala.toLowerCase() === gName.toLowerCase()
+
+                  return (
+                    <div
+                      key={gName}
+                      onClick={() => handleSelectActiveGosala(gName)}
+                      className={`p-4 rounded-lg border transition-all cursor-pointer flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+                        isCurrentlyActive
+                          ? "bg-forest-soft/70 border-forest shadow-xs ring-1 ring-forest/30"
+                          : "bg-card border-line hover:border-forest/60 hover:bg-paper-deep/60"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3.5 min-w-0">
+                        <div className="w-11 h-11 rounded-lg bg-forest text-white font-serif font-bold text-[16px] flex items-center justify-center shrink-0 shadow-xs">
+                          {gName.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-serif text-[16px] font-semibold text-ink truncate">
+                              {gName}
+                            </h4>
+                            {isCurrentlyActive && (
+                              <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-forest text-white font-semibold shrink-0">
+                                Active Now
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[12px] text-ink-faint flex items-center gap-1.5 mt-1">
+                            <MapPin size={11} className="text-saffron shrink-0" />
+                            <span className="truncate">
+                              {gObj?.region || "Operational Hub"}
+                            </span>
+                            <span>·</span>
+                            <span className="truncate">
+                              {gObj?.address || "Pune District"}
+                            </span>
+                          </div>
+                          <div className="text-[11.5px] text-ink-soft mt-1">
+                            AWBI Reg:{" "}
+                            <strong>
+                              {gObj?.trustRegistrationNo || "AWBI-VERIFIED"}
+                            </strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-2 shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-line/60">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-paper-deep text-ink font-medium border border-line">
+                            {cowsCount} cattle
+                          </span>
+                          {queueCount > 0 && (
+                            <span className="font-mono text-[10.5px] px-2 py-0.5 rounded bg-saffron-soft text-saffron-deep font-bold">
+                              {queueCount} in queue
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleSelectActiveGosala(gName)
+                          }}
+                          className={`px-3 py-1.5 rounded text-[12px] font-medium transition cursor-pointer flex items-center gap-1 ${
+                            isCurrentlyActive
+                              ? "bg-forest text-white hover:bg-forest-deep"
+                              : "bg-paper-deep text-ink hover:bg-forest hover:text-white border border-line"
+                          }`}
+                        >
+                          <span>
+                            {isCurrentlyActive
+                              ? "Currently Managing"
+                              : "Manage this Gaushala"}
+                          </span>
+                          <ArrowRight size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="p-4 border-t border-line bg-paper text-[11.5px] text-ink-faint flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck size={14} className="text-forest shrink-0" />
+                  Zero cross-shelter leakage · Each Gaushala is an isolated workspace
+                </span>
+                <span className="font-mono text-[11px] text-ink-soft">
+                  {assignedGosalaNames.length} facilities authorized
+                </span>
               </div>
             </div>
           </div>

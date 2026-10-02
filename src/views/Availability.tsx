@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
   ChevronLeft,
   ChevronRight,
@@ -67,19 +67,28 @@ export default function Availability() {
     profiles,
     currentRole,
     activeGosalaFilter,
+    activeManagerGosala,
   } = useStore()
 
   const assignedGosala =
-    profiles?.manager?.managerData?.gosala ||
+    activeManagerGosala ||
     (activeGosalaFilter && activeGosalaFilter !== "ALL"
       ? activeGosalaFilter
-      : (gosalas[0]?.name || ""))
+      : "") ||
+    profiles?.manager?.managerData?.gosala ||
+    (gosalas[0]?.name || "")
 
   const [selectedDate, setSelectedDate] = useState<string>(TODAY_REFERENCE)
   const [animalCategory, setAnimalCategory] = useState<string>("ALL")
   const [selectedGosala, setSelectedGosala] = useState<string>(
     () => (currentRole === "manager" ? assignedGosala : "ALL"),
   )
+
+  useEffect(() => {
+    if (currentRole === "manager" && assignedGosala) {
+      setSelectedGosala(assignedGosala)
+    }
+  }, [currentRole, assignedGosala])
   const [searchQuery, setSearchQuery] = useState<string>("")
 
   // Hover Popover State for Grid Slots

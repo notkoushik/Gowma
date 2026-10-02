@@ -205,7 +205,9 @@ export type GosalaManager = {
   name: string
   email: string
   phone: string
-  gosala: string
+  gosala: string // Primary / display Gaushala name
+  gosalas?: string[] // All assigned Gaushala names
+  gosalaIds?: string[] // All assigned Gaushala IDs
   region: string
   status: "Active" | "Inactive"
   assignedDate: string

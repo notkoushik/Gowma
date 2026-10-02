@@ -167,11 +167,13 @@ type Store = {
   gosalas: Gosala[]
   activeGosalaFilter: string
   setActiveGosalaFilter: (name: string) => void
+  activeManagerGosala: string
+  setActiveManagerGosala: (name: string) => void
   addGosala: (gosala: Omit<Gosala, "id"> | Gosala) => Gosala
   updateGosala: (id: string, patch: Partial<Gosala>) => void
   deleteGosala: (id: string) => void
-  addManager: (mgr: Omit<GosalaManager, "id" | "assignedDate">) => void
-  updateManager: (id: string, patch: Partial<GosalaManager>) => void
+  addManager: (mgr: Omit<GosalaManager, "id" | "assignedDate"> & { gosalas?: string[] }) => void
+  updateManager: (id: string, patch: Partial<GosalaManager> & { gosalas?: string[] }) => void
   toggleManagerStatus: (id: string) => void
   deleteManager: (id: string) => void
   advanceSettlement: (gosala: string) => void
@@ -254,6 +256,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return []
   })
   const [activeGosalaFilter, setActiveGosalaFilter] = useState<string>("ALL")
+  const [activeManagerGosala, setActiveManagerGosalaState] = useState<string>(
+    () => {
+      try {
+        if (typeof window !== "undefined" && window.localStorage) {
+          return localStorage.getItem("gomaa_active_manager_gosala") || ""
+        }
+      } catch {}
+      return ""
+    },
+  )
+
+  const setActiveManagerGosala = useCallback(
+    (name: string) => {
+      setActiveManagerGosalaState(name)
+      setActiveGosalaFilter(name)
+      try {
+        if (typeof window !== "undefined" && window.localStorage) {
+          localStorage.setItem("gomaa_active_manager_gosala", name)
+        }
+      } catch {}
+    },
+    [],
+  )
 
   useEffect(() => {
     try {
@@ -1119,7 +1144,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const addManager = useCallback(
-    (mgr: Omit<GosalaManager, "id" | "assignedDate">) => {
+    (mgr: Omit<GosalaManager, "id" | "assignedDate"> & { gosalas?: string[] }) => {
       const id = `MGR-${800 + managers.length + 1}`
       const assignedDate =
         "Today, " +
@@ -1128,21 +1153,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
           month: "short",
           year: "numeric",
         })
-      const newMgr: GosalaManager = { ...mgr, id, assignedDate }
+      const primaryGosala =
+        mgr.gosalas && mgr.gosalas.length > 0 ? mgr.gosalas[0] : mgr.gosala || "Unassigned"
+      const newMgr: GosalaManager = {
+        ...mgr,
+        id,
+        assignedDate,
+        gosala: primaryGosala,
+        gosalas: mgr.gosalas || (mgr.gosala ? [mgr.gosala] : []),
+      }
       setManagers((prev) => [newMgr, ...prev])
-      api.addManager(mgr).catch(console.error)
-      notify(`Manager ${mgr.name} assigned to ${mgr.gosala}`, "ok")
+      api.addManager(newMgr).catch(console.error)
+      const targetList =
+        newMgr.gosalas && newMgr.gosalas.length > 0
+          ? newMgr.gosalas.join(", ")
+          : primaryGosala
+      notify(`Manager ${mgr.name} assigned to ${targetList}`, "ok")
     },
     [managers.length, notify],
   )
 
   const updateManager = useCallback(
-    (id: string, patchData: Partial<GosalaManager>) => {
+    (id: string, patchData: Partial<GosalaManager> & { gosalas?: string[] }) => {
       setManagers((prev) =>
-        prev.map((m) => (m.id === id ? { ...m, ...patchData } : m)),
+        prev.map((m) => {
+          if (m.id !== id) return m
+          const updatedGosalas =
+            patchData.gosalas !== undefined ? patchData.gosalas : m.gosalas
+          const primaryGosala =
+            updatedGosalas && updatedGosalas.length > 0
+              ? updatedGosalas[0]
+              : patchData.gosala || m.gosala
+          return {
+            ...m,
+            ...patchData,
+            gosala: primaryGosala,
+            gosalas: updatedGosalas,
+          }
+        }),
       )
       api.updateManager(id, patchData).catch(console.error)
-      notify("Gosala manager details updated", "ok")
+      notify("Gaushala manager details updated", "ok")
     },
     [notify],
   )
@@ -1254,6 +1305,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       gosalas,
       activeGosalaFilter,
       setActiveGosalaFilter,
+      activeManagerGosala,
+      setActiveManagerGosala,
       addGosala,
       updateGosala,
       deleteGosala,
@@ -1279,6 +1332,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       vets,
       gosalas,
       activeGosalaFilter,
+      activeManagerGosala,
+      setActiveManagerGosala,
       pricingConfig,
       blockedSlots,
       managers,

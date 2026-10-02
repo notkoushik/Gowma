@@ -252,23 +252,69 @@ function formatBooking(b: any): Booking {
   }
 }
 
-function formatManager(a: any): GosalaManager {
+function formatManagerUser(user: any): GosalaManager {
+  const assignments = user.managerAssignments || []
+  const assignedGosalas: string[] = assignments
+    .map((a: any) => a.gosala?.name)
+    .filter(Boolean)
+  const assignedGosalaIds: string[] = assignments
+    .map((a: any) => a.gosala?.id)
+    .filter(Boolean)
+  const primaryGosala = assignedGosalas[0] || "Unassigned"
+  const primaryRegion =
+    assignments[0]?.region ||
+    assignments[0]?.gosala?.region ||
+    "Operational Hub"
+
+  let totalAnimals = 0
+  for (const a of assignments) {
+    if (a.gosala?.animals) {
+      totalAnimals += a.gosala.animals.length
+    }
+  }
+
+  const firstAssignedAt = assignments[0]?.assignedAt || user.createdAt
+
   return {
-    id: a.user.id.startsWith("MGR-")
-      ? a.user.id
-      : `MGR-${a.user.id.slice(0, 4)}`,
-    name: a.user.name,
-    email: a.user.email,
-    phone: a.user.phone,
-    gosala: a.gosala.name,
-    region: a.region,
-    status: a.status as "Active" | "Inactive" || "Active",
-    assignedDate: new Date(a.assignedAt).toLocaleDateString("en-IN", {
+    id: user.id.startsWith("MGR-")
+      ? user.id
+      : `MGR-${user.id.slice(0, 4)}`,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    gosala: primaryGosala,
+    gosalas: assignedGosalas,
+    gosalaIds: assignedGosalaIds,
+    region: primaryRegion,
+    status: (user.isActive ? "Active" : "Inactive") as "Active" | "Inactive",
+    assignedDate: new Date(firstAssignedAt).toLocaleDateString("en-IN", {
       day: "2-digit",
       month: "short",
       year: "numeric",
     }),
-    animalsCount: a.gosala.animals?.length || 2,
+    animalsCount: totalAnimals,
+  }
+}
+
+function formatManager(a: any): GosalaManager {
+  if (a.user) {
+    return formatManagerUser(a.user)
+  }
+  return {
+    id: a.id?.startsWith("MGR-") ? a.id : `MGR-${a.id?.slice(0, 4) || "001"}`,
+    name: a.name || "Gaushala Manager",
+    email: a.email || "manager@gosala.org",
+    phone: a.phone || "+91 98000 00000",
+    gosala: a.gosala?.name || a.gosala || "Unassigned",
+    gosalas: a.gosalas || (a.gosala?.name ? [a.gosala.name] : []),
+    region: a.region || "Operational Hub",
+    status: (a.status as "Active" | "Inactive") || "Active",
+    assignedDate: new Date().toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }),
+    animalsCount: a.animalsCount || 0,
   }
 }
 
@@ -1322,42 +1368,109 @@ export async function handleApiRequest(
 
   // GET /api/managers
   if (method === "GET" && pathname === "/api/managers") {
-    const assignments = await prisma.gosalaManagerAssignment.findMany({
-      include: { user: true, gosala: { include: { animals: true } } },
-      orderBy: { assignedAt: "desc" },
-    })
-    return { status: 200, body: { managers: assignments.map(formatManager) } }
+    try {
+      const managerUsers = await prisma.user.findMany({
+        where: { role: "GOSALA_MANAGER" },
+        include: {
+          managerAssignments: {
+            include: {
+              gosala: {
+                include: { animals: true },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      })
+      return {
+        status: 200,
+        body: { managers: managerUsers.map(formatManagerUser) },
+      }
+    } catch (err: any) {
+      console.warn("Error fetching managers:", err?.message)
+      return { status: 200, body: { managers: [] } }
+    }
   }
 
   // POST /api/managers
   if (method === "POST" && pathname === "/api/managers") {
-    let user = await prisma.user.findUnique({ where: { email: body.email } })
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          name: body.name,
-          email: body.email,
-          phone: body.phone,
-          role: "GOSALA_MANAGER",
+    try {
+      let user = await prisma.user.findUnique({ where: { email: body.email } })
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            name: body.name,
+            email: body.email,
+            phone: body.phone,
+            role: "GOSALA_MANAGER",
+            isActive: body.status !== "Inactive",
+          },
+        })
+      } else {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            name: body.name,
+            phone: body.phone,
+            role: "GOSALA_MANAGER",
+            isActive: body.status !== "Inactive",
+          },
+        })
+      }
+
+      // Determine target Gaushalas (supports multiple or single)
+      const rawGosalas: string[] = Array.isArray(body.gosalas)
+        ? body.gosalas
+        : body.gosala
+        ? [body.gosala]
+        : []
+
+      for (const gNameOrId of rawGosalas) {
+        if (!gNameOrId || gNameOrId === "Unassigned") continue
+        const targetGosala = await prisma.gosala.findFirst({
+          where: {
+            OR: [{ id: gNameOrId }, { name: gNameOrId }],
+          },
+        })
+        if (targetGosala) {
+          await prisma.gosalaManagerAssignment.upsert({
+            where: {
+              userId_gosalaId: {
+                userId: user.id,
+                gosalaId: targetGosala.id,
+              },
+            },
+            create: {
+              userId: user.id,
+              gosalaId: targetGosala.id,
+              region: body.region || targetGosala.region,
+              status: "Active",
+            },
+            update: {
+              status: "Active",
+            },
+          })
+        }
+      }
+
+      const updatedUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        include: {
+          managerAssignments: {
+            include: {
+              gosala: {
+                include: { animals: true },
+              },
+            },
+          },
         },
       })
+
+      return { status: 201, body: { manager: formatManagerUser(updatedUser) } }
+    } catch (err: any) {
+      console.error("Error creating manager in DB:", err)
+      return { status: 500, body: { error: err.message || "Failed to create manager" } }
     }
-
-    const gosala =
-      (await prisma.gosala.findFirst({ where: { name: body.gosala } })) ||
-      (await prisma.gosala.findFirst())!
-
-    const assignment = await prisma.gosalaManagerAssignment.create({
-      data: {
-        userId: user.id,
-        gosalaId: gosala.id,
-        region: body.region || gosala.region,
-        status: "Active",
-      },
-      include: { user: true, gosala: { include: { animals: true } } },
-    })
-
-    return { status: 201, body: { manager: formatManager(assignment) } }
   }
 
   // PUT /api/managers/:id
@@ -1375,40 +1488,121 @@ export async function handleApiRequest(
         name: body.name || user.name,
         email: body.email || user.email,
         phone: body.phone || user.phone,
+        isActive: body.status !== undefined ? body.status === "Active" : user.isActive,
       },
     })
 
-    return { status: 200, body: { ok: true } }
+    // If gosalas array was provided, sync assignments!
+    if (body.gosalas !== undefined || body.gosala !== undefined) {
+      const targetGosalas: string[] = Array.isArray(body.gosalas)
+        ? body.gosalas
+        : body.gosala
+        ? [body.gosala]
+        : []
+
+      // Delete existing assignments for this user
+      await prisma.gosalaManagerAssignment.deleteMany({
+        where: { userId: user.id },
+      })
+
+      // Re-create new assignments
+      for (const gNameOrId of targetGosalas) {
+        if (!gNameOrId || gNameOrId === "Unassigned") continue
+        const targetGosala = await prisma.gosala.findFirst({
+          where: {
+            OR: [{ id: gNameOrId }, { name: gNameOrId }],
+          },
+        })
+        if (targetGosala) {
+          await prisma.gosalaManagerAssignment.create({
+            data: {
+              userId: user.id,
+              gosalaId: targetGosala.id,
+              region: body.region || targetGosala.region,
+              status: "Active",
+            },
+          })
+        }
+      }
+    }
+
+    const updatedUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: {
+        managerAssignments: {
+          include: {
+            gosala: {
+              include: { animals: true },
+            },
+          },
+        },
+      },
+    })
+
+    return { status: 200, body: { ok: true, manager: formatManagerUser(updatedUser) } }
   }
 
   // PATCH /api/managers/:id/toggle
   const toggleMgrMatch = pathname.match(/^\/api\/managers\/([^/]+)\/toggle$/)
   if (method === "PATCH" && toggleMgrMatch) {
     const id = toggleMgrMatch[1]
-    const assignment = await prisma.gosalaManagerAssignment.findFirst({
-      where: { OR: [{ userId: id }, { userId: { startsWith: id } }] },
-      include: { user: true, gosala: { include: { animals: true } } },
+    const user = await prisma.user.findFirst({
+      where: { OR: [{ id }, { id: { startsWith: id } }] },
+      include: {
+        managerAssignments: {
+          include: {
+            gosala: {
+              include: { animals: true },
+            },
+          },
+        },
+      },
     })
-    if (!assignment)
+    if (!user)
       return { status: 404, body: { error: "Manager assignment not found" } }
 
-    const nextStatus = assignment.status === "Active" ? "Inactive" : "Active"
-    const updated = await prisma.gosalaManagerAssignment.update({
-      where: { id: assignment.id },
-      data: { status: nextStatus },
-      include: { user: true, gosala: { include: { animals: true } } },
+    const nextActive = !user.isActive
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { isActive: nextActive },
     })
 
-    return { status: 200, body: { manager: formatManager(updated) } }
+    await prisma.gosalaManagerAssignment.updateMany({
+      where: { userId: user.id },
+      data: { status: nextActive ? "Active" : "Inactive" },
+    })
+
+    const updatedUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: {
+        managerAssignments: {
+          include: {
+            gosala: {
+              include: { animals: true },
+            },
+          },
+        },
+      },
+    })
+
+    return { status: 200, body: { manager: formatManagerUser(updatedUser) } }
   }
 
   // DELETE /api/managers/:id
   const delMgrMatch = pathname.match(/^\/api\/managers\/([^/]+)$/)
   if (method === "DELETE" && delMgrMatch) {
     const id = delMgrMatch[1]
-    await prisma.gosalaManagerAssignment.deleteMany({
-      where: { OR: [{ userId: id }, { userId: { startsWith: id } }] },
+    const user = await prisma.user.findFirst({
+      where: { OR: [{ id }, { id: { startsWith: id } }] },
     })
+    if (user) {
+      await prisma.gosalaManagerAssignment.deleteMany({
+        where: { userId: user.id },
+      })
+      await prisma.user.delete({
+        where: { id: user.id },
+      })
+    }
     return { status: 200, body: { success: true } }
   }
 
@@ -1555,10 +1749,29 @@ export async function handleApiRequest(
     try {
       const dbGosalas = await prisma.gosala.findMany({
         where: { isActive: true },
-        include: { animals: true },
+        include: {
+          animals: true,
+          managers: {
+            include: { user: true },
+          },
+        },
         orderBy: { createdAt: "asc" },
       })
-      return { status: 200, body: { ok: true, gosalas: dbGosalas } }
+      const formatted = dbGosalas.map((g: any) => ({
+        ...g,
+        assignedManagers: (g.managers || []).map((m: any) => ({
+          id: m.user.id.startsWith("MGR-")
+            ? m.user.id
+            : `MGR-${m.user.id.slice(0, 4)}`,
+          name: m.user.name,
+          phone: m.user.phone,
+          email: m.user.email,
+        })),
+        managerName:
+          (g.managers || [])[0]?.user?.name || "None (Admin Acting)",
+        managerId: (g.managers || [])[0]?.user?.id || "",
+      }))
+      return { status: 200, body: { ok: true, gosalas: formatted } }
     } catch (err: any) {
       console.warn("Error fetching gosalas from database:", err?.message)
       return { status: 200, body: { ok: true, gosalas: [] } }

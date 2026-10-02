@@ -53,36 +53,16 @@ export default function GosalaManagers() {
   const [formName, setFormName] = useState("")
   const [formEmail, setFormEmail] = useState("")
   const [formPhone, setFormPhone] = useState("")
-  const [formGosala, setFormGosala] = useState(gosalas[0]?.name || "")
-  const [formRegion, setFormRegion] = useState(
-    gosalas[0]?.region || "Operational Hub",
-  )
-  const [formAnimalsCount, setFormAnimalsCount] = useState("0")
-
-  const handleGosalaSelect = (selectedGosalaName: string) => {
-    setFormGosala(selectedGosalaName)
-    const found = gosalas.find((g) => g.name === selectedGosalaName)
-    if (found) {
-      setFormRegion(found.region)
-      const count = animals.filter(
-        (a) => a.gosala.toLowerCase() === found.name.toLowerCase(),
-      ).length
-      setFormAnimalsCount(String(count))
-    }
-  }
+  const [formSelectedGosalas, setFormSelectedGosalas] = useState<string[]>([])
+  const [formRegion, setFormRegion] = useState("Operational Hub")
 
   const handleOpenAdd = () => {
     setEditingManager(null)
     setFormName("")
     setFormEmail("")
     setFormPhone("+91 98")
-    const g = gosalas[0]
-    setFormGosala(g?.name || "")
-    setFormRegion(g?.region || "Operational Hub")
-    const count = g
-      ? animals.filter((a) => a.gosala.toLowerCase() === g.name.toLowerCase()).length
-      : 0
-    setFormAnimalsCount(String(count))
+    setFormRegion("Operational Hub")
+    setFormSelectedGosalas(gosalas.length > 0 ? [gosalas[0].name] : [])
     setShowAddModal(true)
   }
 
@@ -91,9 +71,14 @@ export default function GosalaManagers() {
     setFormName(mgr.name)
     setFormEmail(mgr.email)
     setFormPhone(mgr.phone)
-    setFormGosala(mgr.gosala)
-    setFormRegion(mgr.region)
-    setFormAnimalsCount(String(mgr.animalsCount))
+    setFormRegion(mgr.region || "Operational Hub")
+    const existing =
+      mgr.gosalas && mgr.gosalas.length > 0
+        ? mgr.gosalas
+        : mgr.gosala && mgr.gosala !== "Unassigned"
+        ? [mgr.gosala]
+        : []
+    setFormSelectedGosalas(existing)
     setShowAddModal(true)
   }
 
@@ -104,36 +89,52 @@ export default function GosalaManagers() {
       return
     }
 
+    const totalCows = animals.filter((a) =>
+      formSelectedGosalas.some(
+        (gn) => gn.toLowerCase() === a.gosala.toLowerCase(),
+      ),
+    ).length
+
+    const primaryGosala =
+      formSelectedGosalas.length > 0 ? formSelectedGosalas[0] : "Unassigned"
+
     if (editingManager) {
       updateManager(editingManager.id, {
         name: formName.trim(),
         email: formEmail.trim(),
         phone: formPhone.trim(),
-        gosala: formGosala,
+        gosala: primaryGosala,
+        gosalas: formSelectedGosalas,
         region: formRegion,
-        animalsCount: Number(formAnimalsCount) || 1,
+        animalsCount: totalCows,
       })
-      // Sync with gaushala entity
-      const matchedGosala = gosalas.find(
-        (g) => g.name.toLowerCase() === formGosala.toLowerCase(),
-      )
-      if (matchedGosala) {
-        updateGosala(matchedGosala.id, {
-          managerId: editingManager.id,
-          managerName: formName.trim(),
-        })
+      // Sync each selected Gaushala with managerId and managerName
+      for (const gName of formSelectedGosalas) {
+        const found = gosalas.find(
+          (g) => g.name.toLowerCase() === gName.toLowerCase(),
+        )
+        if (found) {
+          updateGosala(found.id, {
+            managerId: editingManager.id,
+            managerName: formName.trim(),
+          })
+        }
       }
       setShowAddModal(false)
-      notify(`Updated manager ${formName.trim()}`, "ok")
+      notify(
+        `Updated manager ${formName.trim()} with ${formSelectedGosalas.length} assigned Gaushala(s)`,
+        "ok",
+      )
     } else {
       addManager({
         name: formName.trim(),
         email: formEmail.trim(),
         phone: formPhone.trim(),
-        gosala: formGosala,
+        gosala: primaryGosala,
+        gosalas: formSelectedGosalas,
         region: formRegion,
         status: "Active",
-        animalsCount: Number(formAnimalsCount) || 1,
+        animalsCount: totalCows,
       })
       setShowAddModal(false)
     }
@@ -144,7 +145,9 @@ export default function GosalaManagers() {
     // Find current manager ID if any
     const cur = managers.find(
       (m) =>
-        m.gosala.toLowerCase() === g.name.toLowerCase() ||
+        (m.gosalas &&
+          m.gosalas.some((gn) => gn.toLowerCase() === g.name.toLowerCase())) ||
+        m.gosala?.toLowerCase() === g.name.toLowerCase() ||
         m.id === g.managerId,
     )
     setSelectedManagerId(cur ? cur.id : "UNASSIGNED")
@@ -154,14 +157,27 @@ export default function GosalaManagers() {
     if (!reassigningGosala) return
 
     if (selectedManagerId === "UNASSIGNED") {
-      // Unassign manager from this gaushala
-      const curMgr = managers.find(
+      // Find all managers assigned to this Gaushala and remove this Gaushala from their list
+      const assignedMgrs = managers.filter(
         (m) =>
-          m.gosala.toLowerCase() === reassigningGosala.name.toLowerCase() ||
+          (m.gosalas &&
+            m.gosalas.some(
+              (gn) => gn.toLowerCase() === reassigningGosala.name.toLowerCase(),
+            )) ||
+          m.gosala?.toLowerCase() === reassigningGosala.name.toLowerCase() ||
           m.id === reassigningGosala.managerId,
       )
-      if (curMgr) {
-        updateManager(curMgr.id, { gosala: "Unassigned Shelter Pool", status: "Inactive" })
+      for (const mgr of assignedMgrs) {
+        const currentList =
+          mgr.gosalas && mgr.gosalas.length > 0 ? mgr.gosalas : [mgr.gosala]
+        const nextList = currentList.filter(
+          (g) => g.toLowerCase() !== reassigningGosala.name.toLowerCase(),
+        )
+        updateManager(mgr.id, {
+          gosalas: nextList,
+          gosala: nextList[0] || "Unassigned",
+          status: nextList.length === 0 ? "Inactive" : mgr.status,
+        })
       }
       updateGosala(reassigningGosala.id, {
         managerId: "",
@@ -174,22 +190,20 @@ export default function GosalaManagers() {
     } else {
       const chosen = managers.find((m) => m.id === selectedManagerId)
       if (chosen) {
-        // Enforce 1:1 invariant: remove from previous gaushala if any
-        if (chosen.gosala && chosen.gosala !== reassigningGosala.name) {
-          const oldGosala = gosalas.find(
-            (og) => og.name.toLowerCase() === chosen.gosala.toLowerCase(),
-          )
-          if (oldGosala) {
-            updateGosala(oldGosala.id, {
-              managerId: "",
-              managerName: "None (Admin Acting)",
-            })
-          }
-        }
+        // Multi-Gaushala: Add this Gaushala to chosen manager's list (do NOT remove other Gaushalas!)
+        const currentList =
+          chosen.gosalas && chosen.gosalas.length > 0
+            ? chosen.gosalas
+            : chosen.gosala && chosen.gosala !== "Unassigned"
+            ? [chosen.gosala]
+            : []
+        const nextList = Array.from(
+          new Set([...currentList, reassigningGosala.name]),
+        )
 
         updateManager(chosen.id, {
-          gosala: reassigningGosala.name,
-          region: reassigningGosala.region,
+          gosalas: nextList,
+          gosala: nextList[0],
           status: "Active",
         })
         updateGosala(reassigningGosala.id, {
@@ -197,7 +211,7 @@ export default function GosalaManagers() {
           managerName: chosen.name,
         })
         notify(
-          `Assigned ${chosen.name} as dedicated 1:1 custodian of ${reassigningGosala.name}`,
+          `Assigned ${chosen.name} as Manager for ${reassigningGosala.name}. (${nextList.length} Gaushala${nextList.length > 1 ? "s" : ""} managed by ${chosen.name})`,
           "ok",
         )
       }
@@ -209,7 +223,9 @@ export default function GosalaManagers() {
   const filteredManagers = managers.filter((m) => {
     const matchesSearch =
       m.name.toLowerCase().includes(query.toLowerCase()) ||
-      m.gosala.toLowerCase().includes(query.toLowerCase()) ||
+      (m.gosala && m.gosala.toLowerCase().includes(query.toLowerCase())) ||
+      (m.gosalas &&
+        m.gosalas.some((g) => g.toLowerCase().includes(query.toLowerCase()))) ||
       m.region.toLowerCase().includes(query.toLowerCase()) ||
       m.id.toLowerCase().includes(query.toLowerCase())
     const matchesStatus = statusFilter === "All" || m.status === statusFilter
@@ -219,18 +235,26 @@ export default function GosalaManagers() {
   // Mapping calculation
   const matrixData = useMemo(() => {
     return gosalas.map((g) => {
-      // Find assigned active manager
-      const assigned = managers.find(
+      // Find all assigned active managers
+      const assignedActive = managers.filter(
         (m) =>
-          (m.gosala.toLowerCase() === g.name.toLowerCase() ||
-            m.id === g.managerId) &&
-          m.status === "Active",
+          m.status === "Active" &&
+          ((m.gosalas &&
+            m.gosalas.some(
+              (gn) => gn.toLowerCase() === g.name.toLowerCase(),
+            )) ||
+            m.gosala?.toLowerCase() === g.name.toLowerCase() ||
+            m.id === g.managerId),
       )
-      const inactiveAssigned = managers.find(
+      const assignedInactive = managers.filter(
         (m) =>
-          (m.gosala.toLowerCase() === g.name.toLowerCase() ||
-            m.id === g.managerId) &&
-          m.status === "Inactive",
+          m.status === "Inactive" &&
+          ((m.gosalas &&
+            m.gosalas.some(
+              (gn) => gn.toLowerCase() === g.name.toLowerCase(),
+            )) ||
+            m.gosala?.toLowerCase() === g.name.toLowerCase() ||
+            m.id === g.managerId),
       )
 
       const shelterAnimals = animals.filter(
@@ -244,9 +268,10 @@ export default function GosalaManagers() {
 
       return {
         gosala: g,
-        activeManager: assigned || null,
-        inactiveManager: inactiveAssigned || null,
-        isOrphan: !assigned,
+        activeManagers: assignedActive,
+        inactiveManagers: assignedInactive,
+        activeManager: assignedActive[0] || null,
+        isOrphan: assignedActive.length === 0,
         animalsCount: shelterAnimals.length,
         pendingBookingsCount: shelterPendingBookings,
       }
@@ -402,7 +427,7 @@ export default function GosalaManagers() {
                   </tr>
                 </thead>
                 <tbody>
-                  {matrixData.map(({ gosala, activeManager, inactiveManager, isOrphan, animalsCount, pendingBookingsCount }) => (
+                  {matrixData.map(({ gosala, activeManagers, inactiveManagers, isOrphan, animalsCount, pendingBookingsCount }) => (
                     <tr
                       key={gosala.id}
                       className="border-b border-line/70 hover:bg-paper/70 transition-colors"
@@ -451,29 +476,30 @@ export default function GosalaManagers() {
                         </div>
                       </td>
 
-                      {/* Assigned Manager */}
+                      {/* Assigned Manager(s) */}
                       <td className="px-4 py-3.5">
-                        {activeManager ? (
-                          <div className="flex items-center gap-2.5">
-                            <div className="h-7 w-7 rounded-full bg-saffron text-white flex items-center justify-center text-[11px] font-semibold shrink-0">
-                              {activeManager.name.slice(0, 2).toUpperCase()}
-                            </div>
-                            <div>
-                              <div className="text-[12.5px] font-medium text-ink flex items-center gap-1.5">
-                                <span>{activeManager.name}</span>
-                                <span className="font-mono text-[10px] text-ink-faint">
-                                  ({activeManager.id})
-                                </span>
+                        {activeManagers.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {activeManagers.map((mgr) => (
+                              <div key={mgr.id} className="flex items-center gap-2">
+                                <div className="h-6 w-6 rounded-full bg-saffron text-white flex items-center justify-center text-[10px] font-semibold shrink-0">
+                                  {mgr.name.slice(0, 2).toUpperCase()}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="text-[12px] font-medium text-ink leading-tight truncate">
+                                    {mgr.name}
+                                  </div>
+                                  <div className="font-mono text-[10px] text-ink-faint truncate">
+                                    {mgr.phone}
+                                  </div>
+                                </div>
                               </div>
-                              <div className="font-mono text-[11px] text-ink-faint">
-                                {activeManager.phone}
-                              </div>
-                            </div>
+                            ))}
                           </div>
-                        ) : inactiveManager ? (
+                        ) : inactiveManagers.length > 0 ? (
                           <div className="space-y-1">
                             <div className="text-[12px] text-ink-faint line-through">
-                              {inactiveManager.name} (Inactive)
+                              {inactiveManagers[0].name} (Inactive)
                             </div>
                             <span className="inline-flex items-center gap-1 font-mono text-[10px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 font-semibold border border-amber-500/30">
                               <AlertTriangle size={11} /> Unassigned · Inactive Manager
@@ -489,8 +515,12 @@ export default function GosalaManagers() {
 
                       {/* Operational Status */}
                       <td className="px-4 py-3.5">
-                        {activeManager ? (
-                          <Tag tone="ok">Staffed 1:1</Tag>
+                        {activeManagers.length > 0 ? (
+                          <Tag tone="ok">
+                            {activeManagers.length > 1
+                              ? `${activeManagers.length} Managers Assigned`
+                              : "Staffed"}
+                          </Tag>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 font-semibold border border-amber-500/20">
                             Admin Acting
@@ -500,10 +530,14 @@ export default function GosalaManagers() {
 
                       {/* Triage Authority */}
                       <td className="px-4 py-3.5">
-                        {activeManager ? (
+                        {activeManagers.length > 0 ? (
                           <div className="text-[12px] text-ink-soft">
-                            <span className="font-medium text-ink">{activeManager.name}</span>
-                            <div className="text-[10.5px] text-ink-faint">Local Custodian</div>
+                            <span className="font-medium text-ink">
+                              {activeManagers.map((m) => m.name).join(", ")}
+                            </span>
+                            <div className="text-[10.5px] text-ink-faint">
+                              Local Gaushala Custodian
+                            </div>
                           </div>
                         ) : (
                           <div className="text-[12px] text-amber-800 dark:text-amber-300 font-medium flex items-center gap-1">
@@ -517,10 +551,14 @@ export default function GosalaManagers() {
                       <td className="px-4 py-3.5">
                         <button
                           onClick={() => handleOpenReassign(gosala)}
-                          className="inline-flex items-center gap-1 text-[12px] font-medium text-saffron-deep hover:text-saffron px-2.5 py-1 rounded border border-saffron/30 hover:bg-saffron-soft transition-colors"
+                          className="inline-flex items-center gap-1 text-[12px] font-medium text-saffron-deep hover:text-saffron px-2.5 py-1 rounded border border-saffron/30 hover:bg-saffron-soft transition-colors cursor-pointer"
                         >
                           <ArrowRightLeft size={13} />
-                          <span>{activeManager ? "Reassign" : "Assign Manager"}</span>
+                          <span>
+                            {activeManagers.length > 0
+                              ? "Manage Custodian"
+                              : "Assign Manager"}
+                          </span>
                         </button>
                       </td>
                     </tr>
@@ -574,9 +612,9 @@ export default function GosalaManagers() {
                   <tr className="border-b border-line bg-card/60">
                     {[
                       "Manager ID & Name",
-                      "Assigned Gosala (1:1 Lock)",
+                      "Assigned Gaushalas",
                       "Contact Info",
-                      "Animals",
+                      "Total Herd",
                       "Assigned Date",
                       "Status",
                       "Actions",
@@ -591,54 +629,82 @@ export default function GosalaManagers() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredManagers.map((m) => (
-                    <tr
-                      key={m.id}
-                      className="border-b border-line/70 hover:bg-paper/70 transition-colors"
-                    >
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-saffron-soft text-saffron-deep font-medium flex items-center justify-center text-[12px] shrink-0">
-                            {m.name
-                              .split(" ")
-                              .map((x) => x[0])
-                              .join("")
-                              .slice(0, 2)}
-                          </div>
-                          <div>
-                            <div className="text-[13px] font-medium text-ink leading-snug">
-                              {m.name}
+                  {filteredManagers.map((m) => {
+                    const managerGosalas =
+                      m.gosalas && m.gosalas.length > 0
+                        ? m.gosalas
+                        : m.gosala && m.gosala !== "Unassigned"
+                        ? [m.gosala]
+                        : []
+                    const dynamicCowCount = animals.filter((a) =>
+                      managerGosalas.some(
+                        (gn) => gn.toLowerCase() === a.gosala.toLowerCase(),
+                      ),
+                    ).length
+
+                    return (
+                      <tr
+                        key={m.id}
+                        className="border-b border-line/70 hover:bg-paper/70 transition-colors"
+                      >
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-saffron-soft text-saffron-deep font-medium flex items-center justify-center text-[12px] shrink-0">
+                              {m.name
+                                .split(" ")
+                                .map((x) => x[0])
+                                .join("")
+                                .slice(0, 2)}
                             </div>
-                            <div className="font-mono text-[11px] text-ink-faint">
-                              {m.id}
+                            <div>
+                              <div className="text-[13px] font-medium text-ink leading-snug">
+                                {m.name}
+                              </div>
+                              <div className="font-mono text-[11px] text-ink-faint">
+                                {m.id}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <div className="text-[13px] text-ink font-medium leading-snug">
-                          {m.gosala}
-                        </div>
-                        <div className="flex items-center gap-1 text-[11.5px] text-ink-faint mt-0.5">
-                          <MapPin size={11} className="text-saffron shrink-0" />
-                          <span>{m.region}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-1.5 text-[12px] text-ink">
-                          <Phone size={12} className="text-ink-faint" />
-                          <span className="font-mono">{m.phone}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-[11.5px] text-ink-faint mt-0.5">
-                          <Mail size={12} className="text-ink-faint" />
-                          <span>{m.email}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <span className="font-mono text-[12.5px] text-ink font-medium bg-paper-deep px-2 py-0.5 rounded-sm">
-                          {m.animalsCount} animals
-                        </span>
-                      </td>
+                        </td>
+                        <td className="px-4 py-3.5 max-w-[280px]">
+                          {managerGosalas.length > 0 ? (
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap gap-1">
+                                {managerGosalas.map((gn) => (
+                                  <span
+                                    key={gn}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-forest-soft text-forest border border-forest/20"
+                                  >
+                                    <Building2 size={10} />
+                                    <span>{gn}</span>
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="text-[10.5px] text-ink-faint">
+                                {managerGosalas.length} facility{managerGosalas.length > 1 ? "s" : ""} under management
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 font-semibold">
+                              ⚠️ Unassigned
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-1.5 text-[12px] text-ink">
+                            <Phone size={12} className="text-ink-faint" />
+                            <span className="font-mono">{m.phone}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[11.5px] text-ink-faint mt-0.5">
+                            <Mail size={12} className="text-ink-faint" />
+                            <span>{m.email}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className="font-mono text-[12.5px] text-ink font-medium bg-paper-deep px-2 py-0.5 rounded-sm">
+                            {dynamicCowCount} cows
+                          </span>
+                        </td>
                       <td className="px-4 py-3.5 text-[12px] text-ink-faint font-mono">
                         {m.assignedDate}
                       </td>
@@ -676,8 +742,9 @@ export default function GosalaManagers() {
                         </div>
                       </td>
                     </tr>
-                  ))}
-                  {filteredManagers.length === 0 && (
+                  )
+                })}
+                {filteredManagers.length === 0 && (
                     <tr>
                       <td
                         colSpan={7}
@@ -748,17 +815,26 @@ export default function GosalaManagers() {
                     ⚠️ Leave Unassigned (Admin Acts as Custodian)
                   </option>
                   {managers.map((m) => {
-                    const isCurrentlyHere =
-                      m.gosala.toLowerCase() === reassigningGosala.name.toLowerCase()
+                    const managerGosalas =
+                      m.gosalas && m.gosalas.length > 0
+                        ? m.gosalas
+                        : m.gosala && m.gosala !== "Unassigned"
+                        ? [m.gosala]
+                        : []
+                    const isCurrentlyHere = managerGosalas.some(
+                      (gn) =>
+                        gn.toLowerCase() === reassigningGosala.name.toLowerCase(),
+                    )
                     return (
                       <option key={m.id} value={m.id}>
-                        {m.name} ({m.id}) {isCurrentlyHere ? "· [Current Custodian]" : `· [Current: ${m.gosala}]`} ({m.status})
+                        {m.name} ({m.id}) · {managerGosalas.length} facility(ies) managed{" "}
+                        {isCurrentlyHere ? "· [Already Assigned Here]" : ""} ({m.status})
                       </option>
                     )
                   })}
                 </select>
-                <p className="text-[11.5px] text-ink-faint mt-1.5">
-                  Assigning a manager to this shelter will enforce 1:1 linkage and update all operational records.
+                <p className="text-[11.5px] text-ink-faint mt-1.5 leading-relaxed">
+                  Assigning a manager to this facility adds it to their management portfolio without removing their other Gaushalas. When the manager logs in, they can select and manage this facility independently with zero cross-data mixing.
                 </p>
               </div>
 
@@ -853,47 +929,130 @@ export default function GosalaManagers() {
               </div>
 
               <div>
-                <label className="block text-[12.5px] font-medium text-ink-soft mb-1">
-                  Assign to Physical Gaushala (1:1 Lock) *
-                </label>
-                <select
-                  value={formGosala}
-                  onChange={(e) => handleGosalaSelect(e.target.value)}
-                  className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
-                >
-                  {gosalas.map((g) => (
-                    <option key={g.name} value={g.name}>
-                      {g.name} ({g.region})
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-[12.5px] font-medium text-ink">
+                    Assign Gaushalas to this Manager *
+                  </label>
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormSelectedGosalas(gosalas.map((g) => g.name))
+                      }
+                      className="text-forest hover:underline font-medium cursor-pointer"
+                    >
+                      Select All ({gosalas.length})
+                    </button>
+                    <span className="text-line-strong">·</span>
+                    <button
+                      type="button"
+                      onClick={() => setFormSelectedGosalas([])}
+                      className="text-ink-faint hover:underline cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <div className="border border-line rounded-md p-2.5 max-h-52 overflow-y-auto space-y-1.5 bg-paper">
+                  {gosalas.length === 0 ? (
+                    <div className="text-center py-4 text-[12px] text-ink-faint">
+                      No Gaushalas registered yet. Please register Gaushalas first.
+                    </div>
+                  ) : (
+                    gosalas.map((g) => {
+                      const isSelected = formSelectedGosalas.some(
+                        (gn) => gn.toLowerCase() === g.name.toLowerCase(),
+                      )
+                      const cowsInG = animals.filter(
+                        (a) => a.gosala.toLowerCase() === g.name.toLowerCase(),
+                      ).length
+
+                      return (
+                        <label
+                          key={g.id}
+                          className={`flex items-center justify-between p-2 rounded cursor-pointer transition ${
+                            isSelected
+                              ? "bg-forest-soft/70 border border-forest/30"
+                              : "hover:bg-paper-deep border border-transparent"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setFormSelectedGosalas((prev) => [
+                                    ...prev,
+                                    g.name,
+                                  ])
+                                } else {
+                                  setFormSelectedGosalas((prev) =>
+                                    prev.filter(
+                                      (name) =>
+                                        name.toLowerCase() !==
+                                        g.name.toLowerCase(),
+                                    ),
+                                  )
+                                }
+                              }}
+                              className="rounded border-line text-forest focus:ring-forest h-4 w-4"
+                            />
+                            <div className="min-w-0">
+                              <div className="text-[12.5px] font-medium text-ink truncate">
+                                {g.name}
+                              </div>
+                              <div className="text-[10.5px] text-ink-faint flex items-center gap-1.5">
+                                <MapPin size={10} className="text-saffron shrink-0" />
+                                <span>{g.region}</span>
+                                <span>·</span>
+                                <span>AWBI: {g.trustRegistrationNo || "VERIFIED"}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <span className="font-mono text-[10.5px] px-2 py-0.5 rounded bg-paper-deep text-ink-soft shrink-0 ml-2">
+                            {cowsInG} cows
+                          </span>
+                        </label>
+                      )
+                    })
+                  )}
+                </div>
+
+                {/* Assignment Summary strip */}
+                <div className="mt-2 flex items-center justify-between text-[11.5px] text-ink-faint px-1">
+                  <span>
+                    <strong>{formSelectedGosalas.length}</strong> Gaushala
+                    {formSelectedGosalas.length === 1 ? "" : "s"} assigned
+                  </span>
+                  <span>
+                    Total herd:{" "}
+                    <strong>
+                      {
+                        animals.filter((a) =>
+                          formSelectedGosalas.some(
+                            (gn) => gn.toLowerCase() === a.gosala.toLowerCase(),
+                          ),
+                        ).length
+                      }
+                    </strong>{" "}
+                    cows
+                  </span>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[12.5px] font-medium text-ink-soft mb-1">
-                    Operational Region
-                  </label>
-                  <input
-                    type="text"
-                    value={formRegion}
-                    onChange={(e) => setFormRegion(e.target.value)}
-                    className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[12.5px] font-medium text-ink-soft mb-1">
-                    Supervised Animals
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="50"
-                    value={formAnimalsCount}
-                    onChange={(e) => setFormAnimalsCount(e.target.value)}
-                    className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] font-mono text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
-                  />
-                </div>
+              <div>
+                <label className="block text-[12.5px] font-medium text-ink-soft mb-1">
+                  Primary Operational Region
+                </label>
+                <input
+                  type="text"
+                  value={formRegion}
+                  onChange={(e) => setFormRegion(e.target.value)}
+                  placeholder="e.g. Pune Western Zone"
+                  className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
+                />
               </div>
 
               <div className="pt-4 border-t border-line flex items-center justify-end gap-2.5">

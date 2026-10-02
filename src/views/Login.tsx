@@ -1,6 +1,7 @@
-import { useState } from "react"
-import { ArrowRight, Eye, EyeOff, Lock, ShieldCheck } from "lucide-react"
+import { useState, useEffect } from "react"
+import { ArrowRight, Eye, EyeOff, Lock, ShieldCheck, UserCheck, Building2, Check, Info } from "lucide-react"
 import { roles, type Role, type RoleId } from "../data/roles"
+import { initialProfiles } from "../data/profiles"
 import { useStore } from "../store/store"
 
 const flow = [
@@ -62,11 +63,85 @@ export default function Login({
 }: {
   onSignIn: (role: RoleId) => void
 }) {
-  const { profiles } = useStore()
+  const {
+    profiles,
+    managers,
+    gosalas,
+    updateProfile,
+    setActiveManagerGosala,
+    setActiveGosalaFilter,
+  } = useStore()
   const [selected, setSelected] = useState<RoleId>("customer")
   const [showPw, setShowPw] = useState(false)
   const role = roles.find((r) => r.id === selected)!
   const currentProfile = profiles[selected]
+
+  const [selectedManagerId, setSelectedManagerId] = useState<string>("")
+  const [selectedManagerGosala, setSelectedManagerGosala] = useState<string>("")
+  const [emailInput, setEmailInput] = useState<string>("")
+
+  // Set default selected manager if available
+  useEffect(() => {
+    if (selected === "manager" && managers.length > 0) {
+      const activeMgr =
+        managers.find((m) => m.id === selectedManagerId) ||
+        managers.find((m) => m.status !== "Inactive") ||
+        managers[0]
+      if (activeMgr) {
+        if (!selectedManagerId) {
+          setSelectedManagerId(activeMgr.id)
+        }
+        setEmailInput(activeMgr.email || "manager@gomaa.in")
+        const gList =
+          activeMgr.gosalas && activeMgr.gosalas.length > 0
+            ? activeMgr.gosalas
+            : activeMgr.gosala && activeMgr.gosala !== "Unassigned"
+              ? [activeMgr.gosala]
+              : []
+        if (!selectedManagerGosala || !gList.includes(selectedManagerGosala)) {
+          setSelectedManagerGosala(gList[0] || "")
+        }
+      }
+    } else {
+      setEmailInput(currentProfile?.email || role.demoEmail)
+    }
+  }, [selected, managers, currentProfile, role])
+
+  const currentManagerObj = managers.find((m) => m.id === selectedManagerId)
+  const managerGosalaList: string[] = currentManagerObj
+    ? currentManagerObj.gosalas && currentManagerObj.gosalas.length > 0
+      ? currentManagerObj.gosalas
+      : currentManagerObj.gosala && currentManagerObj.gosala !== "Unassigned"
+        ? [currentManagerObj.gosala]
+        : []
+    : []
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (selected === "manager" && currentManagerObj) {
+      const gList = managerGosalaList
+      const targetGosala =
+        selectedManagerGosala || gList[0] || currentManagerObj.gosala || ""
+      const baseManagerData =
+        profiles.manager?.managerData || initialProfiles.manager.managerData!
+      await updateProfile("manager", {
+        name: currentManagerObj.name,
+        email: emailInput || currentManagerObj.email,
+        phone: currentManagerObj.phone,
+        managerData: {
+          ...baseManagerData,
+          managerId: currentManagerObj.id || baseManagerData.managerId,
+          gosala: targetGosala,
+          assignedGosalas: gList,
+        },
+      })
+      if (targetGosala) {
+        setActiveManagerGosala(targetGosala)
+        setActiveGosalaFilter(targetGosala)
+      }
+    }
+    onSignIn(selected)
+  }
 
   return (
     <div className="min-h-screen grid lg:grid-cols-[1.05fr_1fr]">
@@ -156,12 +231,129 @@ export default function Login({
             ))}
           </div>
 
+          {/* Dynamic Manager Account & Gaushala Target Picker */}
+          {selected === "manager" && managers.length > 0 && (
+            <div className="mt-5 p-3.5 bg-card border border-line rounded-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-[12px] font-semibold text-ink">
+                  <UserCheck size={14} className="text-saffron" />
+                  Select Registered Manager Account
+                </div>
+                <span className="text-[10px] font-mono text-ink-faint">
+                  {managers.length} in roster
+                </span>
+              </div>
+
+              <select
+                value={selectedManagerId}
+                onChange={(e) => {
+                  const id = e.target.value
+                  setSelectedManagerId(id)
+                  const chosen = managers.find((m) => m.id === id)
+                  if (chosen) {
+                    setEmailInput(chosen.email || "manager@gomaa.in")
+                    const gList =
+                      chosen.gosalas && chosen.gosalas.length > 0
+                        ? chosen.gosalas
+                        : chosen.gosala && chosen.gosala !== "Unassigned"
+                          ? [chosen.gosala]
+                          : []
+                    setSelectedManagerGosala(gList[0] || "")
+                  }
+                }}
+                className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[12.5px] text-ink outline-none focus:border-saffron transition"
+              >
+                {managers.map((m) => {
+                  const gList =
+                    m.gosalas && m.gosalas.length > 0
+                      ? m.gosalas
+                      : m.gosala && m.gosala !== "Unassigned"
+                        ? [m.gosala]
+                        : []
+                  return (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({gList.length} Gaushala
+                      {gList.length === 1 ? "" : "s"}
+                      {gList.length > 0
+                        ? `: ${gList.join(", ")}`
+                        : " - Unassigned"}
+                      )
+                    </option>
+                  )
+                })}
+              </select>
+
+              {currentManagerObj && (
+                <div className="pt-2 border-t border-line/60 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] text-ink-faint">
+                    <span>Assigned Gaushalas under {currentManagerObj.name}:</span>
+                    {managerGosalaList.length > 1 && (
+                      <span className="text-[10px] text-saffron-deep font-medium">
+                        Select initial shelter to open
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {managerGosalaList.length > 0 ? (
+                      managerGosalaList.map((gName) => {
+                        const isTarget = selectedManagerGosala === gName
+                        return (
+                          <button
+                            type="button"
+                            key={gName}
+                            onClick={() => setSelectedManagerGosala(gName)}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-[11px] font-medium border transition ${
+                              isTarget
+                                ? "bg-forest text-white border-forest shadow-xs"
+                                : "bg-paper text-ink border-line hover:border-line-strong"
+                            }`}
+                          >
+                            <Building2
+                              size={12}
+                              className={
+                                isTarget ? "text-saffron-light" : "text-ink-faint"
+                              }
+                            />
+                            {gName}
+                            {isTarget && (
+                              <Check size={11} className="text-white" />
+                            )}
+                          </button>
+                        )
+                      })
+                    ) : (
+                      <div className="text-[11.5px] text-amber-700 bg-amber-50 border border-amber-200/60 rounded px-2.5 py-1">
+                        ⚠️ No Gaushalas currently assigned to this manager. Operations
+                        Admin can assign Gaushalas in Admin &gt; Gaushala Managers.
+                      </div>
+                    )}
+                  </div>
+                  {managerGosalaList.length > 1 && (
+                    <div className="text-[10.5px] text-ink-faint italic">
+                      * You can seamlessly switch between your assigned Gaushalas
+                      anytime from the header switcher inside your workspace.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {selected === "manager" && managers.length === 0 && (
+            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-sm text-[12px] text-amber-800">
+              <div className="font-semibold flex items-center gap-1.5">
+                <Info size={14} /> No managers registered yet
+              </div>
+              <p className="mt-1 text-[11px] text-amber-700">
+                The Operations Admin has not registered any managers yet. Log in as{" "}
+                <strong>Admin</strong> to create managers and assign Gaushalas.
+              </p>
+            </div>
+          )}
+
           <form
             className="mt-6 space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault()
-              onSignIn(selected)
-            }}
+            onSubmit={handleSubmit}
           >
             <label className="block">
               <span className="text-[12.5px] text-ink-soft font-medium">
@@ -169,8 +361,8 @@ export default function Login({
               </span>
               <input
                 type="email"
-                defaultValue={currentProfile?.email || role.demoEmail}
-                key={currentProfile?.email || role.demoEmail}
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
                 className="mt-1.5 w-full bg-paper border border-line rounded-sm px-3 py-2.5 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
               />
             </label>
@@ -220,7 +412,10 @@ export default function Login({
               type="submit"
               className="w-full inline-flex items-center justify-center gap-2 bg-saffron text-white rounded-sm py-3 text-[14px] font-medium hover:bg-saffron-deep transition-colors"
             >
-              Continue as {currentProfile?.name || role.name}
+              Continue as{" "}
+              {selected === "manager" && currentManagerObj
+                ? currentManagerObj.name
+                : currentProfile?.name || role.name}
               <ArrowRight size={16} />
             </button>
           </form>

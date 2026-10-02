@@ -24,6 +24,7 @@ export type Gosala = {
   email: string
   managerId: string
   managerName: string
+  assignedManagers?: { id: string; name: string; phone?: string; email?: string }[]
   caretaker: string
   caretakerPhone?: string
   caretakerShift?: string

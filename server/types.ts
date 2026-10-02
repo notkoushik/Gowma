@@ -64,6 +64,8 @@ export type GosalaManager = {
   email: string
   phone: string
   gosala: string
+  gosalas?: string[]
+  gosalaIds?: string[]
   region: string
   status: "Active" | "Inactive"
   assignedDate: string

@@ -950,24 +950,28 @@ export default function Animals() {
     deleteVet,
     gosalas,
     activeGosalaFilter,
+    activeManagerGosala,
     setActiveGosalaFilter,
     currentRole,
     profiles,
   } = useStore()
 
   const assignedGosala =
-    profiles?.manager?.managerData?.gosala ||
+    activeManagerGosala ||
     (activeGosalaFilter && activeGosalaFilter !== "ALL"
       ? activeGosalaFilter
-      : "Shri Krishna Gaushala")
+      : "") ||
+    profiles?.manager?.managerData?.gosala ||
+    gosalas[0]?.name ||
+    ""
 
   // Dynamic Gaushala Shelters from Store
   const dynamicGosalaOptions = useMemo(() => {
     if (currentRole === "manager") {
-      return [assignedGosala]
+      return assignedGosala ? [assignedGosala] : (gosalas.map(g => g.name))
     }
     const fromGosalas = (gosalas || []).map((g) => g.name)
-    return Array.from(new Set([...fromGosalas, ...GOSALA_PRESETS]))
+    return Array.from(new Set([...fromGosalas]))
   }, [gosalas, currentRole, assignedGosala])
 
   // State Management
@@ -994,7 +998,7 @@ export default function Animals() {
   )
   const [vetEmergency, setVetEmergency] = useState(true)
   const [vetAssignedGosala, setVetAssignedGosala] = useState(
-    () => (currentRole === "manager" ? assignedGosala : dynamicGosalaOptions[0] || "Shri Krishna Gaushala"),
+    () => (currentRole === "manager" ? assignedGosala : dynamicGosalaOptions[0] || gosalas[0]?.name || ""),
   )
 
   const handleOpenAddVet = (v?: EmpanelledVet) => {
@@ -1011,7 +1015,7 @@ export default function Animals() {
       setVetAssignedGosala(
         currentRole === "manager"
           ? assignedGosala
-          : v.assignedGosalas[0] || dynamicGosalaOptions[0] || "Shri Krishna Gaushala",
+          : v.assignedGosalas[0] || dynamicGosalaOptions[0] || gosalas[0]?.name || "",
       )
     } else {
       setEditingVet(null)
@@ -1026,7 +1030,7 @@ export default function Animals() {
       setVetAssignedGosala(
         currentRole === "manager"
           ? assignedGosala
-          : dynamicGosalaOptions[0] || "Shri Krishna Gaushala",
+          : dynamicGosalaOptions[0] || gosalas[0]?.name || "",
       )
     }
     setShowAddVetModal(true)
@@ -1132,7 +1136,7 @@ export default function Animals() {
         ? assignedGosala
         : activeGosalaFilter !== "ALL"
         ? activeGosalaFilter
-        : dynamicGosalaOptions[0] || "Shri Krishna Gaushala",
+        : dynamicGosalaOptions[0] || gosalas[0]?.name || "",
   )
   const [selectedAgePresetLabel, setSelectedAgePresetLabel] = useState(
     "Prime Sacred Cow (6–8 yrs)",
@@ -1165,7 +1169,7 @@ export default function Animals() {
   const [editBreed, setEditBreed] = useState("Gir Cow")
   const [editType, setEditType] = useState<"Cow" | "Calf" | "Bull">("Cow")
   const [editGosala, setEditGosala] = useState(
-    () => dynamicGosalaOptions[0] || "Shri Krishna Gaushala",
+    () => dynamicGosalaOptions[0] || gosalas[0]?.name || "",
   )
   const [editAge, setEditAge] = useState("6 yrs")
   const [editWeight, setEditWeight] = useState("410 kg")

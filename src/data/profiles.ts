@@ -14,8 +14,9 @@ export type CustomerProfileData = {
 
 export type ManagerProfileData = {
   managerId: string
-  gosala: string
+  gosala: string // active / current gaushala
   gosalaName?: string
+  assignedGosalas?: string[] // list of all assigned gaushalas
   region: string
   dailySevaCeiling: number
   restingBufferMin: number

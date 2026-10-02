@@ -136,7 +136,7 @@ export const getDevoteeGotra = (customerName: string) => {
 }
 
 export default function ManagerLedger() {
-  const { bookings, animals, settlements, profiles, gosalas, activeGosalaFilter, setActiveGosalaFilter, currentRole } = useStore()
+  const { bookings, animals, settlements, profiles, gosalas, activeGosalaFilter, activeManagerGosala, setActiveGosalaFilter, currentRole } = useStore()
   const { notify } = useToast()
 
   // State management
@@ -144,7 +144,7 @@ export default function ManagerLedger() {
   const [isPerGosalaModalOpen, setIsPerGosalaModalOpen] = useState(false)
   const [modalSelectedGosala, setModalSelectedGosala] = useState<string>("ALL")
   const [expandedPaymentId, setExpandedPaymentId] = useState<string | null>("GMA-24815")
-  const [expandedGosalaActionId, setExpandedGosalaActionId] = useState<string | null>("Shri Krishna Gaushala")
+  const [expandedGosalaActionId, setExpandedGosalaActionId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "completed" | "confirmed" | "in_service">("all")
   const [receiptBooking, setReceiptBooking] = useState<Booking | null>(null)
@@ -152,10 +152,10 @@ export default function ManagerLedger() {
   // Current Gaushala Information (Zero-leakage manager isolation)
   const currentGosalaName =
     currentRole === "manager"
-      ? (profiles?.manager?.managerData?.gosala || "Shri Krishna Gaushala")
+      ? (activeManagerGosala || (activeGosalaFilter !== "ALL" ? activeGosalaFilter : "") || profiles?.manager?.managerData?.gosala || gosalas[0]?.name || "")
       : (activeGosalaFilter !== "ALL"
           ? activeGosalaFilter
-          : profiles?.manager?.managerData?.gosala || "Shri Krishna Gaushala")
+          : activeManagerGosala || profiles?.manager?.managerData?.gosala || gosalas[0]?.name || "")
 
   const currentGosala = gosalas.find(
     (g) => g.name.toLowerCase() === currentGosalaName.toLowerCase(),
@@ -164,7 +164,7 @@ export default function ManagerLedger() {
   // All verified bookings strictly scoped for manager
   const allRelevantBookings = bookings.filter((b) => {
     if (currentRole === "manager") {
-      if ((b.gosala || "Shri Krishna Gaushala").toLowerCase() !== currentGosalaName.toLowerCase()) {
+      if (currentGosalaName && (b.gosala || "").toLowerCase() !== currentGosalaName.toLowerCase()) {
         return false
       }
     }
@@ -226,7 +226,7 @@ export default function ManagerLedger() {
 
   // Aggregate stats from verified sevas
   allRelevantBookings.forEach((b) => {
-    const gName = b.gosala || "Shri Krishna Gaushala"
+    const gName = b.gosala || currentGosalaName || (gosalas[0]?.name || "Gaushala")
     if (!gosalaBreakdownMap[gName]) {
       const found = gosalas.find(
         (g) => g.name.toLowerCase() === gName.toLowerCase(),
@@ -285,19 +285,18 @@ export default function ManagerLedger() {
   const gosalaBreakdownList =
     currentRole === "manager"
       ? Object.values(gosalaBreakdownMap).filter(
-          (g) => g.name.toLowerCase() === currentGosalaName.toLowerCase(),
+          (g) => !currentGosalaName || g.name.toLowerCase() === currentGosalaName.toLowerCase(),
         )
       : Object.values(gosalaBreakdownMap)
 
   // Filter relevant bookings for the active gaushala scope (or ALL)
   const relevantBookings = bookings.filter((b) => {
+    const bGosala = b.gosala || currentGosalaName || (gosalas[0]?.name || "")
     const matchesGosala =
       currentRole === "manager"
-        ? (b.gosala || "Shri Krishna Gaushala").toLowerCase() ===
-          currentGosalaName.toLowerCase()
+        ? (!currentGosalaName || bGosala.toLowerCase() === currentGosalaName.toLowerCase())
         : activeGosalaFilter === "ALL" ||
-          (b.gosala || "Shri Krishna Gaushala").toLowerCase() ===
-            activeGosalaFilter.toLowerCase()
+          bGosala.toLowerCase() === activeGosalaFilter.toLowerCase()
 
     const matchesStatus =
       b.status === "Completed" ||
