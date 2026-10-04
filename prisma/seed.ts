@@ -176,60 +176,60 @@ async function main() {
   const gosala1 = await prisma.gosala.create({
     data: {
       name: "Shri Krishna Gaushala",
-      region: "Pune West (Kothrud)",
-      address: "Near Chandani Chowk, Kothrud, Pune",
+      region: "Cyberabad / Gachibowli",
+      address: "Near Outer Ring Road, Gachibowli, Hyderabad",
       contactPhone: "+91 98230 44102",
       contactEmail: "contact@shrikrishnagosala.org",
-      latitude: 18.5074,
-      longitude: 73.8077,
+      latitude: 17.4401,
+      longitude: 78.3489,
     },
   })
 
   const gosala2 = await prisma.gosala.create({
     data: {
       name: "Nandini Goseva Sadan",
-      region: "Pune North (Baner)",
-      address: "Baner-Pashan Link Rd, Baner, Pune",
+      region: "Cyberabad / Kondapur",
+      address: "Botanical Garden Rd, Kondapur, Hyderabad",
       contactPhone: "+91 98901 88321",
       contactEmail: "contact@nandinigoseva.org",
-      latitude: 18.559,
-      longitude: 73.7868,
+      latitude: 17.4647,
+      longitude: 78.3662,
     },
   })
 
   const gosala3 = await prisma.gosala.create({
     data: {
       name: "Gopal Gaushala Trust",
-      region: "Pune East (Kalyani Nagar)",
-      address: "Wadgaon Sheri, Kalyani Nagar, Pune",
+      region: "Hyderabad Central (Banjara Hills)",
+      address: "Road No. 12, Banjara Hills, Hyderabad",
       contactPhone: "+91 97640 19283",
       contactEmail: "contact@gopaltrust.org",
-      latitude: 18.5482,
-      longitude: 73.9034,
+      latitude: 17.4156,
+      longitude: 78.4358,
     },
   })
 
   const gosala4 = await prisma.gosala.create({
     data: {
       name: "Vrindavan Goshala",
-      region: "Pune South (Hadapsar)",
-      address: "Saswad Road, Hadapsar, Pune",
+      region: "Narsingi / Gandipet",
+      address: "Gandipet Main Rd, Narsingi, Hyderabad",
       contactPhone: "+91 98500 77124",
       contactEmail: "contact@vrindavangosala.org",
-      latitude: 18.4967,
-      longitude: 73.9417,
+      latitude: 17.3826,
+      longitude: 78.3976,
     },
   })
 
   const gosala5 = await prisma.gosala.create({
     data: {
       name: "Kamdhenu Seva Kendra",
-      region: "Pune West (Wakad)",
-      address: "Datta Mandir Rd, Wakad, Pune",
+      region: "Cyberabad / Hitec City",
+      address: "Near Cyber Towers, Hitec City, Hyderabad",
       contactPhone: "+91 99220 63819",
       contactEmail: "contact@kamdhenuseva.org",
-      latitude: 18.5987,
-      longitude: 73.7628,
+      latitude: 17.4485,
+      longitude: 78.3748,
     },
   })
 
@@ -241,31 +241,31 @@ async function main() {
       {
         userId: mgrGajanan.id,
         gosalaId: gosala1.id,
-        region: "Pune West (Kothrud)",
+        region: "Cyberabad / Gachibowli",
         status: "Active",
       },
       {
         userId: mgrRameshwar.id,
         gosalaId: gosala2.id,
-        region: "Pune North (Baner)",
+        region: "Cyberabad / Kondapur",
         status: "Active",
       },
       {
         userId: mgrTukaram.id,
         gosalaId: gosala3.id,
-        region: "Pune East (Kalyani Nagar)",
+        region: "Hyderabad Central (Banjara Hills)",
         status: "Active",
       },
       {
         userId: mgrMahadev.id,
         gosalaId: gosala4.id,
-        region: "Pune South (Hadapsar)",
+        region: "Narsingi / Gandipet",
         status: "Active",
       },
       {
         userId: mgrVitthal.id,
         gosalaId: gosala5.id,
-        region: "Pune West (Wakad)",
+        region: "Cyberabad / Hitec City",
         status: "Inactive",
       },
     ],
@@ -360,7 +360,7 @@ async function main() {
       startTime: "10:00",
       endTime: "12:00",
       durationMin: 120,
-      address: "14 Tulsi Nagar, Kothrud, Pune",
+      address: "14 Tulsi Nagar, Kondapur, Hyderabad",
       distanceKm: 12.4,
       baseRate: 3500,
       extraTimeFee: 1000,
@@ -410,7 +410,7 @@ async function main() {
       startTime: "08:00",
       endTime: "09:00",
       durationMin: 60,
-      address: "Plot 22, Baner Road, Pune",
+      address: "Plot 22, Madhapur, Hyderabad",
       distanceKm: 4.2,
       baseRate: 4200,
       extraTimeFee: 0,
@@ -448,7 +448,7 @@ async function main() {
       startTime: "11:00",
       endTime: "12:30",
       durationMin: 90,
-      address: "Sr 8, Viman Nagar, Pune",
+      address: "Sr 8, Hitec City, Hyderabad",
       distanceKm: 9.1,
       baseRate: 3500,
       extraTimeFee: 500,
@@ -511,7 +511,7 @@ async function main() {
       startTime: "09:00",
       endTime: "10:00",
       durationMin: 60,
-      address: "Lane 5, Kalyani Nagar, Pune",
+      address: "Lane 5, Banjara Hills, Hyderabad",
       distanceKm: 6.8,
       baseRate: 2800,
       extraTimeFee: 0,

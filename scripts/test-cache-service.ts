@@ -51,11 +51,11 @@ async function runTests() {
   assert(ttl > 0 && ttl <= 2, `TTL returns remaining seconds (${ttl}s)`)
 
   // 5. Pattern matching KEYS
-  await cacheService.set("fleet:pune:1", "MH-12-Q-4491")
-  await cacheService.set("fleet:pune:2", "MH-12-RN-8821")
+  await cacheService.set("fleet:hyd:1", "TS-09-Q-4491")
+  await cacheService.set("fleet:hyd:2", "TS-09-RN-8821")
   await cacheService.set("fleet:mumbai:1", "MH-01-AB-1234")
-  const puneFleet = await cacheService.keys("fleet:pune:*")
-  assert(puneFleet.length === 2, `KEYS pattern match returns correct subset (${puneFleet.length} items)`)
+  const hydFleet = await cacheService.keys("fleet:hyd:*")
+  assert(hydFleet.length === 2, `KEYS pattern match returns correct subset (${hydFleet.length} items)`)
 
   // 6. Integrated Slot Hold Service test
   const hold1 = await acquireSlotHold({

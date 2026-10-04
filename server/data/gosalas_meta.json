@@ -1,0 +1,396 @@
+{
+  "ee2561fe-06c1-479b-987c-ab4920db4e21": {
+    "photo": "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=480&fit=crop&auto=format",
+    "photos": [
+      "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=480&fit=crop&auto=format",
+      "https://images.unsplash.com/photo-1500595046743-cd271d694d30?w=800&h=480&fit=crop&auto=format"
+    ],
+    "trustRegistrationNo": "AWBI/2018/TG/HYD-4912",
+    "capacity": 65,
+    "establishedYear": "2018",
+    "landAcres": 6.5,
+    "visitingHours": "06:00 AM - 07:30 PM (Daily)",
+    "caretaker": "Gajanan Kale",
+    "caretakerPhone": "+91 98230 44102",
+    "facilities": [
+      "Padded Cattle Ambulance / Van",
+      "24/7 Pure Borewell Water & Trough",
+      "Certified Veterinary Medical Bay",
+      "Sacred Vedic Puja & Havan Courtyard"
+    ],
+    "baseCowPrice": 3500,
+    "basePairPrice": 4800,
+    "baseCalfPrice": 2500,
+    "baseBullPrice": 4000,
+    "baseBuffaloPrice": 3800,
+    "items": [
+      {
+        "id": "item-1791096282121",
+        "name": "Menthulu Flowers",
+        "category": "feed",
+        "price": 100,
+        "desc": "This is one of the most sacraid formation of item",
+        "maxQty": 5,
+        "inStock": true
+      },
+      {
+        "id": "item-mala",
+        "name": "Marigold Pooja Mala",
+        "desc": "Fresh consecrated floral garland for the holy cow",
+        "price": 150,
+        "category": "puja",
+        "inStock": true,
+        "maxQty": 5
+      },
+      {
+        "id": "item-fodder",
+        "name": "Fresh Green Grass Fodder",
+        "desc": "10 kg organic sweet grass basket (Grass Seva)",
+        "price": 120,
+        "category": "feed",
+        "inStock": true,
+        "maxQty": 10
+      },
+      {
+        "id": "item-chunni",
+        "name": "Pure Silk Chunni & Vastra",
+        "desc": "Ceremonial silk drape with golden zari border",
+        "price": 300,
+        "category": "decoration",
+        "inStock": true,
+        "maxQty": 3
+      },
+      {
+        "id": "item-jaggery",
+        "name": "Devotional Jaggery & Chana",
+        "desc": "Organic gur and roasted chana feeding plate",
+        "price": 180,
+        "category": "feed",
+        "inStock": true,
+        "maxQty": 5
+      },
+      {
+        "id": "item-ghee",
+        "name": "Pure Vedic A2 Gir Cow Ghee (500ml)",
+        "desc": "Traditional bilona churned Gaushala trust ghee",
+        "price": 950,
+        "category": "prasadam",
+        "inStock": true,
+        "maxQty": 4
+      },
+      {
+        "id": "item-dhoop",
+        "name": "Natural Gomaye Hawan Dhoop",
+        "desc": "Eco-friendly cow dung herbal dhoop cones (pack of 20)",
+        "price": 200,
+        "category": "puja",
+        "inStock": true,
+        "maxQty": 6
+      },
+      {
+        "id": "item-puja-kit",
+        "name": "Gau Pooja Kalash & Tilak Kit",
+        "desc": "Complete brass kalash, kumkum, akshata and bell set",
+        "price": 450,
+        "category": "puja",
+        "inStock": true,
+        "maxQty": 2
+      }
+    ],
+    "governingAdminRole": "admin",
+    "governingAdminName": "Priya Sharma",
+    "adminId": "USER-ADM-101",
+    "adminName": "Priya Sharma",
+    "managerName": "Gajanan Kale",
+    "managerId": "5a9ddbfc-5ffa-42b4-9878-d213d70a1f75"
+  },
+  "ramnath gaushala": {
+    "photo": "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=480&fit=crop&auto=format",
+    "photos": [
+      "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=480&fit=crop&auto=format",
+      "https://images.unsplash.com/photo-1500595046743-cd271d694d30?w=800&h=480&fit=crop&auto=format"
+    ],
+    "trustRegistrationNo": "AWBI/2018/TG/HYD-4912",
+    "capacity": 65,
+    "establishedYear": "2018",
+    "landAcres": 6.5,
+    "visitingHours": "06:00 AM - 07:30 PM (Daily)",
+    "caretaker": "Gajanan Kale",
+    "caretakerPhone": "+91 98230 44102",
+    "facilities": [
+      "Padded Cattle Ambulance / Van",
+      "24/7 Pure Borewell Water & Trough",
+      "Certified Veterinary Medical Bay",
+      "Sacred Vedic Puja & Havan Courtyard"
+    ],
+    "baseCowPrice": 3500,
+    "basePairPrice": 4800,
+    "baseCalfPrice": 2500,
+    "baseBullPrice": 4000,
+    "baseBuffaloPrice": 3800,
+    "items": [
+      {
+        "id": "item-1791096282121",
+        "name": "Menthulu Flowers",
+        "category": "feed",
+        "price": 100,
+        "desc": "This is one of the most sacraid formation of item",
+        "maxQty": 5,
+        "inStock": true
+      },
+      {
+        "id": "item-mala",
+        "name": "Marigold Pooja Mala",
+        "desc": "Fresh consecrated floral garland for the holy cow",
+        "price": 150,
+        "category": "puja",
+        "inStock": true,
+        "maxQty": 5
+      },
+      {
+        "id": "item-fodder",
+        "name": "Fresh Green Grass Fodder",
+        "desc": "10 kg organic sweet grass basket (Grass Seva)",
+        "price": 120,
+        "category": "feed",
+        "inStock": true,
+        "maxQty": 10
+      },
+      {
+        "id": "item-chunni",
+        "name": "Pure Silk Chunni & Vastra",
+        "desc": "Ceremonial silk drape with golden zari border",
+        "price": 300,
+        "category": "decoration",
+        "inStock": true,
+        "maxQty": 3
+      },
+      {
+        "id": "item-jaggery",
+        "name": "Devotional Jaggery & Chana",
+        "desc": "Organic gur and roasted chana feeding plate",
+        "price": 180,
+        "category": "feed",
+        "inStock": true,
+        "maxQty": 5
+      },
+      {
+        "id": "item-ghee",
+        "name": "Pure Vedic A2 Gir Cow Ghee (500ml)",
+        "desc": "Traditional bilona churned Gaushala trust ghee",
+        "price": 950,
+        "category": "prasadam",
+        "inStock": true,
+        "maxQty": 4
+      },
+      {
+        "id": "item-dhoop",
+        "name": "Natural Gomaye Hawan Dhoop",
+        "desc": "Eco-friendly cow dung herbal dhoop cones (pack of 20)",
+        "price": 200,
+        "category": "puja",
+        "inStock": true,
+        "maxQty": 6
+      },
+      {
+        "id": "item-puja-kit",
+        "name": "Gau Pooja Kalash & Tilak Kit",
+        "desc": "Complete brass kalash, kumkum, akshata and bell set",
+        "price": 450,
+        "category": "puja",
+        "inStock": true,
+        "maxQty": 2
+      }
+    ],
+    "governingAdminRole": "admin",
+    "governingAdminName": "Priya Sharma",
+    "adminId": "USER-ADM-101",
+    "adminName": "Priya Sharma",
+    "managerName": "Gajanan Kale",
+    "managerId": "5a9ddbfc-5ffa-42b4-9878-d213d70a1f75"
+  },
+  "7dbbfeaa-e306-4721-8677-49789048bda2": {
+    "photo": "https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?w=800&h=480&fit=crop&auto=format",
+    "photos": [
+      "https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?w=800&h=480&fit=crop&auto=format",
+      "https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?w=800&h=480&fit=crop&auto=format"
+    ],
+    "trustRegistrationNo": "AWBI/2021/TG/HYD-7104",
+    "capacity": 45,
+    "establishedYear": "2021",
+    "landAcres": 3.8,
+    "visitingHours": "06:30 AM - 07:00 PM (Daily)",
+    "caretaker": "Rahul Kamble",
+    "caretakerPhone": "+91 98230 44910",
+    "facilities": [
+      "24/7 Pure Borewell Water & Trough",
+      "Organic Green Fodder Pasture",
+      "Covered Weather-Proof Night Pens"
+    ],
+    "governingAdminRole": "admin",
+    "governingAdminName": "Priya Sharma",
+    "adminId": "USER-ADM-101",
+    "adminName": "Priya Sharma",
+    "managerName": "Rahul Kamble",
+    "managerId": "51086cd5-a0bb-4d7f-a2e1-61b599e6d31e"
+  },
+  "surya": {
+    "photo": "https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?w=800&h=480&fit=crop&auto=format",
+    "photos": [
+      "https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?w=800&h=480&fit=crop&auto=format",
+      "https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?w=800&h=480&fit=crop&auto=format"
+    ],
+    "trustRegistrationNo": "AWBI/2021/TG/HYD-7104",
+    "capacity": 45,
+    "establishedYear": "2021",
+    "landAcres": 3.8,
+    "visitingHours": "06:30 AM - 07:00 PM (Daily)",
+    "caretaker": "Rahul Kamble",
+    "caretakerPhone": "+91 98230 44910",
+    "facilities": [
+      "24/7 Pure Borewell Water & Trough",
+      "Organic Green Fodder Pasture",
+      "Covered Weather-Proof Night Pens"
+    ],
+    "governingAdminRole": "admin",
+    "governingAdminName": "Priya Sharma",
+    "adminId": "USER-ADM-101",
+    "adminName": "Priya Sharma",
+    "managerName": "Rahul Kamble",
+    "managerId": "51086cd5-a0bb-4d7f-a2e1-61b599e6d31e"
+  },
+  "ff821881-60ed-429c-9a2c-ba53f5daa605": {
+    "photo": "https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?w=800&h=480&fit=crop&auto=format",
+    "photos": [
+      "https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?w=800&h=480&fit=crop&auto=format",
+      "https://images.unsplash.com/photo-1589923188900-85dae523342b?w=800&h=480&fit=crop&auto=format",
+      "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=480&fit=crop&auto=format"
+    ],
+    "trustRegistrationNo": "AWBI/2019/TG/HYD-6380",
+    "capacity": 85,
+    "establishedYear": "2019",
+    "landAcres": 8.2,
+    "visitingHours": "06:00 AM - 08:00 PM (Daily)",
+    "caretaker": "Mahadev Joshi",
+    "caretakerPhone": "+91 98500 77124",
+    "facilities": [
+      "Padded Cattle Ambulance / Van",
+      "24/7 Pure Borewell Water & Trough",
+      "Certified Veterinary Medical Bay",
+      "Organic Green Fodder Pasture",
+      "Sacred Vedic Puja & Havan Courtyard",
+      "Non-Slip Rubber Flooring in Sheds"
+    ],
+    "governingAdminRole": "admin",
+    "governingAdminName": "Priya Sharma",
+    "adminId": "USER-ADM-101",
+    "adminName": "Priya Sharma",
+    "managerName": "Mahadev Joshi",
+    "managerId": "75ec786a-3122-4daa-aa10-d0f550bd47d1"
+  },
+  "suryavanchi gaushala": {
+    "photo": "https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?w=800&h=480&fit=crop&auto=format",
+    "photos": [
+      "https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?w=800&h=480&fit=crop&auto=format",
+      "https://images.unsplash.com/photo-1589923188900-85dae523342b?w=800&h=480&fit=crop&auto=format",
+      "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=480&fit=crop&auto=format"
+    ],
+    "trustRegistrationNo": "AWBI/2019/TG/HYD-6380",
+    "capacity": 85,
+    "establishedYear": "2019",
+    "landAcres": 8.2,
+    "visitingHours": "06:00 AM - 08:00 PM (Daily)",
+    "caretaker": "Mahadev Joshi",
+    "caretakerPhone": "+91 98500 77124",
+    "facilities": [
+      "Padded Cattle Ambulance / Van",
+      "24/7 Pure Borewell Water & Trough",
+      "Certified Veterinary Medical Bay",
+      "Organic Green Fodder Pasture",
+      "Sacred Vedic Puja & Havan Courtyard",
+      "Non-Slip Rubber Flooring in Sheds"
+    ],
+    "governingAdminRole": "admin",
+    "governingAdminName": "Priya Sharma",
+    "adminId": "USER-ADM-101",
+    "adminName": "Priya Sharma",
+    "managerName": "Mahadev Joshi",
+    "managerId": "75ec786a-3122-4daa-aa10-d0f550bd47d1"
+  },
+  "6c8664f1-0a9c-4b00-9f62-c669a938a4a2": {
+    "id": "GOS-TEST-1791051356057",
+    "managerName": "S. Ramanujam",
+    "capacity": 85,
+    "establishedYear": "2021",
+    "status": "Active",
+    "facilities": [
+      "Sacred Cow Gosala",
+      "Pure Mountain Spring Water"
+    ],
+    "lat": 13.6288,
+    "lng": 79.4192,
+    "governingAdminRole": "admin",
+    "governingAdminName": "Priya Sharma",
+    "adminId": "USER-ADM-101",
+    "adminName": "Priya Sharma",
+    "caretaker": "Dedicated Gosevak Caretaker"
+  },
+  "tirupati balaji sacred surabhi trust": {
+    "id": "GOS-TEST-1791051356057",
+    "managerName": "S. Ramanujam",
+    "capacity": 85,
+    "establishedYear": "2021",
+    "status": "Active",
+    "facilities": [
+      "Sacred Cow Gosala",
+      "Pure Mountain Spring Water"
+    ],
+    "lat": 13.6288,
+    "lng": 79.4192,
+    "governingAdminRole": "admin",
+    "governingAdminName": "Priya Sharma",
+    "adminId": "USER-ADM-101",
+    "adminName": "Priya Sharma",
+    "caretaker": "Dedicated Gosevak Caretaker"
+  },
+  "949694c1-5678-431e-87c0-125bf751a1ad": {
+    "governingAdminRole": "super_admin",
+    "governingAdminName": "Vikramaditya Hegde",
+    "adminId": "USER-SA-001",
+    "adminName": "Vikramaditya Hegde",
+    "caretaker": "Rameshwar Shinde",
+    "managerName": "Rameshwar Shinde",
+    "managerId": "0381c49e-1b32-421a-978a-05db86331139",
+    "capacity": 100,
+    "establishedYear": "2016",
+    "trustRegistrationNo": "AWBI/2016/TG/HYD-CAPTAIN",
+    "facilities": [
+      "Padded Cattle Ambulance / Van",
+      "24/7 Pure Borewell Water & Trough",
+      "Certified Veterinary Medical Bay",
+      "Sacred Vedic Puja & Havan Courtyard",
+      "Organic Green Fodder Pasture"
+    ],
+    "photo": "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=480&fit=crop&auto=format"
+  },
+  "govardhan goseva trust": {
+    "governingAdminRole": "super_admin",
+    "governingAdminName": "Vikramaditya Hegde",
+    "adminId": "USER-SA-001",
+    "adminName": "Vikramaditya Hegde",
+    "caretaker": "Rameshwar Shinde",
+    "managerName": "Rameshwar Shinde",
+    "managerId": "0381c49e-1b32-421a-978a-05db86331139",
+    "capacity": 100,
+    "establishedYear": "2016",
+    "trustRegistrationNo": "AWBI/2016/TG/HYD-CAPTAIN",
+    "facilities": [
+      "Padded Cattle Ambulance / Van",
+      "24/7 Pure Borewell Water & Trough",
+      "Certified Veterinary Medical Bay",
+      "Sacred Vedic Puja & Havan Courtyard",
+      "Organic Green Fodder Pasture"
+    ],
+    "photo": "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=480&fit=crop&auto=format"
+  }
+}

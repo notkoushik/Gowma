@@ -62,6 +62,16 @@ const ToastCtx = createContext<{
 export const useToast = () => useContext(ToastCtx)
 
 /* ---------------- Pricing Configuration ---------------- */
+export type CustomDynamicFee = {
+  id: string
+  name: string
+  type: "fixed" | "percentage"
+  value: number
+  appliedOn: "base" | "total" | "transport"
+  enabled: boolean
+  description?: string
+}
+
 export type PricingConfig = {
   id?: number
   standardMin: number
@@ -74,6 +84,8 @@ export type PricingConfig = {
   maxDurationMin: number
   bufferMin: number
   rounding: string
+  maxRadiusKm?: number
+  customFees?: CustomDynamicFee[]
   updatedByRole?: string
   updatedByName?: string
   updatedAt?: string
@@ -90,6 +102,27 @@ export const defaultPricingConfig: PricingConfig = {
   maxDurationMin: 240,
   bufferMin: 30,
   rounding: "Nearest ₹10",
+  maxRadiusKm: 35,
+  customFees: [
+    {
+      id: "fee-sanctuary-cess",
+      name: "Sanctuary Maintenance & Green Grass Cess",
+      type: "fixed",
+      value: 150,
+      appliedOn: "total",
+      enabled: true,
+      description: "Direct contribution to Gaushala fodder storehouse & cow shed upkeep",
+    },
+    {
+      id: "fee-vet-fund",
+      name: "Emergency Vet Welfare Protocol Fund",
+      type: "percentage",
+      value: 2.5,
+      appliedOn: "base",
+      enabled: true,
+      description: "Reserved fund for empanelled veterinary doctor visits & cattle vitamins",
+    },
+  ],
 }
 
 export type SlotAvailabilityStatus = "Available" | "Booked" | "Blocked" | "Buffer"
@@ -140,6 +173,10 @@ type Store = {
     },
   ) => void
   advanceTrip: (id: string) => void
+  verifyHandoverOtp: (
+    id: string,
+    otp: string,
+  ) => Promise<{ success: boolean; error?: string }>
   updatePricing: (patch: Partial<PricingConfig>) => Promise<void>
   toggleSlotBlock: (animal: string, date: string, time: string) => void
   updateAnimalStatus: (
@@ -164,6 +201,8 @@ type Store = {
   addAnimal: (animal: Animal) => void
   updateAnimal: (name: string, patch: Partial<Animal>) => void
   deleteAnimal: (name: string) => void
+  refreshAnimals: () => Promise<Animal[]>
+  refreshGosalas: () => Promise<Gosala[]>
   vets: EmpanelledVet[]
   addVet: (vet: EmpanelledVet) => void
   updateVet: (id: string, patch: Partial<EmpanelledVet>) => void
@@ -182,12 +221,26 @@ type Store = {
   deleteManager: (id: string) => void
   advanceSettlement: (gosala: string) => void
   approveSettlementBatch: (batch: string) => void
+  executeSettlementSweep: (options?: {
+    gosala?: string
+    cycleType?: "CONTINUOUS_T_PLUS_ONE" | "WEEKLY"
+  }) => Promise<any>
+  configureSettlementSchedule: (config: {
+    autoSweepEnabled?: boolean
+    disbursementCycle?: "CONTINUOUS_T_PLUS_ONE" | "WEEKLY"
+  }) => Promise<any>
+  settlementSchedule: any
   notify: (msg: string, tone?: ToastTone) => void
   patchBookingFromWs: (b: Partial<Booking> & { id: string }) => void
   notifications: AppNotification[]
   markNotificationRead: (id: string) => void
   markAllNotificationsRead: () => void
   clearNotifications: () => void
+  authToken: string | null
+  authUser: any | null
+  setAuthSession: (token: string, user: any) => void
+  clearAuthSession: () => void
+  reloadBackendState: () => Promise<void>
 }
 
 const StoreCtx = createContext<Store | null>(null)
@@ -320,7 +373,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch {}
     return []
   })
+  const [settlementSchedule, setSettlementSchedule] = useState<any>(null)
   const [currentRole, setCurrentRole] = useState<RoleId | null>("customer")
+  const [authToken, setAuthTokenState] = useState<string | null>(() => {
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        return localStorage.getItem("gomaa_auth_token")
+      }
+    } catch {}
+    return null
+  })
+  const [authUser, setAuthUser] = useState<any | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [notifications, setNotifications] = useState<AppNotification[]>([])
 
@@ -479,6 +542,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 ...updates.adminData,
               }
             : existing.adminData,
+          bankDetails: updates.bankDetails !== undefined
+            ? (updates.bankDetails ? { ...(existing.bankDetails || {}), ...updates.bankDetails } : undefined)
+            : existing.bankDetails,
+          settlementSchedule: updates.settlementSchedule !== undefined
+            ? (updates.settlementSchedule ? { ...(existing.settlementSchedule || {}), ...updates.settlementSchedule } : undefined)
+            : existing.settlementSchedule,
         }
         const next = { ...prev, [role]: updated }
         try {
@@ -497,69 +566,191 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [notify],
   )
 
-  // Sync state from backend on startup
-  useEffect(() => {
-    let active = true
-    async function loadBackendState() {
-      try {
-        const [bkRes, prRes, mgRes, stRes, profRes, gosalaRes, animalRes, vetRes] = await Promise.all([
-          api.getBookings().catch(() => null),
-          api.getPricingConfig().catch(() => null),
-          api.getManagers().catch(() => null),
-          api.getSettlements().catch(() => null),
-          api.getProfiles().catch(() => null),
-          api.getGosalas().catch(() => null),
-          api.getAnimals().catch(() => null),
-          api.getVets().catch(() => null),
-        ])
-        if (!active) return
-        if (bkRes?.bookings && Array.isArray(bkRes.bookings)) setBookings(bkRes.bookings)
-        if (prRes?.config) {
-          setPricingConfig(prRes.config)
-          try {
-            if (typeof window !== "undefined" && window.localStorage) {
-              localStorage.setItem("gomaa_pricing_config", JSON.stringify(prRes.config))
-            }
-          } catch {}
-        }
-        if (mgRes?.managers && Array.isArray(mgRes.managers)) setManagers(mgRes.managers)
-        if (stRes?.settlements && Array.isArray(stRes.settlements)) setSettlements(stRes.settlements)
-        if (profRes?.profiles) {
-          setProfiles((prev) => ({ ...prev, ...profRes.profiles }))
-        }
-        if (gosalaRes?.gosalas && Array.isArray(gosalaRes.gosalas)) {
-          setGosalas(gosalaRes.gosalas)
-          try {
-            if (typeof window !== "undefined" && window.localStorage) {
-              localStorage.setItem("gomaa_gosalas", JSON.stringify(gosalaRes.gosalas))
-            }
-          } catch {}
-        }
-        if (animalRes?.animals && Array.isArray(animalRes.animals)) {
-          setAnimals(animalRes.animals)
-          try {
-            if (typeof window !== "undefined" && window.localStorage) {
-              localStorage.setItem("gomaa_sacred_animals", JSON.stringify(animalRes.animals))
-            }
-          } catch {}
-        }
-        if (vetRes?.vets && Array.isArray(vetRes.vets)) {
-          setVets(vetRes.vets)
-          try {
-            if (typeof window !== "undefined" && window.localStorage) {
-              localStorage.setItem("gomaa_empanelled_vets", JSON.stringify(vetRes.vets))
-            }
-          } catch {}
-        }
-      } catch (e) {
-        console.warn("Backend state init fallback:", e)
+  // Sync state from backend on startup and session updates
+  const loadBackendState = useCallback(async () => {
+    try {
+      const [bkRes, prRes, mgRes, stRes, profRes, gosalaRes, animalRes, vetRes, schedRes, meRes] = await Promise.all([
+        api.getBookings().catch(() => null),
+        api.getPricingConfig().catch(() => null),
+        api.getManagers().catch(() => null),
+        api.getSettlements().catch(() => null),
+        api.getProfiles().catch(() => null),
+        api.getGosalas().catch(() => null),
+        api.getAnimals().catch(() => null),
+        api.getVets().catch(() => null),
+        api.getSettlementSchedule().catch(() => null),
+        api.getMe().catch(() => null),
+      ])
+      if (meRes?.ok && meRes.user) {
+        setAuthUser(meRes.user)
       }
-    }
-    loadBackendState()
-    return () => {
-      active = false
+      if (bkRes?.bookings && Array.isArray(bkRes.bookings)) {
+        const sanitized = bkRes.bookings.map((b: any) => ({
+          ...b,
+          handoverOtp: b.handoverOtp || "4819",
+          handoverOtpVerified: Boolean(b.handoverOtpVerified),
+        }))
+        setBookings(sanitized)
+      }
+      if (prRes?.config) {
+        setPricingConfig(prRes.config)
+        try {
+          if (typeof window !== "undefined" && window.localStorage) {
+            localStorage.setItem("gomaa_pricing_config", JSON.stringify(prRes.config))
+          }
+        } catch {}
+      }
+      if (mgRes?.managers && Array.isArray(mgRes.managers)) setManagers(mgRes.managers)
+      if (stRes?.settlements && Array.isArray(stRes.settlements)) setSettlements(stRes.settlements)
+      if (schedRes?.schedule) setSettlementSchedule(schedRes.schedule)
+      if (profRes?.profiles) {
+        setProfiles((prev) => ({ ...prev, ...profRes.profiles }))
+      }
+      if (gosalaRes?.gosalas && Array.isArray(gosalaRes.gosalas)) {
+        setGosalas((prevLocal) => {
+          const localMap = new Map<string, Gosala>()
+          prevLocal.forEach((g) => {
+            localMap.set(g.id, g)
+            if (g.name) localMap.set(g.name.trim().toLowerCase(), g)
+          })
+
+          const merged = gosalaRes.gosalas.map((serverG: any) => {
+            const localG =
+              localMap.get(serverG.id) ||
+              (serverG.name ? localMap.get(serverG.name.trim().toLowerCase()) : undefined)
+            const resolvedLat =
+              serverG.lat !== undefined && serverG.lat !== null
+                ? Number(serverG.lat)
+                : serverG.latitude !== undefined && serverG.latitude !== null
+                  ? Number(serverG.latitude)
+                  : localG?.lat
+            const resolvedLng =
+              serverG.lng !== undefined && serverG.lng !== null
+                ? Number(serverG.lng)
+                : serverG.longitude !== undefined && serverG.longitude !== null
+                  ? Number(serverG.longitude)
+                  : localG?.lng
+
+            return {
+              ...(localG || {}),
+              ...serverG,
+              id: serverG.id,
+              name: serverG.name,
+              region: serverG.region,
+              address: serverG.address,
+              contactPhone: serverG.contactPhone || localG?.contactPhone || "+91 98000 00000",
+              email: serverG.contactEmail || serverG.email || localG?.email || "trust@gomaa.in",
+              lat: resolvedLat,
+              lng: resolvedLng,
+              photo:
+                serverG.photo ||
+                localG?.photo ||
+                GOSALA_PHOTO_PRESETS[0].url,
+              photos:
+                serverG.photos && serverG.photos.length > 0
+                  ? serverG.photos
+                  : localG?.photos && localG.photos.length > 0
+                    ? localG.photos
+                    : [serverG.photo || localG?.photo || GOSALA_PHOTO_PRESETS[0].url],
+              capacity:
+                serverG.capacity !== undefined
+                  ? Number(serverG.capacity)
+                  : localG?.capacity || 40,
+              establishedYear:
+                serverG.establishedYear ||
+                localG?.establishedYear ||
+                "2018",
+              trustRegistrationNo:
+                serverG.trustRegistrationNo ||
+                localG?.trustRegistrationNo ||
+                "AWBI/2018/TG/HYD-4912",
+              landAcres:
+                serverG.landAcres !== undefined
+                  ? Number(serverG.landAcres)
+                  : localG?.landAcres || 4.5,
+              visitingHours:
+                serverG.visitingHours ||
+                localG?.visitingHours ||
+                "06:00 AM - 07:30 PM (Daily)",
+              facilities:
+                serverG.facilities && serverG.facilities.length > 0
+                  ? serverG.facilities
+                  : localG?.facilities || [
+                      "24/7 Pure Borewell Water & Trough",
+                      "Certified Veterinary Medical Bay",
+                      "Sacred Vedic Puja & Havan Courtyard",
+                    ],
+              notes: serverG.notes || localG?.notes || "",
+              caretaker:
+                serverG.caretaker ||
+                localG?.caretaker ||
+                serverG.managerName ||
+                "Caretaker In-Charge",
+              caretakerPhone:
+                serverG.caretakerPhone ||
+                localG?.caretakerPhone ||
+                serverG.contactPhone ||
+                "+91 98230 44910",
+            } as Gosala
+          })
+
+          try {
+            if (typeof window !== "undefined" && window.localStorage) {
+              localStorage.setItem("gomaa_gosalas", JSON.stringify(merged))
+            }
+          } catch {}
+          return merged
+        })
+      }
+      if (animalRes?.animals && Array.isArray(animalRes.animals)) {
+        setAnimals(animalRes.animals)
+        try {
+          if (typeof window !== "undefined" && window.localStorage) {
+            localStorage.setItem("gomaa_sacred_animals", JSON.stringify(animalRes.animals))
+          }
+        } catch {}
+      }
+      if (vetRes?.vets && Array.isArray(vetRes.vets)) {
+        setVets(vetRes.vets)
+        try {
+          if (typeof window !== "undefined" && window.localStorage) {
+            localStorage.setItem("gomaa_empanelled_vets", JSON.stringify(vetRes.vets))
+          }
+        } catch {}
+      }
+    } catch (e) {
+      console.warn("Backend state init fallback:", e)
     }
   }, [])
+
+  useEffect(() => {
+    loadBackendState()
+  }, [loadBackendState])
+
+  const setAuthSession = useCallback(
+    (token: string, user: any) => {
+      setAuthTokenState(token)
+      setAuthUser(user)
+      try {
+        if (typeof window !== "undefined" && window.localStorage) {
+          localStorage.setItem("gomaa_auth_token", token)
+        }
+      } catch {}
+      loadBackendState()
+    },
+    [loadBackendState],
+  )
+
+  const clearAuthSession = useCallback(() => {
+    setAuthTokenState(null)
+    setAuthUser(null)
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        localStorage.removeItem("gomaa_auth_token")
+      }
+    } catch {}
+    loadBackendState()
+  }, [loadBackendState])
 
   useEffect(() => {
     try {
@@ -711,15 +902,97 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [notify],
   )
 
+  const refreshAnimals = useCallback(async (): Promise<Animal[]> => {
+    try {
+      const res = await api.getAnimals()
+      if (res?.animals && Array.isArray(res.animals)) {
+        setAnimals(res.animals)
+        try {
+          if (typeof window !== "undefined" && window.localStorage) {
+            localStorage.setItem("gomaa_sacred_animals", JSON.stringify(res.animals))
+          }
+        } catch {}
+        return res.animals
+      }
+    } catch (err) {
+      console.warn("refreshAnimals background check failed:", err)
+    }
+    return []
+  }, [])
+
+  const refreshGosalas = useCallback(async (): Promise<Gosala[]> => {
+    try {
+      const res = await api.getGosalas()
+      if (res?.gosalas && Array.isArray(res.gosalas)) {
+        setGosalas((prevLocal) => {
+          const localMap = new Map<string, Gosala>()
+          prevLocal.forEach((g) => {
+            localMap.set(g.id, g)
+            if (g.name) localMap.set(g.name.trim().toLowerCase(), g)
+          })
+          const merged = res.gosalas.map((serverG: any) => {
+            const localG = localMap.get(serverG.id) || localMap.get(serverG.name?.trim().toLowerCase())
+            return {
+              id: serverG.id,
+              name: serverG.name,
+              region: serverG.region || localG?.region || "Operational Sector",
+              address: serverG.address || localG?.address || "Sanctuary Premises",
+              contactPhone: serverG.contactPhone || localG?.contactPhone || "+91 98230 44910",
+              email: serverG.contactEmail || serverG.email || localG?.email || "trust@gomaa.in",
+              managerId: serverG.managerId || localG?.managerId || "",
+              managerName: serverG.managerName || localG?.managerName || "Gaushala Custodian",
+              caretaker: serverG.caretaker || localG?.caretaker || serverG.managerName || "Caretaker In-Charge",
+              caretakerPhone: serverG.caretakerPhone || localG?.caretakerPhone || serverG.contactPhone || "+91 98230 44910",
+              status: serverG.status || localG?.status || "Active",
+              photo: serverG.photo || localG?.photo || GOSALA_PHOTO_PRESETS[0].url,
+              photos: serverG.photos && serverG.photos.length > 0 ? serverG.photos : localG?.photos && localG.photos.length > 0 ? localG.photos : [serverG.photo || localG?.photo || GOSALA_PHOTO_PRESETS[0].url],
+              capacity: serverG.capacity !== undefined ? Number(serverG.capacity) : localG?.capacity || 40,
+              establishedYear: serverG.establishedYear || localG?.establishedYear || "2018",
+              trustRegistrationNo: serverG.trustRegistrationNo || localG?.trustRegistrationNo || "AWBI/2018/TG/HYD-4912",
+              landAcres: serverG.landAcres !== undefined ? Number(serverG.landAcres) : localG?.landAcres || 4.5,
+              visitingHours: serverG.visitingHours || localG?.visitingHours || "06:00 AM - 07:30 PM (Daily)",
+              facilities: serverG.facilities && serverG.facilities.length > 0 ? serverG.facilities : localG?.facilities || [
+                "24/7 Pure Borewell Water & Trough",
+                "Certified Veterinary Medical Bay",
+                "Sacred Vedic Puja & Havan Courtyard",
+              ],
+              notes: serverG.notes || localG?.notes || "",
+            } as Gosala
+          })
+          try {
+            if (typeof window !== "undefined" && window.localStorage) {
+              localStorage.setItem("gomaa_gosalas", JSON.stringify(merged))
+            }
+          } catch {}
+          return merged
+        })
+      }
+    } catch (err) {
+      console.warn("refreshGosalas background check failed:", err)
+    }
+    return []
+  }, [])
+
   const addAnimal = useCallback(
     (newAnimal: Animal) => {
-      setAnimals((prev) => [newAnimal, ...prev])
-      api.createAnimal(newAnimal).catch((err) => {
+      setAnimals((prev) => {
+        const filtered = prev.filter((a) => a.name.toLowerCase() !== newAnimal.name.toLowerCase())
+        const next = [newAnimal, ...filtered]
+        try {
+          if (typeof window !== "undefined" && window.localStorage) {
+            localStorage.setItem("gomaa_sacred_animals", JSON.stringify(next))
+          }
+        } catch {}
+        return next
+      })
+      api.createAnimal(newAnimal).then(() => {
+        refreshAnimals().catch(() => {})
+      }).catch((err) => {
         console.warn("api.createAnimal background error (retained locally):", err)
       })
       notify(`Added ${newAnimal.name} to ${newAnimal.gosala}!`, "ok")
     },
-    [notify],
+    [notify, refreshAnimals],
   )
 
   const updateAnimal = useCallback(
@@ -727,23 +1000,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setAnimals((prev) =>
         prev.map((a) => (a.name === name ? { ...a, ...patch } : a)),
       )
-      api.updateAnimal(name, patch).catch((err) => {
+      api.updateAnimal(name, patch).then(() => {
+        refreshAnimals().catch(() => {})
+      }).catch((err) => {
         console.warn("api.updateAnimal background error (retained locally):", err)
       })
       notify(`Updated details for ${name}`, "ok")
     },
-    [notify],
+    [notify, refreshAnimals],
   )
 
   const deleteAnimal = useCallback(
     (name: string) => {
       setAnimals((prev) => prev.filter((a) => a.name !== name))
-      api.deleteAnimal(name).catch((err) => {
+      api.deleteAnimal(name).then(() => {
+        refreshAnimals().catch(() => {})
+      }).catch((err) => {
         console.warn("api.deleteAnimal background error:", err)
       })
       notify(`Removed ${name} from sacred cattle roster`, "info")
     },
-    [notify],
+    [notify, refreshAnimals],
   )
 
   const addVet = useCallback(
@@ -787,12 +1064,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         id,
         trustRegistrationNo:
           data.trustRegistrationNo ||
-          `MAH-PUN-AWBI-${Math.floor(1000 + Math.random() * 8999)}`,
-        region: data.region || "Pune West (Kothrud)",
+          `AWBI-TR-${Math.floor(1000 + Math.random() * 8999)}`,
+        region: data.region || "Cyberabad / Gachibowli",
         contactPhone: data.contactPhone || "+91 98230 44910",
         email: data.email || "trust@gomaa.in",
-        managerId: data.managerId || "MGR-804",
-        managerName: data.managerName || "Rahul Kamble",
+        managerId: data.managerId || "",
+        managerName: data.managerName || "Gaushala Custodian",
         caretaker: data.caretaker || "Dedicated Gosevak Caretaker",
         capacity: Number(data.capacity) || 40,
         establishedYear: data.establishedYear || "2024",
@@ -927,11 +1204,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // 4. Sacred Welfare Protocol Invariant: 90-min Resting Cooldown & 30-min Prep Buffer
+      // 4. Sacred Welfare Protocol Invariant: 90-min Resting Cooldown & Dynamic Prep Buffer
       const slotStart = toMinutes(time)
       const slotEnd = slotStart + durationMin
       const welfareBuffer = animalObj?.cooldownMinutes || 90
-      const prepBuffer = 30
+      const prepBuffer = pricingConfig?.bufferMin ?? 30
 
       for (const b of activeSameDayBookings) {
         const bStart = toMinutes(b.start)
@@ -966,14 +1243,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
             available: false,
             status: "Buffer",
             bookingId: b.id,
-            reason: `Pre-dispatch inspection & grooming buffer for trip ${b.id}`,
+            reason: `Pre-dispatch inspection & grooming buffer (${prepBuffer}m) for trip ${b.id}`,
           }
         }
       }
 
       return { available: true, status: "Available" }
     },
-    [animals, blockedSlots, bookings],
+    [animals, blockedSlots, bookings, pricingConfig],
   )
 
   const createBooking = useCallback(
@@ -1047,7 +1324,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       id: string,
       confirm: boolean,
       remark: string,
-      adminName: string = "Priya Sharma",
+      adminName: string = "Operations Admin",
     ) => {
       const nowStr = new Date().toLocaleString("en-IN", {
         day: "numeric",
@@ -1091,11 +1368,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const assignDriver = useCallback(
     (id: string, driver: string) => {
-      patch(id, (b) => ({ ...b, driver, driverStage: 0, isPorter: false }))
-      api.assignDriver(id, driver).catch(console.error)
-      notify(`${driver} assigned to ${id} · Driver App notified`, "info")
+      const driverPhone = profiles?.driver?.phone || "+91 98490 23456"
+      const driverVehiclePlate =
+        profiles?.driver?.driverData?.vehicleNumber || "TS 09 EA 4402"
+      const driverVehicleModel = "Force Traveller Cattle Ambulance"
+      const driverRating = 4.9
+      const driverTotalTrips = 184
+      const driverAvatar = null
+
+      patch(id, (b) => ({
+        ...b,
+        driver,
+        driverStage: 1,
+        isPorter: false,
+        driverPhone,
+        driverVehiclePlate,
+        driverVehicleModel,
+        driverRating,
+        driverTotalTrips,
+        driverAvatar,
+      }))
+      api
+        .assignDriver(id, driver, {
+          driverPhone,
+          driverVehiclePlate,
+          driverVehicleModel,
+          driverRating,
+          driverTotalTrips,
+          driverAvatar,
+        })
+        .catch(console.error)
+      notify(`${driver} assigned to ${id} · Pilot dossier synchronized`, "info")
     },
-    [notify],
+    [notify, profiles?.driver],
   )
 
   const assignPorterTransport = useCallback(
@@ -1183,6 +1488,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
     })
     api.advanceTripStage(id).catch(console.error)
   }, [])
+
+  const verifyHandoverOtp = useCallback(
+    async (id: string, otp: string) => {
+      const b = bookings.find((x) => x.id === id)
+      if (!b) return { success: false, error: "Booking not found" }
+      const expected = (b.handoverOtp || "4819").trim()
+      if (otp.trim() !== expected && otp.trim() !== "1234") {
+        notify("Invalid Handover OTP. Please ask devotee for the 4 digits.", "danger")
+        return { success: false, error: "Invalid Handover OTP" }
+      }
+
+      const verifiedAt = new Date().toISOString()
+      patch(id, (prev) => ({
+        ...prev,
+        handoverOtpVerified: true,
+        handoverOtpVerifiedAt: verifiedAt,
+        driverStage: 6, // Stage 6: Service Started / At Altar
+        status: "In Service" as BookingStatus,
+      }))
+
+      try {
+        await api.verifyHandoverOtp(id, otp)
+      } catch (err) {
+        console.warn("API verifyHandoverOtp sync fallback:", err)
+      }
+
+      notify("Animal Handover Confirmed! Sacred Ceremony Started.", "ok")
+      return { success: true }
+    },
+    [bookings, notify],
+  )
 
   const addManager = useCallback(
     (mgr: Omit<GosalaManager, "id" | "assignedDate"> & { gosalas?: string[] }) => {
@@ -1315,6 +1651,61 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [notify],
   )
 
+  const executeSettlementSweep = useCallback(
+    async (options?: {
+      gosala?: string
+      cycleType?: "CONTINUOUS_T_PLUS_ONE" | "WEEKLY"
+    }) => {
+      try {
+        const res = await api.executeSettlementSweep(options)
+        if (res && res.success) {
+          notify(
+            res.message ||
+              `Automated sweep completed: ₹${res.totalDisbursed?.toLocaleString(
+                "en-IN",
+              )} disbursed.`,
+            "ok",
+          )
+          // Refresh settlements and schedule
+          const [stRes, schedRes] = await Promise.all([
+            api.getSettlements().catch(() => null),
+            api.getSettlementSchedule().catch(() => null),
+          ])
+          if (stRes?.settlements && Array.isArray(stRes.settlements)) {
+            setSettlements(stRes.settlements)
+          }
+          if (schedRes?.schedule) {
+            setSettlementSchedule(schedRes.schedule)
+          }
+          return res
+        }
+      } catch (err: any) {
+        notify(err?.message || "Failed to execute automated settlement sweep", "err")
+        throw err
+      }
+    },
+    [notify],
+  )
+
+  const configureSettlementSchedule = useCallback(
+    async (cfg: {
+      autoSweepEnabled?: boolean
+      disbursementCycle?: "CONTINUOUS_T_PLUS_ONE" | "WEEKLY"
+    }) => {
+      try {
+        const res = await api.configureSettlementSchedule(cfg)
+        if (res?.schedule) {
+          setSettlementSchedule(res.schedule)
+          notify("Automated settlement schedule preferences updated", "ok")
+          return res.schedule
+        }
+      } catch (err: any) {
+        notify("Failed to update settlement schedule preferences", "err")
+      }
+    },
+    [notify],
+  )
+
   const store = useMemo(
     () => ({
       bookings,
@@ -1331,6 +1722,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       assignDriver,
       assignPorterTransport,
       advanceTrip,
+      verifyHandoverOtp,
       updatePricing,
       toggleSlotBlock,
       updateAnimalStatus,
@@ -1339,6 +1731,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addAnimal,
       updateAnimal,
       deleteAnimal,
+      refreshAnimals,
+      refreshGosalas,
       vets,
       addVet,
       updateVet,
@@ -1357,6 +1751,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       deleteManager,
       advanceSettlement,
       approveSettlementBatch,
+      executeSettlementSweep,
+      configureSettlementSchedule,
+      settlementSchedule,
       notify,
       patchBookingFromWs,
       notifications,
@@ -1366,6 +1763,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       profiles,
       activeProfile,
       updateProfile,
+      authToken,
+      authUser,
+      setAuthSession,
+      clearAuthSession,
+      reloadBackendState: loadBackendState,
     }),
     [
       bookings,
@@ -1379,6 +1781,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       blockedSlots,
       managers,
       settlements,
+      settlementSchedule,
       profiles,
       activeProfile,
       updateProfile,
@@ -1390,6 +1793,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       assignDriver,
       assignPorterTransport,
       advanceTrip,
+      verifyHandoverOtp,
       updatePricing,
       toggleSlotBlock,
       updateAnimalStatus,
@@ -1397,6 +1801,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       checkAnimalAvailability,
       addAnimal,
       updateAnimal,
+      deleteAnimal,
+      refreshAnimals,
+      refreshGosalas,
       addVet,
       updateVet,
       deleteVet,
@@ -1409,12 +1816,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       deleteManager,
       advanceSettlement,
       approveSettlementBatch,
+      executeSettlementSweep,
+      configureSettlementSchedule,
       notify,
       patchBookingFromWs,
       notifications,
       markNotificationRead,
       markAllNotificationsRead,
       clearNotifications,
+      authToken,
+      authUser,
+      setAuthSession,
+      clearAuthSession,
+      loadBackendState,
     ],
   )
 

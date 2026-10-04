@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import {
   Bell,
   CalendarRange,
@@ -18,6 +18,7 @@ import {
   ShieldAlert,
   ChevronRight,
   Store,
+  Percent,
 } from "lucide-react"
 import Overview from "./views/Overview"
 import Bookings from "./views/Bookings"
@@ -37,6 +38,7 @@ import EditProfileModal from "./components/EditProfileModal"
 import { useStore, useToast } from "./store/store"
 import { useRealtime } from "./hooks/useRealtime"
 import type { RoleId } from "./data/roles"
+import { api } from "./services/api"
 
 type View =
   | "overview"
@@ -53,10 +55,10 @@ type View =
 const titles: Record<View, { title: string; desc: string }> = {
   overview: {
     title: "Regional Operations & Treasury",
-    desc: "Real-time booking pipeline, revenue metrics and network health across Pune",
+    desc: "Real-time booking pipeline, revenue metrics and network health across regional sanctuaries",
   },
   gosalas: {
-    title: "Pune Gaushalas Network",
+    title: "Gaushalas Network",
     desc: "Regional Gaushala directory, AWBI trust compliance, facility capacities & photo galleries",
   },
   managers: {
@@ -69,7 +71,7 @@ const titles: Record<View, { title: string; desc: string }> = {
   },
   tracking: {
     title: "Live Cow Fleet GPS Tracking",
-    desc: "Real-time GPS tracking for holy cows travelling across Pune with live driver stages",
+    desc: "Real-time GPS tracking for holy cows travelling with live driver stages",
   },
   animals: {
     title: "Sacred Herd Welfare & Empanelled Vets",
@@ -126,12 +128,17 @@ function parseHash(): { role: RoleId | null | undefined; subview?: string; secto
   return { role: undefined }
 }
 
-function getInitialPricingSector(): "global" | "gosalas" {
+function getInitialPricingSector(): "global" | "gosalas" | "commissions" {
   const { subview, sector } = parseHash()
-  if (subview === "pricing" && sector === "gosalas") return "gosalas"
+  if (subview === "pricing") {
+    if (sector === "gosalas") return "gosalas"
+    if (sector === "commissions") return "commissions"
+  }
   try {
     const saved = localStorage.getItem("gomaa_pricing_sector")
-    if (saved === "gosalas" || saved === "global") return saved as "global" | "gosalas"
+    if (saved === "gosalas" || saved === "global" || saved === "commissions") {
+      return saved as "global" | "gosalas" | "commissions"
+    }
   } catch (e) {}
   return "global"
 }
@@ -191,7 +198,7 @@ function CaptainAccessGate({
       <div className="p-4 bg-white/90 border border-amber-200/80 rounded-sm text-left text-[12.5px] text-ink-soft space-y-2 max-w-md mx-auto font-sans shadow-2xs">
         <div className="flex items-start gap-2">
           <span className="text-forest font-bold shrink-0">✓</span>
-          <span><strong>Operations Admin Scope:</strong> Managing Pune Gaushalas, assigning custodians, reviewing devotee bookings, monitoring live GPS fleet, and animal resting schedules.</span>
+          <span><strong>Operations Admin Scope:</strong> Managing regional Gaushalas, assigning custodians, reviewing devotee bookings, monitoring live GPS fleet, and animal resting schedules.</span>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-amber-600 font-bold shrink-0">★</span>
@@ -224,19 +231,25 @@ export default function App() {
     setActiveGosalaFilter,
     setCurrentRole,
     profiles,
+    pricingConfig,
+    setAuthSession,
+    clearAuthSession,
   } = useStore()
   const [auth, setAuth] = useState<RoleId | null>(getInitialAuth)
   const [view, setView] = useState<View>(getInitialAdminView)
-  const [pricingSector, setPricingSector] = useState<"global" | "gosalas">(getInitialPricingSector)
+  const [pricingSector, setPricingSector] = useState<"global" | "gosalas" | "commissions">(getInitialPricingSector)
+  const [isPricingMenuOpen, setIsPricingMenuOpen] = useState(true)
   const [editAdminProfileOpen, setEditAdminProfileOpen] = useState(false)
 
-  const handleSetPricingSector = (sec: "global" | "gosalas") => {
+  const handleSetPricingSector = (sec: "global" | "gosalas" | "commissions") => {
     setPricingSector(sec)
     try {
       localStorage.setItem("gomaa_pricing_sector", sec)
       if (auth === "admin" || auth === "super_admin") {
         if (sec === "gosalas") {
           window.location.hash = `#${auth}/pricing/gosalas`
+        } else if (sec === "commissions") {
+          window.location.hash = `#${auth}/pricing/commissions`
         } else {
           window.location.hash = `#${auth}/pricing`
         }
@@ -262,7 +275,32 @@ export default function App() {
 
   useRealtime()
 
-  // Ensure Operations Admin and Super Admin have regional scope across all Pune Gaushalas
+  // Dynamically compute the active/registered operational region from registered Gaushalas
+  const dynamicRegion = useMemo(() => {
+    let raw = ""
+    if (activeGosalaFilter !== "ALL") {
+      const g = gosalas.find((x) => x.id === activeGosalaFilter || x.name === activeGosalaFilter)
+      if (g?.region) raw = g.region
+      else if (g?.address) raw = g.address
+    }
+    if (!raw && gosalas.length > 0) {
+      const g = gosalas[0]
+      raw = g.region || g.address || ""
+    }
+    if (!raw) return "Regional"
+    if (raw.includes(",")) {
+      const parts = raw.split(",").map((s) => s.trim()).filter(Boolean)
+      const last = parts[parts.length - 1]
+      if (last && isNaN(Number(last))) return last
+    }
+    if (raw.includes(" - ")) {
+      const after = raw.split(" - ")[1].trim()
+      return after.split("(")[0].trim()
+    }
+    return raw.split("(")[0].trim()
+  }, [gosalas, activeGosalaFilter])
+
+  // Ensure Operations Admin and Super Admin have regional scope across all registered Gaushalas
   useEffect(() => {
     if (auth === "admin" || auth === "super_admin") {
       if (activeGosalaFilter !== "ALL") {
@@ -271,8 +309,21 @@ export default function App() {
     }
   }, [auth, activeGosalaFilter, setActiveGosalaFilter])
 
-  const handleSetAuth = (role: RoleId | null) => {
+  const handleSetAuth = async (role: RoleId | null) => {
     setAuth(role)
+    if (!role) {
+      clearAuthSession()
+    } else if (role === "admin" || role === "super_admin") {
+      try {
+        const email = role === "super_admin" ? "superadmin@gomaa.in" : "admin@gomaa.in"
+        const authRes = await api.login(email, role)
+        if (authRes.ok && authRes.token) {
+          setAuthSession(authRes.token, authRes.user)
+        }
+      } catch (err) {
+        console.warn("JWT sync on role switch:", err)
+      }
+    }
     try {
       if (role) {
         localStorage.setItem("gomaa_auth_role", role)
@@ -296,7 +347,7 @@ export default function App() {
     } catch (e) {}
   }
 
-  const handleSetAdminView = (v: View, targetSector?: "global" | "gosalas") => {
+  const handleSetAdminView = (v: View, targetSector?: "global" | "gosalas" | "commissions") => {
     setView(v)
     if (v === "pricing" && targetSector) {
       setPricingSector(targetSector)
@@ -308,8 +359,14 @@ export default function App() {
       localStorage.setItem("gomaa_admin_view", v)
       if (auth === "admin" || auth === "super_admin") {
         const effectiveSector = targetSector || pricingSector
-        if (v === "pricing" && effectiveSector === "gosalas") {
-          window.location.hash = `#${auth}/pricing/gosalas`
+        if (v === "pricing") {
+          if (effectiveSector === "gosalas") {
+            window.location.hash = `#${auth}/pricing/gosalas`
+          } else if (effectiveSector === "commissions") {
+            window.location.hash = `#${auth}/pricing/commissions`
+          } else {
+            window.location.hash = `#${auth}/${v}`
+          }
         } else {
           window.location.hash = `#${auth}/${v}`
         }
@@ -328,8 +385,14 @@ export default function App() {
           .toLowerCase()
         if (auth === "admin" || auth === "super_admin") {
           if (!currentHash.startsWith(auth)) {
-            if (view === "pricing" && pricingSector === "gosalas") {
-              window.location.hash = `#${auth}/pricing/gosalas`
+            if (view === "pricing") {
+              if (pricingSector === "gosalas") {
+                window.location.hash = `#${auth}/pricing/gosalas`
+              } else if (pricingSector === "commissions") {
+                window.location.hash = `#${auth}/pricing/commissions`
+              } else {
+                window.location.hash = `#${auth}/${view}`
+              }
             } else {
               window.location.hash = `#${auth}/${view}`
             }
@@ -370,6 +433,8 @@ export default function App() {
             if (subview === "pricing") {
               if (sector === "gosalas") {
                 setPricingSector("gosalas")
+              } else if (sector === "commissions") {
+                setPricingSector("commissions")
               } else {
                 setPricingSector("global")
               }
@@ -392,6 +457,9 @@ export default function App() {
 
   const isSuperAdmin = auth === "super_admin"
 
+  const currentCommPct = pricingConfig?.commissionPct || 20
+  const currentGaushalaPct = 100 - currentCommPct
+
   // Super Admin Navigation (Master Financial Controller & Money Arranger)
   const superAdminNav: {
     id: View
@@ -409,7 +477,7 @@ export default function App() {
     },
     {
       id: "ledger",
-      label: "Network 80/20 Ledger",
+      label: `Network ${currentGaushalaPct}/${currentCommPct} Ledger`,
       icon: Landmark,
     },
     {
@@ -420,7 +488,7 @@ export default function App() {
     },
     {
       id: "gosalas",
-      label: "Gaushalas Network",
+      label: dynamicRegion !== "Regional" ? `${dynamicRegion} Gaushalas` : "Gaushalas Network",
       icon: Building2,
       badge: `${gosalas.length}`,
     },
@@ -448,7 +516,7 @@ export default function App() {
     { id: "overview", label: "Operations Overview", icon: LayoutDashboard },
     {
       id: "gosalas",
-      label: "Pune Gaushalas",
+      label: dynamicRegion !== "Regional" ? `${dynamicRegion} Gaushalas` : "Gaushalas Network",
       icon: Building2,
       badge: `${gosalas.length}`,
     },
@@ -481,14 +549,26 @@ export default function App() {
     },
     {
       id: "ledger",
-      label: "Treasury 80/20 Ledger",
+      label: `Treasury ${currentGaushalaPct}/${currentCommPct} Ledger`,
       icon: Landmark,
     },
     { id: "availability", label: "Availability & Fleet", icon: CalendarRange },
   ]
 
   const nav = isSuperAdmin ? superAdminNav : adminNav
-  const meta = titles[view] || titles.overview
+  const baseTitle = titles[view] || titles.overview
+  const meta =
+    view === "gosalas" && dynamicRegion !== "Regional"
+      ? {
+          title: `${dynamicRegion} Gaushalas Network`,
+          desc: `${dynamicRegion} Gaushala directory, AWBI trust compliance, facility capacities & photo galleries`,
+        }
+      : view === "ledger"
+      ? {
+          title: `Regional Treasury & ${currentGaushalaPct}/${currentCommPct} Revenue Ledger`,
+          desc: `Network revenue split: ${currentGaushalaPct}% Gaushala net share, 100% transport pass-through & platform escrow`,
+        }
+      : baseTitle
 
   return (
     <div className="min-h-screen bg-paper text-ink flex">
@@ -519,7 +599,7 @@ export default function App() {
                 )}
               </div>
               <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-ink-faint mt-1 truncate">
-                {isSuperAdmin ? "Platform Captain · Finance Master" : "Operations Admin · Pune"}
+                {isSuperAdmin ? "Platform Captain · Finance Master" : `Operations Admin · ${dynamicRegion.toUpperCase()}`}
               </div>
             </div>
           </div>
@@ -529,10 +609,14 @@ export default function App() {
               const active = view === n.id
 
               if (n.id === "pricing") {
+                const isOpen = active || isPricingMenuOpen
                 return (
-                  <div key={n.id} className="relative group">
+                  <div key={n.id} className="space-y-1">
                     <button
-                      onClick={() => handleSetAdminView("pricing")}
+                      onClick={() => {
+                        handleSetAdminView("pricing")
+                        setIsPricingMenuOpen((prev) => !prev)
+                      }}
                       className={`w-full flex items-center gap-3 rounded-sm px-3 py-2.5 text-[13.5px] transition-colors cursor-pointer ${
                         active
                           ? "bg-saffron-soft text-saffron-deep font-medium"
@@ -546,57 +630,61 @@ export default function App() {
                       <span className="truncate">{n.label}</span>
                       <ChevronRight
                         size={13}
-                        className="ml-auto text-ink-faint group-hover:text-amber-600 group-hover:translate-x-0.5 transition-transform"
+                        className={`ml-auto text-ink-faint transition-transform duration-200 ${
+                          isOpen ? "rotate-90 text-amber-600" : ""
+                        }`}
                       />
                     </button>
 
-                    {/* Hover Flyout Submenu with 2 Professional Sector Buttons */}
-                    <div className="hidden group-hover:flex flex-col absolute left-full top-0 ml-1.5 w-68 bg-card border border-amber-300 rounded-sm shadow-xl p-1.5 z-50 animate-in fade-in duration-150">
-                      <div className="px-2.5 py-1.5 border-b border-line/60 mb-1">
-                        <span className="font-mono text-[9.5px] uppercase tracking-wider text-amber-900 font-bold flex items-center gap-1">
-                          <Crown size={11} className="text-amber-600" /> Captain Pricing Sectors
-                        </span>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleSetAdminView("pricing", "global")
-                        }}
-                        className={`w-full text-left p-2 rounded-xs text-[12px] transition flex items-start gap-2.5 cursor-pointer ${
-                          active && pricingSector === "global"
-                            ? "bg-amber-50 text-amber-950 font-semibold border border-amber-200"
-                            : "hover:bg-paper-deep text-ink-soft hover:text-ink"
-                        }`}
-                      >
-                        <SlidersHorizontal size={14} className="text-saffron-deep shrink-0 mt-0.5" />
-                        <div>
-                          <div className="font-medium text-ink">1. Global Platform Economics</div>
-                          <div className="text-[10px] text-ink-faint leading-tight mt-0.5">
-                            Standard duration, per-km transit &amp; 20% commission
-                          </div>
-                        </div>
-                      </button>
+                    {/* Integrated Sub-Menu: Clean, visible, NEVER clipped! */}
+                    {isOpen && (
+                      <div className="pl-3 pr-1 py-1 space-y-1 border-l-2 border-amber-400/80 ml-4 animate-in fade-in duration-150">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleSetAdminView("pricing", "global")
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-sm text-[12px] transition flex items-center gap-2 cursor-pointer ${
+                            active && pricingSector === "global"
+                              ? "bg-amber-100 text-amber-950 font-semibold border border-amber-300 shadow-2xs"
+                              : "text-ink-soft hover:bg-paper-deep hover:text-ink"
+                          }`}
+                        >
+                          <SlidersHorizontal size={13} className="text-saffron-deep shrink-0" />
+                          <span className="truncate">Global Platform Rules</span>
+                        </button>
 
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleSetAdminView("pricing", "gosalas")
-                        }}
-                        className={`w-full text-left p-2 rounded-xs text-[12px] transition flex items-start gap-2.5 cursor-pointer mt-0.5 ${
-                          active && pricingSector === "gosalas"
-                            ? "bg-amber-50 text-amber-950 font-semibold border border-amber-200"
-                            : "hover:bg-paper-deep text-ink-soft hover:text-ink"
-                        }`}
-                      >
-                        <Building2 size={14} className="text-amber-700 shrink-0 mt-0.5" />
-                        <div>
-                          <div className="font-medium text-ink">2. Individual Gaushala Pricing</div>
-                          <div className="text-[10px] text-ink-faint leading-tight mt-0.5">
-                            Cattle darshan rates &amp; store items per Gaushala
-                          </div>
-                        </div>
-                      </button>
-                    </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleSetAdminView("pricing", "gosalas")
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-sm text-[12px] transition flex items-center gap-2 cursor-pointer ${
+                            active && pricingSector === "gosalas"
+                              ? "bg-amber-100 text-amber-950 font-semibold border border-amber-300 shadow-2xs"
+                              : "text-ink-soft hover:bg-paper-deep hover:text-ink"
+                          }`}
+                        >
+                          <Building2 size={13} className="text-amber-700 shrink-0" />
+                          <span className="truncate">Individual Gaushala Pricing</span>
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleSetAdminView("pricing", "commissions")
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-sm text-[12px] transition flex items-center gap-2 cursor-pointer ${
+                            active && pricingSector === "commissions"
+                              ? "bg-amber-100 text-amber-950 font-semibold border border-amber-300 shadow-2xs"
+                              : "text-ink-soft hover:bg-paper-deep hover:text-ink"
+                          }`}
+                        >
+                          <Percent size={13} className="text-amber-800 shrink-0" />
+                          <span className="truncate">Commission &amp; Economics</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )
               }
@@ -657,7 +745,7 @@ export default function App() {
                 <span>{profiles?.[auth]?.name || (isSuperAdmin ? "Vikramaditya Hegde" : "Devendra Sharma")}</span>
               </div>
               <div className="text-[10.5px] text-ink-faint truncate font-mono">
-                {isSuperAdmin ? "Platform Captain · Master" : "Operations Lead · Pune"}
+                {isSuperAdmin ? "Platform Captain · Master" : "Operations Lead · Regional Hub"}
               </div>
             </div>
             <button
@@ -696,7 +784,7 @@ export default function App() {
                     <span>Captain Supreme Authority</span>
                   </>
                 ) : (
-                  <span>Operations Hub</span>
+                  <span>{dynamicRegion !== "Regional" ? `${dynamicRegion} Hub` : "Operations Hub"}</span>
                 )}
               </span>
             </div>
@@ -726,7 +814,7 @@ export default function App() {
                     ? "bg-forest text-white font-semibold shadow-2xs"
                     : "text-ink-soft hover:text-ink hover:bg-card/70"
                 }`}
-                title="Operations Admin: Pune Operations, Manager Governance, Herd Health & Driver Dispatch"
+                title="Operations Admin: Regional Operations, Manager Governance, Herd Health & Driver Dispatch"
               >
                 <Users size={12} />
                 <span>Operations</span>

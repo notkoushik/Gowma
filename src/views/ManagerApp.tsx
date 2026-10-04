@@ -186,7 +186,10 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
     activeManagerGosala,
     setActiveManagerGosala,
     updateProfile,
+    pricingConfig,
   } = useStore()
+  const defaultCommPct = pricingConfig?.commissionPct ?? 20
+  const defaultGaushalaPct = 100 - defaultCommPct
   const meta = titles[view]
   const managerProfile = profiles?.manager || initialProfiles.manager
 
@@ -222,14 +225,28 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
       const isDirectManager =
         (g.managerId &&
           (g.managerId === managerProfile.id ||
-            g.managerId === matchedManager?.id)) ||
+            g.managerId === matchedManager?.id ||
+            Boolean((matchedManager as any)?.rawUserId && g.managerId === (matchedManager as any).rawUserId))) ||
         (g.managerName &&
           g.managerName.toLowerCase() ===
             managerProfile.name.toLowerCase()) ||
+        (g.managerName && Boolean(matchedManager?.name) &&
+          g.managerName.toLowerCase() ===
+            matchedManager!.name.toLowerCase()) ||
+        (Boolean((g as any).manager) &&
+          (g as any).manager.toLowerCase() ===
+            managerProfile.name.toLowerCase()) ||
+        (Boolean((g as any).caretaker) &&
+          (g as any).caretaker.toLowerCase() ===
+            managerProfile.name.toLowerCase()) ||
+        (Boolean((g as any).caretaker && matchedManager?.name) &&
+          (g as any).caretaker.toLowerCase() ===
+            matchedManager!.name.toLowerCase()) ||
         g.assignedManagers?.some(
           (am) =>
             am.id === managerProfile.id ||
             am.id === matchedManager?.id ||
+            am.name?.toLowerCase() === managerProfile.name.toLowerCase() ||
             am.email === managerProfile.email,
         )
       if (
@@ -539,11 +556,11 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
             title="Click to edit manager profile"
           >
             <div className="h-8 w-8 rounded-full bg-saffron text-white flex items-center justify-center text-[12px] font-medium shrink-0">
-              {managerProfile?.name?.slice(0, 2).toUpperCase() || "RK"}
+              {managerProfile?.name?.slice(0, 2).toUpperCase() || "GC"}
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-[12.5px] text-ink truncate font-medium flex items-center gap-1">
-                <span>{managerProfile?.name || "Rahul Kamble"}</span>
+                <span>{managerProfile?.name || "Gaushala Custodian"}</span>
                 <span className="text-[10px] text-saffron-deep opacity-0 group-hover:opacity-100 transition-opacity">
                   ✎
                 </span>
@@ -921,7 +938,7 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
                     </span>
                     <span className="text-ink-faint text-[11.5px] ml-2">
                       (On-Site Shed Custodian:{" "}
-                      {managerProfile?.name || "Rahul Kamble"})
+                      {managerProfile?.name || "Gaushala Custodian"})
                     </span>
                   </div>
                 </div>
@@ -1059,11 +1076,11 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
               <div className="px-5 pb-3 border-b border-line flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="h-8 w-8 rounded-full bg-saffron text-white flex items-center justify-center text-[11px] font-medium">
-                    {managerProfile?.name?.slice(0, 2).toUpperCase() || "RK"}
+                    {managerProfile?.name?.slice(0, 2).toUpperCase() || "GC"}
                   </div>
                   <div>
                     <div className="text-[13px] font-semibold text-ink">
-                      {managerProfile?.name || "Rahul Kamble"}
+                      {managerProfile?.name || "Gaushala Custodian"}
                     </div>
                     <div className="text-[11px] text-ink-faint">
                       {managerProfile?.managerData?.gosala ||
@@ -1131,7 +1148,7 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
                   <div>
                     <div className="text-[13px]">Earnings &amp; Ledger</div>
                     <div className="text-[11px] text-ink-faint">
-                      80/20 Gaushala Trust revenue split
+                      {defaultGaushalaPct}/{defaultCommPct} Gaushala Trust revenue split
                     </div>
                   </div>
                 </button>
@@ -1298,7 +1315,7 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
                             </span>
                             <span>·</span>
                             <span className="truncate">
-                              {gObj?.address || "Pune District"}
+                              {gObj?.address || "Regional Sanctuary Hub"}
                             </span>
                           </div>
                           <div className="text-[11.5px] text-ink-soft mt-1">

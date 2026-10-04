@@ -353,8 +353,9 @@ function Drawer({
 }
 
 export default function Bookings() {
-  const { bookings: rows, managers, gosalas, adminDecide, managerDecide, assignDriver } = useStore()
+  const { bookings: rows, managers, gosalas, adminDecide, managerDecide, assignDriver, profiles, authUser } = useStore()
   const { notify } = useToast()
+  const activeAdminName = authUser?.name || profiles?.admin?.name || "Operations Admin"
   const [filter, setFilter] = useState<typeof filters[number]>("All")
   const [gosalaFilter, setGosalaFilter] = useState<string>("All")
   const [q, setQ] = useState("")
@@ -389,7 +390,7 @@ export default function Bookings() {
       b.id,
       confirm,
       remark || "Feasibility verified by Admin as Acting Custodian",
-      "Priya Sharma (Acting Manager)",
+      `${activeAdminName} (Acting Manager)`,
       undefined,
     )
     notify(

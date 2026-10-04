@@ -17,6 +17,14 @@ export type Gosala = {
   photo: string
   lat?: number
   lng?: number
+  taxTreatment?: string
+  customTaxPct?: number
+  commissionType?: string
+  customCommissionPct?: number
+  customCommissionFlat?: number
+  bufferMinutes?: number
+  partnershipTier?: string
+  partnershipNotes?: string
 }
 
 export type GosalaFacility = {
@@ -78,36 +86,15 @@ export type Addon = {
   maxQty: number
 }
 
-export const addons: Addon[] = [
-  {
-    id: "mala",
-    name: "Marigold mala",
-    desc: "Fresh garland for the animal",
-    price: 150,
-    maxQty: 4,
-  },
-  {
-    id: "flowers",
-    name: "Flower basket",
-    desc: "Assorted puja flowers",
-    price: 200,
-    maxQty: 3,
-  },
-  {
-    id: "chunni",
-    name: "Silk chunni",
-    desc: "Decorative cloth drape",
-    price: 300,
-    maxQty: 2,
-  },
-  {
-    id: "decor",
-    name: "Full decoration",
-    desc: "Bells, kalash & tilak set",
-    price: 450,
-    maxQty: 1,
-  },
-]
+import { DEFAULT_GOSALA_OFFERINGS } from "./gosalas"
+
+export const addons: Addon[] = DEFAULT_GOSALA_OFFERINGS.map((item) => ({
+  id: item.id,
+  name: item.name,
+  desc: item.desc,
+  price: item.price,
+  maxQty: item.maxQty || 5,
+}))
 
 export const durationOptions = [
   { min: 60, label: "60 min", extra: 0, tag: "Included" },
@@ -115,14 +102,3 @@ export const durationOptions = [
   { min: 120, label: "120 min", extra: 1000, tag: "+60 min" },
 ]
 
-// slot availability per time (true = available)
-export const daySlots = [
-  { time: "08:00", end: "09:00", available: true },
-  { time: "09:00", end: "10:00", available: true },
-  { time: "10:00", end: "11:00", available: false },
-  { time: "11:00", end: "12:00", available: true },
-  { time: "12:00", end: "13:00", available: true },
-  { time: "14:00", end: "15:00", available: true },
-  { time: "15:00", end: "16:00", available: false },
-  { time: "16:00", end: "17:00", available: true },
-]

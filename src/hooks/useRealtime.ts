@@ -23,7 +23,7 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
     onGpsTick,
     onRoleAlert,
   } = options
-  const { currentRole, notify, patchBookingFromWs } = useStore()
+  const { currentRole, notify, patchBookingFromWs, refreshAnimals, refreshGosalas } = useStore()
   const [isConnected, setIsConnected] = useState(wsClient.isConnected)
   const [lastGpsTick, setLastGpsTick] = useState<GpsTickPayload | null>(null)
 
@@ -54,6 +54,9 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
     } else if (currentRole === "driver") {
       subs.add("channel:driver:Sunil Pawar")
     }
+
+    // Always listen to animals channel for catalog synchronization
+    subs.add("channel:animals")
 
     // Connect WebSocket
     wsClient.connect()
@@ -110,15 +113,33 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
       },
     )
 
+    // Listen to Animal & Gaushala roster changes
+    const unAnimal = wsClient.on("ANIMAL_REGISTERED", () => {
+      refreshAnimals?.().catch(() => {})
+    })
+    const unAnimalUpd = wsClient.on("ANIMAL_UPDATED", () => {
+      refreshAnimals?.().catch(() => {})
+    })
+    const unAnimalDel = wsClient.on("ANIMAL_DELETED", () => {
+      refreshAnimals?.().catch(() => {})
+    })
+    const unGosalaUpd = wsClient.on("GOSALA_UPDATED", () => {
+      refreshGosalas?.().catch(() => {})
+    })
+
     return () => {
       unConn()
       unGps()
       unAlert()
       unBooking()
       unStage()
+      unAnimal()
+      unAnimalUpd()
+      unAnimalDel()
+      unGosalaUpd()
       subs.forEach((ch) => wsClient.unsubscribe(ch))
     }
-  }, [bookingId, currentRole, gosalaName, channels.join(",")])
+  }, [bookingId, currentRole, gosalaName, channels.join(","), refreshAnimals, refreshGosalas])
 
   return {
     isConnected,

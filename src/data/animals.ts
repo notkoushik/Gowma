@@ -33,10 +33,12 @@ export type AnimalCustomDetail = {
   value: string
 }
 
+export type AnimalType = "Cow" | "Calf" | "Bull" | "Buffalo" | "Cow & Calf"
+
 export type Animal = {
   name: string
   tagId?: string // e.g. "IN-MH-12-8491" (Govt INAPH / Pashu Aadhaar)
-  type: "Cow" | "Calf" | "Bull"
+  type: AnimalType
   breed?: string
   gosala: string
   age: string
@@ -98,9 +100,22 @@ export const CATTLE_BREEDS = [
   "Red Sindhi",
   "Malvi",
   "Punganur Dwarf",
+  "Murrah Buffalo",
+  "Jaffrabadi Buffalo",
+  "Surti Buffalo",
+  "Mehsana Buffalo",
+  "Bhadawari Buffalo",
 ]
 
 export const AGE_PRESETS = [
+  {
+    label: "Mother Cow & Calf Pair (Gau-Vatsa Jodi)",
+    age: "4 yrs + 6 mos",
+    ageYears: 4,
+    weight: "480 kg combined",
+    height: "130 cm",
+    type: "Cow & Calf",
+  },
   {
     label: "Young Calf (1–2 yrs)",
     age: "1 yr",
@@ -149,13 +164,23 @@ export const AGE_PRESETS = [
     height: "142 cm",
     type: "Bull",
   },
+  {
+    label: "Indigenous Buffalo / Mahishi (4–8 yrs)",
+    age: "5 yrs",
+    ageYears: 5,
+    weight: "550 kg",
+    height: "140 cm",
+    type: "Buffalo",
+  },
 ]
 
 export const CEREMONIAL_CATEGORIES = [
   "Ceremonial · Puja & Griha Pravesh",
+  "Gau-Vatsa Jodi Puja (Mother & Calf)",
   "Temple Pradakshina & Utsav",
   "Vedic Havan & Blessing",
   "Kamadhenu Gau Seva",
+  "Mahishi Puja (Sacred Buffalo Seva)",
   "Gau Gras & Darshan Seva",
   "Gaushala Sanctuary Rest",
 ]

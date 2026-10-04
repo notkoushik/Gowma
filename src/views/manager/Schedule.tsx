@@ -27,8 +27,12 @@ import { Panel, PanelHead, StatusPill, Eyebrow } from "../../lib/ui"
 
 const hours = Array.from({ length: 11 }, (_, i) => 8 + i) // 08:00–18:00
 
-// Base reference date matching the seed database
-const TODAY_REFERENCE = "28 Sep 2026"
+// Base reference date dynamically computed from current system date
+const TODAY_REFERENCE = new Date().toLocaleDateString("en-IN", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+})
 
 export default function Schedule() {
   const {
@@ -131,18 +135,18 @@ export default function Schedule() {
       if (b.date) uniqueDates.add(b.date)
     })
 
-    // Add standard 7-day rolling window around reference date
-    const standardWindow = [
-      "25 Sep 2026",
-      "26 Sep 2026",
-      "27 Sep 2026",
-      "28 Sep 2026",
-      "29 Sep 2026",
-      "30 Sep 2026",
-      "01 Oct 2026",
-      "02 Oct 2026",
-    ]
-    standardWindow.forEach((d) => uniqueDates.add(d))
+    // Dynamic rolling window: 2 days in past to 7 days ahead
+    const now = new Date()
+    for (let offset = -2; offset <= 7; offset++) {
+      const d = new Date(now)
+      d.setDate(d.getDate() + offset)
+      const dateStr = d.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+      uniqueDates.add(dateStr)
+    }
 
     // Parse and sort chronologically
     const parseDateVal = (s: string) => {

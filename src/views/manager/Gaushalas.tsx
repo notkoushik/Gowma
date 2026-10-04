@@ -26,6 +26,12 @@ import {
   Upload,
   RefreshCw,
   Link2,
+  Percent,
+  Landmark,
+  ShieldAlert,
+  FileText,
+  Crown,
+  Globe,
 } from "lucide-react"
 import { useStore, useToast, type Gosala } from "../../store/store"
 import {
@@ -511,12 +517,16 @@ export default function Gaushalas({
 }: {
   onNavigateToHerd?: (gosalaName?: string) => void
 }) {
-  const { gosalas, animals, addGosala, updateGosala, deleteGosala, vets } =
+  const { gosalas, animals, addGosala, updateGosala, deleteGosala, vets, currentRole, profiles, authUser } =
     useStore()
   const { notify } = useToast()
 
+  const activeAdminName = authUser?.name || profiles?.admin?.name || "Operations Admin"
+  const activeSuperAdminName = authUser?.name || profiles?.super_admin?.name || "Vikramaditya Hegde"
+
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("ALL")
+  const [portfolioScope, setPortfolioScope] = useState<"my_portfolio" | "all_network">("my_portfolio")
 
   // Selected Gaushala for Professional Profile View
   const [selectedGosalaId, setSelectedGosalaId] = useState<string | null>(null)
@@ -532,6 +542,34 @@ export default function Gaushalas({
       ) || null
     )
   }, [gosalas, selectedGosalaId])
+
+  // Multi-Tenant Isolation Scope:
+  // - Operations Admin: Show ONLY Gaushalas under the active admin's regional administration!
+  // - Super Admin: By default ("my_portfolio"), show ONLY Gaushalas directly under Super Admin!
+  //   Super Admin can also switch to "all_network" for sovereign audit.
+  const scopedGosalas = useMemo(() => {
+    if (currentRole === "admin") {
+      return gosalas.filter((g) => {
+        const role = (g as any).governingAdminRole
+        const name = (g as any).governingAdminName
+        const adminName = (g as any).adminName
+        return (
+          role === "admin" ||
+          !role ||
+          name === activeAdminName ||
+          adminName === activeAdminName ||
+          (authUser?.gosalaNames && authUser.gosalaNames.includes(g.name))
+        )
+      })
+    }
+    if (currentRole === "super_admin") {
+      if (portfolioScope === "my_portfolio") {
+        return gosalas.filter((g) => (g as any).governingAdminRole === "super_admin")
+      }
+      return gosalas
+    }
+    return gosalas
+  }, [gosalas, currentRole, portfolioScope, activeAdminName, authUser])
 
   // Modal States
   const [showAddModal, setShowAddModal] = useState(false)
@@ -568,10 +606,18 @@ export default function Gaushalas({
     GOSALA_FACILITY_OPTIONS[2],
   ])
   const [formNotes, setFormNotes] = useState("")
+  const [formPartnershipTier, setFormPartnershipTier] = useState<"PREFERRED" | "STANDARD" | "CHARITABLE">("STANDARD")
+  const [formCommissionType, setFormCommissionType] = useState<"percentage" | "fixed">("percentage")
+  const [formCommissionValue, setFormCommissionValue] = useState<number>(10)
+  const [formTaxTreatment, setFormTaxTreatment] = useState<"standard_gst" | "section_80g_exempt" | "reduced_charity_gst">("standard_gst")
+  const [formBufferMinutes, setFormBufferMinutes] = useState<number>(30)
+  const [formPartnershipNotes, setFormPartnershipNotes] = useState("")
+  const [formLandAcres, setFormLandAcres] = useState("5.5")
+  const [formVisitingHours, setFormVisitingHours] = useState("6:00 AM – 7:30 PM (All 7 Days)")
 
   // Filtered Gaushalas
   const filteredGosalas = useMemo(() => {
-    return gosalas.filter((g) => {
+    return scopedGosalas.filter((g) => {
       const q = searchQuery.toLowerCase().trim()
       const matchesSearch =
         !q ||
@@ -586,12 +632,15 @@ export default function Gaushalas({
 
       return matchesSearch && matchesStatus
     })
-  }, [gosalas, searchQuery, statusFilter])
+  }, [scopedGosalas, searchQuery, statusFilter])
 
   // Aggregate Metrics
-  const totalGosalas = gosalas.length
-  const totalCapacity = gosalas.reduce((acc, g) => acc + (g.capacity || 0), 0)
-  const totalResidentCows = animals.length
+  const totalGosalas = scopedGosalas.length
+  const totalCapacity = scopedGosalas.reduce((acc, g) => acc + (g.capacity || 0), 0)
+  const scopedHousedCows = animals.filter((a) =>
+    scopedGosalas.some((g) => g.name.toLowerCase() === a.gosala.toLowerCase()),
+  )
+  const totalResidentCows = scopedHousedCows.length
   const utilizationPct =
     totalCapacity > 0 ? Math.round((totalResidentCows / totalCapacity) * 100) : 0
 
@@ -614,8 +663,8 @@ export default function Gaushalas({
     setFormPhoto(GOSALA_PHOTO_PRESETS[0].url)
     setFormPhotos([
       GOSALA_PHOTO_PRESETS[0].url,
+      GOSALA_PHOTO_PRESETS[1].url,
       GOSALA_PHOTO_PRESETS[2].url,
-      GOSALA_PHOTO_PRESETS[3].url,
     ])
     setFormFacilities([
       GOSALA_FACILITY_OPTIONS[0],
@@ -623,6 +672,14 @@ export default function Gaushalas({
       GOSALA_FACILITY_OPTIONS[2],
     ])
     setFormNotes("")
+    setFormPartnershipTier("STANDARD")
+    setFormCommissionType("percentage")
+    setFormCommissionValue(10)
+    setFormTaxTreatment("standard_gst")
+    setFormBufferMinutes(30)
+    setFormPartnershipNotes("")
+    setFormLandAcres("5.5")
+    setFormVisitingHours("6:00 AM – 7:30 PM (All 7 Days)")
     setShowAddModal(true)
   }
 
@@ -646,6 +703,8 @@ export default function Gaushalas({
     setFormCaretaker(g.caretaker)
     setFormCapacity(String(g.capacity))
     setFormYear(g.establishedYear)
+    setFormLandAcres(g.landAcres != null ? String(g.landAcres) : "5.5")
+    setFormVisitingHours(g.visitingHours || "6:00 AM – 7:30 PM (All 7 Days)")
     setFormStatus(g.status)
     setFormPhoto(g.photo || GOSALA_PHOTO_PRESETS[0].url)
     setFormPhotos(
@@ -655,6 +714,12 @@ export default function Gaushalas({
     )
     setFormFacilities(g.facilities || [])
     setFormNotes(g.notes || "")
+    setFormPartnershipTier((g.partnershipTier as any) || "STANDARD")
+    setFormCommissionType((g.commissionType as any) || "percentage")
+    setFormCommissionValue(g.customCommissionPct || (g.customCommissionFlat ? g.customCommissionFlat : 10))
+    setFormTaxTreatment((g.taxTreatment as any) || "standard_gst")
+    setFormBufferMinutes(g.bufferMinutes || 30)
+    setFormPartnershipNotes(g.partnershipNotes || "")
     setShowAddModal(true)
   }
 
@@ -701,7 +766,7 @@ export default function Gaushalas({
     }
 
     const regionToSave = isCustomRegionMode
-      ? customRegion.trim() || "Pune Region"
+      ? customRegion.trim() || "Regional Hub"
       : formRegion
 
     if (editingGosala) {
@@ -716,12 +781,21 @@ export default function Gaushalas({
         email: formEmail.trim(),
         caretaker: formCaretaker.trim(),
         capacity: Number(formCapacity) || 40,
+        landAcres: parseFloat(formLandAcres) || 5.0,
         establishedYear: formYear.trim(),
+        visitingHours: formVisitingHours.trim() || "6:00 AM – 7:30 PM (All 7 Days)",
         status: formStatus,
         photo: formPhoto,
         photos: formPhotos.length > 0 ? formPhotos : [formPhoto],
         facilities: formFacilities,
         notes: formNotes.trim(),
+        partnershipTier: formPartnershipTier,
+        commissionType: formCommissionType,
+        customCommissionPct: formCommissionType === "percentage" ? formCommissionValue : undefined,
+        customCommissionFlat: formCommissionType === "fixed" ? formCommissionValue : undefined,
+        taxTreatment: formTaxTreatment,
+        bufferMinutes: formBufferMinutes,
+        partnershipNotes: formPartnershipNotes.trim(),
       })
     } else {
       addGosala({
@@ -733,16 +807,29 @@ export default function Gaushalas({
         lng: formLng,
         contactPhone: formPhone.trim(),
         email: formEmail.trim(),
-        managerId: "MGR-804",
-        managerName: "Rahul Kamble",
+        managerId: "",
+        managerName: formCaretaker.trim() || "Dedicated Caretaker",
         caretaker: formCaretaker.trim(),
+        governingAdminRole: currentRole === "super_admin" ? "super_admin" : "admin",
+        governingAdminName: currentRole === "super_admin" ? activeSuperAdminName : activeAdminName,
+        adminId: currentRole === "super_admin" ? (authUser?.userId || "USER-SA-001") : (authUser?.userId || "USER-ADM-101"),
+        adminName: currentRole === "super_admin" ? activeSuperAdminName : activeAdminName,
         capacity: Number(formCapacity) || 40,
+        landAcres: parseFloat(formLandAcres) || 5.0,
         establishedYear: formYear.trim(),
+        visitingHours: formVisitingHours.trim() || "6:00 AM – 7:30 PM (All 7 Days)",
         status: formStatus,
         photo: formPhoto,
         photos: formPhotos.length > 0 ? formPhotos : [formPhoto],
         facilities: formFacilities,
         notes: formNotes.trim(),
+        partnershipTier: formPartnershipTier,
+        commissionType: formCommissionType,
+        customCommissionPct: formCommissionType === "percentage" ? formCommissionValue : undefined,
+        customCommissionFlat: formCommissionType === "fixed" ? formCommissionValue : undefined,
+        taxTreatment: formTaxTreatment,
+        bufferMinutes: formBufferMinutes,
+        partnershipNotes: formPartnershipNotes.trim(),
       })
     }
 
@@ -842,6 +929,81 @@ export default function Gaushalas({
             Animal Welfare Board of India
           </div>
         </Panel>
+      </div>
+
+      {/* Admin Portfolio Scope Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card border border-line rounded-lg p-3 sm:p-4">
+        <div className="flex items-center gap-2.5">
+          <div
+            className={`h-9 w-9 rounded-md flex items-center justify-center text-white shrink-0 ${
+              currentRole === "super_admin"
+                ? "bg-gradient-to-br from-amber-500 to-amber-700 shadow-xs"
+                : "bg-forest shadow-xs"
+            }`}
+          >
+            {currentRole === "super_admin" ? (
+              <Crown size={18} className="stroke-[2.2]" />
+            ) : (
+              <Building2 size={18} />
+            )}
+          </div>
+          <div>
+            <div className="text-[13.5px] font-semibold text-ink flex items-center gap-2">
+              <span>Administering Portfolio:</span>
+              <span className="font-serif text-forest font-bold">
+                {currentRole === "super_admin"
+                  ? portfolioScope === "my_portfolio"
+                    ? `${activeSuperAdminName} (Sovereign Gaushalas)`
+                    : "Consolidated Platform Network (Audit Mode)"
+                  : `${activeAdminName} (Regional Operations Hub)`}
+              </span>
+            </div>
+            <p className="text-[11.5px] text-ink-faint">
+              {currentRole === "super_admin"
+                ? portfolioScope === "my_portfolio"
+                  ? "Inspecting your sovereign Gaushalas portfolio (Isolated from other admins)"
+                  : "Super Admin Captain audit mode: All platform shelters across all regional admins"
+                : `Managing ${scopedGosalas.length} operational shelter(s) assigned under ${activeAdminName}`}
+            </p>
+          </div>
+        </div>
+
+        {currentRole === "super_admin" && (
+          <div className="flex items-center bg-paper border border-line rounded-md p-1 text-[11.5px] font-medium shrink-0">
+            <button
+              type="button"
+              onClick={() => setPortfolioScope("my_portfolio")}
+              className={`px-3 py-1.5 rounded transition cursor-pointer flex items-center gap-1.5 ${
+                portfolioScope === "my_portfolio"
+                  ? "bg-gradient-to-r from-amber-500 to-amber-700 text-white font-semibold shadow-xs"
+                  : "text-ink-soft hover:text-ink hover:bg-card"
+              }`}
+            >
+              <Crown size={12} className="stroke-[2.2]" />
+              <span>
+                My Gaushalas (
+                {
+                  gosalas.filter(
+                    (g) => (g as any).governingAdminRole === "super_admin",
+                  ).length
+                }
+                )
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPortfolioScope("all_network")}
+              className={`px-3 py-1.5 rounded transition cursor-pointer flex items-center gap-1.5 ${
+                portfolioScope === "all_network"
+                  ? "bg-forest text-white font-semibold shadow-xs"
+                  : "text-ink-soft hover:text-ink hover:bg-card"
+              }`}
+            >
+              <Globe size={12} />
+              <span>All Network ({gosalas.length})</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 2. Controls & Search Toolbar */}
@@ -1280,360 +1442,712 @@ export default function Gaushalas({
         </div>
       )}
 
-      {/* 5. Comprehensive Add / Edit Gaushala Modal */}
+      {/* 5. Comprehensive Full-Screen Gaushala Onboarding & Dossier Portal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-5 bg-ink/50 backdrop-blur-sm animate-fade-in overflow-y-auto">
-          <div className="bg-paper border-t sm:border border-line rounded-t-2xl sm:rounded-md shadow-2xl w-full max-w-xl max-h-[92vh] overflow-y-auto my-0 sm:my-auto pb-[env(safe-area-inset-bottom)] sm:pb-0">
-            {/* Mobile Sheet Drag Indicator */}
-            <div className="w-12 h-1 bg-ink-faint/30 rounded-full mx-auto my-2.5 sm:hidden shrink-0" />
-
-            <div className="flex items-center justify-between px-5 py-4 border-b border-line bg-card sticky top-0 z-10">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded bg-forest-soft text-forest">
-                  <Building2 size={18} />
-                </div>
-                <div>
-                  <h3 className="font-serif text-[17px] text-ink font-bold">
-                    {editingGosala
-                      ? `Edit Gaushala: ${editingGosala.name}`
-                      : "Register New Gaushala Premise"}
-                  </h3>
-                  <p className="text-[11.5px] text-ink-faint">
-                    {editingGosala
-                      ? "Update premise details, photo, capacity, and welfare facilities"
-                      : "Add a new sacred cow shelter under your trust management"}
-                  </p>
-                </div>
+        <div className="fixed inset-0 z-50 bg-paper text-ink overflow-y-auto flex flex-col animate-fade-in">
+          {/* Top Sticky Enterprise Command Header */}
+          <header className="sticky top-0 z-30 bg-card/95 backdrop-blur-md border-b border-line px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-xs">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-10 w-10 rounded-md bg-forest-soft text-forest flex items-center justify-center shrink-0 border border-forest/20 shadow-2xs">
+                <Building2 size={22} />
               </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-[10.5px] uppercase tracking-wider text-forest font-semibold">
+                    GOMAA Sacred Sanctuary Infrastructure
+                  </span>
+                  <span className="text-ink-faint text-[11px]">•</span>
+                  <span className="font-mono text-[10.5px] text-ink-faint">
+                    AWBI Section 38 Verification Ready
+                  </span>
+                  <span className="inline-flex items-center gap-1 font-mono text-[10px] px-2 py-0.5 rounded-full bg-ok-soft text-ok border border-ok/30 font-medium">
+                    <ShieldCheck size={11} /> Active GOMAA Trust Protocol
+                  </span>
+                </div>
+                <h1 className="font-serif text-[19px] sm:text-[22px] text-ink font-bold truncate tracking-tight">
+                  {editingGosala
+                    ? `Sanctuary Master Dossier: ${editingGosala.name}`
+                    : "Register New Sacred Gaushala Premise"}
+                </h1>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0">
               <button
+                type="button"
                 onClick={() => {
                   setShowAddModal(false)
                   setEditingGosala(null)
                 }}
-                className="text-ink-faint hover:text-ink p-1 rounded transition-colors cursor-pointer"
+                className="px-3.5 py-1.5 rounded-md border border-line text-[12.5px] font-medium text-ink-soft hover:text-ink hover:bg-paper transition cursor-pointer"
+              >
+                Cancel / Exit
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveGosala}
+                className="inline-flex items-center gap-1.5 px-5 py-1.5 rounded-md bg-forest hover:bg-forest-deep text-white text-[13px] font-semibold transition shadow-xs cursor-pointer"
+              >
+                <Check size={15} />
+                <span>
+                  {editingGosala ? "Save Gaushala Changes" : "Confirm & Register Gaushala"}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddModal(false)
+                  setEditingGosala(null)
+                }}
+                className="h-9 w-9 rounded-md text-ink-faint hover:text-ink hover:bg-paper grid place-items-center transition cursor-pointer"
                 aria-label="Close"
               >
                 <X size={18} />
               </button>
             </div>
+          </header>
 
-            <form
-              onSubmit={handleSaveGosala}
-              className="p-5 space-y-4 text-[12.5px]"
-            >
-              {/* Name & AWBI Reg */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[12px] font-medium text-ink mb-1">
-                    Gaushala Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    placeholder="e.g. Govardhan Goseva Trust"
-                    className="w-full bg-card border border-line rounded px-3 py-2 text-[16px] sm:text-[13px] text-ink outline-none focus:border-forest transition"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[12px] font-medium text-ink mb-1">
-                    AWBI / Govt. Trust Reg No. *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formRegNo}
-                    onChange={(e) => setFormRegNo(e.target.value)}
-                    placeholder="e.g. MAH-PUN-AWBI-0982"
-                    className="w-full bg-card border border-line rounded px-3 py-2 text-[16px] sm:text-[13px] text-ink font-mono outline-none focus:border-forest transition"
-                  />
-                </div>
-              </div>
-
-              {/* Shelter Photo Picker */}
-              <div>
-                <GosalaPhotoUploader
-                  currentPhoto={formPhoto}
-                  photos={formPhotos}
-                  onPhotoChange={setFormPhoto}
-                  onPhotosChange={setFormPhotos}
-                  label="Gaushala Premise Photographs *"
-                  helperText="Primary visual and premise gallery representing this sanctuary facility across the platform"
-                />
-              </div>
-
-              {/* Region with Custom Option */}
-              <div>
-                <label className="block text-[12px] font-medium text-ink mb-1">
-                  Operational Region *
-                </label>
-                <select
-                  value={isCustomRegionMode ? "__CUSTOM__" : formRegion}
-                  onChange={(e) => {
-                    if (e.target.value === "__CUSTOM__") {
-                      setIsCustomRegionMode(true)
-                      setCustomRegion("")
-                    } else {
-                      setIsCustomRegionMode(false)
-                      setFormRegion(e.target.value)
-                    }
-                  }}
-                  className="w-full bg-card border border-line rounded px-3 py-2 text-[16px] sm:text-[13px] text-ink outline-none focus:border-forest transition cursor-pointer"
-                >
-                  {getAllIndianStates().map((st) => (
-                    <optgroup key={st} label={st}>
-                      {getHubsForState(st).map((h) => (
-                        <option key={h.id} value={`${h.state} - ${h.name}`}>
-                          {h.name} ({h.city})
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                  <optgroup label="Custom / New Zone">
-                    <option
-                      value="__CUSTOM__"
-                      className="font-semibold text-forest"
-                    >
-                      + Customize / Other Region...
-                    </option>
-                  </optgroup>
-                </select>
-
-                {isCustomRegionMode && (
-                  <div className="mt-1.5 flex items-center gap-1.5 animate-fade-in">
-                    <input
-                      type="text"
-                      autoFocus
-                      value={customRegion}
-                      onChange={(e) => setCustomRegion(e.target.value)}
-                      placeholder="Enter custom region / district..."
-                      className="w-full bg-paper border border-forest/60 focus:border-forest rounded px-2.5 py-1.5 text-[16px] sm:text-[12px] text-ink outline-none shadow-xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsCustomRegionMode(false)
-                        setFormRegion(GOSALA_REGION_PRESETS[0])
-                      }}
-                      className="text-[11px] text-ink-faint hover:text-ink px-2.5 py-1.5 border border-line rounded bg-paper-deep shrink-0 cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Interactive Map Pinpoint & Geodesic Coordinates */}
-              <div>
-                <MapLocationPicker
-                  key={`${editingGosala?.id || "new"}-${formLat}-${formLng}`}
-                  initialLat={formLat}
-                  initialLng={formLng}
-                  initialAddress={formAddress}
-                  initialRegion={formRegion}
-                  onChange={({ lat, lng, address, suggestedRegion }) => {
-                    setFormLat(lat)
-                    setFormLng(lng)
-                    if (address) {
-                      setFormAddress(address)
-                    }
-                    if (suggestedRegion && !isCustomRegionMode) {
-                      setFormRegion(suggestedRegion)
-                    }
-                  }}
-                  label="Gaushala Map Pinpoint & GPS Coordinates *"
-                  helperText="Pinpoint the exact shelter location on the map, search any landmark/town, or jump to any Indian region even if you are not physically there."
-                  height="260px"
-                />
-              </div>
-
-              {/* Physical Address */}
-              <div>
-                <label className="block text-[12px] font-medium text-ink mb-1">
-                  Physical Address &amp; Landmark *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formAddress}
-                  onChange={(e) => setFormAddress(e.target.value)}
-                  placeholder="e.g. Survey No. 42, Near Paud Phata, Kothrud, Pune 411038"
-                  className="w-full bg-card border border-line rounded px-3 py-2 text-[16px] sm:text-[13px] text-ink outline-none focus:border-forest transition"
-                />
-              </div>
-
-              {/* Phone, Caretaker & Capacity */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[12px] font-medium text-ink mb-1">
-                    Contact Phone *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formPhone}
-                    onChange={(e) => setFormPhone(e.target.value)}
-                    placeholder="+91 98230 44910"
-                    className="w-full bg-card border border-line rounded px-3 py-2 text-[16px] sm:text-[13px] text-ink font-mono outline-none focus:border-forest transition"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[12px] font-medium text-ink mb-1">
-                    Lead Gosevak *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formCaretaker}
-                    onChange={(e) => setFormCaretaker(e.target.value)}
-                    placeholder="e.g. Rameshwar Shastri"
-                    className="w-full bg-card border border-line rounded px-3 py-2 text-[16px] sm:text-[13px] text-ink outline-none focus:border-forest transition"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[12px] font-medium text-ink mb-1">
-                    Total Bovine Capacity *
-                  </label>
-                  <input
-                    type="number"
-                    min="5"
-                    max="500"
-                    required
-                    value={formCapacity}
-                    onChange={(e) => setFormCapacity(e.target.value)}
-                    className="w-full bg-card border border-line rounded px-3 py-2 text-[16px] sm:text-[13px] text-ink outline-none focus:border-forest transition"
-                  />
-                </div>
-              </div>
-
-              {/* Email & Established Year */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[12px] font-medium text-ink mb-1">
-                    Sanctuary Email
-                  </label>
-                  <input
-                    type="email"
-                    value={formEmail}
-                    onChange={(e) => setFormEmail(e.target.value)}
-                    placeholder="care@gaushala.org"
-                    className="w-full bg-card border border-line rounded px-3 py-2 text-[16px] sm:text-[13px] text-ink outline-none focus:border-forest transition"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[12px] font-medium text-ink mb-1">
-                    Established Year
-                  </label>
-                  <input
-                    type="text"
-                    value={formYear}
-                    onChange={(e) => setFormYear(e.target.value)}
-                    placeholder="e.g. 2018"
-                    className="w-full bg-card border border-line rounded px-3 py-2 text-[16px] sm:text-[13px] text-ink font-mono outline-none focus:border-forest transition"
-                  />
-                </div>
-              </div>
-
-              {/* Status */}
-              <div>
-                <label className="block text-[12px] font-medium text-ink mb-1">
-                  Operational Status
-                </label>
+          {/* Full Screen Form Body */}
+          <form onSubmit={handleSaveGosala} className="flex-1 flex flex-col">
+            <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-8 py-6 space-y-6">
+              {/* Executive Notice Banner */}
+              <div className="p-4 rounded-lg bg-forest-soft/30 border border-forest/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-ink">
                 <div className="flex items-center gap-3">
-                  {(["Active", "Maintenance", "Under Audit"] as GosalaStatus[]).map(
-                    (st) => (
-                      <label
-                        key={st}
-                        className="inline-flex items-center gap-1.5 cursor-pointer text-[12px]"
-                      >
-                        <input
-                          type="radio"
-                          name="gosala_status"
-                          value={st}
-                          checked={formStatus === st}
-                          onChange={() => setFormStatus(st)}
-                          className="accent-forest"
-                        />
-                        <span>{st}</span>
-                      </label>
-                    ),
-                  )}
+                  <div className="h-8 w-8 rounded-full bg-forest text-white grid place-items-center shrink-0">
+                    <Sparkles size={16} />
+                  </div>
+                  <div>
+                    <div className="text-[13px] font-bold text-ink flex items-center gap-2">
+                      <span>Government &amp; AWBI Certified Cow Shelter Onboarding</span>
+                      <span className="font-mono text-[10.5px] px-2 py-0.2 rounded bg-forest/20 text-forest font-semibold">
+                        ISO / AWBI Standard
+                      </span>
+                    </div>
+                    <div className="text-[12px] text-ink-soft mt-0.5">
+                      Ensure accurate physical coordinates, valid registration certificates, and lead caretaker details for doorstep van transit authorization.
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="font-mono text-[11px] text-ink-faint">
+                    Capacity: <strong>{formCapacity} Bovines</strong>
+                  </span>
+                  <span className="text-ink-faint">•</span>
+                  <span className="font-mono text-[11px] text-ink-faint">
+                    Status: <strong className="text-forest">{formStatus}</strong>
+                  </span>
                 </div>
               </div>
 
-              {/* Verified Facilities Checklist */}
-              <div>
-                <label className="block text-[12px] font-medium text-ink mb-1.5">
-                  Available Bovine Amenities &amp; Infrastructure
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-card border border-line rounded p-3 max-h-48 overflow-y-auto">
-                  {GOSALA_FACILITY_OPTIONS.map((fac) => {
-                    const checked = formFacilities.includes(fac)
-                    return (
-                      <label
-                        key={fac}
-                        className={`flex items-center gap-2 p-2 rounded cursor-pointer transition text-[11.5px] ${
-                          checked
-                            ? "bg-forest-soft/40 text-forest font-medium"
-                            : "hover:bg-paper-deep text-ink-soft"
-                        }`}
-                      >
+              {/* 2-Column Responsive Layout */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                {/* Left Column (7 cols): Identity, Photography & Facilities */}
+                <div className="lg:col-span-7 space-y-6">
+                  {/* Card 1: Sanctuary Legal Identity & Trust Accreditation */}
+                  <div className="bg-card border border-line rounded-lg p-5 space-y-4 shadow-2xs">
+                    <div className="flex items-center justify-between border-b border-line pb-3">
+                      <div className="flex items-center gap-2">
+                        <Building2 size={16} className="text-forest" />
+                        <h2 className="font-serif text-[16px] text-ink font-bold">
+                          1. Sanctuary Legal Identity &amp; Trust Accreditation
+                        </h2>
+                      </div>
+                      <span className="font-mono text-[10px] text-ink-faint uppercase tracking-wider">
+                        Step 1 of 6
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="sm:col-span-2">
+                        <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
+                          Official Gaushala / Trust Name *
+                        </label>
                         <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => handleToggleFacility(fac)}
-                          className="accent-forest shrink-0"
+                          type="text"
+                          required
+                          value={formName}
+                          onChange={(e) => setFormName(e.target.value)}
+                          placeholder="e.g. Govardhan Goseva Trust &amp; Research Sanctuary"
+                          className="w-full bg-paper border border-line rounded-md px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-forest focus:ring-2 focus:ring-forest/20 transition font-medium"
                         />
-                        <span className="truncate">{fac}</span>
+                      </div>
+
+                      <div>
+                        <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
+                          AWBI / Govt. Trust Reg. No. *
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            required
+                            value={formRegNo}
+                            onChange={(e) => setFormRegNo(e.target.value)}
+                            placeholder="e.g. MAH-PUN-AWBI-4722"
+                            className="w-full bg-paper border border-line rounded-md pl-3 pr-8 py-2.5 text-[13px] text-ink font-mono outline-none focus:border-forest focus:ring-2 focus:ring-forest/20 transition"
+                          />
+                          <ShieldCheck size={16} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-forest pointer-events-none" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
+                          Operational Hub &amp; State *
+                        </label>
+                        <select
+                          value={isCustomRegionMode ? "__CUSTOM__" : formRegion}
+                          onChange={(e) => {
+                            if (e.target.value === "__CUSTOM__") {
+                              setIsCustomRegionMode(true)
+                              setCustomRegion("")
+                            } else {
+                              setIsCustomRegionMode(false)
+                              setFormRegion(e.target.value)
+                            }
+                          }}
+                          className="w-full bg-paper border border-line rounded-md px-3 py-2.5 text-[12.5px] text-ink outline-none focus:border-forest focus:ring-2 focus:ring-forest/20 transition cursor-pointer"
+                        >
+                          {getAllIndianStates().map((st) => (
+                            <optgroup key={st} label={st}>
+                              {getHubsForState(st).map((h) => (
+                                <option key={h.id} value={`${h.state} - ${h.name}`}>
+                                  {h.city} — {h.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                          <optgroup label="Custom / New Operational Hub">
+                            <option
+                              value="__CUSTOM__"
+                              className="font-semibold text-forest"
+                            >
+                              + Customize / Add New Hub...
+                            </option>
+                          </optgroup>
+                        </select>
+
+                        {isCustomRegionMode && (
+                          <div className="mt-2 flex items-center gap-1.5 animate-fade-in">
+                            <input
+                              type="text"
+                              autoFocus
+                              value={customRegion}
+                              onChange={(e) => setCustomRegion(e.target.value)}
+                              placeholder="Enter custom region / district name..."
+                              className="w-full bg-paper border border-forest/60 focus:border-forest rounded-md px-3 py-2 text-[12.5px] text-ink outline-none shadow-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsCustomRegionMode(false)
+                                setFormRegion(GOSALA_REGION_PRESETS[0])
+                              }}
+                              className="text-[11px] text-ink-faint hover:text-ink px-3 py-2 border border-line rounded-md bg-paper-deep shrink-0 cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
+                          Full Physical Sanctuary Premises Address &amp; Pincode *
+                        </label>
+                        <textarea
+                          rows={2}
+                          required
+                          value={formAddress}
+                          onChange={(e) => setFormAddress(e.target.value)}
+                          placeholder="Survey number, main road, landmark, village/suburb, district, state &amp; 6-digit postal pincode"
+                          className="w-full bg-paper border border-line rounded-md px-3 py-2 text-[13px] text-ink outline-none focus:border-forest focus:ring-2 focus:ring-forest/20 transition resize-none leading-relaxed"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
+                          Trust Helpline Phone *
+                        </label>
+                        <input
+                          type="tel"
+                          required
+                          value={formPhone}
+                          onChange={(e) => setFormPhone(e.target.value)}
+                          placeholder="+91 98230 44910"
+                          className="w-full bg-paper border border-line rounded-md px-3 py-2 text-[13px] text-ink font-mono outline-none focus:border-forest focus:ring-2 focus:ring-forest/20 transition"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
+                          Official Trust Email
+                        </label>
+                        <input
+                          type="email"
+                          value={formEmail}
+                          onChange={(e) => setFormEmail(e.target.value)}
+                          placeholder="trust@gomaa.in"
+                          className="w-full bg-paper border border-line rounded-md px-3 py-2 text-[13px] text-ink outline-none focus:border-forest focus:ring-2 focus:ring-forest/20 transition"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Premise Inspection Photography & Media Vault */}
+                  <div className="bg-card border border-line rounded-lg p-5 space-y-4 shadow-2xs">
+                    <div className="flex items-center justify-between border-b border-line pb-3">
+                      <div className="flex items-center gap-2">
+                        <Camera size={16} className="text-forest" />
+                        <h2 className="font-serif text-[16px] text-ink font-bold">
+                          2. Premise Photography &amp; Visual Verification
+                        </h2>
+                      </div>
+                      <span className="font-mono text-[10px] text-ink-faint uppercase tracking-wider">
+                        High-Resolution Multi-Angle Visuals
+                      </span>
+                    </div>
+
+                    <GosalaPhotoUploader
+                      currentPhoto={formPhoto}
+                      photos={formPhotos}
+                      onPhotoChange={setFormPhoto}
+                      onPhotosChange={setFormPhotos}
+                      label="Gaushala Premise &amp; Sacred Shed Photographs *"
+                      helperText="Prominently displayed on devotee booking screens, driver waybills, and official transit permits"
+                    />
+                  </div>
+
+                  {/* Card 3: Bovine Facilities & Welfare Infrastructure */}
+                  <div className="bg-card border border-line rounded-lg p-5 space-y-4 shadow-2xs">
+                    <div className="flex items-center justify-between border-b border-line pb-3">
+                      <div className="flex items-center gap-2">
+                        <Award size={16} className="text-forest" />
+                        <h2 className="font-serif text-[16px] text-ink font-bold">
+                          3. Certified Bovine Facilities &amp; Welfare Infrastructure
+                        </h2>
+                      </div>
+                      <span className="font-mono text-[10px] text-ink-faint uppercase tracking-wider">
+                        {formFacilities.length} of {GOSALA_FACILITY_OPTIONS.length} Selected
+                      </span>
+                    </div>
+
+                    <p className="text-[12px] text-ink-soft">
+                      Select all verified amenities available on the sanctuary grounds. These are displayed as trust badges to devotees.
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {GOSALA_FACILITY_OPTIONS.map((fac) => {
+                        const checked = formFacilities.includes(fac)
+                        return (
+                          <label
+                            key={fac}
+                            className={`flex items-start gap-2.5 p-3 rounded-md border transition cursor-pointer ${
+                              checked
+                                ? "bg-forest-soft/40 border-forest/40 text-ink font-medium shadow-2xs"
+                                : "bg-paper border-line hover:border-line-strong text-ink-soft"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => handleToggleFacility(fac)}
+                              className="accent-forest shrink-0 mt-0.5"
+                            />
+                            <span className="text-[12px] leading-snug">{fac}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+
+                    <div>
+                      <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
+                        Special Welfare, Medical, &amp; Sanctuary Protocol Notes
                       </label>
-                    )
-                  })}
+                      <textarea
+                        rows={3}
+                        value={formNotes}
+                        onChange={(e) => setFormNotes(e.target.value)}
+                        placeholder="e.g. 24/7 borehole solar pump installed. In-house organic hydro-fodder chamber running daily at 5:30 AM."
+                        className="w-full bg-paper border border-line rounded-md px-3 py-2 text-[12.5px] text-ink outline-none focus:border-forest focus:ring-2 focus:ring-forest/20 transition resize-none leading-relaxed"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column (5 cols): Capacity, Geodesics & Platform Economics */}
+                <div className="lg:col-span-5 space-y-6">
+                  {/* Card 4: Herd Scale & Staffing Matrix */}
+                  <div className="bg-card border border-line rounded-lg p-5 space-y-4 shadow-2xs">
+                    <div className="flex items-center justify-between border-b border-line pb-3">
+                      <div className="flex items-center gap-2">
+                        <PawPrint size={16} className="text-forest" />
+                        <h2 className="font-serif text-[16px] text-ink font-bold">
+                          4. Herd Scale &amp; Staffing Matrix
+                        </h2>
+                      </div>
+                      <span className="font-mono text-[10px] text-ink-faint uppercase tracking-wider">
+                        Operational Capacity
+                      </span>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider">
+                                  Herd Capacity *
+                                </label>
+                                <span className="font-mono text-[11px] font-bold text-forest">
+                                  {formCapacity} Cattle
+                                </span>
+                              </div>
+                              <input
+                                type="number"
+                                min="5"
+                                max="1000"
+                                required
+                                value={formCapacity}
+                                onChange={(e) => setFormCapacity(e.target.value)}
+                                className="w-full bg-paper border border-line rounded-md px-3.5 py-2 text-[13px] text-ink font-semibold outline-none focus:border-forest transition"
+                              />
+                            </div>
+
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider">
+                                  Sanctuary Land Area *
+                                </label>
+                                <span className="font-mono text-[11px] font-bold text-forest">
+                                  {formLandAcres} Acres
+                                </span>
+                              </div>
+                              <input
+                                type="number"
+                                step="0.1"
+                                min="0.5"
+                                max="500"
+                                required
+                                value={formLandAcres}
+                                onChange={(e) => setFormLandAcres(e.target.value)}
+                                placeholder="e.g. 5.5"
+                                className="w-full bg-paper border border-line rounded-md px-3.5 py-2 text-[13px] text-ink font-semibold outline-none focus:border-forest transition"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mb-3">
+                            <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
+                              Visiting & Darshan Hours (Shown to Devotees) *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={formVisitingHours}
+                              onChange={(e) => setFormVisitingHours(e.target.value)}
+                              placeholder="e.g. 6:00 AM – 7:30 PM (All 7 Days)"
+                              className="w-full bg-paper border border-line rounded-md px-3 py-2 text-[13px] text-ink outline-none focus:border-forest transition"
+                            />
+                            <div className="flex items-center gap-1.5 mt-1.5 overflow-x-auto text-[10.5px]">
+                              <span className="text-ink-faint shrink-0">Quick presets:</span>
+                              {[
+                                "6:00 AM – 7:30 PM (All 7 Days)",
+                                "7:00 AM – 8:00 PM (Daily)",
+                                "Dawn to Dusk (Vedic Darshan)",
+                              ].map((preset) => (
+                                <button
+                                  key={preset}
+                                  type="button"
+                                  onClick={() => setFormVisitingHours(preset)}
+                                  className="px-2 py-0.5 rounded border border-line bg-paper hover:bg-forest-soft/40 hover:text-forest text-ink-soft shrink-0 transition"
+                                >
+                                  {preset}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
+                              Lead Gosevak / Chief Caretaker *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={formCaretaker}
+                              onChange={(e) => setFormCaretaker(e.target.value)}
+                              placeholder="e.g. Rameshwar Shastri"
+                              className="w-full bg-paper border border-line rounded-md px-3 py-2 text-[13px] text-ink outline-none focus:border-forest transition"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
+                              Established Year
+                            </label>
+                            <input
+                              type="text"
+                              value={formYear}
+                              onChange={(e) => setFormYear(e.target.value)}
+                              placeholder="e.g. 2018"
+                              className="w-full bg-paper border border-line rounded-md px-3 py-2 text-[13px] text-ink font-mono outline-none focus:border-forest transition"
+                            />
+                          </div>
+                        </div>
+
+                      <div>
+                        <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1.5">
+                          Operational Status
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(["Active", "Maintenance", "Under Audit"] as GosalaStatus[]).map((st) => (
+                            <label
+                              key={st}
+                              className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-md border text-[11.5px] font-medium transition cursor-pointer text-center ${
+                                formStatus === st
+                                  ? st === "Active"
+                                    ? "bg-ok-soft text-ok border-ok/40 font-semibold shadow-2xs"
+                                    : st === "Maintenance"
+                                      ? "bg-warn-soft text-warn border-warn/40 font-semibold shadow-2xs"
+                                      : "bg-danger-soft text-danger border-danger/40 font-semibold shadow-2xs"
+                                  : "bg-paper border-line text-ink-soft hover:bg-paper-deep"
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="gosala_status"
+                                value={st}
+                                checked={formStatus === st}
+                                onChange={() => setFormStatus(st)}
+                                className="sr-only"
+                              />
+                              <span>{st}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 5: Geodesic Coordinates & Doorstep Serviceability */}
+                  <div className="bg-card border border-line rounded-lg p-5 space-y-4 shadow-2xs">
+                    <div className="flex items-center justify-between border-b border-line pb-3">
+                      <div className="flex items-center gap-2">
+                        <MapPin size={16} className="text-forest" />
+                        <h2 className="font-serif text-[16px] text-ink font-bold">
+                          5. Geodesics &amp; Doorstep Radius
+                        </h2>
+                      </div>
+                      <span className="font-mono text-[10px] text-ink-faint uppercase tracking-wider">
+                        GPS Geofencing
+                      </span>
+                    </div>
+
+                    <MapLocationPicker
+                      key={editingGosala?.id || "new"}
+                      initialLat={formLat}
+                      initialLng={formLng}
+                      initialAddress={formAddress}
+                      initialRegion={formRegion}
+                      onChange={({ lat, lng, address, suggestedRegion }) => {
+                        setFormLat(lat)
+                        setFormLng(lng)
+                        if (address) {
+                          setFormAddress(address)
+                        }
+                        if (suggestedRegion && !isCustomRegionMode) {
+                          setFormRegion(suggestedRegion)
+                        }
+                      }}
+                      label="Gaushala Location Pinpoint & Coordinates *"
+                      helperText="Pinpoint the exact shelter location on the map, search any landmark/town, or jump to any Indian region."
+                    />
+
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-ink-faint uppercase tracking-wider mb-1">
+                          Latitude (Lat)
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={formLat || ""}
+                          onChange={(e) => setFormLat(parseFloat(e.target.value) || undefined)}
+                          className="w-full bg-paper border border-line rounded px-3 py-1.5 text-[12px] font-mono text-ink outline-none focus:border-forest"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-ink-faint uppercase tracking-wider mb-1">
+                          Longitude (Lng)
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={formLng || ""}
+                          onChange={(e) => setFormLng(parseFloat(e.target.value) || undefined)}
+                          className="w-full bg-paper border border-line rounded px-3 py-1.5 text-[12px] font-mono text-ink outline-none focus:border-forest"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 rounded bg-paper border border-line text-[11px] text-ink-soft leading-relaxed flex items-start gap-2">
+                      <Clock size={13} className="text-forest shrink-0 mt-0.5" />
+                      <span>
+                        <strong>Doorstep Service Radius:</strong> Devotees within <strong>35 km</strong> qualify for direct van delivery. Transit beyond 35 km automatically enters extended transit buffer mode.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Card 6: Custom Gaushala Economics, Commission & Buffer */}
+                  <div className="bg-card border border-line rounded-lg p-5 space-y-4 shadow-2xs">
+                    <div className="flex items-center justify-between border-b border-line pb-3">
+                      <div className="flex items-center gap-2">
+                        <Landmark size={16} className="text-forest" />
+                        <h2 className="font-serif text-[16px] text-ink font-bold">
+                          6. Custom Economics &amp; Welfare Buffer
+                        </h2>
+                      </div>
+                      <span className="font-mono text-[10px] text-forest uppercase tracking-wider font-semibold">
+                        Dynamic Commission
+                      </span>
+                    </div>
+
+                    <div className="space-y-3.5">
+                      <div>
+                        <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
+                          Partnership Tier
+                        </label>
+                        <select
+                          value={formPartnershipTier}
+                          onChange={(e) => setFormPartnershipTier(e.target.value as any)}
+                          className="w-full bg-paper border border-line rounded px-3 py-2 text-[12.5px] text-ink outline-none focus:border-forest cursor-pointer"
+                        >
+                          <option value="PREFERRED">Preferred Trust Partner (Close Sanctuary, Low 8-10% Commission)</option>
+                          <option value="STANDARD">Standard Platform Gaushala (Standard 12-15% Commission)</option>
+                          <option value="CHARITABLE">100% Non-Profit Trust (0% Platform Margin / 80G Exempt)</option>
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
+                            Commission Model
+                          </label>
+                          <select
+                            value={formCommissionType}
+                            onChange={(e) => setFormCommissionType(e.target.value as any)}
+                            className="w-full bg-paper border border-line rounded px-3 py-2 text-[12.5px] text-ink outline-none focus:border-forest cursor-pointer"
+                          >
+                            <option value="percentage">Percentage (%)</option>
+                            <option value="fixed">Fixed Rate (₹)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
+                            {formCommissionType === "percentage" ? "Commission %" : "Fixed Amount (₹)"}
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            max={formCommissionType === "percentage" ? 50 : 5000}
+                            value={formCommissionValue}
+                            onChange={(e) => setFormCommissionValue(parseFloat(e.target.value) || 0)}
+                            className="w-full bg-paper border border-line rounded px-3 py-2 text-[13px] text-ink font-mono outline-none focus:border-forest"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
+                            Tax Exemption Treatment
+                          </label>
+                          <select
+                            value={formTaxTreatment}
+                            onChange={(e) => setFormTaxTreatment(e.target.value as any)}
+                            className="w-full bg-paper border border-line rounded px-3 py-2 text-[12.5px] text-ink outline-none focus:border-forest cursor-pointer"
+                          >
+                            <option value="standard_gst">Standard GST (12%)</option>
+                            <option value="section_80g_exempt">Section 80G Tax Exempt (0%)</option>
+                            <option value="reduced_charity_gst">Concessional Charity GST (5%)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
+                            Resting Buffer (Mins)
+                          </label>
+                          <input
+                            type="number"
+                            min="15"
+                            max="120"
+                            step="5"
+                            value={formBufferMinutes}
+                            onChange={(e) => setFormBufferMinutes(parseInt(e.target.value) || 30)}
+                            className="w-full bg-paper border border-line rounded px-3 py-2 text-[13px] text-ink font-mono outline-none focus:border-forest"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
+                          Partnership Rationale &amp; Notes
+                        </label>
+                        <input
+                          type="text"
+                          value={formPartnershipNotes}
+                          onChange={(e) => setFormPartnershipNotes(e.target.value)}
+                          placeholder="e.g. Close Partner Gaushala - 8% preferential commission agreed"
+                          className="w-full bg-paper border border-line rounded px-3 py-2 text-[12.5px] text-ink outline-none focus:border-forest"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
+            </div>
 
-              {/* Internal Notes */}
-              <div>
-                <label className="block text-[12px] font-medium text-ink mb-1">
-                  Special Welfare &amp; Facility Notes
-                </label>
-                <textarea
-                  rows={2}
-                  value={formNotes}
-                  onChange={(e) => setFormNotes(e.target.value)}
-                  placeholder="e.g. Solar water heater installed. Ayurvedic feeding conducted daily at 6 AM."
-                  className="w-full bg-card border border-line rounded px-3 py-2 text-[16px] sm:text-[12.5px] text-ink outline-none focus:border-forest transition resize-none"
-                />
+            {/* Bottom Sticky Action Footer */}
+            <footer className="sticky bottom-0 z-30 bg-card/95 backdrop-blur-md border-t border-line px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-lg">
+              <div className="flex items-center gap-3 text-[12px] text-ink-soft">
+                <span className="font-semibold text-ink">
+                  {formName.trim() || "New Gaushala Premise"}
+                </span>
+                <span>•</span>
+                <span className="font-mono text-ink-faint">
+                  {isCustomRegionMode ? customRegion : formRegion}
+                </span>
+                <span>•</span>
+                <span className="font-mono text-forest font-medium">
+                  Capacity: {formCapacity} Cattle
+                </span>
+                <span>•</span>
+                <span className="font-mono text-ink-faint">
+                  Tier: {formPartnershipTier} ({formCommissionValue}{formCommissionType === "percentage" ? "%" : "₹"})
+                </span>
               </div>
 
-              {/* Submit Buttons */}
-              <div className="pt-3 border-t border-line flex items-center justify-end gap-2">
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => {
                     setShowAddModal(false)
                     setEditingGosala(null)
                   }}
-                  className="px-4 py-2 text-[12px] font-medium bg-paper border border-line rounded text-ink hover:bg-paper-deep transition-colors cursor-pointer"
+                  className="px-4 py-2 text-[12.5px] font-medium text-ink-soft hover:text-ink border border-line rounded-md hover:bg-paper transition cursor-pointer"
                 >
-                  Cancel
+                  Cancel &amp; Discard
                 </button>
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-1.5 px-5 py-2 text-[12.5px] font-medium bg-forest text-white rounded hover:opacity-95 shadow-xs cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-6 py-2 text-[13px] font-bold rounded-md bg-forest hover:bg-forest-deep text-white shadow-xs transition cursor-pointer"
                 >
-                  <Check size={14} />
-                  <span>
-                    {editingGosala ? "Save Gaushala Changes" : "Register Gaushala"}
-                  </span>
+                  <Check size={16} />
+                  <span>{editingGosala ? "Save Gaushala Changes" : "Confirm & Register Gaushala Premise"}</span>
                 </button>
               </div>
-            </form>
-          </div>
+            </footer>
+          </form>
         </div>
       )}
     </div>

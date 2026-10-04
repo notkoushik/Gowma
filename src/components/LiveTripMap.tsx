@@ -33,36 +33,39 @@ export interface LiveTripMapProps {
   viewerRole?: "CUSTOMER" | "DRIVER" | "ADMIN" | "MANAGER"
 }
 
-// Known coordinates for Pune Gosalas and Pune localities
-const PUNE_COORDS: Record<string, LatLng> = {
-  // Gosalas
-  "Shri Krishna Gaushala": [18.5074, 73.8077], // Kothrud / Paud Road
-  "Nandini Goseva Sadan": [18.559, 73.7868], // Baner
-  "Gopal Gaushala Trust": [18.5482, 73.9034], // Kalyani Nagar
-  "Vrindavan Goshala": [18.4967, 73.9417], // Hadapsar
-  "Kamdhenu Seva Kendra": [18.5987, 73.7628], // Wakad
+// Known coordinates for Gaushalas and regional localities
+const REGIONAL_COORDS: Record<string, LatLng> = {
+  // Registered Gaushalas & Sanctuaries
+  "RamNath Gaushala": [17.4647, 78.3662], // Kondapur / Gachibowli, Hyderabad
+  "Surya": [17.4401, 78.3489], // Gachibowli, Hyderabad
+  "Suryavanchi Gaushala": [17.3826, 78.3976], // Narsingi / Gandipet, Hyderabad
+  "Shri Krishna Gaushala": [17.4401, 78.3489],
+  "Nandini Goseva Sadan": [17.4647, 78.3662],
+  "Gopal Gaushala Trust": [17.4447, 78.3762],
+  "Vrindavan Goshala": [17.3826, 78.3976],
+  "Kamdhenu Seva Kendra": [17.4200, 78.3300],
 
-  // Pune Localities
-  "Kothrud, Pune": [18.5074, 73.8077],
-  "Shivaji Nagar, Pune": [18.5308, 73.8474],
-  "Viman Nagar, Pune": [18.5679, 73.9143],
-  "Aundh, Pune": [18.5602, 73.8077],
-  "Hadapsar, Pune": [18.5089, 73.9259],
-  "Deccan Gymkhana, Pune": [18.5173, 73.8415],
-  "Bavdhan, Pune": [18.5134, 73.7744],
-  "Katraj, Pune": [18.4529, 73.8652],
-  "Erandwane, Pune": [18.5108, 73.8298],
-  "Navi Peth, Pune": [18.5126, 73.8447],
+  // Regional Localities (Hyderabad & Cyberabad)
+  "Kondapur, Hyderabad": [17.4647, 78.3662],
+  "Gachibowli, Hyderabad": [17.4401, 78.3489],
+  "Hitec City, Hyderabad": [17.4485, 78.3748],
+  "Madhapur, Hyderabad": [17.4483, 78.3915],
+  "Banjara Hills, Hyderabad": [17.4156, 78.4358],
+  "Jubilee Hills, Hyderabad": [17.4325, 78.4073],
+  "Narsingi, Hyderabad": [17.3826, 78.3976],
+  "Gandipet, Hyderabad": [17.3850, 78.3200],
+  "Kukatpally, Hyderabad": [17.4947, 78.3996],
+  "Secunderabad": [17.4399, 78.4983],
 }
 
 function resolveCoords(name: string, fallback: LatLng): LatLng {
-  if (PUNE_COORDS[name]) return PUNE_COORDS[name]
-  for (const key of Object.keys(PUNE_COORDS)) {
+  if (REGIONAL_COORDS[name]) return REGIONAL_COORDS[name]
+  for (const key of Object.keys(REGIONAL_COORDS)) {
     if (
       name.toLowerCase().includes(key.toLowerCase()) ||
       key.toLowerCase().includes(name.toLowerCase())
     ) {
-      return PUNE_COORDS[key]
+      return REGIONAL_COORDS[key]
     }
   }
   return fallback
@@ -588,7 +591,7 @@ export default function LiveTripMap({
               ? "Connecting road network..."
               : roadRoute?.summary
                 ? `Via ${roadRoute.summary}`
-                : "Pune Street Corridors"}
+                : "City Transit Corridors"}
           </span>
         </div>
       </div>

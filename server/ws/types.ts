@@ -18,9 +18,13 @@ export type ServerEventType =
   | "ANIMAL_STATUS_CHANGED"
   | "ANIMAL_REGISTERED"
   | "ANIMAL_UPDATED"
+  | "ANIMAL_DELETED"
   | "VET_UPDATED"
   | "GOSALA_REGISTERED"
   | "GOSALA_UPDATED"
+  | "GOSALA_DELETED"
+  | "HANDOVER_VERIFIED"
+  | "SETTLEMENT_SWEEP_EXECUTED"
 
 export type GpsTickPayload = {
   bookingId: string

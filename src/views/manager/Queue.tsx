@@ -119,7 +119,8 @@ function ReviewCard({
     (a) => (a.name || "").toLowerCase() === bAnimal,
   )
   const isCalf = b.animalType === "Calf" || bAnimal.includes("kesari")
-  const maxDistance = animalObj?.maxRadiusKm || (isCalf ? 8 : 20)
+  const isPair = b.animalType === "Cow & Calf"
+  const maxDistance = animalObj?.maxRadiusKm || (isCalf ? 8 : isPair ? 15 : 20)
   const distanceSafe = (b.distanceKm || 0) <= maxDistance
 
   // Simulated weather check for slot
@@ -805,7 +806,7 @@ export default function Queue({
       b.id,
       true,
       remark || "Operational feasibility & animal health verified",
-      profiles?.manager?.name || "Rahul Kamble",
+      profiles?.manager?.name || "Gaushala Custodian",
     )
   }
 
@@ -831,7 +832,7 @@ export default function Queue({
       rejectingBooking.id,
       false,
       finalRemark,
-      profiles?.manager?.name || "Rahul Kamble",
+      profiles?.manager?.name || "Gaushala Custodian",
       selectedReasonCode,
     )
 
@@ -1924,7 +1925,8 @@ export default function Queue({
                     )
                     const isCalf =
                       b.animalType === "Calf" || bAnimal.includes("kesari")
-                    const maxDist = animalObj?.maxRadiusKm || (isCalf ? 8 : 20)
+                    const isPair = b.animalType === "Cow & Calf"
+                    const maxDist = animalObj?.maxRadiusKm || (isCalf ? 8 : isPair ? 15 : 20)
                     const distSafe = (b.distanceKm || 0) <= maxDist
                     const isMidday =
                       (b.start || "") >= "12:00" && (b.start || "") <= "15:30"

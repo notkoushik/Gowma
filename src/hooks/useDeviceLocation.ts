@@ -27,7 +27,7 @@ export function getIndianLocalityFromCoords(lat: number, lng: number): string {
 }
 
 // Backward-compatible alias for existing code
-export function getPuneLocalityFromCoords(lat: number, lng: number): string {
+export function getRegionalLocalityFromCoords(lat: number, lng: number): string {
   return getIndianLocalityFallback(lat, lng)
 }
 
@@ -247,14 +247,14 @@ export function useDeviceLocation() {
     }
 
     return {
-      lat: null,
-      lng: null,
-      accuracy: null,
+      lat: 17.4401,
+      lng: 78.3489,
+      accuracy: 50,
       speed: null,
       heading: null,
-      address: null,
-      city: null,
-      state: null,
+      address: "Kothaguda, Hyderabad, Telangana",
+      city: "Hyderabad",
+      state: "Telangana",
       error: null,
       isLoading: false,
       hasPermission: false,
@@ -262,35 +262,12 @@ export function useDeviceLocation() {
         typeof navigator !== "undefined" && navigator.geolocation
           ? "prompt"
           : "unsupported",
+      source: "OFFLINE_CENTROID",
     }
   })
 
   const [isWatching, setIsWatching] = useState(false)
   const watchIdRef = useRef<number | null>(null)
-
-  // Check initial permission status if available
-  useEffect(() => {
-    if (typeof navigator !== "undefined" && "permissions" in navigator) {
-      navigator.permissions
-        .query({ name: "geolocation" as PermissionName })
-        .then((perm) => {
-          setState((s) => ({
-            ...s,
-            permissionStatus: perm.state as "prompt" | "granted" | "denied",
-            hasPermission: perm.state === "granted",
-          }))
-
-          perm.onchange = () => {
-            setState((s) => ({
-              ...s,
-              permissionStatus: perm.state as "prompt" | "granted" | "denied",
-              hasPermission: perm.state === "granted",
-            }))
-          }
-        })
-        .catch(() => {})
-    }
-  }, [])
 
   // Explicit user-gesture or auto request function
   const requestLocation = useCallback(async (): Promise<{
@@ -309,138 +286,192 @@ export function useDeviceLocation() {
           lat: number
           lng: number
           accuracy: number
-        } | null>((resolve) => {
+        }>((resolve, reject) => {
           navigator.geolocation.getCurrentPosition(
             (pos) => {
-              resolve({
-                lat: pos.coords.latitude,
-                lng: pos.coords.longitude,
-                accuracy: pos.coords.accuracy,
-              })
+              if (
+                pos?.coords &&
+                typeof pos.coords.latitude === "number" &&
+                !isNaN(pos.coords.latitude)
+              ) {
+                resolve({
+                  lat: pos.coords.latitude,
+                  lng: pos.coords.longitude,
+                  accuracy: pos.coords.accuracy,
+                })
+              } else {
+                reject(new Error("Invalid coordinates returned by browser GPS"))
+              }
             },
-            () => resolve(null),
-            {
-              enableHighAccuracy: true,
-              timeout: 6000,
-              maximumAge: 60000,
-            },
+            (err) => reject(err),
+            { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 },
           )
         })
 
-        if (gpsResult) {
-          const { address, city, state: stateName } =
-            await reverseGeocodeCoords(gpsResult.lat, gpsResult.lng)
+        // Reverse geocode high-accuracy coordinates
+        const geoInfo = await reverseGeocodeCoords(
+          gpsResult.lat,
+          gpsResult.lng,
+        )
 
-          const updated: GeoLocationState = {
-            lat: gpsResult.lat,
-            lng: gpsResult.lng,
-            accuracy: gpsResult.accuracy,
-            speed: null,
-            heading: null,
-            address,
-            city,
-            state: stateName,
-            error: null,
-            isLoading: false,
-            hasPermission: true,
-            permissionStatus: "granted",
-            source: "GPS_HARDWARE",
-          }
-
-          try {
-            localStorage.setItem(
-              STORAGE_KEY,
-              JSON.stringify({
-                lat: gpsResult.lat,
-                lng: gpsResult.lng,
-                address,
-                city,
-                state: stateName,
-                accuracy: gpsResult.accuracy,
-                source: "GPS_HARDWARE",
-              }),
-            )
-          } catch (e) {}
-
-          setState(updated)
-          return {
-            lat: gpsResult.lat,
-            lng: gpsResult.lng,
-            address,
-            city,
-            state: stateName,
-          }
+        const newState: GeoLocationState = {
+          lat: Number(gpsResult.lat.toFixed(5)),
+          lng: Number(gpsResult.lng.toFixed(5)),
+          accuracy: gpsResult.accuracy,
+          speed: null,
+          heading: null,
+          address: geoInfo.address,
+          city: geoInfo.city,
+          state: geoInfo.state,
+          error: null,
+          isLoading: false,
+          hasPermission: true,
+          permissionStatus: "granted",
+          source: "GPS_HARDWARE",
         }
-      } catch (e) {
-        console.warn("GPS lookup error:", e)
+
+        setState(newState)
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(newState))
+        } catch {}
+
+        return {
+          lat: newState.lat!,
+          lng: newState.lng!,
+          address: newState.address!,
+          city: newState.city!,
+          state: newState.state!,
+        }
+      } catch (err: any) {
+        console.warn("Browser GPS prompt declined or failed, trying IP fallback...", err)
       }
     }
 
-    // 2. Fallback to Zero-Key IP Geolocation
+    // 2. Fallback to IP Geolocation
     const ipResult = await getIpLocationFallback()
     if (ipResult) {
-      const updated: GeoLocationState = {
-        lat: ipResult.lat,
-        lng: ipResult.lng,
-        accuracy: 10000,
+      const newState: GeoLocationState = {
+        lat: Number(ipResult.lat.toFixed(5)),
+        lng: Number(ipResult.lng.toFixed(5)),
+        accuracy: 5000,
         speed: null,
         heading: null,
         address: ipResult.address,
         city: ipResult.city,
         state: ipResult.state,
-        error: "Approximate city detected via network (±10km). Enable device GPS or pinpoint on map for exact doorstep delivery.",
+        error: null,
         isLoading: false,
         hasPermission: false,
-        permissionStatus: state.permissionStatus === "denied" ? "denied" : "prompt",
+        permissionStatus: "prompt",
         source: "IP_FALLBACK",
       }
 
+      setState(newState)
       try {
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({
-            lat: ipResult.lat,
-            lng: ipResult.lng,
-            address: ipResult.address,
-            city: ipResult.city,
-            state: ipResult.state,
-            source: "IP_FALLBACK",
-          }),
-        )
-      } catch (e) {}
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(newState))
+      } catch {}
 
-      setState(updated)
-      return ipResult
+      return {
+        lat: newState.lat!,
+        lng: newState.lng!,
+        address: newState.address!,
+        city: newState.city!,
+        state: newState.state!,
+      }
     }
 
-    // 3. Fallback to nearest major Vedic/metropolitan hub (Default: Hyderabad Central)
-    const defaultHub = INDIAN_REGIONAL_HUBS[0] // Hyderabad Central
-    const fallbackAddress = `${defaultHub.name}, ${defaultHub.city}, ${defaultHub.state}`
+    // 3. Last Fallback: Indian Hub Centroid
+    const fallbackHub = INDIAN_REGIONAL_HUBS[0]
     const fallbackState: GeoLocationState = {
-      lat: defaultHub.lat,
-      lng: defaultHub.lng,
-      accuracy: null,
+      lat: fallbackHub.lat,
+      lng: fallbackHub.lng,
+      accuracy: 10000,
       speed: null,
       heading: null,
-      address: fallbackAddress,
-      city: defaultHub.city,
-      state: defaultHub.state,
-      error: "Location access not permitted; using regional Vedic hub.",
+      address: `${fallbackHub.name}, ${fallbackHub.city}, ${fallbackHub.state}`,
+      city: fallbackHub.city,
+      state: fallbackHub.state,
+      error: null,
       isLoading: false,
       hasPermission: false,
-      permissionStatus: "denied",
+      permissionStatus: "prompt",
       source: "OFFLINE_CENTROID",
     }
-
     setState(fallbackState)
     return {
-      lat: defaultHub.lat,
-      lng: defaultHub.lng,
-      address: fallbackAddress,
-      city: defaultHub.city,
-      state: defaultHub.state,
+      lat: fallbackState.lat!,
+      lng: fallbackState.lng!,
+      address: fallbackState.address!,
+      city: fallbackState.city!,
+      state: fallbackState.state!,
     }
   }, [])
+
+  // Check initial permission status and auto-query if granted or silently fetch IP
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && "permissions" in navigator) {
+      navigator.permissions
+        .query({ name: "geolocation" as PermissionName })
+        .then((perm) => {
+          setState((s) => ({
+            ...s,
+            permissionStatus: perm.state as "prompt" | "granted" | "denied",
+            hasPermission: perm.state === "granted",
+          }))
+
+          if (perm.state === "granted") {
+            requestLocation()
+          } else {
+            getIpLocationFallback().then((ipLoc) => {
+              if (ipLoc) {
+                setState((s) => {
+                  if (s.hasPermission) return s
+                  return {
+                    ...s,
+                    lat: ipLoc.lat,
+                    lng: ipLoc.lng,
+                    city: ipLoc.city,
+                    state: ipLoc.state,
+                    address: ipLoc.address,
+                    source: "IP_FALLBACK",
+                  }
+                })
+              }
+            }).catch(() => {})
+          }
+
+          perm.onchange = () => {
+            setState((s) => ({
+              ...s,
+              permissionStatus: perm.state as "prompt" | "granted" | "denied",
+              hasPermission: perm.state === "granted",
+            }))
+            if (perm.state === "granted") {
+              requestLocation()
+            }
+          }
+        })
+        .catch(() => {})
+    } else {
+      getIpLocationFallback().then((ipLoc) => {
+        if (ipLoc) {
+          setState((s) => {
+            if (s.hasPermission) return s
+            return {
+              ...s,
+              lat: ipLoc.lat,
+              lng: ipLoc.lng,
+              city: ipLoc.city,
+              state: ipLoc.state,
+              address: ipLoc.address,
+              source: "IP_FALLBACK",
+            }
+          })
+        }
+      }).catch(() => {})
+    }
+  }, [requestLocation])
+
 
   // Manual city/region override
   const setManualLocation = useCallback(

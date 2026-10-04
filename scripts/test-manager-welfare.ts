@@ -51,7 +51,7 @@ console.log(
     customer: "Devotee Ananya",
     status: "Confirmed",
     total: 3500,
-    address: "Kothrud, Pune",
+    address: "Kondapur, Hyderabad",
     distanceKm: 6.2,
     paid: true,
   } as any)
@@ -66,7 +66,7 @@ console.log(
     customer: "Devotee Suresh",
     status: "Confirmed",
     total: 3500,
-    address: "Aundh, Pune",
+    address: "Gachibowli, Hyderabad",
     distanceKm: 8.5,
     paid: true,
   } as any)
@@ -95,7 +95,7 @@ console.log(
     customer: "Devotee Rahul",
     status: "Confirmed",
     total: 2800,
-    address: "Baner, Pune",
+    address: "Madhapur, Hyderabad",
     distanceKm: 4.2,
     paid: true,
   } as any)
@@ -137,7 +137,7 @@ console.log(
     customer: "Pooja Hegde",
     status: "Confirmed",
     total: 4200,
-    address: "Kalyani Nagar, Pune",
+    address: "Banjara Hills, Hyderabad",
     distanceKm: 7.1,
     paid: true,
   } as any)
@@ -382,7 +382,7 @@ console.log(
     aadhaarNumber: "XXXX-XXXX-4819",
     aadhaarVerified: true,
     ritualPurpose: "Griha Pravesh & Kamadhenu Puja",
-    address: "14 Tulsi Nagar, Kothrud, Pune",
+    address: "14 Tulsi Nagar, Kondapur, Hyderabad",
   }
 
   // Validate Aadhaar masked format
@@ -416,13 +416,13 @@ console.log(
   "---------------------------------------------------------------------",
 )
 {
-  const pickupLocation = "Shri Krishna Gaushala, Pune"
-  const receiverDestination = "14 Tulsi Nagar, Kothrud, Pune"
+  const pickupLocation = "Shri Krishna Gaushala, Hyderabad"
+  const receiverDestination = "14 Tulsi Nagar, Kondapur, Hyderabad"
   const receiverName = "Ananya Deshmukh"
   const receiverPhone = "+91 98204 11827"
 
   // Simulate Porter dispatch generation
-  const porterTrackingId = "POR-PUN-77291"
+  const porterTrackingId = "POR-HYD-77291"
   const porterPayload = {
     bookingId: "GMA-24817",
     porterBookingId: porterTrackingId,
@@ -438,8 +438,8 @@ console.log(
   }
 
   assert(
-    porterPayload.porterBookingId.startsWith("POR-PUN-"),
-    "Porter tracking ID format verified (POR-PUN-XXXXX)",
+    porterPayload.porterBookingId.startsWith("POR-HYD-"),
+    "Porter tracking ID format verified (POR-HYD-XXXXX)",
   )
   assert(
     porterPayload.receiver.name === receiverName,
@@ -487,7 +487,7 @@ console.log(
       date: "30 Sep 2026",
       timeSlot: "06:00 - 07:00",
       durationMin: 60,
-      serviceAddress: "14 Tulsi Nagar, Kothrud, Pune",
+      serviceAddress: "14 Tulsi Nagar, Kondapur, Hyderabad",
       distanceKm: 4.2,
       specialInstructions:
         "Ground-floor courtyard altar prepared. Water bucket and grass basket kept ready.",

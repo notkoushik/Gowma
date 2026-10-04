@@ -7,11 +7,38 @@ import type {
 
 const API_BASE = ""
 
+const TOKEN_KEY = "gomaa_auth_token"
+
+export function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function setAuthToken(token: string | null) {
+  try {
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token)
+    } else {
+      localStorage.removeItem(TOKEN_KEY)
+    }
+  } catch {}
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = getAuthToken()
+  const authHeaders: Record<string, string> = {}
+  if (token) {
+    authHeaders["Authorization"] = `Bearer ${token}`
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders,
       ...(options.headers || {}),
     },
   })
@@ -25,6 +52,29 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  async login(emailOrPhone: string, roleHint?: string) {
+    const data = await request<{ ok: boolean; token: string; user: any }>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email: emailOrPhone, roleHint }),
+    })
+    if (data.token) {
+      setAuthToken(data.token)
+    }
+    return data
+  },
+
+  async getMe() {
+    return request<{ ok: boolean; user: any }>("/api/auth/me")
+  },
+
+  async getAccounts() {
+    return request<{ ok: boolean; accounts: any[] }>("/api/auth/accounts")
+  },
+
+  logout() {
+    setAuthToken(null)
+  },
+
   async getHealth() {
     return request<{ ok: boolean; timestamp: string }>("/api/health")
   },
@@ -79,6 +129,15 @@ export const api = {
     distanceKm: number
     addonsCost?: number
     discount?: number
+    taxPct?: number
+    commissionPct?: number
+    commissionFlat?: number
+    gosalaId?: string
+    gosala?: string
+    freeKm?: number
+    perKm?: number
+    extraUnitMin?: number
+    extraUnitRate?: number
   }) {
     return request<any>("/api/pricing/calculate", {
       method: "POST",
@@ -123,10 +182,21 @@ export const api = {
     })
   },
 
-  async assignDriver(id: string, driver: string) {
+  async assignDriver(
+    id: string,
+    driver: string,
+    driverDetails?: {
+      driverPhone?: string
+      driverVehiclePlate?: string
+      driverVehicleModel?: string
+      driverRating?: number
+      driverTotalTrips?: number
+      driverAvatar?: string | null
+    },
+  ) {
     return request<{ booking: Booking }>(`/api/bookings/${id}/assign-driver`, {
       method: "POST",
-      body: JSON.stringify({ driver }),
+      body: JSON.stringify({ driver, ...driverDetails }),
     })
   },
 
@@ -134,6 +204,16 @@ export const api = {
     return request<{ booking: Booking }>(`/api/bookings/${id}/advance-stage`, {
       method: "POST",
     })
+  },
+
+  async verifyHandoverOtp(id: string, otp: string) {
+    return request<{ success: boolean; message: string; booking: Booking }>(
+      `/api/bookings/${id}/verify-handover-otp`,
+      {
+        method: "POST",
+        body: JSON.stringify({ otp }),
+      },
+    )
   },
 
   async getManagers() {
@@ -353,6 +433,51 @@ export const api = {
       `/api/vets/${encodeURIComponent(id)}`,
       {
         method: "DELETE",
+      },
+    )
+  },
+
+  async executeSettlementSweep(options?: {
+    gosala?: string
+    cycleType?: "CONTINUOUS_T_PLUS_ONE" | "WEEKLY"
+  }) {
+    return request<{
+      success: boolean
+      disbursedBatches: any[]
+      totalDisbursed: number
+      totalRetained: number
+      cycle: string
+      message: string
+    }>("/api/settlements/sweep", {
+      method: "POST",
+      body: JSON.stringify(options || {}),
+    })
+  },
+
+  async getSettlementSchedule() {
+    return request<{
+      schedule: {
+        autoSweepEnabled: boolean
+        disbursementCycle: "CONTINUOUS_T_PLUS_ONE" | "WEEKLY"
+        nextScheduledRun: string
+        lastSweepAt: string | null
+        totalBatchesPaid: number
+        totalDisbursedAmount: number
+        pendingEscrowAmount: number
+        activeCustodianPool: string
+      }
+    }>("/api/settlements/schedule")
+  },
+
+  async configureSettlementSchedule(config: {
+    autoSweepEnabled?: boolean
+    disbursementCycle?: "CONTINUOUS_T_PLUS_ONE" | "WEEKLY"
+  }) {
+    return request<{ success: boolean; schedule: any }>(
+      "/api/settlements/schedule/configure",
+      {
+        method: "POST",
+        body: JSON.stringify(config),
       },
     )
   },

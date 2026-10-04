@@ -71,7 +71,7 @@ async function main() {
     start: "10:00",
     end: "11:30",
     durationMin: 90,
-    address: "Bungalow 7, Prabhat Road, Deccan, Pune",
+    address: "Bungalow 7, Road 10, Jubilee Hills, Hyderabad",
     distanceKm: 12,
     base: 3500,
     extraTime: 500,
@@ -113,7 +113,7 @@ async function main() {
   // 6. Test Phase 2: Operations Admin Final Confirmation & Driver Dispatch
   console.log("\n--- Step 6: Testing Phase 2 Operations Admin Dispatch & Confirmation ---")
   const adminConfirmRes = await handleApiRequest("POST", `/api/bookings/${testBookingId}/admin-confirm`, {
-    adminName: "Operations Admin Pune Central",
+    adminName: "Operations Admin Regional Central",
     driverName: "Sunil Pawar",
     driverPhone: "+91 98201 55432",
     vehicleNumber: "MH-12-Q-4491",

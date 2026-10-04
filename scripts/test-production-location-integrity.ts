@@ -4,9 +4,21 @@
  * Gosala Database Persistence, and End-to-End Booking Integrity.
  */
 
+if (typeof (globalThis as any).window === "undefined") {
+  ;(globalThis as any).screen = { deviceXDPI: 96, logicalXDPI: 96 }
+  Object.defineProperty(globalThis, "window", {
+    value: globalThis,
+    writable: true,
+  })
+  ;(globalThis as any).document = {
+    createElement: () => ({ style: {} }),
+    documentElement: { style: {} },
+    head: { appendChild: () => {} },
+  }
+}
+
 import { calculateDistanceKm, calculateRoadDistanceKm, findNearestIndianHub, INDIAN_REGIONAL_HUBS } from "../src/data/regions"
 import { getGaushalaServiceability, sortGaushalasByProximity } from "../src/utils/geoDistance"
-import { resolveGosalaDetail } from "../src/views/customer/GosalaProfile"
 
 interface TestResult {
   suite: string
@@ -92,7 +104,7 @@ async function runSimulation() {
   )
 
   // Out of Radius (>75 km)
-  const distantTarget = { lat: 18.5204, lng: 73.8567 } // Pune to Hyderabad (~500 km)
+  const distantTarget = { lat: 19.9975, lng: 73.7898 } // Nashik to Hyderabad (~550 km)
   const outOfRadiusService = getGaushalaServiceability(hydNarsingi.lat, hydNarsingi.lng, distantTarget)
   assert(
     outOfRadiusService.tier === "OUT_OF_RADIUS" && !outOfRadiusService.isDirectBookingAllowed,
@@ -108,11 +120,11 @@ async function runSimulation() {
 
   const mockRegisteredGosalas = [
     {
-      id: "GOS-PUN-1",
-      name: "Shri Krishna Gaushala (Pune)",
-      lat: 18.5074,
-      lng: 73.8077,
-      address: "Bavdhan, Pune, Maharashtra",
+      id: "GOS-WAR-1",
+      name: "Sri Ramalingeswara Gaushala (Warangal)",
+      lat: 17.9689,
+      lng: 79.5941,
+      address: "Hanamkonda, Warangal, Telangana",
       capacity: 45,
     },
     {
@@ -142,13 +154,13 @@ async function runSimulation() {
     `Top Gaushala: ${hydUserSorted[0].gosala.name} (${hydUserSorted[0].serviceability.distanceKm} km)`,
   )
 
-  // When a devotee opens the app in Pune (Kothrud: 18.5074, 73.8077)
-  const puneUserSorted = sortGaushalasByProximity(mockRegisteredGosalas, 18.5074, 73.8077)
+  // When a devotee opens the app in Warangal (Hanamkonda: 17.9689, 79.5941)
+  const warUserSorted = sortGaushalasByProximity(mockRegisteredGosalas, 17.9689, 79.5941)
   assert(
-    puneUserSorted[0].gosala.id === "GOS-PUN-1",
+    warUserSorted[0].gosala.id === "GOS-WAR-1",
     "Dynamic Nearest Gaushala Sorting",
-    "Pune devotee dynamically sees Pune Gaushala as #1 nearest",
-    `Top Gaushala: ${puneUserSorted[0].gosala.name} (${puneUserSorted[0].serviceability.distanceKm} km)`,
+    "Warangal devotee dynamically sees Warangal Gaushala as #1 nearest",
+    `Top Gaushala: ${warUserSorted[0].gosala.name} (${warUserSorted[0].serviceability.distanceKm} km)`,
   )
 
   // -------------------------------------------------------------------------
@@ -172,6 +184,7 @@ async function runSimulation() {
     lng: 77.6833,
   }
 
+  const { resolveGosalaDetail } = await import("../src/views/customer/GosalaProfile")
   const resolved = resolveGosalaDetail("GOS-VRN-999", [newlyCreatedGosala])
   assert(
     resolved !== null && resolved.name === "Radha Govinda Surabhi Dham",

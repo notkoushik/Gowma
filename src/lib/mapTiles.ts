@@ -47,58 +47,12 @@ function resolveKeys(): KeyState {
 }
 
 /**
- * Custom TileLayer that transparently caches tiles in browser CacheStorage.
- * Serves cached tiles in <2ms and saves 70-80% of network API requests.
+ * Custom TileLayer that ensures standard Leaflet tile styling and reliable loading.
  */
 class CachedTileLayer extends L.TileLayer {
   createTile(coords: L.Coords, done: L.DoneCallback): HTMLElement {
-    const tile = document.createElement("img")
+    const tile = super.createTile(coords, done) as HTMLImageElement
     tile.setAttribute("role", "presentation")
-
-    const url = this.getTileUrl(coords)
-
-    if (typeof window !== "undefined" && "caches" in window) {
-      window.caches
-        .open(MAP_TILE_CACHE_NAME)
-        .then((cache) => {
-          cache
-            .match(url)
-            .then((cachedResponse) => {
-              if (cachedResponse) {
-                return cachedResponse.blob().then((blob) => {
-                  tile.src = URL.createObjectURL(blob)
-                  done(undefined, tile)
-                })
-              }
-              // Not cached: Load over network and cache in background
-              tile.src = url
-              tile.onload = () => {
-                done(undefined, tile)
-                fetch(url, { mode: "cors" })
-                  .then((res) => {
-                    if (res.ok) cache.put(url, res)
-                  })
-                  .catch(() => {})
-              }
-              tile.onerror = (e) => done(e as any, tile)
-            })
-            .catch(() => {
-              tile.src = url
-              tile.onload = () => done(undefined, tile)
-              tile.onerror = (e) => done(e as any, tile)
-            })
-        })
-        .catch(() => {
-          tile.src = url
-          tile.onload = () => done(undefined, tile)
-          tile.onerror = (e) => done(e as any, tile)
-        })
-    } else {
-      tile.src = url
-      tile.onload = () => done(undefined, tile)
-      tile.onerror = (e) => done(e as any, tile)
-    }
-
     return tile
   }
 }

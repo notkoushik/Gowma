@@ -830,6 +830,48 @@ export default function GaushalaProfileView({
         </div>
       </div>
 
+      {/* Devotee Public Profile & Road En Route Controls */}
+      <div className="bg-gradient-to-r from-forest/10 via-saffron/10 to-forest/5 border border-forest/20 rounded-xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-mono font-semibold bg-forest text-white shadow-xs">
+              <Compass size={11} />
+              Public Devotee Profile View
+            </span>
+            <span className="text-[11px] text-ink-faint">
+              What devotees see on the customer sanctuary page & road navigation route
+            </span>
+          </div>
+          <div className="flex items-center gap-3.5 text-[12.5px] text-ink pt-1 flex-wrap">
+            <span className="inline-flex items-center gap-1.5 font-medium bg-card px-2.5 py-1 rounded border border-line shadow-xs">
+              <span className="text-forest">🌾 Land Area:</span>
+              <strong className="font-semibold text-ink font-mono">{gosala.landAcres ?? 5.5} Acres</strong>
+            </span>
+            <span className="inline-flex items-center gap-1.5 font-medium bg-card px-2.5 py-1 rounded border border-line shadow-xs">
+              <span className="text-saffron-deep">⏰ Darshan Hours:</span>
+              <strong className="font-semibold text-ink font-mono">{gosala.visitingHours || "6:00 AM – 7:30 PM (All 7 Days)"}</strong>
+            </span>
+            <span className="inline-flex items-center gap-1.5 font-medium bg-card px-2.5 py-1 rounded border border-line shadow-xs">
+              <span className="text-forest">📍 Geodesics:</span>
+              <span className="font-mono text-[11.5px] text-ink-soft">{(gosala.lat ?? 17.4401).toFixed(4)}, {(gosala.lng ?? 78.3489).toFixed(4)}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 font-medium bg-card px-2.5 py-1 rounded border border-line shadow-xs">
+              <span className="text-ink-soft">🛡️ Geofence:</span>
+              <span className="font-mono text-[11.5px] text-forest font-semibold">35 km Radius</span>
+            </span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onEdit(gosala)}
+          className="shrink-0 px-4 py-2 rounded-lg bg-forest hover:bg-forest-deep text-white text-[12px] font-medium transition flex items-center gap-2 cursor-pointer shadow-sm hover:shadow"
+        >
+          <Edit3 size={13} />
+          <span>Edit Public Profile Details</span>
+        </button>
+      </div>
+
       {/* 4. Tab Navigation Strip */}
       <div className="flex items-center gap-1 border-b border-line bg-card/60 rounded-t-lg px-2 pt-2 overflow-x-auto">
         {[
@@ -900,6 +942,47 @@ export default function GaushalaProfileView({
                 {gosala.notes ||
                   `${gosala.name} is a dedicated indigenous bovine sanctuary established in ${gosala.establishedYear} with certified AWBI recognition (Registration: ${gosala.trustRegistrationNo}). The sanctuary upholds rigorous Vedic goseva standards with daily Surya Namaskar aartis, organic green Napier grazing, pure borewell water troughs, and round-the-clock veterinary oversight.`}
               </p>
+            </div>
+
+            {/* Sanctuary Land Area & Public Visiting Hours Card */}
+            <div className="bg-paper border border-line rounded-lg p-4 sm:p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="font-serif text-[16px] text-ink font-semibold flex items-center gap-2">
+                    <Compass size={16} className="text-forest" />
+                    <span>Devotee Timings & Sanctuary Grounds Scale</span>
+                  </h3>
+                  <p className="text-[11px] text-ink-faint">
+                    These parameters are rendered live on the Customer Portal and mobile route directions
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onEdit(gosala)}
+                  className="px-2.5 py-1 rounded bg-forest-soft/40 hover:bg-forest-soft text-forest text-[11.5px] font-medium transition inline-flex items-center gap-1 cursor-pointer border border-forest/20 shadow-xs"
+                >
+                  <Edit3 size={11} />
+                  <span>Update Scale & Timings</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-card border border-line rounded-lg p-3">
+                  <div className="text-[11px] font-mono text-ink-faint uppercase">Total Land Area</div>
+                  <div className="font-serif text-[18px] font-bold text-ink mt-0.5">{gosala.landAcres ?? 5.5} Acres</div>
+                  <div className="text-[10.5px] text-forest font-medium mt-1">Free-roam grazing & cow paddocks</div>
+                </div>
+                <div className="bg-card border border-line rounded-lg p-3">
+                  <div className="text-[11px] font-mono text-ink-faint uppercase">Visiting & Darshan Hours</div>
+                  <div className="font-serif text-[15px] font-semibold text-ink mt-0.5">{gosala.visitingHours || "6:00 AM – 7:30 PM (All 7 Days)"}</div>
+                  <div className="text-[10.5px] text-saffron-deep font-medium mt-1">Open for public seva & aarti</div>
+                </div>
+                <div className="bg-card border border-line rounded-lg p-3">
+                  <div className="text-[11px] font-mono text-ink-faint uppercase">Operational Service Geofence</div>
+                  <div className="font-serif text-[18px] font-bold text-ink mt-0.5">35 km Radius</div>
+                  <div className="text-[10.5px] text-ok font-medium mt-1">Automated dispatch & emergency transit</div>
+                </div>
+              </div>
             </div>
 
             {/* Verified Facilities & Infrastructure Grid */}

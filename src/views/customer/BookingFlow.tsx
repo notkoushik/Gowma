@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Check,
   ChevronLeft,
+  ChevronRight,
   Clock,
   CreditCard,
   Lock,
@@ -19,8 +20,9 @@ import {
   Sparkles,
   Building2,
 } from "lucide-react"
-import type { Animal } from "../../data/animals"
-import { addons as ADDONS, type Gosala } from "../../data/customer"
+import type { Animal, AnimalType } from "../../data/animals"
+import { type Gosala } from "../../data/customer"
+import { DEFAULT_GOSALA_OFFERINGS } from "../../data/gosalas"
 import { inr } from "../../data/mock"
 import { useStore } from "../../store/store"
 import { api } from "../../services/api"
@@ -49,18 +51,63 @@ const standardSlots = [
 ]
 
 function Calendar({
-  selected,
+  selectedDate,
   onSelect,
 }: {
-  selected: number
-  onSelect: (d: number) => void
+  selectedDate: Date
+  onSelect: (d: Date) => void
 }) {
-  // September 2026: 1 Sep is a Tuesday (index 2)
-  const firstDow = 2
-  const days = 30
-  const today = 26
+  const [viewDate, setViewDate] = useState(
+    () => new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1),
+  )
+
+  const viewYear = viewDate.getFullYear()
+  const viewMonth = viewDate.getMonth()
+
+  const monthLabel = viewDate.toLocaleDateString("en-IN", {
+    month: "long",
+    year: "numeric",
+  })
+
+  const firstDow = new Date(viewYear, viewMonth, 1).getDay()
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const handlePrevMonth = () => {
+    setViewDate(new Date(viewYear, viewMonth - 1, 1))
+  }
+
+  const handleNextMonth = () => {
+    setViewDate(new Date(viewYear, viewMonth + 1, 1))
+  }
+
   return (
     <div>
+      <div className="flex items-center justify-between mb-3 px-1">
+        <span className="font-serif text-[15px] font-semibold text-ink">
+          {monthLabel}
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={handlePrevMonth}
+            className="p-1 rounded hover:bg-paper-deep text-ink-soft cursor-pointer transition"
+            aria-label="Previous month"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={handleNextMonth}
+            className="p-1 rounded hover:bg-paper-deep text-ink-soft cursor-pointer transition"
+            aria-label="Next month"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
       <div className="grid grid-cols-7 gap-1 mb-1">
         {weekDays.map((d, i) => (
           <div
@@ -73,22 +120,28 @@ function Calendar({
       </div>
       <div className="grid grid-cols-7 gap-1">
         {Array.from({ length: firstDow }).map((_, i) => (
-          <div key={`e${i}`} />
+          <div key={`empty-${i}`} />
         ))}
-        {Array.from({ length: days }, (_, i) => i + 1).map((d) => {
-          const past = d < today
-          const active = d === selected
+        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
+          const dateObj = new Date(viewYear, viewMonth, d)
+          dateObj.setHours(0, 0, 0, 0)
+          const isPast = dateObj.getTime() < today.getTime()
+          const isActive =
+            selectedDate.getDate() === d &&
+            selectedDate.getMonth() === viewMonth &&
+            selectedDate.getFullYear() === viewYear
+
           return (
             <button
               key={d}
-              disabled={past}
-              onClick={() => onSelect(d)}
+              disabled={isPast}
+              onClick={() => onSelect(dateObj)}
               className={`h-9 rounded-sm text-[13px] tabular transition-colors ${
-                active
-                  ? "bg-saffron text-white font-medium"
-                  : past
-                    ? "text-ink-faint/40 cursor-not-allowed"
-                    : "text-ink hover:bg-saffron-soft"
+                isActive
+                  ? "bg-saffron text-white font-medium shadow-xs"
+                  : isPast
+                    ? "text-ink-faint/30 cursor-not-allowed line-through"
+                    : "text-ink hover:bg-saffron-soft cursor-pointer"
               }`}
             >
               {d}
@@ -112,7 +165,7 @@ export default function BookingFlow({
   onComplete: (summary: import("../CustomerApp").BookingSummary) => void
 }) {
   const { pricingConfig, checkAnimalAvailability, profiles } = useStore()
-  const devoteeName = profiles?.customer?.name || "Ananya Deshmukh"
+  const devoteeName = profiles?.customer?.name || "Devotee"
   const deviceLocation = useDeviceLocation()
 
   // Dynamic Pan-India Venue & Landmark Options based on Gaushala's geographic coordinates
@@ -176,10 +229,19 @@ export default function BookingFlow({
   ])
 
   const [step, setStep] = useState(0)
-  const [date, setDate] = useState(27)
+  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date())
   const [slot, setSlot] = useState<string | null>(null)
   const [duration, setDuration] = useState(60)
   const [qty, setQty] = useState<Record<string, number>>({})
+  const [includeCalfPair, setIncludeCalfPair] = useState(animal.type === "Cow & Calf")
+  const CALF_PAIR_ADDON_PRICE = 1300
+  const isPairService = animal.type === "Cow & Calf" || (animal.type === "Cow" && includeCalfPair)
+  const pairSurcharge = (animal.type === "Cow" && includeCalfPair) ? CALF_PAIR_ADDON_PRICE : 0
+  const effectiveAnimalType: AnimalType = isPairService ? "Cow & Calf" : (animal.type as AnimalType)
+  const effectiveAnimalName =
+    animal.type === "Cow" && includeCalfPair
+      ? `${animal.name} & Accompanying Baby Calf`
+      : animal.name
   const [selectedLocIndex, setSelectedLocIndex] = useState(0)
   const [address, setAddress] = useState(() => venueOptions[0]?.name || "Local Sanctuary Area")
   const [distanceKm, setDistanceKm] = useState(() => venueOptions[0]?.distanceKm || 6.5)
@@ -241,7 +303,35 @@ export default function BookingFlow({
   const [holdError, setHoldError] = useState<string | null>(null)
   const [isHoldingSlot, setIsHoldingSlot] = useState(false)
 
-  const selectedDateStr = `${date} Sep 2026`
+  // Dynamically formatted date string (e.g., "4 Oct 2026")
+  const selectedDateStr = useMemo(() => {
+    return selectedDate.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    })
+  }, [selectedDate])
+
+  // Dynamically load add-ons/offerings from the Gaushala's inventory, or fallback to default offerings
+  const dynamicAddons = useMemo(() => {
+    const gaushalaItems = (gosala as any)?.items
+    if (Array.isArray(gaushalaItems) && gaushalaItems.length > 0) {
+      return gaushalaItems.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        desc: item.desc || "Gaushala sacred offering",
+        price: item.price,
+        maxQty: item.maxQty || 5,
+      }))
+    }
+    return DEFAULT_GOSALA_OFFERINGS.map((item) => ({
+      id: item.id,
+      name: item.name,
+      desc: item.desc,
+      price: item.price,
+      maxQty: item.maxQty || 5,
+    }))
+  }, [gosala])
 
   // Dynamic extra-time calculation based on Super Admin pricingConfig
   const durationOptions = useMemo(() => {
@@ -276,7 +366,17 @@ export default function BookingFlow({
 
   const dur =
     durationOptions.find((d) => d.min === duration) || durationOptions[0]
-  const addonTotal = ADDONS.reduce((a, x) => a + (qty[x.id] || 0) * x.price, 0)
+  const addonTotal =
+    dynamicAddons.reduce((a, x) => a + (qty[x.id] || 0) * x.price, 0) + pairSurcharge
+
+  const effectiveTaxPct =
+    gosala.taxTreatment === "section_80g_exempt"
+      ? 0
+      : gosala.taxTreatment === "reduced_charity_gst"
+      ? 5
+      : gosala.customTaxPct !== undefined
+      ? gosala.customTaxPct
+      : pricingConfig.taxPct
 
   // Real-time backend pricing engine call
   useEffect(() => {
@@ -287,6 +387,11 @@ export default function BookingFlow({
         durationMin: duration,
         distanceKm,
         addonsCost: addonTotal,
+        taxPct: effectiveTaxPct,
+        commissionPct: gosala.customCommissionPct ?? pricingConfig.commissionPct,
+        commissionFlat: gosala.customCommissionFlat,
+        gosalaId: gosala.id,
+        gosala: gosala.name,
       })
       .then((res) => {
         if (active && res) {
@@ -299,7 +404,18 @@ export default function BookingFlow({
     return () => {
       active = false
     }
-  }, [animal.price, duration, distanceKm, addonTotal])
+  }, [
+    animal.price,
+    duration,
+    distanceKm,
+    addonTotal,
+    effectiveTaxPct,
+    gosala.id,
+    gosala.name,
+    gosala.customCommissionPct,
+    gosala.customCommissionFlat,
+    pricingConfig.commissionPct,
+  ])
 
   // Real-time backend slot availability check
   useEffect(() => {
@@ -370,11 +486,12 @@ export default function BookingFlow({
     ? backendPricing.transport
     : Math.round((chargeableKm * pricingConfig.perKm) / 10) * 10
   const extraTime = backendPricing ? backendPricing.extraTime : dur.extra
+
   const tax = backendPricing
     ? backendPricing.tax
     : Math.round(
         ((animal.price + extraTime + transport + addonTotal) *
-          pricingConfig.taxPct) /
+          effectiveTaxPct) /
           100,
       )
   const total = backendPricing
@@ -444,10 +561,10 @@ export default function BookingFlow({
   }
 
   const canNext = useMemo(() => {
-    if (step === 0) return !!date
+    if (step === 0) return !!selectedDate
     if (step === 1) return !!slot
     return true
-  }, [step, date, slot])
+  }, [step, selectedDate, slot])
 
   const calculateEndTime = (startTime: string, durMin: number) => {
     const [h, m] = startTime.split(":").map(Number)
@@ -500,7 +617,8 @@ export default function BookingFlow({
           </p>
           <div className="mt-6 rounded-sm border border-line bg-card p-4 text-left space-y-2 text-[13px]">
             {[
-              ["Animal", `${animal.name} · ${animal.type}`],
+              ["Service Category", effectiveAnimalType === "Cow & Calf" ? "Gau-Vatsa Jodi Seva (Mother & Calf Pair)" : effectiveAnimalType],
+              ["Bovine", effectiveAnimalName],
               ["Gosala", gosala.name],
               ["Date", selectedDateStr],
               ["Time", `${slot} – ${endTime} (${duration} min)`],
@@ -519,9 +637,9 @@ export default function BookingFlow({
           <button
             onClick={() =>
               onComplete({
-                animal: `${animal.name} · ${animal.type}`,
-                animalName: animal.name,
-                animalType: animal.type as "Cow" | "Calf" | "Bull",
+                animal: `${effectiveAnimalName} · ${effectiveAnimalType}`,
+                animalName: effectiveAnimalName,
+                animalType: effectiveAnimalType,
                 gosala: gosala.name,
                 date: selectedDateStr,
                 time: `${slot} – ${endTime}`,
@@ -546,7 +664,10 @@ export default function BookingFlow({
                   pricingConfig.extraUnitRate,
                 commissionSnapshot: backendPricing?.commission,
                 commissionPct:
-                  backendPricing?.commissionPct ?? pricingConfig.commissionPct,
+                  backendPricing?.commissionPct ??
+                  (gosala.customCommissionPct !== undefined
+                    ? gosala.customCommissionPct
+                    : pricingConfig.commissionPct),
               })
             }
             className="w-full mt-6 bg-saffron text-white rounded-sm py-3 text-[14px] font-medium hover:bg-saffron-deep transition-colors shadow-sm"
@@ -658,10 +779,10 @@ export default function BookingFlow({
 
           {step === 0 && (
             <div className="rounded-sm border border-line bg-card p-4">
-              <Calendar selected={date} onSelect={setDate} />
+              <Calendar selectedDate={selectedDate} onSelect={setSelectedDate} />
               <p className="text-[11.5px] text-ink-faint mt-3 pt-3 border-t border-line">
                 Availability is checked live for {animal.name} on the selected
-                date.
+                date ({selectedDateStr}).
               </p>
             </div>
           )}
@@ -783,8 +904,81 @@ export default function BookingFlow({
           )}
 
           {step === 3 && (
-            <div className="space-y-2.5">
-              {ADDONS.map((a) => {
+            <div className="space-y-3">
+              {/* Mother Cow & Calf Pair (Gau-Vatsa Jodi) Upgrade */}
+              {animal.type === "Cow" && (
+                <div
+                  className={`p-3.5 rounded-sm border transition-all ${
+                    includeCalfPair
+                      ? "bg-amber-50/80 border-amber-300 ring-1 ring-amber-400"
+                      : "bg-card border-line hover:border-line-strong"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-serif text-[14.5px] font-semibold text-ink">
+                          Gau-Vatsa Jodi Seva · Cow & Calf Joint Booking
+                        </span>
+                        <span className="text-[10px] font-semibold px-2 py-0.2 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                          Single-Time Joint Seva
+                        </span>
+                      </div>
+                      <p className="text-[11.5px] text-ink-soft mt-1 leading-relaxed">
+                        Bring the accompanying baby calf along with {animal.name} for sacred Mother-Calf puja & blessings at your doorstep. Both bovines arrive together.
+                      </p>
+                      <div className="font-mono text-[12.5px] text-amber-900 font-bold mt-1.5 flex items-center gap-1.5">
+                        <span>+{inr(CALF_PAIR_ADDON_PRICE)}</span>
+                        <span className="text-[11px] text-ink-faint font-normal font-sans">
+                          (Accompanying calf transport & attendant included)
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIncludeCalfPair(!includeCalfPair)}
+                      className={`shrink-0 px-3 py-1.5 rounded-sm text-[12px] font-medium transition cursor-pointer shadow-2xs ${
+                        includeCalfPair
+                          ? "bg-amber-600 text-white hover:bg-amber-700"
+                          : "bg-paper text-ink border border-line hover:border-line-strong hover:bg-paper-deep"
+                      }`}
+                    >
+                      {includeCalfPair ? "✓ Pair Selected" : "+ Add Calf (Jodi)"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {animal.type === "Cow & Calf" && (
+                <div className="p-3.5 rounded-sm border border-amber-300 bg-amber-50/70">
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={16} className="text-amber-700" />
+                    <span className="font-serif text-[14.5px] font-semibold text-ink">
+                      Sacred Gau-Vatsa Jodi Seva Included
+                    </span>
+                  </div>
+                  <p className="text-[11.5px] text-ink-soft mt-1 leading-relaxed">
+                    This booking includes both the Mother Cow and her nursing Calf together for a single-time holistic Vedic blessing ceremony.
+                  </p>
+                </div>
+              )}
+
+              {animal.type === "Buffalo" && (
+                <div className="p-3.5 rounded-sm border border-indigo-200 bg-indigo-50/50">
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={15} className="text-indigo-700" />
+                    <span className="font-serif text-[14.5px] font-semibold text-ink">
+                      Indigenous Sacred Buffalo (Mahishi Seva)
+                    </span>
+                  </div>
+                  <p className="text-[11.5px] text-ink-soft mt-0.5 leading-relaxed">
+                    Doorstep darshan and Gau Gras feeding for revered indigenous buffalo breed with trained attendant.
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-2.5">
+                {dynamicAddons.map((a) => {
                 const q = qty[a.id] || 0
                 return (
                   <div
@@ -831,6 +1025,7 @@ export default function BookingFlow({
                   </div>
                 )
               })}
+              </div>
             </div>
           )}
 
@@ -1012,7 +1207,8 @@ export default function BookingFlow({
                   Booking overview
                 </div>
                 {[
-                  ["Animal", `${animal.name} · ${animal.type}`],
+                  ["Service Category", isPairService ? "Gau-Vatsa Jodi Seva (Mother & Calf Pair)" : effectiveAnimalType],
+                  ["Bovine", `${effectiveAnimalName} (${animal.breed || "Indigenous Gir"})`],
                   ["Gosala", gosala.name],
                   ["Date", selectedDateStr],
                   ["Time", `${slot} – ${endTime}`],
@@ -1021,7 +1217,7 @@ export default function BookingFlow({
                 ].map(([l, v]) => (
                   <div key={l} className="flex justify-between gap-4">
                     <span className="text-ink-faint shrink-0">{l}</span>
-                    <span className="text-ink text-right truncate">{v}</span>
+                    <span className="text-ink text-right truncate font-medium">{v}</span>
                   </div>
                 ))}
               </div>
@@ -1075,6 +1271,12 @@ export default function BookingFlow({
                     l="Base booking (60 min)"
                     v={backendPricing?.base ?? animal.price}
                   />
+                  {pairSurcharge > 0 && (
+                    <div className="flex justify-between text-amber-900 font-medium text-[12.5px]">
+                      <span>Accompanying Baby Calf Seva (Gau-Vatsa Jodi)</span>
+                      <span className="font-mono tabular">+{inr(pairSurcharge)}</span>
+                    </div>
+                  )}
                   {extraTime > 0 && (
                     <Line
                       l={`Extra time (${duration - 60} min)`}
@@ -1085,10 +1287,17 @@ export default function BookingFlow({
                     l={`Transport (${chargeableKm.toFixed(1)} km chargeable)`}
                     v={transport}
                   />
-                  {addonTotal > 0 && (
-                    <Line l="Add-ons (puja, mala)" v={addonTotal} />
+                  {addonTotal - pairSurcharge > 0 && (
+                    <Line l="Sacred Offerings & Add-ons" v={addonTotal - pairSurcharge} />
                   )}
-                  <Line l={`GST / Tax (${pricingConfig.taxPct}%)`} v={tax} />
+                  <Line
+                    l={
+                      effectiveTaxPct === 0
+                        ? "GST / Tax (Section 80G Exempt: 0%)"
+                        : `GST / Tax (${effectiveTaxPct}%)`
+                    }
+                    v={tax}
+                  />
                 </div>
                 <div className="flex justify-between items-center mt-3 pt-3 border-t border-line-strong">
                   <span className="font-serif text-[16px] text-ink">

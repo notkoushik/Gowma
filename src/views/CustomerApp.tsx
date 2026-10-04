@@ -24,16 +24,18 @@ import {
   Building2,
   PawPrint,
 } from "lucide-react"
-import { type Animal } from "../data/animals"
+import { type Animal, type AnimalType } from "../data/animals"
 import { pricing, type Gosala } from "../data/customer"
 import { CURRENT_CUSTOMER, inr, type Booking } from "../data/mock"
 import { tripStages } from "../data/driver"
-import { useStore } from "../store/store"
+import { useStore, useToast } from "../store/store"
 import BookingFlow from "./customer/BookingFlow"
-import { MobileGosalaProfile } from "./customer/GosalaProfile"
+import { MobileGosalaProfile, EnRouteModal } from "./customer/GosalaProfile"
+import { fetchRoadRoute } from "../services/routing"
 import LiveTripMap from "../components/LiveTripMap"
 import LocationPromptBanner from "../components/LocationPromptBanner"
 import CattleAndShelterGallery from "../components/CattleAndShelterGallery"
+import CustomerTrackingDossier from "../components/CustomerTrackingDossier"
 import { useRealtime } from "../hooks/useRealtime"
 import {
   useDeviceLocation,
@@ -56,7 +58,7 @@ type Tab = "discover" | "bookings" | "track" | "profile"
 export type BookingSummary = {
   animal: string
   animalName: string
-  animalType: "Cow" | "Calf" | "Bull"
+  animalType: AnimalType
   gosala: string
   date: string
   time: string
@@ -91,11 +93,21 @@ export type MyBooking = {
   address?: string
   distanceKm?: number
   driver?: string | null
+  handoverOtp?: string
+  handoverOtpVerified?: boolean
+  handoverOtpVerifiedAt?: string | null
+  driverPhone?: string | null
+  driverVehiclePlate?: string | null
+  driverVehicleModel?: string | null
+  driverRating?: number | null
+  driverTotalTrips?: number | null
+  driverAvatar?: string | null
 }
 
 export function makeBooking(
   s: BookingSummary,
   customerProfile?: RoleProfile,
+  defaultCommissionPct: number = 20,
 ): Booking {
   const custName = customerProfile?.name || CURRENT_CUSTOMER
   const custPhone = customerProfile?.phone || "+91 98204 11827"
@@ -109,7 +121,7 @@ export function makeBooking(
     customerProfile?.customerData?.specialNotes ||
     "Ground-floor courtyard altar prepared. Water bucket and fresh grass kept ready."
 
-  const commPct = s.commissionPct ?? 20
+  const commPct = s.commissionPct ?? defaultCommissionPct
   const commAmount =
     s.commissionSnapshot ?? Math.round(((s.base + s.extraTime) * commPct) / 100)
 
@@ -142,6 +154,9 @@ export function makeBooking(
     driver: null,
     driverStage: 0,
     paid: true,
+    handoverOtp: String(Math.floor(1000 + Math.random() * 9000)),
+    handoverOtpVerified: false,
+    handoverOtpVerifiedAt: null,
     freeKmSnapshot: s.freeKmSnapshot ?? 5,
     perKmSnapshot: s.perKmSnapshot ?? 50,
     extraUnitRateSnapshot: s.extraUnitRateSnapshot ?? 500,
@@ -179,6 +194,15 @@ export function toMyBooking(b: Booking): MyBooking {
     address: b.address,
     distanceKm: b.distanceKm,
     driver: b.driver,
+    handoverOtp: b.handoverOtp,
+    handoverOtpVerified: b.handoverOtpVerified,
+    handoverOtpVerifiedAt: b.handoverOtpVerifiedAt,
+    driverPhone: b.driverPhone,
+    driverVehiclePlate: b.driverVehiclePlate,
+    driverVehicleModel: b.driverVehicleModel,
+    driverRating: b.driverRating,
+    driverTotalTrips: b.driverTotalTrips,
+    driverAvatar: b.driverAvatar,
   }
 }
 
@@ -198,34 +222,51 @@ function Discover({
   onOpenGosala,
 }: {
   onOpenAnimal: (a: Animal) => void
-  onOpenGosala: (id: string) => void
+  onOpenGosala: (id: string, distanceKm?: number) => void
 }) {
   const { gosalas: storeGosalas, animals: storeAnimals } = useStore()
+  const { notify } = useToast()
   const [q, setQ] = useState("")
-  const [address, setAddress] = useState("Kothrud, Pune")
+  const [address, setAddress] = useState("Kothaguda, Hyderabad")
   const [isEditingAddress, setIsEditingAddress] = useState(false)
   const [locationPickerOpen, setLocationPickerOpen] = useState(false)
+  const [routeModalGosala, setRouteModalGosala] = useState<Gosala | null>(null)
+  const [routeModalMode, setRouteModalMode] = useState<"route" | "pinpoint">("route")
   const deviceLocation = useDeviceLocation()
 
   const liveAnimals = storeAnimals || []
 
   const customerGosalas: Gosala[] = useMemo(() => {
-    return storeGosalas.map((g) => ({
-      id: g.id,
-      name: g.name,
-      area: g.address || g.region || "Operational Vedic Sanctuary",
-      distanceKm: (g as any).distanceKm ?? 6.5,
-      rating: (g as any).rating ?? 4.9,
-      animals:
-        liveAnimals.filter(
-          (a) => a.gosala.toLowerCase() === g.name.toLowerCase(),
-        ).length || g.capacity || 0,
-      photo:
-        g.photo ||
-        "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=600&h=400&fit=crop&auto=format",
-      lat: g.lat,
-      lng: g.lng,
-    }))
+    return storeGosalas.map((g, idx) => {
+      const housedCows = liveAnimals.filter(
+        (a) => a.gosala.toLowerCase() === g.name.toLowerCase(),
+      )
+      const dynamicRating = (g as any).rating || Number((4.7 + ((g.name.length * 3 + idx) % 4) * 0.1).toFixed(1))
+
+      return {
+        id: g.id,
+        name: g.name,
+        area: g.address || g.region || "Operational Vedic Sanctuary",
+        distanceKm: (g as any).distanceKm ?? 6.5,
+        rating: dynamicRating,
+        animals: housedCows.length || g.capacity || 40,
+        photo:
+          g.photo ||
+          "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=600&h=400&fit=crop&auto=format",
+        lat:
+          g.lat !== undefined && g.lat !== null
+            ? Number(g.lat)
+            : (g as any).latitude !== undefined && (g as any).latitude !== null
+              ? Number((g as any).latitude)
+              : undefined,
+        lng:
+          g.lng !== undefined && g.lng !== null
+            ? Number(g.lng)
+            : (g as any).longitude !== undefined && (g as any).longitude !== null
+              ? Number((g as any).longitude)
+              : undefined,
+      }
+    })
   }, [storeGosalas, liveAnimals])
 
   const sortedGaushalas = useMemo(() => {
@@ -235,6 +276,41 @@ function Discover({
       deviceLocation.lng,
     )
   }, [customerGosalas, deviceLocation.lat, deviceLocation.lng])
+
+  // Prefetch and store real road driving distances for total accuracy across card and modal
+  const [roadDistances, setRoadDistances] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    const lat = deviceLocation.lat || 17.4401
+    const lng = deviceLocation.lng || 78.3489
+    const userCoords: [number, number] = [lat, lng]
+
+    customerGosalas.forEach((g) => {
+      const gLat =
+        g.lat !== undefined && g.lat !== null
+          ? Number(g.lat)
+          : (g as any).latitude !== undefined && (g as any).latitude !== null
+            ? Number((g as any).latitude)
+            : undefined
+      const gLng =
+        g.lng !== undefined && g.lng !== null
+          ? Number(g.lng)
+          : (g as any).longitude !== undefined && (g as any).longitude !== null
+            ? Number((g as any).longitude)
+            : undefined
+
+      if (gLat && gLng) {
+        fetchRoadRoute(userCoords, [gLat, gLng]).then((route) => {
+          if (route?.distanceKm) {
+            setRoadDistances((prev) => ({
+              ...prev,
+              [g.id]: route.distanceKm,
+            }))
+          }
+        })
+      }
+    })
+  }, [deviceLocation.lat, deviceLocation.lng, customerGosalas])
 
   const handleSelectHub = (hub: OperationalRegionHub) => {
     deviceLocation.setManualLocation(hub)
@@ -248,15 +324,27 @@ function Discover({
       setAddress(
         res.address || getIndianLocalityFromCoords(res.lat, res.lng),
       )
+      notify(
+        `📍 Live Location: ${res.city}, ${res.state} (${res.lat.toFixed(3)}° N, ${res.lng.toFixed(3)}° E) verified!`,
+        "ok",
+      )
     }
   }
 
-  const list = liveAnimals.filter(
-    (a) =>
-      q === "" ||
-      a.name.toLowerCase().includes(q.toLowerCase()) ||
-      a.type.toLowerCase().includes(q.toLowerCase()),
-  )
+  const [selectedCategory, setSelectedCategory] = useState<"ALL" | AnimalType>("ALL")
+
+  const list = liveAnimals.filter((a) => {
+    const qLower = q.toLowerCase().trim()
+    const matchesSearch =
+      qLower === "" ||
+      a.name.toLowerCase().includes(qLower) ||
+      a.type.toLowerCase().includes(qLower) ||
+      (a.breed && a.breed.toLowerCase().includes(qLower)) ||
+      (a.category && a.category.toLowerCase().includes(qLower))
+    const matchesCat =
+      selectedCategory === "ALL" || a.type === selectedCategory
+    return matchesSearch && matchesCat
+  })
   return (
     <div className="p-4 space-y-5">
       {/* Location Bar with Switcher Modal Trigger */}
@@ -274,9 +362,29 @@ function Discover({
               <span>Your Location</span>
               <ChevronDown size={11} className="text-ink-faint group-hover:text-saffron-deep" />
             </div>
-            <div className="text-[12.5px] text-ink font-semibold truncate group-hover:text-saffron-deep">
-              {deviceLocation.city || (deviceLocation.isLoading ? "Locating..." : address)}
+            <div className="text-[12.5px] text-ink font-semibold truncate group-hover:text-saffron-deep flex items-center gap-1.5">
+              <span>{deviceLocation.city || (deviceLocation.isLoading ? "Locating..." : address)}</span>
+              {deviceLocation.source && (
+                <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-medium border ${
+                  deviceLocation.source === "GPS_HARDWARE"
+                    ? "bg-ok-soft text-ok border-ok/30"
+                    : deviceLocation.source === "IP_FALLBACK"
+                      ? "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30"
+                      : "bg-paper-deep text-ink-soft border-line"
+                }`}>
+                  {deviceLocation.source === "GPS_HARDWARE"
+                    ? "🛰️ Live GPS"
+                    : deviceLocation.source === "IP_FALLBACK"
+                      ? "🌐 Live IP"
+                      : "📍 Custom"}
+                </span>
+              )}
             </div>
+            {deviceLocation.lat && deviceLocation.lng && (
+              <div className="text-[10px] font-mono text-ink-faint truncate">
+                {deviceLocation.lat.toFixed(4)}° N, {deviceLocation.lng.toFixed(4)}° E · {deviceLocation.state || "India"}
+              </div>
+            )}
           </div>
         </button>
         <button
@@ -343,53 +451,111 @@ function Discover({
             </p>
           </div>
         ) : (
-          <div className="flex gap-3 overflow-x-auto -mx-4 px-4 pb-1">
-            {sortedGaushalas.map(({ gosala: g, serviceability }) => (
-              <button
-                key={g.id}
-                onClick={() => onOpenGosala(g.id)}
-                className="w-[240px] shrink-0 rounded-sm border border-line bg-card overflow-hidden text-left hover:border-line-strong transition-colors flex flex-col justify-between"
-              >
-                <div>
-                  <div className="h-24 bg-paper-deep relative overflow-hidden">
-                    <img
-                      src={g.photo}
-                      alt={g.name}
-                      className="h-full w-full object-cover"
-                    />
-                    <span
-                      className={`absolute top-2 right-2 text-[9.5px] px-1.5 py-0.5 rounded font-medium shadow-2xs border ${serviceability.badgeClass}`}
+          <div className="flex gap-3.5 overflow-x-auto -mx-4 px-4 pb-2">
+            {sortedGaushalas.map(({ gosala: g, serviceability }) => {
+              const housedCount = liveAnimals.filter(
+                (a) => a.gosala.toLowerCase() === g.name.toLowerCase(),
+              ).length
+              const cattleLabel =
+                housedCount > 0
+                  ? `${housedCount} cattle`
+                  : g.animals && g.animals > 0
+                    ? `Cap: ${g.animals} cattle`
+                    : "Intake Open"
+
+              return (
+                <div
+                  key={g.id}
+                  className="w-[260px] shrink-0 rounded-lg border border-line bg-card overflow-hidden text-left hover:border-line-strong transition-all flex flex-col justify-between shadow-xs"
+                >
+                  <div
+                    onClick={() =>
+                      onOpenGosala(
+                        g.id,
+                        roadDistances[g.id] ?? serviceability.distanceKm,
+                      )
+                    }
+                    className="cursor-pointer"
+                  >
+                    <div className="h-28 bg-paper-deep relative overflow-hidden">
+                      <img
+                        src={g.photo}
+                        alt={g.name}
+                        className="h-full w-full object-cover"
+                      />
+                      <span
+                        className={`absolute top-2 right-2 text-[9.5px] px-1.5 py-0.5 rounded font-medium shadow-2xs border ${serviceability.badgeClass}`}
+                      >
+                        {serviceability.badgeText}
+                      </span>
+                    </div>
+                    <div className="p-3">
+                      <div className="text-[13.5px] text-ink font-semibold truncate">
+                        {g.name}
+                      </div>
+                      <div className="text-[11px] text-ink-faint mt-0.5 truncate flex items-center gap-1">
+                        <MapPin size={10} className="text-saffron shrink-0" />
+                        <span className="truncate">{g.area}</span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-2 text-[11px]">
+                        <span className="inline-flex items-center gap-1 text-ink-soft">
+                          <Star size={11} className="text-saffron fill-saffron" />{" "}
+                          {g.rating}
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-ink-soft font-mono tabular font-medium">
+                          <Navigation size={11} className="text-forest" /> {roadDistances[g.id] ?? serviceability.distanceKm} km
+                        </span>
+                        <span className="text-ink-faint font-medium">· {cattleLabel}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="px-3 pb-2.5 pt-1.5 border-t border-line/50 bg-paper/40 flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setRouteModalGosala(g)
+                          setRouteModalMode("route")
+                        }}
+                        className="px-2 py-1 rounded bg-forest/10 hover:bg-forest text-forest hover:text-white border border-forest/20 text-[10.5px] font-medium transition inline-flex items-center gap-1 cursor-pointer"
+                        title="Check driving en route"
+                      >
+                        <Navigation size={10} />
+                        <span>En Route</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setRouteModalGosala(g)
+                          setRouteModalMode("pinpoint")
+                        }}
+                        className="px-2 py-1 rounded bg-card hover:bg-paper-deep text-ink-soft hover:text-ink border border-line text-[10.5px] font-medium transition inline-flex items-center gap-1 cursor-pointer"
+                        title="View exact map pin"
+                      >
+                        <MapPin size={10} className="text-saffron" />
+                        <span>Location</span>
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onOpenGosala(
+                          g.id,
+                          roadDistances[g.id] ?? serviceability.distanceKm,
+                        )
+                      }
+                      className="text-[11px] text-saffron-deep hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
                     >
-                      {serviceability.badgeText}
-                    </span>
-                  </div>
-                  <div className="p-3">
-                    <div className="text-[13px] text-ink leading-tight font-medium">
-                      {g.name}
-                    </div>
-                    <div className="text-[11px] text-ink-faint mt-0.5 truncate">
-                      {g.area}
-                    </div>
-                    <div className="flex items-center gap-3 mt-2 text-[11px]">
-                      <span className="inline-flex items-center gap-1 text-ink-soft">
-                        <Star size={11} className="text-saffron fill-saffron" />{" "}
-                        {g.rating}
-                      </span>
-                      <span className="inline-flex items-center gap-1 text-ink-soft font-mono tabular font-medium">
-                        <Navigation size={11} /> {serviceability.distanceKm} km
-                      </span>
-                      <span className="text-ink-faint">· {g.animals} animals</span>
-                    </div>
+                      <span>Profile →</span>
+                    </button>
                   </div>
                 </div>
-                <div className="px-3 pb-2.5 pt-1 text-[10.5px] text-saffron-deep font-medium border-t border-line/40 flex items-center justify-between">
-                  <span>View profile →</span>
-                  {serviceability.tier === "LOCAL_SERVICE" && (
-                    <span className="text-[9.5px] text-ok font-mono uppercase">Doorstep</span>
-                  )}
-                </div>
-              </button>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -405,18 +571,70 @@ function Discover({
       />
 
       <div>
-        <h2 className="font-serif text-[16px] text-ink mb-2.5">
-          Available animals
-        </h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-serif text-[16px] text-ink">
+            Available animals
+          </h2>
+          <span className="font-mono text-[11px] text-ink-faint">
+            {list.length} {list.length === 1 ? "bovine" : "bovines"}
+          </span>
+        </div>
+
+        {/* Bovine Category Filter Pills */}
+        <div className="flex gap-2 overflow-x-auto pb-2 mb-3 -mx-1 px-1 scrollbar-none">
+          {[
+            { id: "ALL", label: "All Bovines" },
+            { id: "Cow & Calf", label: "Cow & Calf Pair (Jodi)" },
+            { id: "Cow", label: "Cow (Gau Mata)" },
+            { id: "Calf", label: "Calf (Vatsa)" },
+            { id: "Bull", label: "Bull (Nandi)" },
+            { id: "Buffalo", label: "Buffalo (Mahishi)" },
+          ].map((cat) => {
+            const count =
+              cat.id === "ALL"
+                ? liveAnimals.length
+                : liveAnimals.filter((a) => a.type === cat.id).length
+            const active = selectedCategory === cat.id
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id as any)}
+                className={`shrink-0 px-2.5 py-1 rounded-full text-[11.5px] transition flex items-center gap-1.5 cursor-pointer border ${
+                  active
+                    ? "bg-saffron text-white border-saffron font-medium shadow-2xs"
+                    : "bg-card text-ink-soft border-line hover:border-line-strong hover:text-ink"
+                }`}
+              >
+                <span>{cat.label}</span>
+                <span
+                  className={`text-[9.5px] font-mono px-1 rounded-full ${
+                    active ? "bg-white/20 text-white" : "bg-paper-deep text-ink-faint"
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
         {list.length === 0 ? (
           <div className="p-6 text-center rounded-sm border border-dashed border-line bg-card/60">
             <PawPrint size={26} className="mx-auto text-saffron-deep/70 mb-2" />
             <p className="font-serif text-[15px] text-ink font-semibold">
-              No sacred cattle registered yet
+              No sacred cattle found
             </p>
             <p className="text-[12px] text-ink-soft max-w-xs mx-auto mt-1 leading-relaxed">
-              Once sanctuaries onboard their sacred cows and calves, you can book doorstep Gau Seva here.
+              No bovines registered under &ldquo;{selectedCategory}&rdquo; matching your search. Try switching categories or clearing search.
             </p>
+            {selectedCategory !== "ALL" && (
+              <button
+                onClick={() => setSelectedCategory("ALL")}
+                className="mt-3 text-[11.5px] text-saffron-deep hover:underline cursor-pointer font-medium"
+              >
+                Show all cattle ({liveAnimals.length})
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
@@ -438,12 +656,24 @@ function Discover({
                     <span className="font-serif text-[16px] text-ink">
                       {a.name}
                     </span>
-                    <span className="font-mono text-[13px] text-ink tabular">
+                    <span className="font-mono text-[13px] text-ink tabular font-medium">
                       {inr(a.price)}
                     </span>
                   </div>
-                  <div className="text-[11.5px] text-ink-faint">
-                    {a.type} · {a.category}
+                  <div className="text-[11.5px] text-ink-faint flex items-center gap-1.5 flex-wrap mt-0.5">
+                    <span className="font-medium text-ink-soft">{a.type}</span>
+                    {a.type === "Cow & Calf" && (
+                      <span className="text-[9.5px] font-semibold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                        Mother & Calf Pair
+                      </span>
+                    )}
+                    {a.type === "Buffalo" && (
+                      <span className="text-[9.5px] font-medium px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-800 border border-indigo-200">
+                        Mahishi
+                      </span>
+                    )}
+                    <span>·</span>
+                    <span>{a.category}</span>
                   </div>
                   <div className="text-[11px] text-ink-faint mt-1 truncate">
                     {a.gosala}
@@ -467,6 +697,20 @@ function Discover({
           </div>
         )}
       </div>
+      {routeModalGosala && (
+        <EnRouteModal
+          isOpen={!!routeModalGosala}
+          onClose={() => setRouteModalGosala(null)}
+          gosalaName={routeModalGosala.name}
+          gosalaAddress={routeModalGosala.area || routeModalGosala.name}
+          gosalaLat={routeModalGosala.lat ?? (routeModalGosala as any).latitude}
+          gosalaLng={routeModalGosala.lng ?? (routeModalGosala as any).longitude}
+          customerLat={deviceLocation.lat || undefined}
+          customerLng={deviceLocation.lng || undefined}
+          customerAddress={address || deviceLocation.address || undefined}
+          mode={routeModalMode}
+        />
+      )}
     </div>
   )
 }
@@ -632,7 +876,7 @@ function Bookings({
   onTrack,
 }: {
   list: MyBooking[]
-  onTrack: () => void
+  onTrack: (bookingId?: string) => void
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
@@ -751,11 +995,11 @@ function Bookings({
                   <span className="text-[11.5px] text-forest font-medium inline-flex items-center gap-1">
                     <ShieldCheck size={13} /> Verified Devotee Booking
                   </span>
-                  {b.status === "In Service" && (
+                  {b.status !== "Rejected" && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        onTrack()
+                        onTrack(b.id)
                       }}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-saffron text-white text-[12px] font-medium shadow-xs hover:bg-saffron-deep transition cursor-pointer"
                     >
@@ -773,7 +1017,15 @@ function Bookings({
 }
 
 /* ---------------- Track ---------------- */
-function Track({ booking }: { booking?: MyBooking }) {
+function Track({
+  booking,
+  bookingsList = [],
+  onSelectBooking,
+}: {
+  booking?: MyBooking
+  bookingsList?: MyBooking[]
+  onSelectBooking?: (id: string) => void
+}) {
   const deviceLocation = useDeviceLocation()
   if (!booking)
     return (
@@ -784,10 +1036,25 @@ function Track({ booking }: { booking?: MyBooking }) {
         </p>
       </div>
     )
-  const stage = booking.driverStage ?? 0
+
   return (
     <div className="p-4 space-y-4">
-      <h1 className="font-serif text-[22px] text-ink">Live tracking</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="font-serif text-[22px] text-ink">Live tracking</h1>
+        {bookingsList.length > 1 && (
+          <select
+            value={booking.id}
+            onChange={(e) => onSelectBooking?.(e.target.value)}
+            className="text-[11px] font-mono bg-card border border-line rounded px-2 py-1 text-ink-soft cursor-pointer max-w-[170px] truncate"
+          >
+            {bookingsList.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.id} · {b.status}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
 
       <LocationPromptBanner
         role="CUSTOMER"
@@ -800,95 +1067,16 @@ function Track({ booking }: { booking?: MyBooking }) {
         onRequestLocation={deviceLocation.requestLocation}
       />
 
-      <LiveTripMap
-        bookingId={booking.id}
-        pickupLocation={booking.gosala}
-        dropLocation={booking.address || "Kothrud, Pune"}
-        driverName={booking.driver || "Sunil Pawar"}
-        stageIndex={stage}
-        distanceKm={booking.distanceKm || 8}
+      <CustomerTrackingDossier
+        booking={booking}
         customerCoords={
           deviceLocation.lat && deviceLocation.lng
             ? [deviceLocation.lat, deviceLocation.lng]
             : null
         }
-        viewerRole="CUSTOMER"
+        layoutMode="compact"
         heightClass="h-56"
       />
-
-      <div className="rounded-sm border border-line bg-card p-4 flex items-center gap-3">
-        <div className="h-10 w-10 rounded-full bg-forest text-white grid place-items-center text-[13px] font-medium">
-          SP
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-[13.5px] text-ink">Sunil Pawar</div>
-          <div className="text-[11.5px] text-ink-faint">
-            Driver · {booking.animal}
-          </div>
-        </div>
-        <a
-          href="tel:+919000000000"
-          className="h-9 w-9 grid place-items-center rounded-full bg-forest text-white"
-        >
-          <Phone size={16} />
-        </a>
-      </div>
-
-      <div className="rounded-sm border border-line bg-card p-4">
-        <div className="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-3">
-          Trip status
-        </div>
-        <div className="text-[15px] font-serif text-ink mb-3">
-          {tripStages[stage]}
-        </div>
-        <ol className="space-y-0">
-          {tripStages.map((s, i) => {
-            const state = i < stage ? "done" : i === stage ? "current" : "todo"
-            return (
-              <li key={s} className="flex gap-3 items-start">
-                <div className="flex flex-col items-center">
-                  <span
-                    className={`h-2.5 w-2.5 rounded-full border-2 ${
-                      state === "done"
-                        ? "bg-forest border-forest"
-                        : state === "current"
-                          ? "bg-saffron border-saffron"
-                          : "bg-card border-line-strong"
-                    }`}
-                  />
-                  {i < tripStages.length - 1 && (
-                    <span
-                      className={`w-0.5 h-4 ${
-                        i < stage ? "bg-forest" : "bg-line"
-                      }`}
-                    />
-                  )}
-                </div>
-                <span
-                  className={`text-[12px] -mt-0.5 pb-1 ${
-                    state === "todo" ? "text-ink-faint" : "text-ink"
-                  } ${state === "current" ? "font-medium" : ""}`}
-                >
-                  {s}
-                </span>
-              </li>
-            )
-          })}
-        </ol>
-      </div>
-
-      <div className="rounded-sm border border-line bg-card p-4 space-y-2 text-[12.5px]">
-        <div className="flex gap-2">
-          <Flag size={14} className="text-saffron mt-0.5" />
-          <span className="text-ink-soft">{booking.gosala} → your address</span>
-        </div>
-        <div className="flex gap-2">
-          <Clock size={14} className="text-ink-faint mt-0.5" />
-          <span className="text-ink-soft">
-            {booking.date} · {booking.time}
-          </span>
-        </div>
-      </div>
     </div>
   )
 }
@@ -903,20 +1091,34 @@ function MobileCustomer({
   myBookings: MyBooking[]
   onCreate: (s: BookingSummary) => void
 }) {
-  const { profiles } = useStore()
+  const { profiles, refreshAnimals } = useStore()
   const [tab, setTab] = useState<Tab>("discover")
+
+  useEffect(() => {
+    refreshAnimals?.().catch(() => {})
+  }, [refreshAnimals])
   const [detail, setDetail] = useState<Animal | null>(null)
   const [gosalaProfileId, setGosalaProfileId] = useState<string | null>(null)
+  const [gosalaProfileDist, setGosalaProfileDist] = useState<number | undefined>(undefined)
   const [flow, setFlow] = useState<{ animal: Animal; gosala: Gosala } | null>(
     null,
   )
   const [editProfileOpen, setEditProfileOpen] = useState(false)
   const [openProfileSection, setOpenProfileSection] = useState<string | null>(null)
+  const [selectedTrackBookingId, setSelectedTrackBookingId] = useState<string | null>(null)
 
   const customerProfile = profiles?.customer
   const devoteeName = customerProfile?.name || CURRENT_CUSTOMER
 
-  const activeTrip = myBookings.find((b) => b.status === "In Service")
+  const activeTrip =
+    (selectedTrackBookingId
+      ? myBookings.find((b) => b.id === selectedTrackBookingId)
+      : null) ||
+    myBookings.find((b) => b.status === "In Service") ||
+    myBookings.find((b) => b.status === "Confirmed" && b.driver) ||
+    myBookings.find((b) => b.status === "Confirmed") ||
+    myBookings.find((b) => b.status === "Under Review") ||
+    myBookings[0]
 
   const tabs: { id: Tab; label: string; icon: typeof Home }[] = [
     { id: "discover", label: "Discover", icon: Compass },
@@ -965,9 +1167,14 @@ function MobileCustomer({
           ) : gosalaProfileId ? (
             <MobileGosalaProfile
               gosalaId={gosalaProfileId}
-              onBack={() => setGosalaProfileId(null)}
+              distanceKm={gosalaProfileDist}
+              onBack={() => {
+                setGosalaProfileId(null)
+                setGosalaProfileDist(undefined)
+              }}
               onSelectAnimal={(a) => {
                 setGosalaProfileId(null)
+                setGosalaProfileDist(undefined)
                 setDetail(a)
               }}
             />
@@ -976,13 +1183,28 @@ function MobileCustomer({
               {tab === "discover" && (
                 <Discover
                   onOpenAnimal={setDetail}
-                  onOpenGosala={(id) => setGosalaProfileId(id)}
+                  onOpenGosala={(id, dist) => {
+                    setGosalaProfileId(id)
+                    setGosalaProfileDist(dist)
+                  }}
                 />
               )}
               {tab === "bookings" && (
-                <Bookings list={myBookings} onTrack={() => setTab("track")} />
+                <Bookings
+                  list={myBookings}
+                  onTrack={(bookingId) => {
+                    if (bookingId) setSelectedTrackBookingId(bookingId)
+                    setTab("track")
+                  }}
+                />
               )}
-              {tab === "track" && <Track booking={activeTrip} />}
+              {tab === "track" && (
+                <Track
+                  booking={activeTrip}
+                  bookingsList={myBookings}
+                  onSelectBooking={setSelectedTrackBookingId}
+                />
+              )}
               {tab === "profile" && (
                 <div className="p-4 space-y-4">
                   <div className="flex items-center justify-between">
@@ -1054,7 +1276,7 @@ function MobileCustomer({
                         </div>
                         <div className="pt-1.5 border-t border-line/40">
                           <span className="text-[10.5px] uppercase font-mono text-ink-faint block">Default Puja Venue</span>
-                          <span className="text-ink font-medium">{customerProfile?.customerData?.defaultAddress || "Flat 402, Ruturang Apts, Kothrud, Pune"}</span>
+                          <span className="text-ink font-medium">{customerProfile?.customerData?.defaultAddress || "Flat 402, Aditya Heights, Kondapur, Hyderabad"}</span>
                         </div>
                       </div>
                     )}
@@ -1065,7 +1287,7 @@ function MobileCustomer({
                     {
                       id: "addresses",
                       label: "Saved addresses",
-                      subtitle: "Flat 402, Ruturang Apts, Kothrud, Pune",
+                      subtitle: customerProfile?.customerData?.defaultAddress || "Flat 402, Aditya Heights, Kondapur, Hyderabad",
                       content: (
                         <div className="space-y-2 text-[12px]">
                           <div className="p-2.5 rounded bg-card border border-line flex items-start justify-between">
@@ -1074,7 +1296,7 @@ function MobileCustomer({
                                 <MapPin size={12} className="text-saffron" /> Home (Default Altar)
                               </div>
                               <div className="text-ink-soft text-[11.5px] mt-0.5">
-                                {customerProfile?.customerData?.defaultAddress || "Flat 402, Ruturang Apts, Kothrud, Pune"}
+                                {customerProfile?.customerData?.defaultAddress || "Flat 402, Aditya Heights, Kondapur, Hyderabad"}
                               </div>
                             </div>
                             <span className="text-[10px] font-mono bg-forest/10 text-forest px-1.5 py-0.5 rounded">Active</span>
@@ -1243,7 +1465,7 @@ function useIsDesktop() {
 }
 
 export default function CustomerApp({ onSignOut }: { onSignOut: () => void }) {
-  const { bookings, createBooking, profiles } = useStore()
+  const { bookings, createBooking, profiles, pricingConfig } = useStore()
   const isDesktop = useIsDesktop()
   const customerProfile = profiles?.customer
   const currentDevotee = customerProfile?.name || CURRENT_CUSTOMER
@@ -1255,7 +1477,10 @@ export default function CustomerApp({ onSignOut }: { onSignOut: () => void }) {
     .map(toMyBooking)
 
   const create = (s: BookingSummary) =>
-    createBooking(makeBooking(s, customerProfile), s.holdId)
+    createBooking(
+      makeBooking(s, customerProfile, pricingConfig?.commissionPct),
+      s.holdId,
+    )
 
   return isDesktop ? (
     <DesktopCustomer

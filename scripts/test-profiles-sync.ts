@@ -136,7 +136,7 @@ updateProfile("customer", {
   customerData: {
     gotra: "Vashishta",
     aadhaarNumber: "•••• •••• 8821",
-    defaultAddress: "Bavdhan, Pune, Maharashtra 411021",
+    defaultAddress: "Kondapur, Hyderabad, Telangana 500084",
   },
 })
 

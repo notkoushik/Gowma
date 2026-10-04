@@ -31,9 +31,9 @@ console.log("\n--- TEST 2: Dynamic Gaushala Registration ---")
 const newGaushala: Gosala = {
   id: `GOS-${Date.now().toString().slice(-4)}`,
   name: "Gokul Vrundavan Gaushala Sanctuary",
-  registrationNumber: "AWBI/PUN/2026/9981",
-  region: "Wakad, Pune (West Corridor)",
-  address: "Survey No. 44, Wakad-Hinjawadi Link Rd, Pune 411057",
+  registrationNumber: "AWBI/TS/2026/9981",
+  region: "Cyberabad / Gachibowli",
+  address: "Survey No. 44, Gachibowli ORR Link Rd, Hyderabad 500032",
   contactPhone: "+91 99234 56789",
   contactEmail: "care@gokulvrundavan.org",
   caretakerName: "Pandit Raghav Sharma",

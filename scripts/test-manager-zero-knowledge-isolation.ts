@@ -122,7 +122,7 @@ assert(
 )
 
 // Test Case 6: Header Universal Search Count Isolation
-const searchVal = "Pune" // Common search term that matches multiple gaushalas or bookings
+const searchVal = "Hyderabad" // Common search term that matches multiple gaushalas or bookings
 const allMatchingBookings = bookings.filter(b => 
   b.address.toLowerCase().includes(searchVal.toLowerCase()) || 
   b.customer.toLowerCase().includes(searchVal.toLowerCase())

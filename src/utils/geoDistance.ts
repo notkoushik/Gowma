@@ -1,4 +1,5 @@
 import { calculateDistanceKm } from "../data/regions.ts"
+import { getCachedOrEstimatedRoadDistance } from "../services/routing"
 
 export type ServiceTier = "LOCAL_SERVICE" | "EXTENDED_TRANSIT" | "OUT_OF_RADIUS"
 
@@ -25,20 +26,17 @@ export function getGaushalaServiceability(
   userLng: number | null,
   gaushala: GeoLocationTarget,
 ): ServiceabilityInfo {
-  // If user location is not yet known, assume central operational radius
-  if (!userLat || !userLng || !gaushala.lat || !gaushala.lng) {
-    return {
-      tier: "LOCAL_SERVICE",
-      distanceKm: 6.5,
-      badgeText: "Nearby",
-      badgeClass: "bg-ok-soft text-ok border-ok/30",
-      isDirectBookingAllowed: true,
-      estimatedTransitMin: 25,
-    }
-  }
+  // Robust coordinate fallback to active operational corridor if awaiting GPS
+  const effectiveUserLat = userLat || 17.4401
+  const effectiveUserLng = userLng || 78.3489
+  const effectiveGosalaLat = gaushala.lat || 17.3753
+  const effectiveGosalaLng = gaushala.lng || 78.3615
 
-  const distanceKm = calculateDistanceKm(userLat, userLng, gaushala.lat, gaushala.lng)
-  const estimatedTransitMin = Math.round(15 + distanceKm * 2.2)
+  const distanceKm = getCachedOrEstimatedRoadDistance(
+    [effectiveUserLat, effectiveUserLng],
+    [effectiveGosalaLat, effectiveGosalaLng],
+  )
+  const estimatedTransitMin = Math.max(5, Math.round(distanceKm * 1.8 + 5))
 
   if (distanceKm <= 35) {
     return {

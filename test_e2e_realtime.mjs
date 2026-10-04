@@ -126,7 +126,7 @@ async function runTestSuite() {
         start: "14:00",
         end: "15:00",
         durationMin: 60,
-        address: "Kothrud, Pune",
+        address: "Kondapur, Hyderabad",
         distanceKm: 6.5,
         base: 2400,
         extraTime: 0,
@@ -275,12 +275,12 @@ async function runTestSuite() {
       `    Sample GPS Tick: lat=${tick.lat}, lng=${tick.lng}, bearing=${tick.bearing}°, speed=${tick.speedKmh} km/h, dist=${tick.distanceRemainingKm} km, ETA=${tick.etaMinutes} min`,
     )
     assert(
-      typeof tick.lat === "number" && tick.lat > 18.0 && tick.lat < 19.0,
-      "Tick latitude is valid for Pune region (" + tick.lat + ")",
+      typeof tick.lat === "number" && tick.lat > 17.0 && tick.lat < 20.0,
+      "Tick latitude is valid for regional corridor (" + tick.lat + ")",
     )
     assert(
-      typeof tick.lng === "number" && tick.lng > 73.0 && tick.lng < 74.0,
-      "Tick longitude is valid for Pune region (" + tick.lng + ")",
+      typeof tick.lng === "number" && tick.lng > 73.0 && tick.lng < 80.0,
+      "Tick longitude is valid for regional corridor (" + tick.lng + ")",
     )
     assert(
       tick.bearing >= 0 && tick.bearing <= 360,

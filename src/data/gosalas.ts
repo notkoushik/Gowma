@@ -44,7 +44,9 @@ export type Gosala = {
   additionalStaff?: GosalaStaff[]
   customDetails?: GosalaCustomDetail[]
   capacity: number
+  landAcres?: number
   establishedYear: string
+  visitingHours?: string
   facilities: string[]
   lat?: number
   lng?: number
@@ -57,8 +59,36 @@ export type Gosala = {
   baseCowPrice?: number
   baseBullPrice?: number
   baseCalfPrice?: number
+  baseBuffaloPrice?: number
+  basePairPrice?: number
+  customBovineCategories?: CustomBovineCategory[]
+
+  // Gaushala-Specific Commission, Tax & Settlement Economics
+  partnershipTier?: PartnershipTier
+  commissionType?: CommissionType
+  customCommissionPct?: number // e.g. 8 for 8%
+  customCommissionFlat?: number // e.g. 400 for ₹400 flat
+  taxTreatment?: TaxTreatment
+  customTaxPct?: number // e.g. 0 for exempt, 5 for concessional
+  bufferMinutes?: number // turnaround buffer in minutes
+  partnershipNotes?: string // rationale e.g. "Close Partner Gaushala - 8% preferential commission"
+
   governingAdminName?: string
   governingAdminRole?: string
+  adminId?: string
+  adminName?: string
+}
+
+export type PartnershipTier = "PREFERRED" | "STANDARD" | "CHARITABLE" | "COMMERCIAL" | "CUSTOM"
+export type CommissionType = "percentage" | "fixed" | "hybrid"
+export type TaxTreatment = "standard_gst" | "section_80g_exempt" | "reduced_charity_gst" | "custom_rate"
+
+export type CustomBovineCategory = {
+  id: string
+  name: string
+  basePrice: number
+  description?: string
+  badgeText?: string
 }
 
 export const DEFAULT_GOSALA_OFFERINGS: GosalaOfferingItem[] = [
@@ -144,13 +174,14 @@ import { INDIAN_REGIONAL_HUBS } from "./regions.ts"
 
 export const GOSALA_REGION_PRESETS = [
   ...INDIAN_REGIONAL_HUBS.map((h) => `${h.state} - ${h.name}`),
-  // Legacy short aliases for seamless backward compatibility
-  "Pune West (Kothrud)",
-  "Pune North (Baner)",
-  "Pune East (Kalyani Nagar)",
-  "Pune South (Hadapsar)",
-  "Pune PCMC (Wakad / Pimpri)",
-  "Pune Rural (Mulshi & Paud)",
+  // Common regional aliases
+  "Cyberabad / Gachibowli",
+  "Narsingi / Gandipet",
+  "Hyderabad Central (Banjara Hills / Jubilee Hills)",
+  "Secunderabad / Cantonment",
+  "Warangal / Hanamkonda",
+  "Vijayawada / Guntur",
+  "Tirupati / Chandragiri",
   "Hyderabad Central (Banjara Hills / Jubilee Hills)",
   "Cyberabad / Gachibowli (HITEC City)",
   "Narsingi / Gandipet (Outer Ring Road)",
@@ -180,7 +211,7 @@ export const GOSALA_PHOTO_PRESETS = [
   {
     label: "Veterinary Clinical & Care Bay",
     description: "Dedicated medical examination stalls with clean maternity and recovery isolation units",
-    url: "https://images.unsplash.com/photo-1516467508483-a7212febe31a?w=800&h=480&fit=crop&auto=format",
+    url: "https://images.unsplash.com/photo-1589923188900-85dae523342b?w=800&h=480&fit=crop&auto=format",
   },
   {
     label: "Open Solar Grazing Yard",

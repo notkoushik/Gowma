@@ -24,6 +24,7 @@ export function gOMAABackendPlugin(): Plugin {
               req.method || "GET",
               req.url || "",
               rawBody,
+              req.headers,
             )
             if (!result) {
               res.statusCode = 404

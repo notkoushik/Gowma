@@ -41,6 +41,27 @@ export type AdminProfileData = {
   treasuryClearanceLevel?: string
 }
 
+export type BankAccountDetails = {
+  accountBeneficiary: string
+  bankName: string
+  branchName: string
+  accountNumber: string // Full account number stored safely
+  ifscCode: string
+  accountType: "CURRENT_TRUST" | "SAVINGS" | "NODAL_ESCROW" | "SALARY"
+  verificationStatus: "VERIFIED" | "PENDING_PENNY_DROP" | "REJECTED"
+  badgeLabel?: string // e.g. "Active Direct Credit", "Sovereign Nodal Escrow", "Operational Reimbursement"
+  upiId?: string
+  lastVerifiedAt?: string
+}
+
+export type SettlementSchedule = {
+  disbursementCycle: string // e.g. "Every Sunday at 23:59 IST"
+  disbursementMode: string // e.g. "Direct RBI NEFT / Instant IMPS"
+  escrowCustodianPool: string // e.g. "ICICI Nodal Trust Escrow"
+  nextScheduledBatch: string // e.g. "Upcoming Sunday Midnight"
+  badgeLabel?: string // e.g. "Weekly Auto-Sweep", "Continuous Escrow Sweep"
+}
+
 export type RoleProfile = {
   id: string
   role: RoleId
@@ -52,6 +73,8 @@ export type RoleProfile = {
   managerData?: ManagerProfileData
   driverData?: DriverProfileData
   adminData?: AdminProfileData
+  bankDetails?: BankAccountDetails
+  settlementSchedule?: SettlementSchedule
 }
 
 export const initialProfiles: Record<RoleId, RoleProfile> = {
@@ -62,8 +85,8 @@ export const initialProfiles: Record<RoleId, RoleProfile> = {
     phone: "+91 98204 11827",
     email: "ananya.deshmukh@gmail.com",
     customerData: {
-      address: "14 Tulsi Nagar, Kothrud, Pune",
-      defaultAddress: "14 Tulsi Nagar, Kothrud, Pune",
+      address: "14 Tulsi Nagar, Kondapur, Hyderabad",
+      defaultAddress: "14 Tulsi Nagar, Kondapur, Hyderabad",
       aadhaarNumber: "XXXX-XXXX-4819",
       gotra: "Kashyapa",
       familyMembers: "Ananya (Self), Rajesh (Husband)",
@@ -73,6 +96,7 @@ export const initialProfiles: Record<RoleId, RoleProfile> = {
       totalBookings: 4,
       preferredCeremony: "Griha Pravesh & Kamadhenu Puja",
     },
+    // No hardcoded bank details - dynamic user input
   },
   manager: {
     id: "USER-MGR-804",
@@ -84,11 +108,12 @@ export const initialProfiles: Record<RoleId, RoleProfile> = {
       managerId: "MGR-804",
       gosala: "Shri Krishna Gaushala",
       gosalaName: "Shri Krishna Gaushala",
-      region: "Pune Western Zone",
+      region: "Cyberabad Zone",
       dailySevaCeiling: 2,
       restingBufferMin: 90,
       defaultBufferMin: 90,
     },
+    // No hardcoded bank details - dynamic user input
   },
   driver: {
     id: "USER-DRV-102",
@@ -105,6 +130,7 @@ export const initialProfiles: Record<RoleId, RoleProfile> = {
       assignedGaushala: "Shri Krishna Gaushala",
       status: "Available",
     },
+    // No hardcoded bank details - dynamic user input
   },
   admin: {
     id: "USER-ADM-101",
@@ -115,9 +141,10 @@ export const initialProfiles: Record<RoleId, RoleProfile> = {
     adminData: {
       adminId: "ADM-101",
       designation: "Regional Operations Officer",
-      department: "Pune Gaushala Operations & Logistics Hub",
+      department: "Central Gaushala Operations & Logistics Hub",
       authorityLevel: "OPERATIONS_ADMIN",
     },
+    // No hardcoded bank details - dynamic user input
   },
   super_admin: {
     id: "USER-SA-001",
@@ -132,5 +159,6 @@ export const initialProfiles: Record<RoleId, RoleProfile> = {
       authorityLevel: "SUPER_ADMIN",
       treasuryClearanceLevel: "Level-3 Master Authority",
     },
+    // No hardcoded bank details - dynamic user input
   },
 }

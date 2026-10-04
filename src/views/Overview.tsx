@@ -150,18 +150,27 @@ export default function Overview() {
 
   // Dynamically calculate booking mix from actual bookings
   const dynamicBookingMix = useMemo(() => {
+    const pairCount = bookings.filter((b) => b.animalType === "Cow & Calf").length
     const cowCount = bookings.filter((b) => b.animalType === "Cow").length
     const bullCount = bookings.filter((b) => b.animalType === "Bull").length
     const calfCount = bookings.filter((b) => b.animalType === "Calf").length
+    const buffaloCount = bookings.filter((b) => b.animalType === "Buffalo").length
     const total = bookings.length
     if (total === 0) {
       return [
+        { name: "Cow & Calf Pair (Jodi)", value: 0, color: "#d97706" },
         { name: "Cow (Desi Gau)", value: 0, color: "var(--color-saffron)" },
         { name: "Nandi (Sacred Bull)", value: 0, color: "var(--color-forest)" },
         { name: "Vatsa (Young Calf)", value: 0, color: "#c28834" },
+        { name: "Buffalo (Mahishi)", value: 0, color: "#4f46e5" },
       ]
     }
     return [
+      {
+        name: "Cow & Calf Pair (Jodi)",
+        value: Math.round((pairCount / total) * 100),
+        color: "#d97706",
+      },
       {
         name: "Cow (Desi Gau)",
         value: Math.round((cowCount / total) * 100),
@@ -177,7 +186,12 @@ export default function Overview() {
         value: Math.round((calfCount / total) * 100),
         color: "#c28834",
       },
-    ]
+      {
+        name: "Buffalo (Mahishi)",
+        value: Math.round((buffaloCount / total) * 100),
+        color: "#4f46e5",
+      },
+    ].filter((x) => x.value > 0 || total === 0)
   }, [bookings])
 
   return (

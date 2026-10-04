@@ -27,7 +27,7 @@ export type Booking = {
   phone: string
   gosala: string
   animal: string
-  animalType: "Cow" | "Calf" | "Bull"
+  animalType: "Cow" | "Calf" | "Bull" | "Buffalo" | "Cow & Calf"
   date: string
   start: string
   end: string
@@ -72,6 +72,19 @@ export type Booking = {
   porterDriverName?: string
   porterDriverPhone?: string
   porterStatus?: string
+
+  // Dynamic Customer Animal Received & Handover OTP Security
+  handoverOtp?: string
+  handoverOtpVerified?: boolean
+  handoverOtpVerifiedAt?: string | null
+
+  // Rich Swiggy/Uber Driver Profile & Cattle Ambulance Specs
+  driverPhone?: string | null
+  driverVehiclePlate?: string | null
+  driverVehicleModel?: string | null
+  driverRating?: number | null
+  driverTotalTrips?: number | null
+  driverAvatar?: string | null
 }
 
 export type GaushalaDriver = {

@@ -37,6 +37,7 @@ import {
 } from "lucide-react"
 import {
   type Animal,
+  type AnimalType,
   type AnimalOperationalStatus,
   type AnimalVetInfo,
   type AnimalDietInfo,
@@ -651,7 +652,7 @@ const defaultVetDoctors: Record<string, AnimalVetInfo> = {
     doctorName: "Dr. Anand Kulkarni",
     qualification: "B.V.Sc & A.H., M.V.Sc (Bovine Care)",
     regNo: "MH-VET-4821",
-    clinic: "Govt. Veterinary Polyclinic, Kothrud, Pune",
+    clinic: "Govt. Veterinary Polyclinic, Hyderabad",
     phone: "+91 98220 54321",
     lastVisit: "22 Sep 2026",
     nextDue: "22 Oct 2026",
@@ -667,8 +668,8 @@ const defaultVetDoctors: Record<string, AnimalVetInfo> = {
   "Nandini Goseva Sadan": {
     doctorName: "Dr. Rameshwar Deshmukh",
     qualification: "M.V.Sc Medicine & Surgery",
-    regNo: "MH-VET-3910",
-    clinic: "Baner Animal Healthcare Center, Pune",
+    regNo: "TS-VET-3910",
+    clinic: "Regional Animal Healthcare Center, Hyderabad",
     phone: "+91 98901 67890",
     lastVisit: "20 Sep 2026",
     nextDue: "20 Oct 2026",
@@ -684,8 +685,8 @@ const defaultVetDoctors: Record<string, AnimalVetInfo> = {
   "Gopal Gaushala Trust": {
     doctorName: "Dr. Suresh Patil",
     qualification: "B.V.Sc & A.H., Cattle Specialist",
-    regNo: "MH-VET-5120",
-    clinic: "Kalyani Nagar Veterinary Clinic, Pune",
+    regNo: "TS-VET-5120",
+    clinic: "Banjara Hills Veterinary Clinic, Hyderabad",
     phone: "+91 97640 45678",
     lastVisit: "24 Sep 2026",
     nextDue: "24 Oct 2026",
@@ -701,25 +702,45 @@ const defaultVetDoctors: Record<string, AnimalVetInfo> = {
 }
 
 function getVetDetails(gosala: string): AnimalVetInfo {
-  return (
-    defaultVetDoctors[gosala] || {
-      doctorName: "Dr. Anand Kulkarni",
-      qualification: "B.V.Sc & A.H.",
-      regNo: "MH-VET-4821",
-      clinic: "District Veterinary Hospital, Pune",
-      phone: "+91 98220 54321",
-      lastVisit: "22 Sep 2026",
-      nextDue: "22 Oct 2026",
-      dewormingDate: "15 Sep 2026",
-      hoofCareDate: "20 Sep 2026",
-      vitals: {
-        temp: "38.5°C",
-        heartRate: "64 bpm",
-        respiration: "22 /min",
-        rumen: "3 / 2min",
-      },
+  const now = new Date()
+  const formatDate = (daysOffset: number) => {
+    const d = new Date(now)
+    d.setDate(d.getDate() + daysOffset)
+    return d.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    })
+  }
+
+  const existing = defaultVetDoctors[gosala]
+  if (existing) {
+    return {
+      ...existing,
+      lastVisit: formatDate(-7),
+      nextDue: formatDate(23),
+      dewormingDate: formatDate(-14),
+      hoofCareDate: formatDate(-10),
     }
-  )
+  }
+
+  return {
+    doctorName: "Dr. Anand Kulkarni",
+    qualification: "B.V.Sc & A.H., Bovine Welfare Specialist",
+    regNo: "VET-REG-4821",
+    clinic: `${gosala || "Sanctuary"} Veterinary Healthcare Bay`,
+    phone: "+91 98220 54321",
+    lastVisit: formatDate(-7),
+    nextDue: formatDate(23),
+    dewormingDate: formatDate(-14),
+    hoofCareDate: formatDate(-10),
+    vitals: {
+      temp: "38.5°C",
+      heartRate: "64 bpm",
+      respiration: "22 /min",
+      rumen: "3 / 2min",
+    },
+  }
 }
 
 function AnimalCard({
@@ -992,7 +1013,7 @@ export default function Animals() {
   const [vetRegNo, setVetRegNo] = useState("")
   const [vetClinic, setVetClinic] = useState("")
   const [vetPhone, setVetPhone] = useState("+91 98")
-  const [vetAddress, setVetAddress] = useState("Kothrud, Pune")
+  const [vetAddress, setVetAddress] = useState("Kondapur, Hyderabad")
   const [vetSpecialization, setVetSpecialization] = useState(
     "Bovine Health, Vaccination & Ultrasound",
   )
@@ -1024,7 +1045,7 @@ export default function Animals() {
       setVetRegNo(`MH-VET-${Math.floor(2000 + Math.random() * 7000)}`)
       setVetClinic("")
       setVetPhone("+91 98")
-      setVetAddress("Kothrud, Pune")
+      setVetAddress("Kondapur, Hyderabad")
       setVetSpecialization("Bovine Health, Vaccination & Ultrasound")
       setVetEmergency(true)
       setVetAssignedGosala(
@@ -1068,10 +1089,10 @@ export default function Animals() {
         id: `VET-${Date.now().toString().slice(-4)}`,
         name: formattedName,
         qualification: vetQualification,
-        regNo: vetRegNo || `MH-VET-${Math.floor(2000 + Math.random() * 7000)}`,
+        regNo: vetRegNo || `TS-VET-${Math.floor(2000 + Math.random() * 7000)}`,
         clinic: vetClinic || "Govt. Veterinary Polyclinic",
         phone: vetPhone || "+91 98220 54321",
-        address: vetAddress || "Pune, Maharashtra",
+        address: vetAddress || "Hyderabad, Telangana",
         specialization: vetSpecialization,
         emergency24x7: vetEmergency,
         assignedGosalas: finalAssignedGosalas,
@@ -1128,7 +1149,7 @@ export default function Animals() {
   const [addStep, setAddStep] = useState<1 | 2>(1)
   const [name, setName] = useState("")
   const [tagId, setTagId] = useState("IN-MH-12-8491")
-  const [type, setType] = useState<"Cow" | "Calf" | "Bull">("Cow")
+  const [type, setType] = useState<AnimalType>("Cow")
   const [breed, setBreed] = useState("Gir Cow")
   const [gosala, setGosala] = useState(
     () =>
@@ -1167,7 +1188,7 @@ export default function Animals() {
   const [editName, setEditName] = useState("")
   const [editTagId, setEditTagId] = useState("")
   const [editBreed, setEditBreed] = useState("Gir Cow")
-  const [editType, setEditType] = useState<"Cow" | "Calf" | "Bull">("Cow")
+  const [editType, setEditType] = useState<AnimalType>("Cow")
   const [editGosala, setEditGosala] = useState(
     () => dynamicGosalaOptions[0] || gosalas[0]?.name || "",
   )
@@ -1410,15 +1431,32 @@ export default function Animals() {
       setAge(p.age)
       setWeight(p.weight)
       setHeight(p.height)
-      setType(p.type as any)
+      setType(p.type as AnimalType)
       if (p.type === "Calf") {
         setCustomDailySeva(1)
         setCustomRadiusKm(8)
         setCustomCooldownMins(120)
+        setPrice("2500")
+      } else if (p.type === "Cow & Calf") {
+        setCustomDailySeva(2)
+        setCustomRadiusKm(15)
+        setCustomCooldownMins(120)
+        setPrice("4800")
+      } else if (p.type === "Buffalo") {
+        setCustomDailySeva(2)
+        setCustomRadiusKm(18)
+        setCustomCooldownMins(90)
+        setPrice("3200")
+      } else if (p.type === "Bull") {
+        setCustomDailySeva(2)
+        setCustomRadiusKm(20)
+        setCustomCooldownMins(90)
+        setPrice("4500")
       } else {
         setCustomDailySeva(2)
         setCustomRadiusKm(20)
         setCustomCooldownMins(90)
+        setPrice("3500")
       }
     }
   }
@@ -3332,6 +3370,23 @@ export default function Animals() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[12px] font-medium text-ink mb-1">
+                        Cattle Classification / Type
+                      </label>
+                      <select
+                        value={type}
+                        onChange={(e) => setType(e.target.value as AnimalType)}
+                        className="w-full bg-card border border-line rounded px-3 py-2 text-[13px] text-ink outline-none focus:border-forest transition font-medium"
+                      >
+                        <option value="Cow">Cow (Gau Mata)</option>
+                        <option value="Cow & Calf">Cow & Calf Pair (Gau-Vatsa Jodi)</option>
+                        <option value="Calf">Calf (Vatsa)</option>
+                        <option value="Bull">Bull (Nandi)</option>
+                        <option value="Buffalo">Buffalo (Mahishi / Sacred Buffalo)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[12px] font-medium text-ink mb-1">
                         Life Stage & Age Category (Smart Preset)
                       </label>
                       <select
@@ -3346,7 +3401,8 @@ export default function Animals() {
                         ))}
                       </select>
                     </div>
-
+                  </div>
+                  <div>
                     {currentRole === "manager" ? (
                       <div>
                         <label className="block text-[12px] font-medium text-ink mb-1">
@@ -3817,7 +3873,7 @@ export default function Animals() {
                     required
                     value={vetClinic}
                     onChange={(e) => setVetClinic(e.target.value)}
-                    placeholder="e.g. Pune Central Veterinary Hospital"
+                    placeholder="e.g. Central Veterinary Hospital, Hyderabad"
                     className="w-full bg-card border border-line rounded px-3 py-2 text-[13px] text-ink outline-none focus:border-forest"
                   />
                 </div>
@@ -3846,7 +3902,7 @@ export default function Animals() {
                     type="text"
                     value={vetAddress}
                     onChange={(e) => setVetAddress(e.target.value)}
-                    placeholder="e.g. Kothrud, Pune"
+                    placeholder="e.g. Kondapur, Hyderabad"
                     className="w-full bg-card border border-line rounded px-3 py-2 text-[13px] text-ink outline-none focus:border-forest"
                   />
                 </div>
@@ -4032,13 +4088,15 @@ export default function Animals() {
                       <select
                         value={editType}
                         onChange={(e) =>
-                          setEditType(e.target.value as "Cow" | "Calf" | "Bull")
+                          setEditType(e.target.value as AnimalType)
                         }
                         className="w-full bg-card border border-line rounded px-3 py-2 text-[13px] text-ink outline-none focus:border-forest transition"
                       >
                         <option value="Cow">Cow (Gau Mata)</option>
+                        <option value="Cow & Calf">Cow & Calf Pair (Gau-Vatsa Jodi)</option>
                         <option value="Calf">Calf (Vatsa)</option>
                         <option value="Bull">Bull (Nandi)</option>
+                        <option value="Buffalo">Buffalo (Mahishi / Sacred Buffalo)</option>
                       </select>
                     </div>
 

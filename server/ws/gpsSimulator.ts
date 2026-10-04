@@ -4,11 +4,14 @@ import type { GpsTickPayload } from "./types.ts"
 type Point = { lat: number; lng: number }
 
 const GOSALA_COORDS: Record<string, Point> = {
-  "Shri Krishna Gaushala": { lat: 18.5074, lng: 73.8077 }, // Kothrud / Paud Road
-  "Nandini Goseva Sadan": { lat: 18.559, lng: 73.7868 }, // Baner
-  "Gopal Gaushala Trust": { lat: 18.5482, lng: 73.9034 }, // Kalyani Nagar
-  "Vrindavan Goshala": { lat: 18.4967, lng: 73.9417 }, // Hadapsar
-  "Kamdhenu Seva Kendra": { lat: 18.5987, lng: 73.7628 }, // Wakad
+  "RamNath Gaushala": { lat: 17.4647, lng: 78.3662 },
+  "Surya": { lat: 17.4401, lng: 78.3489 },
+  "Suryavanchi Gaushala": { lat: 17.3826, lng: 78.3976 },
+  "Shri Krishna Gaushala": { lat: 17.4401, lng: 78.3489 },
+  "Nandini Goseva Sadan": { lat: 17.4647, lng: 78.3662 },
+  "Gopal Gaushala Trust": { lat: 17.4447, lng: 78.3762 },
+  "Vrindavan Goshala": { lat: 17.3826, lng: 78.3976 },
+  "Kamdhenu Seva Kendra": { lat: 17.4200, lng: 78.3300 },
 }
 
 function calculateBearing(p1: Point, p2: Point): number {
@@ -93,8 +96,8 @@ class GpsSimulatorManager {
     this.stopSimulation(bookingId)
 
     const startPoint = GOSALA_COORDS[gosalaName] || {
-      lat: 18.5074,
-      lng: 73.8077,
+      lat: 17.4401,
+      lng: 78.3489,
     }
     const endPoint = {
       lat: startPoint.lat + 0.024,

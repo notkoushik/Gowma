@@ -1171,7 +1171,7 @@ export default function LiveTracking() {
                         Puja Location (Devotee's House)
                       </div>
                       <div className="font-medium text-ink mt-0.5 truncate">
-                        {matchedBooking.address || "Kothrud, Pune"}
+                        {matchedBooking.address || "Kondapur, Hyderabad"}
                       </div>
                       <div className="text-[11px] text-forest font-mono mt-0.5">
                         {matchedBooking.distanceKm || 8} km road drive
@@ -1265,7 +1265,7 @@ export default function LiveTracking() {
                     </span>
                     <span className="text-ink-soft">
                       {selectedAnimal.gosala} →{" "}
-                      {matchedBooking?.address || "Kothrud, Pune"}
+                      {matchedBooking?.address || "Kondapur, Hyderabad"}
                     </span>
                   </div>
                   <button
@@ -1475,7 +1475,7 @@ export default function LiveTracking() {
                       </div>
                       <div className="text-ink mt-0.5 truncate font-medium">
                         {matchedBooking?.address ||
-                          "14 Tulsi Nagar, Kothrud, Pune"}
+                          "14 Tulsi Nagar, Kondapur, Hyderabad"}
                       </div>
                       <div className="text-[11px] text-forest font-medium">
                         Ground Floor Puja Spot Verified

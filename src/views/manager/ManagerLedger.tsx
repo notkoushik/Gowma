@@ -27,13 +27,17 @@ import {
   X,
   Printer,
   ExternalLink,
-  ShieldAlert,
   ArrowDownRight,
   Coins,
   PawPrint,
+  Edit3,
+  Crown,
+  Globe,
 } from "lucide-react"
 import { inr, type Booking, type Settlement, inHouseDrivers } from "../../data/mock"
 import type { Gosala } from "../../data/gosalas"
+import type { RoleProfile } from "../../data/profiles"
+import EditProfileModal from "../../components/EditProfileModal"
 import { useStore, useToast } from "../../store/store"
 import { Panel, PanelHead, Tag, Eyebrow } from "../../lib/ui"
 
@@ -52,15 +56,83 @@ interface SettlementBatch {
 }
 
 
-export const getGaushalaBankDetails = (gName: string, gObj?: Gosala) => {
+export const getGaushalaBankDetails = (
+  gName: string,
+  gObj?: Gosala,
+  profile?: RoleProfile,
+) => {
+  // 1. If explicit dynamic bank details exist in profile, prioritize them!
+  if (profile?.bankDetails?.accountNumber) {
+    const bd = profile.bankDetails
+    const ss = profile.settlementSchedule
+    const isCentral = profile.role === "super_admin" || gName === "ALL"
+    const displayBeneficiary =
+      bd.accountBeneficiary ||
+      (isCentral
+        ? "GOMAA Central Nodal Gaushala Trust Escrow"
+        : `${gName} Charitable Trust`)
+    const displayBankName = bd.branchName
+      ? `${bd.bankName} · ${bd.branchName}`
+      : bd.bankName
+    const displayAccount =
+      bd.accountNumber.length > 4
+        ? `•••• •••• •••• ${bd.accountNumber.slice(-4)}`
+        : bd.accountNumber
+
+    return {
+      beneficiary: displayBeneficiary,
+      bankName: displayBankName,
+      accountMasked: displayAccount,
+      ifsc: bd.ifscCode,
+      regNo:
+        gObj?.trustRegistrationNo ||
+        (isCentral ? "AWBI-NODAL-CENTRAL-2026" : "AWBI-TR-0421"),
+      cycle:
+        ss?.disbursementCycle ||
+        (isCentral
+          ? "Continuous Real-Time Platform Sweep (T+1)"
+          : "Every Sunday at 23:59 IST"),
+      mode:
+        ss?.disbursementMode ||
+        (isCentral
+          ? "Automated RBI RTGS & Escrow Nodal Routing"
+          : "Direct RBI NEFT / Instant IMPS"),
+      escrowPool:
+        ss?.escrowCustodianPool || "ICICI Nodal Trust Escrow & Central Reserve",
+      nextBatch:
+        ss?.nextScheduledBatch ||
+        (isCentral
+          ? "Continuous Real-Time Batch Engine"
+          : "Upcoming Sunday Midnight"),
+      badgeLabel:
+        ss?.badgeLabel ||
+        (profile.role === "super_admin"
+          ? "Continuous T+1 Auto-Sweep"
+          : "Weekly Auto-Sweep"),
+      accountType: bd.accountType,
+      statusBadge: bd.badgeLabel || "Active Direct Credit",
+      lastVerifiedAt: bd.lastVerifiedAt || "Live",
+      upiId: bd.upiId,
+      isDynamic: true,
+    }
+  }
+
+  // 2. Central Nodal Account fallback
   if (gName === "ALL") {
     return {
       beneficiary: "GOMAA Central Nodal Gaushala Trust Escrow",
-      bankName: "ICICI Nodal Trust Escrow · Bund Garden Branch, Pune",
+      bankName: "ICICI Nodal Trust Escrow · Hitec City Branch, Hyderabad",
       accountMasked: "•••• •••• 9901",
       ifsc: "ICIC0000005",
-      regNo: "AWBI-MAH-PUN-CENTRAL-2026",
+      regNo: "AWBI-NODAL-CENTRAL-2026",
       cycle: "Every Sunday at 23:59 IST (Auto-Sweep)",
+      mode: "Direct RBI NEFT / Instant IMPS",
+      escrowPool: "ICICI Nodal Trust Escrow",
+      nextBatch: "Upcoming Sunday Midnight",
+      badgeLabel: "Weekly Auto-Sweep",
+      statusBadge: "Active Direct Credit",
+      accountType: "NODAL_ESCROW" as const,
+      isDynamic: false,
     }
   }
 
@@ -72,52 +144,87 @@ export const getGaushalaBankDetails = (gName: string, gObj?: Gosala) => {
   if (gaushalaKey.includes("nandini")) {
     return {
       beneficiary: "Nandini Goseva Sadan Charitable Trust",
-      bankName: customBank || "Bank of Maharashtra · Baner Branch, Pune",
+      bankName: customBank || "State Bank of India · Gachibowli Branch, Hyderabad",
       accountMasked: customAcc || "•••• •••• 7120",
-      ifsc: customIfsc || "MAHB0000312",
-      regNo: gObj?.trustRegistrationNo || "MAH-PUN-AWBI-0618",
+      ifsc: customIfsc || "SBIN0000312",
+      regNo: gObj?.trustRegistrationNo || "AWBI-TR-0618",
       cycle: "Every Sunday at 23:59 IST",
+      mode: "Direct RBI NEFT / Instant IMPS",
+      escrowPool: "ICICI Nodal Trust Escrow",
+      nextBatch: "Upcoming Sunday Midnight",
+      badgeLabel: "Weekly Auto-Sweep",
+      statusBadge: "Active Direct Credit",
+      accountType: "CURRENT_TRUST" as const,
+      isDynamic: false,
     }
   }
   if (gaushalaKey.includes("gopal")) {
     return {
       beneficiary: "Gopal Gaushala Trust Public Trust",
-      bankName: customBank || "State Bank of India · Kalyani Nagar Branch, Pune",
+      bankName: customBank || "HDFC Bank Ltd · Banjara Hills Branch, Hyderabad",
       accountMasked: customAcc || "•••• •••• 9304",
-      ifsc: customIfsc || "SBIN0004182",
-      regNo: gObj?.trustRegistrationNo || "MAH-PUN-AWBI-0792",
+      ifsc: customIfsc || "HDFC0004182",
+      regNo: gObj?.trustRegistrationNo || "AWBI-TR-0792",
       cycle: "Every Sunday at 23:59 IST",
+      mode: "Direct RBI NEFT / Instant IMPS",
+      escrowPool: "ICICI Nodal Trust Escrow",
+      nextBatch: "Upcoming Sunday Midnight",
+      badgeLabel: "Weekly Auto-Sweep",
+      statusBadge: "Active Direct Credit",
+      accountType: "CURRENT_TRUST" as const,
+      isDynamic: false,
     }
   }
   if (gaushalaKey.includes("vrindavan")) {
     return {
       beneficiary: "Vrindavan Goshala Welfare Society",
-      bankName: customBank || "ICICI Bank Ltd · Hadapsar Branch, Pune",
+      bankName: customBank || "ICICI Bank Ltd · Financial District Branch, Hyderabad",
       accountMasked: customAcc || "•••• •••• 5519",
       ifsc: customIfsc || "ICIC0001048",
-      regNo: gObj?.trustRegistrationNo || "MAH-PUN-AWBI-1034",
+      regNo: gObj?.trustRegistrationNo || "AWBI-TR-1034",
       cycle: "Every Sunday at 23:59 IST",
+      mode: "Direct RBI NEFT / Instant IMPS",
+      escrowPool: "ICICI Nodal Trust Escrow",
+      nextBatch: "Upcoming Sunday Midnight",
+      badgeLabel: "Weekly Auto-Sweep",
+      statusBadge: "Active Direct Credit",
+      accountType: "CURRENT_TRUST" as const,
+      isDynamic: false,
     }
   }
   if (gaushalaKey.includes("kamdhenu") || gaushalaKey.includes("kamadhenu")) {
     return {
       beneficiary: "Kamdhenu Seva Kendra Trust",
-      bankName: customBank || "Axis Bank · Wakad Branch, Pune",
+      bankName: customBank || "Axis Bank · Madhapur Branch, Hyderabad",
       accountMasked: customAcc || "•••• •••• 8831",
       ifsc: customIfsc || "UTIB0002194",
-      regNo: gObj?.trustRegistrationNo || "MAH-PUN-AWBI-1190",
+      regNo: gObj?.trustRegistrationNo || "AWBI-TR-1190",
       cycle: "Every Sunday at 23:59 IST",
+      mode: "Direct RBI NEFT / Instant IMPS",
+      escrowPool: "ICICI Nodal Trust Escrow",
+      nextBatch: "Upcoming Sunday Midnight",
+      badgeLabel: "Weekly Auto-Sweep",
+      statusBadge: "Active Direct Credit",
+      accountType: "CURRENT_TRUST" as const,
+      isDynamic: false,
     }
   }
 
   // Default for Shri Krishna Gaushala or custom newly added Gaushalas
   return {
     beneficiary: `${gName} Charitable Trust`,
-    bankName: customBank || "HDFC Bank Ltd · Kothrud Branch, Pune",
+    bankName: customBank || "HDFC Bank Ltd · Kondapur Branch, Hyderabad",
     accountMasked: customAcc || "•••• •••• 4829",
     ifsc: customIfsc || "HDFC0001824",
-    regNo: gObj?.trustRegistrationNo || "MAH-PUN-AWBI-0421",
+    regNo: gObj?.trustRegistrationNo || "AWBI-TR-0421",
     cycle: "Every Sunday at 23:59 IST",
+    mode: "Direct RBI NEFT / Instant IMPS",
+    escrowPool: "ICICI Nodal Trust Escrow",
+    nextBatch: "Upcoming Sunday Midnight",
+    badgeLabel: "Weekly Auto-Sweep",
+    statusBadge: "Active Direct Credit",
+    accountType: "CURRENT_TRUST" as const,
+    isDynamic: false,
   }
 }
 
@@ -136,8 +243,20 @@ export const getDevoteeGotra = (customerName: string) => {
 }
 
 export default function ManagerLedger() {
-  const { bookings, animals, settlements, profiles, gosalas, activeGosalaFilter, activeManagerGosala, setActiveGosalaFilter, currentRole } = useStore()
+  const { bookings, animals, settlements, profiles, gosalas, activeGosalaFilter, activeManagerGosala, setActiveGosalaFilter, currentRole, pricingConfig, authUser } = useStore()
   const { notify } = useToast()
+
+  const activeAdminName = authUser?.name || profiles?.admin?.name || "Operations Admin"
+
+  // Dynamic Revenue Split Configuration derived from Master Pricing & Platform Economics
+  const defaultCommissionPct = pricingConfig?.commissionPct ?? 20
+  const defaultGaushalaNetPct = 100 - defaultCommissionPct
+
+  // Dynamic Strategic Allocation of Cuttings into 4 Protection Pools
+  const poolInsurancePct = Math.round(defaultCommissionPct * 0.35)
+  const poolGpsPct = Math.round(defaultCommissionPct * 0.25)
+  const poolCarePct = Math.round(defaultCommissionPct * 0.25)
+  const poolEscrowPct = Math.max(0, defaultCommissionPct - poolInsurancePct - poolGpsPct - poolCarePct)
 
   // State management
   const [activeCategory, setActiveCategory] = useState<TopCategory>("gross")
@@ -251,7 +370,7 @@ export default function ManagerLedger() {
     const baseAndExtra = (b.base || 0) + (b.extraTime || 0)
     const transport = b.transport || 0
     const addons = b.addons || 0
-    const commissionPct = b.commissionPct || 20
+    const commissionPct = b.commissionPct ?? defaultCommissionPct
 
     const ritualCut = Math.round(baseAndExtra * (1 - commissionPct / 100))
     const net = ritualCut + transport + Math.round(addons * 0.9)
@@ -321,7 +440,7 @@ export default function ManagerLedger() {
     const transport = b.transport || 0
     const addons = b.addons || 0
     const tax = b.tax || 0
-    const commissionPct = b.commissionPct || 20
+    const commissionPct = b.commissionPct ?? defaultCommissionPct
 
     const ritualCut = Math.round(baseAndExtra * (1 - commissionPct / 100))
     const platformRitualCut = Math.round(baseAndExtra * (commissionPct / 100))
@@ -408,7 +527,57 @@ export default function ManagerLedger() {
   const poolCare = Math.round(totalGomaaCommission * 0.25)
   const poolEscrow = totalGomaaCommission - poolInsurance - poolGps - poolCare
 
-  const activeBank = getGaushalaBankDetails(currentGosalaName, currentGosala)
+  const [isEditBankModalOpen, setIsEditBankModalOpen] = useState(false)
+
+  // Priority order for bank profile resolution
+  const effectiveBankProfile = useMemo(() => {
+    if (currentRole === "super_admin") {
+      // In super_admin view: if viewing ALL (central overview), use super_admin's bank profile
+      if (activeGosalaFilter === "ALL" || !currentGosalaName) {
+        return profiles?.super_admin?.bankDetails
+          ? profiles.super_admin
+          : profiles?.manager?.bankDetails
+            ? profiles.manager
+            : profiles?.[currentRole]
+      }
+      // If super_admin drilled into a specific Gaushala, check if manager has bank details first
+      return profiles?.manager?.bankDetails
+        ? profiles.manager
+        : profiles?.super_admin
+    }
+    // In manager or other view: use manager profile or active role profile
+    return profiles?.manager?.bankDetails
+      ? profiles.manager
+      : profiles?.[currentRole || "manager"]
+  }, [currentRole, activeGosalaFilter, currentGosalaName, profiles])
+
+  const [ledgerPortfolioScope, setLedgerPortfolioScope] = useState<"my_portfolio" | "all_network">("my_portfolio")
+
+  const displayLedgerGosalas = useMemo(() => {
+    if (currentRole === "manager") return []
+    if (currentRole === "admin") {
+      // Operations Admin: strictly her portfolio or governed sanctuaries
+      return gosalas.filter(
+        (g) =>
+          (g as any).governingAdminRole === "admin" ||
+          !(g as any).governingAdminRole ||
+          (g as any).governingAdminName === activeAdminName ||
+          (g as any).adminName === activeAdminName ||
+          (authUser?.gosalaNames && authUser.gosalaNames.includes(g.name)),
+      )
+    }
+    if (currentRole === "super_admin") {
+      if (ledgerPortfolioScope === "my_portfolio") {
+        return gosalas.filter(
+          (g) => (g as any).governingAdminRole === "super_admin",
+        )
+      }
+      return gosalas
+    }
+    return gosalas
+  }, [gosalas, currentRole, ledgerPortfolioScope])
+
+  const activeBank = getGaushalaBankDetails(currentGosalaName, currentGosala, effectiveBankProfile)
 
   // Dynamic Settlement Batches computed from actual volume and active shelter bank
   const dynamicBatches: SettlementBatch[] = useMemo(() => {
@@ -495,7 +664,7 @@ export default function ManagerLedger() {
             </div>
             <div className="text-[11.5px] text-ink-faint">
               {currentRole === "manager"
-                ? "Dedicated 80% Gaushala Trust revenue split with 100% transport pass-through for your cowshed"
+                ? `Dedicated ${defaultGaushalaNetPct}% Gaushala Trust revenue split with 100% transport pass-through for your cowshed`
                 : "Switch between individual Gaushalas to inspect dedicated net shares & trust settlements"}
             </div>
           </div>
@@ -521,6 +690,38 @@ export default function ManagerLedger() {
             </div>
           ) : (
             <>
+              {currentRole === "super_admin" && (
+                <div className="flex items-center bg-paper-deep border border-line rounded-md p-0.5 text-[11px] font-medium shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLedgerPortfolioScope("my_portfolio")
+                      setActiveGosalaFilter("ALL")
+                    }}
+                    className={`px-2 py-1 rounded transition cursor-pointer flex items-center gap-1 ${
+                      ledgerPortfolioScope === "my_portfolio"
+                        ? "bg-gradient-to-r from-amber-500 to-amber-700 text-white font-semibold shadow-xs"
+                        : "text-ink-soft hover:text-ink hover:bg-card"
+                    }`}
+                  >
+                    <Crown size={11} className="stroke-[2.2]" />
+                    <span>My Gaushalas</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLedgerPortfolioScope("all_network")}
+                    className={`px-2 py-1 rounded transition cursor-pointer flex items-center gap-1 ${
+                      ledgerPortfolioScope === "all_network"
+                        ? "bg-forest text-white font-semibold shadow-xs"
+                        : "text-ink-soft hover:text-ink hover:bg-card"
+                    }`}
+                  >
+                    <Globe size={11} />
+                    <span>All Network</span>
+                  </button>
+                </div>
+              )}
+
               <button
                 onClick={() => setActiveGosalaFilter("ALL")}
                 className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition cursor-pointer whitespace-nowrap ${
@@ -529,9 +730,13 @@ export default function ManagerLedger() {
                     : "bg-paper border border-line text-ink-soft hover:text-ink hover:bg-paper-deep"
                 }`}
               >
-                All Gaushalas ({allRelevantBookings.length} Sevas)
+                {currentRole === "super_admin" && ledgerPortfolioScope === "my_portfolio"
+                  ? `Sovereign Portfolio (${displayLedgerGosalas.length} Shelters)`
+                  : currentRole === "admin"
+                    ? `${activeAdminName} Portfolio (${displayLedgerGosalas.length} Shelters)`
+                    : `All Gaushalas (${allRelevantBookings.length} Sevas)`}
               </button>
-              {gosalas.map((g) => {
+              {displayLedgerGosalas.map((g) => {
                 const isActive =
                   activeGosalaFilter.toLowerCase() === g.name.toLowerCase()
                 const gStats = gosalaBreakdownMap[g.name]
@@ -663,7 +868,7 @@ export default function ManagerLedger() {
             <div className="font-serif text-[28px] text-forest font-semibold mt-2 tabular flex items-baseline justify-between">
               <span>{inr(totalGaushalaNet)}</span>
               <span className="text-[11px] font-sans font-medium text-forest bg-forest-soft border border-forest/20 px-1.5 py-0.5 rounded">
-                80% Net
+                {defaultGaushalaNetPct}% Net
               </span>
             </div>
             <div className="text-[11.5px] text-ink-faint mt-1 flex items-center justify-between">
@@ -763,7 +968,7 @@ export default function ManagerLedger() {
             <div className="font-serif text-[28px] text-ink-soft font-semibold mt-2 tabular flex items-baseline justify-between">
               <span>{inr(totalGomaaCommission)}</span>
               <span className="text-[11px] font-sans font-medium text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
-                20% Cap
+                {defaultCommissionPct}% Cap
               </span>
             </div>
             <div className="text-[11.5px] text-ink-faint mt-1 flex items-center justify-between">
@@ -986,7 +1191,7 @@ export default function ManagerLedger() {
                     const baseAndExtra = (b.base || 0) + (b.extraTime || 0)
                     const transport = b.transport || 0
                     const addons = b.addons || 0
-                    const commissionPct = b.commissionPct || 20
+                    const commissionPct = b.commissionPct ?? defaultCommissionPct
 
                     const ritualCut = Math.round(baseAndExtra * (1 - commissionPct / 100))
                     const platformRitualCut = Math.round(baseAndExtra * (commissionPct / 100))
@@ -1273,7 +1478,7 @@ export default function ManagerLedger() {
                                       </div>
 
                                       <div className="flex items-center justify-between text-ink-faint text-[11.5px]">
-                                        <span>GOMAA Platform Fee (20% on Base):</span>
+                                        <span>GOMAA Platform Fee ({commissionPct}% on Base):</span>
                                         <span className="font-mono">−{inr(platformCut)}</span>
                                       </div>
 
@@ -1343,7 +1548,7 @@ export default function ManagerLedger() {
               <div className="flex items-center gap-2">
                 <ShieldCheck size={16} className="text-forest" />
                 <span className="font-serif text-[15px] text-ink font-bold">
-                  Transparent 80/20 Gaushala Trust Revenue Architecture
+                  Transparent {defaultGaushalaNetPct}/{defaultCommissionPct} Gaushala Trust Revenue Architecture
                 </span>
               </div>
               <span className="text-[10.5px] font-mono bg-forest text-white px-2 py-0.5 rounded-full font-medium">
@@ -1351,7 +1556,7 @@ export default function ManagerLedger() {
               </span>
             </div>
             <p className="text-[12px] text-ink-soft leading-relaxed">
-              Every ceremonial rupee earned is protected by the Board of Trustees. The 80% net shelter allocation is strictly locked into three non-divertible operational accounts:
+              Every ceremonial rupee earned is protected by the Board of Trustees. The {defaultGaushalaNetPct}% net shelter allocation is strictly locked into three non-divertible operational accounts:
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
               <div className="p-3 rounded-lg bg-card border border-line space-y-1">
@@ -1501,7 +1706,7 @@ export default function ManagerLedger() {
                         </div>
                       )}
                       <div className="flex items-center justify-between text-ink-faint text-[11.5px]">
-                        <span>Platform Operations Fee Deducted (20%):</span>
+                        <span>Platform Operations Fee Deducted ({defaultCommissionPct}%):</span>
                         <span className="font-mono">−{inr(g.platformFee)}</span>
                       </div>
                       <div className="pt-1.5 border-t border-forest/30 flex items-center justify-between font-bold text-forest text-[13px]">
@@ -1806,12 +2011,12 @@ export default function ManagerLedger() {
                   <span>GOMAA Platform Fee & Operational Cuttings Overview</span>
                 </h3>
                 <p className="text-[12px] text-ink-faint mt-0.5">
-                  Concise overview of the 20% platform cut on base ceremonies used to fund cow transit insurance, GPS telematics, customer care, and escrow compliance.
+                  Concise overview of the {defaultCommissionPct}% platform cut on base ceremonies used to fund cow transit insurance, GPS telematics, customer care, and escrow compliance.
                 </p>
               </div>
               <div className="flex items-center gap-2 self-start sm:self-auto">
                 <span className="font-mono text-[11px] text-blue-900 bg-blue-100 border border-blue-200 px-2.5 py-1 rounded font-semibold">
-                  20% Base Cap · ₹0 on Transport
+                  {defaultCommissionPct}% Base Cap · ₹0 on Transport
                 </span>
               </div>
             </div>
@@ -1837,7 +2042,7 @@ export default function ManagerLedger() {
                   <Receipt size={14} className="text-ink-soft" />
                 </div>
                 <div className="font-serif text-[22px] font-bold text-ink tabular">
-                  20% Max on Base
+                  {defaultCommissionPct}% Max on Base
                 </div>
                 <div className="text-[11px] text-forest font-medium">
                   ₹0 taken from transport logistics
@@ -1863,7 +2068,7 @@ export default function ManagerLedger() {
               <div className="p-3 rounded-lg border border-line bg-card shadow-2xs space-y-1">
                 <div className="font-semibold text-ink text-[12.5px] flex items-center justify-between">
                   <span>Cow Transit Insurance</span>
-                  <span className="font-mono text-blue-800 font-bold">7% ({inr(poolInsurance)})</span>
+                  <span className="font-mono text-blue-800 font-bold">{poolInsurancePct}% ({inr(poolInsurance)})</span>
                 </div>
                 <p className="text-[11px] text-ink-faint">
                   Accident, heat stress, veterinary emergency cover & road hospitalization for sacred cattle.
@@ -1873,7 +2078,7 @@ export default function ManagerLedger() {
               <div className="p-3 rounded-lg border border-line bg-card shadow-2xs space-y-1">
                 <div className="font-semibold text-ink text-[12.5px] flex items-center justify-between">
                   <span>IoT GPS & Telemetry</span>
-                  <span className="font-mono text-blue-800 font-bold">5% ({inr(poolGps)})</span>
+                  <span className="font-mono text-blue-800 font-bold">{poolGpsPct}% ({inr(poolGps)})</span>
                 </div>
                 <p className="text-[11px] text-ink-faint">
                   Live vehicle telematics, route telemetry, cabin heat sensors & real-time dispatch map.
@@ -1883,7 +2088,7 @@ export default function ManagerLedger() {
               <div className="p-3 rounded-lg border border-line bg-card shadow-2xs space-y-1">
                 <div className="font-semibold text-ink text-[12.5px] flex items-center justify-between">
                   <span>Devotee Care Desk</span>
-                  <span className="font-mono text-blue-800 font-bold">5% ({inr(poolCare)})</span>
+                  <span className="font-mono text-blue-800 font-bold">{poolCarePct}% ({inr(poolCare)})</span>
                 </div>
                 <p className="text-[11px] text-ink-faint">
                   Devotee support, Vedic calendar & Muhurat synchronization, Pandit booking verification.
@@ -1893,7 +2098,7 @@ export default function ManagerLedger() {
               <div className="p-3 rounded-lg border border-line bg-card shadow-2xs space-y-1">
                 <div className="font-semibold text-ink text-[12.5px] flex items-center justify-between">
                   <span>Escrow & Compliance</span>
-                  <span className="font-mono text-blue-800 font-bold">3% ({inr(poolEscrow)})</span>
+                  <span className="font-mono text-blue-800 font-bold">{poolEscrowPct}% ({inr(poolEscrow)})</span>
                 </div>
                 <p className="text-[11px] text-ink-faint">
                   RBI-compliant nodal escrow pool, Sunday auto-sweeps, AWBI compliance & audited receipts.
@@ -1920,7 +2125,7 @@ export default function ManagerLedger() {
                     Base Seva Amount
                   </th>
                   <th className="px-4 py-3 font-mono text-[11px] font-semibold text-blue-800 uppercase tracking-wider">
-                    Platform Cutting (20%)
+                    Platform Cutting ({defaultCommissionPct}%)
                   </th>
                   <th className="px-4 py-3 font-mono text-[11px] font-semibold text-forest uppercase tracking-wider">
                     Net Credited to Trust
@@ -1935,7 +2140,7 @@ export default function ManagerLedger() {
                   const baseAndExtra = (b.base || 0) + (b.extraTime || 0)
                   const transport = b.transport || 0
                   const addons = b.addons || 0
-                  const commissionPct = b.commissionPct || 20
+                  const commissionPct = b.commissionPct ?? defaultCommissionPct
 
                   const ritualCut = Math.round(baseAndExtra * (1 - commissionPct / 100))
                   const gaushalaNet = ritualCut + transport + Math.round(addons * 0.9)
@@ -1987,16 +2192,29 @@ export default function ManagerLedger() {
       {/* ----------------- SHARED BOTTOM DETAILS SECTION (BANK & HISTORICAL BATCHES) ----------------- */}
       <Panel className="p-6 border-line bg-card shadow-xs overflow-hidden mt-6">
         <div className="space-y-6">
-          {/* Sub-section A: Verified Trust Bank Account Details */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Sub-section A: Verified Trust Bank Account Details */}
             <div className="p-4 rounded-xl border border-line bg-card shadow-2xs space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[11px] uppercase tracking-wider text-forest font-semibold flex items-center gap-1.5">
-                  <Landmark size={14} /> Verified Charity Trust Bank Account
+                  <Landmark size={14} />{" "}
+                  {activeBank.accountType === "NODAL_ESCROW"
+                    ? "Central Nodal Escrow Account"
+                    : "Verified Charity Trust Bank Account"}
                 </span>
-                <span className="text-[10.5px] font-mono bg-forest/10 text-forest border border-forest/20 px-2 py-0.5 rounded-full font-medium">
-                  Active Direct Credit
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10.5px] font-mono bg-forest/10 text-forest border border-forest/20 px-2 py-0.5 rounded-full font-medium">
+                    {activeBank.statusBadge || "Active Direct Credit"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditBankModalOpen(true)}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-forest hover:text-emerald-700 bg-forest-soft hover:bg-forest/15 rounded border border-forest/20 transition cursor-pointer"
+                    title="Update bank details and disbursement preferences"
+                  >
+                    <Edit3 size={11} /> Update
+                  </button>
+                </div>
               </div>
               <div className="pt-1 space-y-1 text-[12.5px]">
                 <div className="flex justify-between">
@@ -2019,16 +2237,25 @@ export default function ManagerLedger() {
                   <span className="text-ink-faint font-sans">IFSC Code:</span>
                   <span className="text-ink font-mono">{activeBank.ifsc}</span>
                 </div>
+                {activeBank.upiId && (
+                  <div className="flex justify-between font-mono text-[12px]">
+                    <span className="text-ink-faint font-sans">Direct UPI ID:</span>
+                    <span className="text-ink font-mono text-forest">{activeBank.upiId}</span>
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="p-4 rounded-xl border border-line bg-card shadow-2xs space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[11px] uppercase tracking-wider text-forest font-semibold flex items-center gap-1.5">
-                  <Calendar size={14} /> Automated Settlement Schedule
+                  <Calendar size={14} />{" "}
+                  {activeBank.accountType === "NODAL_ESCROW"
+                    ? "Platform Treasury Payout Policy"
+                    : "Automated Settlement Schedule"}
                 </span>
                 <span className="text-[10.5px] font-mono bg-saffron/15 text-saffron-deep px-2 py-0.5 rounded-full font-medium">
-                  Weekly Auto-Sweep
+                  {activeBank.badgeLabel || "Weekly Auto-Sweep"}
                 </span>
               </div>
               <div className="pt-1 space-y-1 text-[12.5px]">
@@ -2038,15 +2265,15 @@ export default function ManagerLedger() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-ink-faint">Disbursement Mode:</span>
-                  <span className="font-medium text-ink">Direct RBI NEFT / Instant IMPS</span>
+                  <span className="font-medium text-ink">{activeBank.mode || "Direct RBI NEFT / Instant IMPS"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-ink-faint">Escrow Custodian Pool:</span>
-                  <span className="text-ink font-mono text-[12px]">ICICI Nodal Trust Escrow</span>
+                  <span className="text-ink font-mono text-[12px]">{activeBank.escrowPool || "ICICI Nodal Trust Escrow"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-ink-faint">Next Scheduled Batch:</span>
-                  <strong className="text-forest font-semibold">Upcoming Sunday Midnight</strong>
+                  <strong className="text-forest font-semibold">{activeBank.nextBatch || "Upcoming Sunday Midnight"}</strong>
                 </div>
               </div>
             </div>
@@ -2317,7 +2544,7 @@ export default function ManagerLedger() {
                               </div>
                             )}
                             <div className="flex items-center justify-between text-ink-faint text-[11.5px]">
-                              <span>Platform Operations Fee Deducted (20%):</span>
+                              <span>Platform Operations Fee Deducted ({defaultCommissionPct}%):</span>
                               <span className="font-mono">−{inr(g.platformFee)}</span>
                             </div>
                             <div className="pt-1.5 border-t border-forest/30 flex items-center justify-between font-bold text-forest text-[13px]">
@@ -2541,35 +2768,31 @@ export default function ManagerLedger() {
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between text-ink-faint text-[12px]">
-                  <span>GOMAA Platform 20% Operations Deduction</span>
-                  <span className="font-mono">
-                    −{inr(
-                      receiptBooking.total -
-                        (Math.round(
-                          ((receiptBooking.base || 0) +
-                            (receiptBooking.extraTime || 0)) *
-                            0.8,
-                        ) +
-                          receiptBooking.transport +
-                          Math.round(receiptBooking.addons * 0.9)),
-                    )}
-                  </span>
-                </div>
-                <div className="pt-2 border-t border-line flex justify-between font-bold text-forest text-[14px]">
-                  <span>Net Credited to {receiptBooking.gosala} Trust</span>
-                  <span className="font-mono">
-                    {inr(
-                      Math.round(
-                        ((receiptBooking.base || 0) +
-                          (receiptBooking.extraTime || 0)) *
-                          0.8,
-                      ) +
-                        receiptBooking.transport +
-                        Math.round(receiptBooking.addons * 0.9),
-                    )}
-                  </span>
-                </div>
+                {(() => {
+                  const receiptCommPct = receiptBooking.commissionPct ?? defaultCommissionPct;
+                  const receiptGaushalaPct = 100 - receiptCommPct;
+                  const ritualBaseTotal = (receiptBooking.base || 0) + (receiptBooking.extraTime || 0);
+                  const gaushalaRitualShare = Math.round(ritualBaseTotal * (receiptGaushalaPct / 100));
+                  const platformRitualCut = ritualBaseTotal - gaushalaRitualShare;
+                  const samagriShare = Math.round(receiptBooking.addons * 0.9);
+                  const netCredited = gaushalaRitualShare + (receiptBooking.transport || 0) + samagriShare;
+                  return (
+                    <>
+                      <div className="flex justify-between text-ink-faint text-[12px]">
+                        <span>GOMAA Platform {receiptCommPct}% Operations Deduction</span>
+                        <span className="font-mono">
+                          −{inr(platformRitualCut + Math.round(receiptBooking.addons * 0.1))}
+                        </span>
+                      </div>
+                      <div className="pt-2 border-t border-line flex justify-between font-bold text-forest text-[14px]">
+                        <span>Net Credited to {receiptBooking.gosala} Trust ({receiptGaushalaPct}% Base)</span>
+                        <span className="font-mono">
+                          {inr(netCredited)}
+                        </span>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Digital Seal */}
@@ -2605,6 +2828,14 @@ export default function ManagerLedger() {
             </div>
           </div>
         </div>
+      )}
+
+      {isEditBankModalOpen && (
+        <EditProfileModal
+          role={currentRole || "manager"}
+          isOpen={isEditBankModalOpen}
+          onClose={() => setIsEditBankModalOpen(false)}
+        />
       )}
     </div>
   )

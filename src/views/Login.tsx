@@ -3,6 +3,7 @@ import { ArrowRight, Eye, EyeOff, Lock, ShieldCheck, UserCheck, Building2, Check
 import { roles, type Role, type RoleId } from "../data/roles"
 import { initialProfiles } from "../data/profiles"
 import { useStore } from "../store/store"
+import { api } from "../services/api"
 
 const flow = [
   "Slot held",
@@ -87,6 +88,8 @@ export default function Login({
     updateProfile,
     setActiveManagerGosala,
     setActiveGosalaFilter,
+    setAuthSession,
+    notify,
   } = useStore()
   const [selected, setSelected] = useState<RoleId>("customer")
   const [showPw, setShowPw] = useState(false)
@@ -96,6 +99,49 @@ export default function Login({
   const [selectedManagerId, setSelectedManagerId] = useState<string>("")
   const [selectedManagerGosala, setSelectedManagerGosala] = useState<string>("")
   const [emailInput, setEmailInput] = useState<string>("")
+
+  // Robust helper to resolve all assigned Gaushalas for a manager from roster & network
+  const resolveManagerGosalas = (m: any): string[] => {
+    if (!m) return []
+    const directList =
+      m.gosalas && m.gosalas.length > 0
+        ? m.gosalas
+        : m.gosala && m.gosala !== "Unassigned"
+          ? [m.gosala]
+          : []
+
+    const mappedFromGosalas = gosalas
+      .filter((g) => {
+        if (
+          g.managerId &&
+          (g.managerId === m.id ||
+            m.id.includes(g.managerId) ||
+            g.managerId.includes(m.id) ||
+            ((m as any).rawUserId && g.managerId === (m as any).rawUserId))
+        )
+          return true
+        if (g.managerName && g.managerName.toLowerCase() === m.name.toLowerCase())
+          return true
+        if ((g as any).manager && (g as any).manager.toLowerCase() === m.name.toLowerCase())
+          return true
+        if ((g as any).caretaker && (g as any).caretaker.toLowerCase() === m.name.toLowerCase())
+          return true
+        if (Array.isArray(g.assignedManagers)) {
+          return g.assignedManagers.some(
+            (am) =>
+              am.id === m.id ||
+              am.name?.toLowerCase() === m.name.toLowerCase() ||
+              am.email?.toLowerCase() === m.email?.toLowerCase(),
+          )
+        }
+        return false
+      })
+      .map((g) => g.name)
+
+    return Array.from(new Set([...directList, ...mappedFromGosalas])).filter(
+      Boolean,
+    )
+  }
 
   // Set default selected manager if available
   useEffect(() => {
@@ -109,12 +155,7 @@ export default function Login({
           setSelectedManagerId(activeMgr.id)
         }
         setEmailInput(activeMgr.email || "manager@gomaa.in")
-        const gList =
-          activeMgr.gosalas && activeMgr.gosalas.length > 0
-            ? activeMgr.gosalas
-            : activeMgr.gosala && activeMgr.gosala !== "Unassigned"
-              ? [activeMgr.gosala]
-              : []
+        const gList = resolveManagerGosalas(activeMgr)
         if (!selectedManagerGosala || !gList.includes(selectedManagerGosala)) {
           setSelectedManagerGosala(gList[0] || "")
         }
@@ -122,19 +163,26 @@ export default function Login({
     } else {
       setEmailInput(currentProfile?.email || role.demoEmail)
     }
-  }, [selected, managers, currentProfile, role])
+  }, [selected, managers, currentProfile, role, gosalas])
 
   const currentManagerObj = managers.find((m) => m.id === selectedManagerId)
   const managerGosalaList: string[] = currentManagerObj
-    ? currentManagerObj.gosalas && currentManagerObj.gosalas.length > 0
-      ? currentManagerObj.gosalas
-      : currentManagerObj.gosala && currentManagerObj.gosala !== "Unassigned"
-        ? [currentManagerObj.gosala]
-        : []
+    ? resolveManagerGosalas(currentManagerObj)
     : []
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    try {
+      const emailToAuth = emailInput.trim() || currentProfile?.email || role.demoEmail
+      const authRes = await api.login(emailToAuth, selected)
+      if (authRes.ok && authRes.token) {
+        setAuthSession(authRes.token, authRes.user)
+        notify(`Authenticated securely via JWT as ${authRes.user?.name || role.name}`, "ok")
+      }
+    } catch (err: any) {
+      console.warn("JWT login note:", err?.message)
+    }
+
     if (selected === "manager" && currentManagerObj) {
       const gList = managerGosalaList
       const targetGosala =
@@ -269,24 +317,14 @@ export default function Login({
                   const chosen = managers.find((m) => m.id === id)
                   if (chosen) {
                     setEmailInput(chosen.email || "manager@gomaa.in")
-                    const gList =
-                      chosen.gosalas && chosen.gosalas.length > 0
-                        ? chosen.gosalas
-                        : chosen.gosala && chosen.gosala !== "Unassigned"
-                          ? [chosen.gosala]
-                          : []
+                    const gList = resolveManagerGosalas(chosen)
                     setSelectedManagerGosala(gList[0] || "")
                   }
                 }}
                 className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[12.5px] text-ink outline-none focus:border-saffron transition"
               >
                 {managers.map((m) => {
-                  const gList =
-                    m.gosalas && m.gosalas.length > 0
-                      ? m.gosalas
-                      : m.gosala && m.gosala !== "Unassigned"
-                        ? [m.gosala]
-                        : []
+                  const gList = resolveManagerGosalas(m)
                   return (
                     <option key={m.id} value={m.id}>
                       {m.name} ({gList.length} Gaushala

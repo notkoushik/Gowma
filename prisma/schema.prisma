@@ -38,6 +38,8 @@ enum AnimalType {
   COW
   CALF
   BULL
+  BUFFALO
+  COW_AND_CALF
 }
 
 enum HealthStatus {
@@ -65,6 +67,7 @@ enum AuditAction {
   STAGE_ADVANCED
   SLOT_BLOCKED
   SLOT_UNBLOCKED
+  HANDOVER_VERIFIED
 }
 
 // -------------------------------------------------------------
@@ -72,23 +75,23 @@ enum AuditAction {
 // -------------------------------------------------------------
 
 model User {
-  id           String    @id @default(uuid())
-  email        String    @unique
-  name         String
-  phone        String
-  role         UserRole
-  avatar       String?
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  phone     String
+  role      UserRole
+  avatar    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relationships
-  customerBookings      Booking[]               @relation("CustomerBookings")
-  driverBookings        Booking[]               @relation("DriverBookings")
-  managerAssignments    GosalaManagerAssignment[]
-  auditTrails           ApprovalAuditTrail[]
-  createdBlocks         AnimalScheduleBlock[]
-  createdHolds          TemporarySlotHold[]
+  customerBookings   Booking[]                 @relation("CustomerBookings")
+  driverBookings     Booking[]                 @relation("DriverBookings")
+  managerAssignments GosalaManagerAssignment[]
+  auditTrails        ApprovalAuditTrail[]
+  createdBlocks      AnimalScheduleBlock[]
+  createdHolds       TemporarySlotHold[]
 
   @@index([email])
   @@index([role])
@@ -96,39 +99,56 @@ model User {
 }
 
 model Gosala {
-  id           String    @id @default(uuid())
-  name         String    @unique
+  id           String   @id @default(uuid())
+  name         String   @unique
   region       String
   address      String
   contactPhone String
   contactEmail String
   latitude     Float?
   longitude    Float?
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Custom Pricing & Offerings
+  baseCowPrice     Int? @default(3500)
+  baseBullPrice    Int? @default(4000)
+  baseCalfPrice    Int? @default(2500)
+  baseBuffaloPrice Int? @default(3800)
+  basePairPrice    Int? @default(4800) // Cow & Calf Pair at single time service
+
+  // Custom Gaushala Economics, Commission & Buffer Module
+  partnershipTier   String?  @default("STANDARD") // "PREFERRED" | "STANDARD" | "CHARITABLE" | "COMMERCIAL" | "CUSTOM"
+  commissionType    String?  @default("PERCENTAGE") // "PERCENTAGE" | "FIXED_PER_BOOKING" | "HYBRID"
+  commissionValue   Float?   // e.g. 8.0 for 8% preferred, or 400 for ₹400 flat
+  taxTreatment      String?  @default("STANDARD_GST") // "STANDARD_GST" | "SECTION_80G_EXEMPT" | "REDUCED_CHARITY_GST" | "CUSTOM_RATE"
+  customTaxPct      Float?   // e.g. 0.0 for exempt, 5.0 for concessional
+  bufferMinutes     Int?     @default(30) // Turnaround/sanctuary buffer between bookings
+  partnershipNotes  String?  // Rationale for special commission/tier
 
   // Relationships
-  animals       Animal[]
-  managers      GosalaManagerAssignment[]
-  bookings      Booking[]
-  settlements   SettlementBatch[]
+  animals     Animal[]
+  managers    GosalaManagerAssignment[]
+  bookings    Booking[]
+  settlements SettlementBatch[]
+  offerings   GosalaOffering[]
 
   @@index([region])
   @@map("gosalas")
 }
 
 model GosalaManagerAssignment {
-  id           String    @id @default(uuid())
-  userId       String
-  gosalaId     String
-  region       String
-  status       String    @default("Active") // "Active" | "Inactive"
-  assignedAt   DateTime  @default(now())
+  id         String   @id @default(uuid())
+  userId     String
+  gosalaId   String
+  region     String
+  status     String   @default("Active") // "Active" | "Inactive"
+  assignedAt DateTime @default(now())
 
   // Relationships
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  gosala       Gosala    @relation(fields: [gosalaId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gosala Gosala @relation(fields: [gosalaId], references: [id], onDelete: Cascade)
 
   @@unique([userId, gosalaId])
   @@index([gosalaId])
@@ -143,6 +163,7 @@ model Animal {
   breed        String?
   ageYears     Int?
   healthStatus HealthStatus @default(HEALTHY)
+  price        Int          @default(3500)
   isActive     Boolean      @default(true)
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
@@ -164,68 +185,84 @@ model Animal {
 // -------------------------------------------------------------
 
 model Booking {
-  id                   String        @id // "GMA-XXXXX"
-  customerId           String
-  gosalaId             String
-  animalId             String
-  driverId             String?
+  id         String  @id // "GMA-XXXXX"
+  customerId String
+  gosalaId   String
+  animalId   String
+  driverId   String?
 
   // Denormalized customer & animal display cache for performant retrieval
-  customerName         String
-  customerPhone        String
-  animalName           String
-  animalType           AnimalType
-  gosalaName           String
+  customerName  String
+  customerPhone String
+  animalName    String
+  animalType    AnimalType
+  gosalaName    String
 
   // Slot timing & distance
-  bookingDate          String        // "26 Sep 2026"
-  startTime            String        // "10:00"
-  endTime              String        // "12:00"
-  durationMin          Int           // 120
-  address              String
-  distanceKm           Float
+  bookingDate String // "26 Sep 2026"
+  startTime   String // "10:00"
+  endTime     String // "12:00"
+  durationMin Int // 120
+  address     String
+  distanceKm  Float
 
   // Financial Breakdown (All figures in INR whole currency)
-  baseRate             Int
-  extraTimeFee         Int
-  transportFee         Int
-  addonsFee            Int
-  taxFee               Int
-  discountFee          Int
-  totalAmount          Int
-  commissionPct        Float
-  commissionAmount     Int
-  gosalaPayable        Int
+  baseRate         Int
+  extraTimeFee     Int
+  transportFee     Int
+  addonsFee        Int
+  taxFee           Int
+  discountFee      Int
+  totalAmount      Int
+  commissionPct    Float
+  commissionAmount Int
+  gosalaPayable    Int
 
   // Lifecycle & Field tracking
-  status               BookingStatus @default(PAYMENT_VERIFIED)
-  driverStage          Int           @default(0)
-  isPaid               Boolean       @default(true)
+  status      BookingStatus @default(PAYMENT_VERIFIED)
+  driverStage Int           @default(0)
+  isPaid      Boolean       @default(true)
 
   // Anti-Corruption Historical Snapshots (Protection from retroactive master price shifts)
-  freeKmSnapshot       Float         @default(5.0)
-  perKmSnapshot        Float         @default(50.0)
-  extraUnitRateSnapshot Int          @default(500)
-  commissionSnapshot   Int           @default(0)
+  freeKmSnapshot        Float @default(5.0)
+  perKmSnapshot         Float @default(50.0)
+  extraUnitRateSnapshot Int   @default(500)
+  commissionSnapshot    Int   @default(0)
 
   // Review Remarks Cache
-  managerRemark        String?
-  adminRemark          String?
+  managerRemark String?
+  adminRemark   String?
 
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+  // Dynamic Customer Animal Received & Handover OTP Security
+  handoverOtp           String?   @default("4819")
+  handoverOtpVerified   Boolean   @default(false)
+  handoverOtpVerifiedAt DateTime?
+
+  // Rich Swiggy/Uber Driver Profile & Cattle Ambulance Specs
+  driverPhone        String?
+  driverVehiclePlate String?
+  driverVehicleModel String?
+  driverRating       Float?
+  driverTotalTrips   Int?
+  driverAvatar       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relationships
-  customer             User          @relation("CustomerBookings", fields: [customerId], references: [id])
-  gosala               Gosala        @relation(fields: [gosalaId], references: [id])
-  animal               Animal        @relation(fields: [animalId], references: [id])
-  driver               User?         @relation("DriverBookings", fields: [driverId], references: [id])
-  auditTrails          ApprovalAuditTrail[]
+  customer        User                 @relation("CustomerBookings", fields: [customerId], references: [id])
+  gosala          Gosala               @relation(fields: [gosalaId], references: [id])
+  animal          Animal               @relation(fields: [animalId], references: [id])
+  driver          User?                @relation("DriverBookings", fields: [driverId], references: [id])
+  pricingConfigId Int?                 @default(1)
+  pricingConfig   MasterPricingConfig? @relation(fields: [pricingConfigId], references: [id])
+  auditTrails     ApprovalAuditTrail[]
 
   @@index([animalId, bookingDate, status])
   @@index([gosalaId, bookingDate])
   @@index([customerId])
   @@index([driverId])
+  @@index([pricingConfigId])
   @@index([status])
   @@map("bookings")
 }
@@ -235,18 +272,18 @@ model Booking {
 // -------------------------------------------------------------
 
 model ApprovalAuditTrail {
-  id           String       @id @default(uuid())
-  bookingId    String
-  actorId      String
-  actorRole    UserRole
-  actorName    String
-  action       AuditAction
-  remark       String
-  createdAt    DateTime     @default(now())
+  id        String      @id @default(uuid())
+  bookingId String
+  actorId   String
+  actorRole UserRole
+  actorName String
+  action    AuditAction
+  remark    String
+  createdAt DateTime    @default(now())
 
   // Relationships
-  booking      Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  actor        User         @relation(fields: [actorId], references: [id])
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  actor   User    @relation(fields: [actorId], references: [id])
 
   @@index([bookingId])
   @@index([actorId])
@@ -258,37 +295,37 @@ model ApprovalAuditTrail {
 // -------------------------------------------------------------
 
 model TemporarySlotHold {
-  id           String       @id // "HOLD-XXXXX"
+  id           String   @id // "HOLD-XXXXX"
   animalId     String
-  date         String       // "26 Sep 2026"
-  startTime    String       // "10:00"
-  durationMin  Int          // 60
+  date         String // "26 Sep 2026"
+  startTime    String // "10:00"
+  durationMin  Int // 60
   customerName String
   customerId   String?
-  expiresAt    DateTime     // Epoch timestamp for TTL eviction
-  createdAt    DateTime     @default(now())
+  expiresAt    DateTime // Epoch timestamp for TTL eviction
+  createdAt    DateTime @default(now())
 
   // Relationships
-  animal       Animal       @relation(fields: [animalId], references: [id], onDelete: Cascade)
-  customer     User?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  customer User?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   @@index([animalId, date, expiresAt])
   @@map("temporary_slot_holds")
 }
 
 model AnimalScheduleBlock {
-  id           String       @id @default(uuid())
-  animalId     String
-  animalName   String
-  date         String       // "26 Sep 2026"
-  timeSlot     String       // "11:00"
-  reason       String?      // "Rest / Vet visit"
-  blockedById  String?
-  createdAt    DateTime     @default(now())
+  id          String   @id @default(uuid())
+  animalId    String
+  animalName  String
+  date        String // "26 Sep 2026"
+  timeSlot    String // "11:00"
+  reason      String? // "Rest / Vet visit"
+  blockedById String?
+  createdAt   DateTime @default(now())
 
   // Relationships
-  animal       Animal       @relation(fields: [animalId], references: [id], onDelete: Cascade)
-  blockedBy    User?        @relation(fields: [blockedById], references: [id], onDelete: SetNull)
+  animal    Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  blockedBy User?  @relation(fields: [blockedById], references: [id], onDelete: SetNull)
 
   @@unique([animalId, date, timeSlot])
   @@index([animalId, date])
@@ -300,40 +337,81 @@ model AnimalScheduleBlock {
 // -------------------------------------------------------------
 
 model MasterPricingConfig {
-  id             Int          @id @default(1)
-  standardMin    Int          @default(60)
-  extraUnitMin   Int          @default(30)
-  extraUnitRate  Int          @default(500)
-  freeKm         Float        @default(5.0)
-  perKm          Float        @default(50.0)
-  taxPct         Float        @default(12.0)
-  commissionPct  Float        @default(20.0)
-  maxDurationMin Int          @default(240)
-  bufferMin      Int          @default(30)
-  rounding       String       @default("Nearest ₹10")
-  updatedByRole  String       @default("SUPER_ADMIN")
-  updatedByName  String       @default("Vikramaditya Hegde")
-  updatedAt      DateTime     @updatedAt
+  id             Int      @id @default(1)
+  standardMin    Int      @default(60)
+  extraUnitMin   Int      @default(30)
+  extraUnitRate  Int      @default(500)
+  freeKm         Float    @default(5.0)
+  perKm          Float    @default(50.0)
+  taxPct         Float    @default(12.0)
+  commissionPct  Float    @default(20.0)
+  maxDurationMin Int      @default(240)
+  bufferMin               Int      @default(30)
+  rounding                String   @default("Nearest ₹10")
+  samagriGaushalaCutPct   Float?   @default(90.0)
+  transportPassThroughPct Float?   @default(100.0)
+  autoSweepEnabled        Boolean? @default(true)
+  disbursementCycle       String?  @default("CONTINUOUS_T_PLUS_ONE")
+  autoSweepHour           Int?     @default(23)
+  autoSweepMinute         Int?     @default(59)
+  updatedByRole           String   @default("SUPER_ADMIN")
+  updatedByName           String   @default("Vikramaditya Hegde")
+  updatedAt               DateTime @updatedAt
+
+  // Relationships
+  bookings Booking[]
 
   @@map("master_pricing_config")
+}
+
+model GosalaOffering {
+  id        String   @id @default(uuid())
+  gosalaId  String
+  name      String
+  desc      String?
+  price     Int
+  category  String   @default("puja") // puja, feed, prasadam, decoration
+  inStock   Boolean  @default(true)
+  maxQty    Int      @default(5)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  gosala Gosala @relation(fields: [gosalaId], references: [id], onDelete: Cascade)
+
+  @@index([gosalaId])
+  @@map("gosala_offerings")
 }
 
 model SettlementBatch {
   id               String           @id @default(uuid())
   gosalaId         String
   gosalaName       String
-  batch            String           // "SEP-W4"
+  batch            String // "SEP-W4"
   bookingsCount    Int
   grossAmount      Int
   commissionPct    Float
   commissionAmount Int
   payableAmount    Int
   status           SettlementStatus @default(PENDING)
+
+  // Automated Banking Sweep Telemetry
+  utrNumber         String?          @unique
+  bankBeneficiary   String?
+  bankName          String?
+  accountMasked     String?
+  ifscCode          String?
+  payoutMode        String?          @default("RBI_RTGS")
+  disbursedAt       DateTime?
+  disbursementCycle String?          @default("CONTINUOUS_T_PLUS_ONE")
+  idempotencyKey    String?          @unique
+  failureReason     String?
+
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
   // Relationships
-  gosala           Gosala           @relation(fields: [gosalaId], references: [id], onDelete: Cascade)
+  gosala Gosala @relation(fields: [gosalaId], references: [id], onDelete: Cascade)
 
   @@index([gosalaId, batch])
   @@index([status])

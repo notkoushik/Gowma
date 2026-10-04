@@ -20,22 +20,22 @@ const vetDoctors: Record<
   "Shri Krishna Gaushala": {
     name: "Dr. Anand Kulkarni",
     qualification: "B.V.Sc & A.H., M.V.Sc (Bovine Care)",
-    regNo: "MH-VET-4821",
-    clinic: "Govt. Veterinary Polyclinic, Kothrud, Pune",
+    regNo: "TS-VET-4821",
+    clinic: "Govt. Veterinary Polyclinic, Hyderabad",
     phone: "+91 98220 54321",
   },
   "Nandini Goseva Sadan": {
     name: "Dr. Rameshwar Deshmukh",
     qualification: "M.V.Sc Medicine & Surgery",
-    regNo: "MH-VET-3910",
-    clinic: "Baner Animal Healthcare Center, Pune",
+    regNo: "TS-VET-3910",
+    clinic: "Regional Animal Healthcare Center, Hyderabad",
     phone: "+91 98901 67890",
   },
   "Gopal Gaushala Trust": {
     name: "Dr. Suresh Patil",
     qualification: "B.V.Sc & A.H., Cattle Specialist",
-    regNo: "MH-VET-5120",
-    clinic: "Kalyani Nagar Veterinary Clinic, Pune",
+    regNo: "TS-VET-5120",
+    clinic: "Banjara Hills Veterinary Clinic, Hyderabad",
     phone: "+91 97640 45678",
   },
 }

@@ -22,7 +22,11 @@ import { useStore, type SlotAvailabilityStatus } from "../store/store"
 import { Panel, PanelHead, StatusPill, Eyebrow } from "../lib/ui"
 import type { Animal } from "../data/animals"
 
-const TODAY_REFERENCE = "28 Sep 2026"
+const TODAY_REFERENCE = new Date().toLocaleDateString("en-IN", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+})
 
 const legend = [
   {
@@ -110,17 +114,18 @@ export default function Availability() {
       if (b.date) uniqueDates.add(b.date)
     })
 
-    const standardWindow = [
-      "25 Sep 2026",
-      "26 Sep 2026",
-      "27 Sep 2026",
-      "28 Sep 2026",
-      "29 Sep 2026",
-      "30 Sep 2026",
-      "01 Oct 2026",
-      "02 Oct 2026",
-    ]
-    standardWindow.forEach((d) => uniqueDates.add(d))
+    // Dynamic rolling window: 2 days in past to 7 days ahead
+    const now = new Date()
+    for (let offset = -2; offset <= 7; offset++) {
+      const d = new Date(now)
+      d.setDate(d.getDate() + offset)
+      const dateStr = d.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+      uniqueDates.add(dateStr)
+    }
 
     const parseDateVal = (s: string) => {
       const parts = s.split(" ")
@@ -178,10 +183,7 @@ export default function Availability() {
   const filteredAnimals = useMemo(() => {
     return animals.filter((a) => {
       const matchesCategory =
-        animalCategory === "ALL" ||
-        (animalCategory === "Cow" && a.type === "Cow") ||
-        (animalCategory === "Calf" && a.type === "Calf") ||
-        (animalCategory === "Bull" && a.type === "Bull")
+        animalCategory === "ALL" || a.type === animalCategory
 
       const matchesGosala =
         currentRole === "manager"
@@ -370,6 +372,10 @@ export default function Availability() {
             {[
               { id: "ALL", label: `All (${animals.length})` },
               {
+                id: "Cow & Calf",
+                label: `Cow & Calf Pairs (${animals.filter((a) => a.type === "Cow & Calf").length})`,
+              },
+              {
                 id: "Cow",
                 label: `Cows (${animals.filter((a) => a.type === "Cow").length})`,
               },
@@ -380,6 +386,10 @@ export default function Availability() {
               {
                 id: "Bull",
                 label: `Bulls (${animals.filter((a) => a.type === "Bull").length})`,
+              },
+              {
+                id: "Buffalo",
+                label: `Buffalos (${animals.filter((a) => a.type === "Buffalo").length})`,
               },
             ].map((cat) => (
               <button

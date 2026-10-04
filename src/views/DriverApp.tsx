@@ -1,6 +1,7 @@
 import React, {
   useState,
   useEffect,
+  useRef,
   Component,
   ErrorInfo,
   ReactNode,
@@ -20,6 +21,11 @@ import {
   Crosshair,
   AlertCircle,
   Truck,
+  KeyRound,
+  ShieldCheck,
+  CheckCircle2,
+  Sparkles,
+  Check,
 } from "lucide-react"
 import { tripStages, type Trip } from "../data/driver"
 import { inr, type Booking } from "../data/mock"
@@ -30,24 +36,25 @@ import LocationPromptBanner from "../components/LocationPromptBanner"
 import { useRealtime } from "../hooks/useRealtime"
 import { api } from "../services/api"
 
-const DRIVER = "Sunil Pawar"
-
 function toTrip(b: Booking): Trip {
   const idStr = String(b.id || "0000")
   return {
     id: "TRIP-" + idStr.slice(-4),
     bookingId: idStr,
-    customer: b.customer || "Customer",
-    phone: b.phone || "+91 98204 11827",
-    animal: b.animal || "Cow",
+    customer: b.customer || "Devotee",
+    phone: b.phone || "—",
+    animal: b.animal || "Sacred Bovine",
     animalType: b.animalType || "Cow",
-    gosala: b.gosala || "Shri Krishna Gaushala",
-    pickup: b.gosala || "Shri Krishna Gaushala",
-    drop: b.address || "Kothrud, Pune",
-    date: b.date || "Today",
-    window: `${b.start || "10:00"} – ${b.end || "11:00"}`,
-    distanceKm: typeof b.distanceKm === "number" ? b.distanceKm : 6.5,
+    gosala: b.gosala || "Sanctuary Trust",
+    pickup: b.gosala || "Gaushala Sanctuary",
+    drop: b.address || "Devotee Altar",
+    date: b.date || "Scheduled Date",
+    window: `${b.start || "—"} – ${b.end || "—"}`,
+    distanceKm: typeof b.distanceKm === "number" ? b.distanceKm : 0,
     stageIndex: typeof b.driverStage === "number" ? b.driverStage : 0,
+    handoverOtp: b.handoverOtp,
+    handoverOtpVerified: b.handoverOtpVerified,
+    handoverOtpVerifiedAt: b.handoverOtpVerifiedAt,
   }
 }
 
@@ -67,17 +74,209 @@ function StageBadge({ i }: { i: number }) {
   )
 }
 
+function HandoverOtpModal({
+  isOpen,
+  onClose,
+  trip,
+  onVerify,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  trip: Trip
+  onVerify?: (otp: string) => Promise<boolean>
+}) {
+  const [pin, setPin] = useState(["", "", "", ""])
+  const [loading, setLoading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState("")
+  const input0 = useRef<HTMLInputElement>(null)
+  const input1 = useRef<HTMLInputElement>(null)
+  const input2 = useRef<HTMLInputElement>(null)
+  const input3 = useRef<HTMLInputElement>(null)
+  const inputs = [input0, input1, input2, input3]
+
+  useEffect(() => {
+    if (isOpen) {
+      setPin(["", "", "", ""])
+      setErrorMsg("")
+      setTimeout(() => input0.current?.focus(), 150)
+    }
+  }, [isOpen])
+
+  const handleDigitChange = (index: number, val: string) => {
+    const digit = val.replace(/\D/g, "").slice(-1)
+    const updated = [...pin]
+    updated[index] = digit
+    setPin(updated)
+    setErrorMsg("")
+
+    if (digit && index < 3) {
+      inputs[index + 1].current?.focus()
+    }
+  }
+
+  const handleKeyDown = (
+    index: number,
+    e: React.KeyboardEvent<HTMLInputElement>,
+  ) => {
+    if (e.key === "Backspace" && !pin[index] && index > 0) {
+      inputs[index - 1].current?.focus()
+    }
+  }
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault()
+    const pasted = e.clipboardData
+      .getData("text")
+      .replace(/\D/g, "")
+      .slice(0, 4)
+    if (!pasted) return
+    const updated = ["", "", "", ""]
+    pasted.split("").forEach((ch, idx) => {
+      if (idx < 4) updated[idx] = ch
+    })
+    setPin(updated)
+    const nextIdx = Math.min(pasted.length, 3)
+    inputs[nextIdx].current?.focus()
+  }
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    const otpCode = pin.join("")
+    if (otpCode.length < 4) {
+      setErrorMsg("Please enter the complete 4-digit PIN provided by the devotee.")
+      return
+    }
+    setLoading(true)
+    setErrorMsg("")
+    try {
+      if (onVerify) {
+        const ok = await onVerify(otpCode)
+        if (ok) {
+          onClose()
+        } else {
+          setErrorMsg(
+            "Invalid OTP. Please ask the devotee for the 4-digit code on their GOMAA screen.",
+          )
+        }
+      } else {
+        onClose()
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to verify OTP. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/65 flex items-center justify-center p-4 backdrop-blur-xs animate-fade-in">
+      <div className="w-full max-w-sm bg-card border border-line rounded-lg shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="p-4 bg-gradient-to-r from-saffron-soft/60 to-paper border-b border-line flex items-center justify-between">
+          <div className="flex items-center gap-2 text-saffron-deep">
+            <KeyRound size={18} />
+            <h3 className="font-serif text-[17px] font-semibold text-ink">
+              Devotee Handover OTP
+            </h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-ink-faint hover:text-ink p-1 cursor-pointer font-bold"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-5 space-y-4">
+          <div className="text-center space-y-1">
+            <p className="text-[13.5px] text-ink font-semibold">
+              Doorstep Handover Verification
+            </p>
+            <p className="text-[12px] text-ink-faint">
+              Ask devotee <strong className="text-ink">{trip.customer}</strong> for
+              the 4-digit code displayed on their GOMAA live tracking screen.
+            </p>
+          </div>
+
+          {/* 4 PIN inputs */}
+          <div className="flex justify-center gap-2.5 my-2" onPaste={handlePaste}>
+            {pin.map((digit, idx) => (
+              <input
+                key={idx}
+                ref={inputs[idx]}
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                value={digit}
+                onChange={(e) => handleDigitChange(idx, e.target.value)}
+                onKeyDown={(e) => handleKeyDown(idx, e)}
+                className="h-13 w-12 text-center text-[22px] font-mono font-bold rounded-md border-2 border-line focus:border-saffron focus:ring-2 focus:ring-saffron/20 bg-paper outline-none transition shadow-2xs"
+              />
+            ))}
+          </div>
+
+          {errorMsg && (
+            <div className="p-2.5 rounded bg-danger-soft/60 border border-danger/30 text-danger text-[12px] text-center font-medium">
+              {errorMsg}
+            </div>
+          )}
+
+          <div className="rounded bg-paper p-3 border border-line text-[11.5px] text-ink-soft space-y-1">
+            <div className="font-semibold text-forest flex items-center gap-1">
+              <ShieldCheck size={13} /> Sacred Welfare Protocol:
+            </div>
+            <div>✓ Sacred bovine escorted safely to courtyard/altar</div>
+            <div>✓ Devotee confirmed holy animal is calm and comfortable</div>
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 px-3 rounded text-[13px] font-medium border border-line hover:bg-paper transition cursor-pointer text-ink-soft"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={loading || pin.join("").length < 4}
+              onClick={handleSubmit}
+              className="flex-1 py-2.5 px-3 rounded text-[13px] font-medium bg-saffron text-white hover:bg-saffron-deep transition cursor-pointer disabled:opacity-40 shadow-xs flex items-center justify-center gap-1.5"
+            >
+              {loading ? (
+                <RefreshCw size={14} className="animate-spin" />
+              ) : (
+                <CheckCircle2 size={15} />
+              )}
+              Verify & Begin
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function TripDetail({
   trip,
+  driverName = "Assigned Seva Driver",
   onBack,
   onAdvance,
+  onVerifyOtp,
   onResetStage,
 }: {
   trip: Trip
+  driverName?: string
   onBack: () => void
   onAdvance: () => void
+  onVerifyOtp?: (otp: string) => Promise<boolean>
   onResetStage: (stage: number) => void
 }) {
+  const [showOtpModal, setShowOtpModal] = useState(false)
   const done = trip.stageIndex >= tripStages.length - 1
   const isEnRoute = trip.stageIndex >= 4 && !done
   const deviceLocation = useDeviceLocation()
@@ -195,7 +394,7 @@ function TripDetail({
           bookingId={trip.bookingId}
           pickupLocation={trip.pickup}
           dropLocation={trip.drop}
-          driverName={DRIVER}
+          driverName={driverName}
           stageIndex={trip.stageIndex}
           distanceKm={trip.distanceKm}
           driverCoords={
@@ -360,19 +559,41 @@ function TripDetail({
 
         {/* Advance stage button */}
         {!done ? (
-          <button
-            onClick={onAdvance}
-            className="w-full bg-saffron text-white rounded-sm py-3 text-[14px] font-medium hover:bg-saffron-deep transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-          >
-            Advance: {tripStages[trip.stageIndex + 1]}
-            <ArrowRight size={16} />
-          </button>
+          trip.stageIndex === 5 ? (
+            <div className="space-y-2">
+              <button
+                onClick={() => setShowOtpModal(true)}
+                className="w-full bg-saffron text-white rounded-sm py-3.5 text-[14px] font-semibold hover:bg-saffron-deep transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md ring-2 ring-saffron/30"
+              >
+                <KeyRound size={17} />
+                Verify Devotee Handover OTP & Begin Seva
+              </button>
+              <p className="text-[11.5px] text-center text-ink-faint">
+                Devotee must inspect bovine comfort and provide 4-digit code before seva commences.
+              </p>
+            </div>
+          ) : (
+            <button
+              onClick={onAdvance}
+              className="w-full bg-saffron text-white rounded-sm py-3 text-[14px] font-medium hover:bg-saffron-deep transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+            >
+              Advance: {tripStages[trip.stageIndex + 1]}
+              <ArrowRight size={16} />
+            </button>
+          )
         ) : (
           <div className="rounded-sm bg-ok-soft border border-ok/30 p-3 text-center text-ok text-[13px] font-medium">
             Trip completed successfully
           </div>
         )}
       </div>
+
+      <HandoverOtpModal
+        isOpen={showOtpModal}
+        onClose={() => setShowOtpModal(false)}
+        trip={trip}
+        onVerify={onVerifyOtp}
+      />
     </div>
   )
 }
@@ -464,29 +685,38 @@ class DriverErrorBoundary extends Component<{
 import EditProfileModal from "../components/EditProfileModal"
 
 function DriverAppContent({ onSignOut }: { onSignOut: () => void }) {
-  const { bookings, advanceTrip, notify, profiles } = useStore()
+  const { bookings, advanceTrip, verifyHandoverOtp, assignDriver, notify, profiles } = useStore()
   const [openId, setOpenId] = useState<string | null>(null)
   const [online, setOnline] = useState(true)
   const [editProfileOpen, setEditProfileOpen] = useState(false)
 
   const driverProfile = profiles?.driver
-  const driverName = driverProfile?.name || "Sunil Pawar"
+  const driverName = driverProfile?.name || "Assigned Seva Driver"
   const firstName = driverName.split(" ")[0] || "Driver"
-  const vehicleNo = driverProfile?.driverData?.vehicleNumber || "MH 12 RN 4402"
+  const vehicleNo = driverProfile?.driverData?.vehicleNumber || "Cattle Ambulance / Van"
   const licenseNo =
-    driverProfile?.driverData?.licenseNumber || "MH-14-2018-009412"
+    driverProfile?.driverData?.licenseNumber || "Govt Certified Transport License"
 
-  // Map trips safely matching driver name, driverId, or fallback
+  // Map trips dynamically matching driver name, driverId, or unassigned active trips
   const trips = (bookings || [])
     .filter(
       (b) =>
         (b.driver === driverName ||
-          b.driver === "Sunil Pawar" ||
-          (b as any).driverId ||
-          b.id === "GMA-TEST-95999") &&
-        b.status !== "Rejected",
+          !b.driver ||
+          (b as any).driverId === driverProfile?.id ||
+          (b as any).driverId === driverProfile?.driverData?.driverId) &&
+        b.status !== "Rejected" &&
+        b.status !== "Completed" &&
+        b.status !== "Cancelled",
     )
     .map(toTrip)
+
+  // Incoming trips awaiting pilot assignment
+  const unacceptedTrips = (bookings || []).filter(
+    (b) =>
+      (!b.driver || b.driverStage === 0) &&
+      (b.status === "Confirmed" || b.status === "Admin Review" || b.status === "Payment Verified"),
+  )
 
   const open =
     trips.find((t) => t.id === openId || t.bookingId === openId) ?? null
@@ -494,6 +724,23 @@ function DriverAppContent({ onSignOut }: { onSignOut: () => void }) {
   useRealtime({ bookingId: open?.bookingId })
 
   const advance = (bookingId: string) => advanceTrip(bookingId)
+
+  const handleVerifyOtp = async (otpCode: string): Promise<boolean> => {
+    if (!open) return false
+    try {
+      const res = await verifyHandoverOtp(open.bookingId, otpCode)
+      if (res.success) {
+        notify(`Handover OTP verified! Stage 6: Service Started at Altar.`, "ok")
+        return true
+      } else {
+        notify(res.error || "Invalid OTP code", "err")
+        return false
+      }
+    } catch (e: any) {
+      notify(e.message || "Failed to verify OTP", "err")
+      return false
+    }
+  }
 
   const handleResetStage = async (stage: number) => {
     if (!open) return
@@ -554,8 +801,10 @@ function DriverAppContent({ onSignOut }: { onSignOut: () => void }) {
           {open ? (
             <TripDetail
               trip={open}
+              driverName={driverName}
               onBack={() => setOpenId(null)}
               onAdvance={() => advance(open.bookingId)}
+              onVerifyOtp={handleVerifyOtp}
               onResetStage={handleResetStage}
             />
           ) : (
@@ -594,9 +843,9 @@ function DriverAppContent({ onSignOut }: { onSignOut: () => void }) {
                   </span>
                 </div>
                 <div className="text-[11px] text-ink-faint">
-                  Phone: {driverProfile?.phone || "+91 98230 44910"} ·{" "}
+                  Phone: {driverProfile?.phone || "Verified Contact"} ·{" "}
                   {driverProfile?.driverData?.assignedGaushala ||
-                    "Shri Krishna Gaushala"}
+                    "Assigned Sanctuary Trust"}
                 </div>
               </div>
 
@@ -619,6 +868,50 @@ function DriverAppContent({ onSignOut }: { onSignOut: () => void }) {
                   </div>
                 ))}
               </div>
+
+              {/* Uber-Style Dispatch Request Card */}
+              {unacceptedTrips.length > 0 && (
+                <div className="rounded-lg border-2 border-saffron bg-gradient-to-br from-amber-500/10 via-card to-paper p-4 shadow-md space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-saffron text-white">
+                      <Sparkles size={11} /> NEW DISPATCH REQUEST
+                    </span>
+                    <span className="text-[11px] font-mono text-saffron-deep font-semibold">
+                      Proximity Dispatch
+                    </span>
+                  </div>
+
+                  <div>
+                    <div className="text-[17px] font-serif font-bold text-ink">
+                      {unacceptedTrips[0].animal} ({unacceptedTrips[0].animalType})
+                    </div>
+                    <div className="text-[12px] text-ink-faint mt-0.5 truncate">
+                      From: {unacceptedTrips[0].gosala}
+                    </div>
+                    <div className="text-[12px] text-ink-soft truncate">
+                      To: {unacceptedTrips[0].address}
+                    </div>
+                    <div className="flex items-center gap-3 mt-2 text-[11.5px] font-mono text-ink-soft">
+                      <span>Est. {unacceptedTrips[0].distanceKm || 8} km</span>
+                      <span>·</span>
+                      <span>
+                        Window: {unacceptedTrips[0].start} –{" "}
+                        {unacceptedTrips[0].end}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      assignDriver(unacceptedTrips[0].id, driverName)
+                      setOpenId(unacceptedTrips[0].id)
+                    }}
+                    className="w-full py-2.5 px-4 rounded bg-forest hover:bg-forest/90 text-white font-semibold text-[13px] transition shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Check size={16} /> Accept Seva Trip & Start Transit
+                  </button>
+                </div>
+              )}
 
               <div>
                 <h2 className="font-serif text-[16px] text-ink mb-2.5">

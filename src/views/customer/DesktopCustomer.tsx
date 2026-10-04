@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
   Bell,
   ChevronDown,
@@ -28,10 +28,11 @@ import { pricing, type Gosala } from "../../data/customer"
 import { inr } from "../../data/mock"
 import { tripStages } from "../../data/driver"
 import BookingFlow from "./BookingFlow"
-import { DesktopGosalaProfile } from "./GosalaProfile"
+import { DesktopGosalaProfile, EnRouteModal } from "./GosalaProfile"
 import { statusTone, type BookingSummary, type MyBooking } from "../CustomerApp"
 import LiveTripMap from "../../components/LiveTripMap"
 import LocationPromptBanner from "../../components/LocationPromptBanner"
+import CustomerTrackingDossier from "../../components/CustomerTrackingDossier"
 import {
   useDeviceLocation,
   getIndianLocalityFromCoords,
@@ -44,6 +45,7 @@ import {
   sortGaushalasByProximity,
   getGaushalaServiceability,
 } from "../../utils/geoDistance"
+import { fetchRoadRoute } from "../../services/routing"
 import type { OperationalRegionHub } from "../../data/regions"
 
 type Tab = "discover" | "bookings" | "track" | "profile"
@@ -57,19 +59,25 @@ export default function DesktopCustomer({
   myBookings: MyBooking[]
   onCreate: (s: BookingSummary) => void
 }) {
-  const { profiles, gosalas: storeGosalas, animals: storeAnimals } = useStore()
+  const { profiles, gosalas: storeGosalas, animals: storeAnimals, refreshAnimals } = useStore()
   const customerProfile = profiles?.customer
   const devoteeName = customerProfile?.name || "Ananya Deshmukh"
+
+  useEffect(() => {
+    refreshAnimals?.().catch(() => {})
+  }, [refreshAnimals])
 
   const [tab, setTab] = useState<Tab>("discover")
   const [detail, setDetail] = useState<Animal | null>(null)
   const [gosalaProfileId, setGosalaProfileId] = useState<string | null>(null)
+  const [routeModalGosala, setRouteModalGosala] = useState<Gosala | null>(null)
+  const [routeModalMode, setRouteModalMode] = useState<"route" | "pinpoint">("route")
   const [flow, setFlow] = useState<{ animal: Animal; gosala: Gosala } | null>(
     null,
   )
   const [q, setQ] = useState("")
   const [deliveryAddress, setDeliveryAddress] = useState(
-    customerProfile?.customerData?.defaultAddress || "Kothrud, Pune",
+    customerProfile?.customerData?.defaultAddress || "Kothaguda, Hyderabad",
   )
   const [isEditingAddress, setIsEditingAddress] = useState(false)
   const [editProfileOpen, setEditProfileOpen] = useState(false)
@@ -79,22 +87,36 @@ export default function DesktopCustomer({
   const liveAnimals = storeAnimals || []
 
   const customerGosalas: Gosala[] = useMemo(() => {
-    return storeGosalas.map((g) => ({
-      id: g.id,
-      name: g.name,
-      area: g.address || g.region || "Operational Vedic Sanctuary",
-      distanceKm: (g as any).distanceKm ?? 6.5,
-      rating: (g as any).rating ?? 4.9,
-      animals:
-        liveAnimals.filter(
-          (a) => a.gosala.toLowerCase() === g.name.toLowerCase(),
-        ).length || g.capacity || 0,
-      photo:
-        g.photo ||
-        "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=600&h=400&fit=crop&auto=format",
-      lat: g.lat,
-      lng: g.lng,
-    }))
+    return storeGosalas.map((g, idx) => {
+      const housedCows = liveAnimals.filter(
+        (a) => a.gosala.toLowerCase() === g.name.toLowerCase(),
+      )
+      const dynamicRating = (g as any).rating || Number((4.7 + ((g.name.length * 3 + idx) % 4) * 0.1).toFixed(1))
+
+      return {
+        id: g.id,
+        name: g.name,
+        area: g.address || g.region || "Operational Vedic Sanctuary",
+        distanceKm: (g as any).distanceKm ?? 6.5,
+        rating: dynamicRating,
+        animals: housedCows.length || g.capacity || 40,
+        photo:
+          g.photo ||
+          "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=600&h=400&fit=crop&auto=format",
+        lat:
+          g.lat !== undefined && g.lat !== null
+            ? Number(g.lat)
+            : (g as any).latitude !== undefined && (g as any).latitude !== null
+              ? Number((g as any).latitude)
+              : undefined,
+        lng:
+          g.lng !== undefined && g.lng !== null
+            ? Number(g.lng)
+            : (g as any).longitude !== undefined && (g as any).longitude !== null
+              ? Number((g as any).longitude)
+              : undefined,
+      }
+    })
   }, [storeGosalas, liveAnimals])
 
   const sortedGaushalas = useMemo(() => {
@@ -104,6 +126,41 @@ export default function DesktopCustomer({
       deviceLocation.lng,
     )
   }, [customerGosalas, deviceLocation.lat, deviceLocation.lng])
+
+  // Prefetch and store real road driving distances for total accuracy across card and modal
+  const [roadDistances, setRoadDistances] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    const lat = deviceLocation.lat || 17.4401
+    const lng = deviceLocation.lng || 78.3489
+    const userCoords: [number, number] = [lat, lng]
+
+    customerGosalas.forEach((g) => {
+      const gLat =
+        g.lat !== undefined && g.lat !== null
+          ? Number(g.lat)
+          : (g as any).latitude !== undefined && (g as any).latitude !== null
+            ? Number((g as any).latitude)
+            : undefined
+      const gLng =
+        g.lng !== undefined && g.lng !== null
+          ? Number(g.lng)
+          : (g as any).longitude !== undefined && (g as any).longitude !== null
+            ? Number((g as any).longitude)
+            : undefined
+
+      if (gLat && gLng) {
+        fetchRoadRoute(userCoords, [gLat, gLng]).then((route) => {
+          if (route?.distanceKm) {
+            setRoadDistances((prev) => ({
+              ...prev,
+              [g.id]: route.distanceKm,
+            }))
+          }
+        })
+      }
+    })
+  }, [deviceLocation.lat, deviceLocation.lng, customerGosalas])
 
   const handleSelectHub = (hub: OperationalRegionHub) => {
     deviceLocation.setManualLocation(hub)
@@ -120,7 +177,16 @@ export default function DesktopCustomer({
     }
   }
 
-  const activeTrip = myBookings.find((b) => b.status === "In Service")
+  const [selectedTrackBookingId, setSelectedTrackBookingId] = useState<string | null>(null)
+  const activeTrip =
+    (selectedTrackBookingId
+      ? myBookings.find((b) => b.id === selectedTrackBookingId)
+      : null) ||
+    myBookings.find((b) => b.status === "In Service") ||
+    myBookings.find((b) => b.status === "Confirmed" && b.driver) ||
+    myBookings.find((b) => b.status === "Confirmed") ||
+    myBookings.find((b) => b.status === "Under Review") ||
+    myBookings[0]
   const list = liveAnimals.filter(
     (a) =>
       q === "" ||
@@ -290,6 +356,7 @@ export default function DesktopCustomer({
         ) : gosalaProfileId ? (
           <DesktopGosalaProfile
             gosalaId={gosalaProfileId}
+            distanceKm={roadDistances[gosalaProfileId]}
             onBack={() => setGosalaProfileId(null)}
             onSelectAnimal={(a) => {
               setGosalaProfileId(null)
@@ -367,60 +434,106 @@ export default function DesktopCustomer({
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                  {sortedGaushalas.map(({ gosala: g, serviceability }) => (
-                    <button
-                      key={g.id}
-                      onClick={() => setGosalaProfileId(g.id)}
-                      className="text-left rounded-sm border border-line bg-card overflow-hidden group hover:border-line-strong transition-colors flex flex-col justify-between"
-                    >
-                      <div>
-                        <div className="h-40 bg-paper-deep overflow-hidden relative">
-                          <img
-                            src={g.photo}
-                            alt={g.name}
-                            className="h-full w-full object-cover group-hover:scale-[1.03] transition-transform duration-500"
-                          />
-                          <span
-                            className={`absolute top-2.5 right-2.5 text-[10px] px-2 py-0.5 rounded-full font-medium shadow-2xs border ${serviceability.badgeClass}`}
+                  {sortedGaushalas.map(({ gosala: g, serviceability }) => {
+                    const housedCount = liveAnimals.filter(
+                      (a) => a.gosala.toLowerCase() === g.name.toLowerCase(),
+                    ).length
+                    const cattleLabel =
+                      housedCount > 0
+                        ? `${housedCount} cattle`
+                        : g.animals && g.animals > 0
+                          ? `Cap: ${g.animals} cattle`
+                          : "Intake Open"
+
+                    return (
+                      <div
+                        key={g.id}
+                        className="rounded-lg border border-line bg-card overflow-hidden group hover:border-line-strong hover:shadow-md transition-all flex flex-col justify-between"
+                      >
+                        <div
+                          onClick={() => setGosalaProfileId(g.id)}
+                          className="cursor-pointer"
+                        >
+                          <div className="h-44 bg-paper-deep overflow-hidden relative">
+                            <img
+                              src={g.photo}
+                              alt={g.name}
+                              className="h-full w-full object-cover group-hover:scale-[1.03] transition-transform duration-500"
+                            />
+                            <span
+                              className={`absolute top-2.5 right-2.5 text-[10px] px-2 py-0.5 rounded-full font-medium shadow-2xs border ${serviceability.badgeClass}`}
+                            >
+                              {serviceability.badgeText}
+                            </span>
+                          </div>
+                          <div className="p-4">
+                            <div className="font-serif text-[17px] text-ink font-semibold group-hover:text-forest transition">
+                              {g.name}
+                            </div>
+                            <div className="text-[12px] text-ink-faint mt-0.5 flex items-center gap-1">
+                              <MapPin size={11} className="shrink-0 text-saffron" />
+                              <span className="truncate">{g.area}</span>
+                            </div>
+                            <div className="flex items-center gap-3.5 mt-3 text-[12px]">
+                              <span className="inline-flex items-center gap-1 text-ink-soft">
+                                <Star
+                                  size={12}
+                                  className="text-saffron fill-saffron"
+                                />{" "}
+                                {g.rating}
+                              </span>
+                              <span className="inline-flex items-center gap-1 text-ink-soft font-mono tabular font-medium">
+                                <Navigation size={12} className="text-forest" /> {roadDistances[g.id] ?? serviceability.distanceKm} km
+                              </span>
+                              <span className="text-ink-faint font-medium">
+                                · {cattleLabel}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Interactive Navigation Action Bar */}
+                        <div className="px-4 py-3 bg-paper/50 border-t border-line/60 flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setRouteModalGosala(g)
+                                setRouteModalMode("route")
+                              }}
+                              className="px-2.5 py-1.5 rounded-md bg-forest/10 hover:bg-forest text-forest hover:text-white border border-forest/20 text-[11px] font-medium transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                              title="Check road navigation route and travel ETA"
+                            >
+                              <Navigation size={11} />
+                              <span>En Route</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setRouteModalGosala(g)
+                                setRouteModalMode("pinpoint")
+                              }}
+                              className="px-2.5 py-1.5 rounded-md bg-card hover:bg-paper-deep text-ink-soft hover:text-ink border border-line text-[11px] font-medium transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                              title="Inspect exact sanctuary pinpoint on map"
+                            >
+                              <MapPin size={11} className="text-saffron" />
+                              <span>Location</span>
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setGosalaProfileId(g.id)}
+                            className="text-[12px] text-saffron-deep hover:underline font-semibold flex items-center gap-1 cursor-pointer"
                           >
-                            {serviceability.badgeText}
-                          </span>
-                        </div>
-                        <div className="p-4">
-                          <div className="font-serif text-[17px] text-ink font-semibold">
-                            {g.name}
-                          </div>
-                          <div className="text-[12px] text-ink-faint mt-0.5 flex items-center gap-1">
-                            <MapPin size={11} className="shrink-0 text-saffron" />
-                            <span className="truncate">{g.area}</span>
-                          </div>
-                          <div className="flex items-center gap-4 mt-3 text-[12px]">
-                            <span className="inline-flex items-center gap-1 text-ink-soft">
-                              <Star
-                                size={12}
-                                className="text-saffron fill-saffron"
-                              />{" "}
-                              {g.rating}
-                            </span>
-                            <span className="inline-flex items-center gap-1 text-ink-soft font-mono tabular font-medium">
-                              <Navigation size={12} /> {serviceability.distanceKm} km
-                            </span>
-                            <span className="text-ink-faint">
-                              {g.animals} animals
-                            </span>
-                          </div>
+                            <span>Profile →</span>
+                          </button>
                         </div>
                       </div>
-                      <div className="px-4 pb-4 pt-2 border-t border-line/40 text-[11.5px] text-saffron-deep font-medium flex items-center justify-between">
-                        <span>View full profile →</span>
-                        {serviceability.tier === "LOCAL_SERVICE" && (
-                          <span className="text-[10px] text-ok font-mono uppercase tracking-wider font-semibold">
-                            Doorstep Seva
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </section>
@@ -494,9 +607,19 @@ export default function DesktopCustomer({
             </section>
           </div>
         ) : tab === "bookings" ? (
-          <BookingsView list={myBookings} onTrack={() => setTab("track")} />
+          <BookingsView
+            list={myBookings}
+            onTrack={(id) => {
+              if (id) setSelectedTrackBookingId(id)
+              setTab("track")
+            }}
+          />
         ) : tab === "track" ? (
-          <TrackView booking={activeTrip} />
+          <TrackView
+            booking={activeTrip}
+            bookingsList={myBookings}
+            onSelectBooking={setSelectedTrackBookingId}
+          />
         ) : (
           <ProfileView onOpenEditProfile={() => setEditProfileOpen(true)} />
         )}
@@ -532,6 +655,21 @@ export default function DesktopCustomer({
         onDetectGPS={handleDetectLocation}
         isDetectingGPS={deviceLocation.isLoading}
       />
+
+      {routeModalGosala && (
+        <EnRouteModal
+          isOpen={!!routeModalGosala}
+          onClose={() => setRouteModalGosala(null)}
+          gosalaName={routeModalGosala.name}
+          gosalaAddress={routeModalGosala.area || routeModalGosala.name}
+          gosalaLat={routeModalGosala.lat ?? (routeModalGosala as any).latitude}
+          gosalaLng={routeModalGosala.lng ?? (routeModalGosala as any).longitude}
+          customerLat={deviceLocation.lat || undefined}
+          customerLng={deviceLocation.lng || undefined}
+          customerAddress={deliveryAddress || deviceLocation.address || undefined}
+          mode={routeModalMode}
+        />
+      )}
     </div>
   )
 }
@@ -695,7 +833,7 @@ function BookingsView({
   onTrack,
 }: {
   list: MyBooking[]
-  onTrack: () => void
+  onTrack: (bookingId?: string) => void
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
@@ -819,11 +957,11 @@ function BookingsView({
                       <span className="text-[12px] text-forest font-medium inline-flex items-center gap-1.5">
                         <ShieldCheck size={14} /> Verified Devotee Booking
                       </span>
-                      {b.status === "In Service" && (
+                      {b.status !== "Rejected" && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
-                            onTrack()
+                            onTrack(b.id)
                           }}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-saffron text-white text-[12.5px] font-medium shadow-xs hover:bg-saffron-deep transition cursor-pointer"
                         >
@@ -843,7 +981,15 @@ function BookingsView({
 }
 
 /* ---------------- Track (two-column) ---------------- */
-function TrackView({ booking }: { booking?: MyBooking }) {
+function TrackView({
+  booking,
+  bookingsList = [],
+  onSelectBooking,
+}: {
+  booking?: MyBooking
+  bookingsList?: MyBooking[]
+  onSelectBooking?: (id: string) => void
+}) {
   const deviceLocation = useDeviceLocation()
   if (!booking)
     return (
@@ -854,10 +1000,25 @@ function TrackView({ booking }: { booking?: MyBooking }) {
         </p>
       </div>
     )
-  const stage = booking.driverStage ?? 0
+
   return (
     <div>
-      <h1 className="font-serif text-[26px] text-ink mb-5">Live tracking</h1>
+      <div className="flex items-center justify-between mb-5">
+        <h1 className="font-serif text-[26px] text-ink">Live tracking</h1>
+        {bookingsList.length > 1 && (
+          <select
+            value={booking.id}
+            onChange={(e) => onSelectBooking?.(e.target.value)}
+            className="text-[12px] font-mono bg-card border border-line rounded px-3 py-1.5 text-ink-soft cursor-pointer shadow-2xs"
+          >
+            {bookingsList.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.id} · {b.animal} ({b.status})
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
 
       <LocationPromptBanner
         role="CUSTOMER"
@@ -871,108 +1032,16 @@ function TrackView({ booking }: { booking?: MyBooking }) {
         className="mb-5"
       />
 
-      <div className="grid lg:grid-cols-[1.4fr_1fr] gap-6">
-        <div className="space-y-5">
-          <LiveTripMap
-            bookingId={booking.id}
-            pickupLocation={booking.gosala}
-            dropLocation={booking.address || "Kothrud, Pune"}
-            driverName={booking.driver || "Sunil Pawar"}
-            stageIndex={stage}
-            distanceKm={booking.distanceKm || 8}
-            customerCoords={
-              deviceLocation.lat && deviceLocation.lng
-                ? [deviceLocation.lat, deviceLocation.lng]
-                : null
-            }
-            viewerRole="CUSTOMER"
-            heightClass="h-[380px]"
-          />
-          <div className="rounded-sm border border-line bg-card p-4 flex items-center gap-3">
-            <div className="h-11 w-11 rounded-full bg-forest text-white grid place-items-center text-[14px] font-medium">
-              SP
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[14px] text-ink">Sunil Pawar</div>
-              <div className="text-[12px] text-ink-faint">
-                Driver · {booking.animal}
-              </div>
-            </div>
-            <a
-              href="tel:+919000000000"
-              className="inline-flex items-center gap-2 bg-forest text-white rounded-sm px-4 py-2 text-[13px]"
-            >
-              <Phone size={15} /> Call
-            </a>
-          </div>
-        </div>
-
-        <div className="space-y-5">
-          <div className="rounded-sm border border-line bg-card p-5">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-1">
-              Current status
-            </div>
-            <div className="font-serif text-[20px] text-ink mb-4">
-              {tripStages[stage]}
-            </div>
-            <ol>
-              {tripStages.map((s, i) => {
-                const state =
-                  i < stage ? "done" : i === stage ? "current" : "todo"
-                return (
-                  <li key={s} className="flex gap-3 items-start">
-                    <div className="flex flex-col items-center">
-                      <span
-                        className={`h-3 w-3 rounded-full border-2 ${
-                          state === "done"
-                            ? "bg-forest border-forest"
-                            : state === "current"
-                              ? "bg-saffron border-saffron"
-                              : "bg-card border-line-strong"
-                        }`}
-                      />
-                      {i < tripStages.length - 1 && (
-                        <span
-                          className={`w-0.5 h-6 ${
-                            i < stage ? "bg-forest" : "bg-line"
-                          }`}
-                        />
-                      )}
-                    </div>
-                    <span
-                      className={`text-[13px] -mt-0.5 pb-2.5 ${
-                        state === "todo" ? "text-ink-faint" : "text-ink"
-                      } ${state === "current" ? "font-medium" : ""}`}
-                    >
-                      {s}
-                    </span>
-                  </li>
-                )
-              })}
-            </ol>
-          </div>
-          <div className="rounded-sm border border-line bg-card p-5 space-y-3 text-[13px]">
-            <div className="flex gap-2">
-              <Flag size={15} className="text-saffron mt-0.5" />
-              <span className="text-ink-soft">
-                {booking.gosala} → your address
-              </span>
-            </div>
-            <div className="flex gap-2">
-              <Clock size={15} className="text-ink-faint mt-0.5" />
-              <span className="text-ink-soft">
-                {booking.date} · {booking.time}
-              </span>
-            </div>
-            <div className="flex gap-2">
-              <ShieldCheck size={15} className="text-ok mt-0.5" />
-              <span className="text-ink-soft">
-                Booking ID {booking.id} · confirmed
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <CustomerTrackingDossier
+        booking={booking}
+        customerCoords={
+          deviceLocation.lat && deviceLocation.lng
+            ? [deviceLocation.lat, deviceLocation.lng]
+            : null
+        }
+        layoutMode="wide"
+        heightClass="h-[380px]"
+      />
     </div>
   )
 }
@@ -1067,7 +1136,7 @@ function ProfileView({ onOpenEditProfile }: { onOpenEditProfile: () => void }) {
                 </div>
                 <div className="text-ink mt-0.5">
                   {customerProfile?.customerData?.defaultAddress ||
-                    "Flat 402, Ruturang Apts, Kothrud, Pune"}
+                    "Flat 402, Aditya Heights, Kondapur, Hyderabad"}
                 </div>
               </div>
             </div>
@@ -1096,7 +1165,7 @@ function ProfileView({ onOpenEditProfile }: { onOpenEditProfile: () => void }) {
                       <MapPin size={13} className="text-saffron" /> Home (Default Altar)
                     </div>
                     <div className="text-ink-soft text-[12px] mt-0.5">
-                      {customerProfile?.customerData?.defaultAddress || "Flat 402, Ruturang Apts, Kothrud, Pune"}
+                      {customerProfile?.customerData?.defaultAddress || "Flat 402, Aditya Heights, Kondapur, Hyderabad"}
                     </div>
                   </div>
                   <span className="text-[10.5px] font-mono bg-forest/10 text-forest border border-forest/20 px-2 py-0.5 rounded">Active</span>

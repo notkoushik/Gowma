@@ -43,6 +43,18 @@ export type Booking = {
   extraUnitRateSnapshot?: number
   commissionSnapshot?: number
   createdAt?: string
+  // Dynamic Customer Animal Received & Handover OTP Security
+  handoverOtp?: string
+  handoverOtpVerified?: boolean
+  handoverOtpVerifiedAt?: string | null
+
+  // Rich Swiggy/Uber Driver Profile & Cattle Ambulance Specs
+  driverPhone?: string | null
+  driverVehiclePlate?: string | null
+  driverVehicleModel?: string | null
+  driverRating?: number | null
+  driverTotalTrips?: number | null
+  driverAvatar?: string | null
 }
 
 export type PricingConfig = {
