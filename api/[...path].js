@@ -4266,6 +4266,33 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
 }
 
 // server/apiEntry.ts
+function resolveRequestUrl(req) {
+  const rawUrl = req.url || "";
+  let parsed;
+  try {
+    parsed = new URL(rawUrl, "http://localhost");
+  } catch {
+    parsed = new URL("/api", "http://localhost");
+  }
+  if (parsed.pathname.includes("[...path]")) {
+    let pathSegments = [];
+    if (parsed.searchParams.has("path")) {
+      pathSegments = parsed.searchParams.getAll("path");
+      parsed.searchParams.delete("path");
+    } else if (req.query?.path) {
+      pathSegments = Array.isArray(req.query.path) ? req.query.path : [req.query.path];
+    }
+    const reconstructedPath = "/api/" + pathSegments.map((s) => s.replace(/^\/+|\/+$/g, "")).filter(Boolean).join("/");
+    const remainingQuery = parsed.searchParams.toString();
+    return remainingQuery ? `${reconstructedPath}?${remainingQuery}` : reconstructedPath;
+  }
+  let pathname = parsed.pathname;
+  if (!pathname.startsWith("/api")) {
+    pathname = "/api" + (pathname.startsWith("/") ? "" : "/") + pathname;
+  }
+  const query = parsed.searchParams.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
 async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
@@ -4275,23 +4302,7 @@ async function handler(req, res) {
     res.end();
     return;
   }
-  let requestUrl = req.url || "";
-  if (requestUrl.includes("[...path]") || requestUrl === "/api" || requestUrl === "/api/") {
-    if (req.headers["x-forwarded-uri"]) {
-      requestUrl = req.headers["x-forwarded-uri"];
-    } else if (req.query?.path) {
-      if (Array.isArray(req.query.path)) {
-        requestUrl = `/api/${req.query.path.join("/")}`;
-      } else if (typeof req.query.path === "string") {
-        requestUrl = `/api/${req.query.path}`;
-      }
-    }
-  }
-  const originalUrl = req.url || "";
-  const qIdx = originalUrl.indexOf("?");
-  if (qIdx !== -1 && !requestUrl.includes("?")) {
-    requestUrl += originalUrl.slice(qIdx);
-  }
+  const requestUrl = resolveRequestUrl(req);
   let rawBody = "";
   if (req.body) {
     rawBody = typeof req.body === "string" ? req.body : JSON.stringify(req.body);

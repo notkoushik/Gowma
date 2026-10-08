@@ -56,13 +56,29 @@ export class WebSocketClient {
     }
 
     this.isExplicitlyClosed = false
+
+    const isVercel =
+      typeof window !== "undefined" &&
+      (window.location.hostname.includes("vercel.app") ||
+        window.location.hostname.includes("now.sh"))
+    const customWsUrl =
+      typeof import.meta !== "undefined" &&
+      (import.meta as any).env?.VITE_WS_URL
+
+    if (isVercel && !customWsUrl) {
+      // In serverless deployment without a dedicated WS gateway, WebSocket is disabled gracefully
+      return
+    }
+
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
-    const wsUrl = `${protocol}//${window.location.host}/ws`
+    const wsUrl = customWsUrl || `${protocol}//${window.location.host}/ws`
 
     try {
       this.ws = new WebSocket(wsUrl)
     } catch (e) {
-      console.warn("[WS] Failed to instantiate WebSocket:", e)
+      if (typeof window !== "undefined" && window.location.hostname === "localhost") {
+        console.warn("[WS] Failed to instantiate WebSocket:", e)
+      }
       this.scheduleReconnect()
       return
     }
