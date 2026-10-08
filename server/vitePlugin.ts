@@ -1,11 +1,13 @@
 import type { Plugin } from "vite"
-import { handleApiRequest } from "./router.ts"
-import { setupWebSocketServer } from "./ws/server.ts"
 
 export function gOMAABackendPlugin(): Plugin {
   return {
     name: "gomaa-backend-api",
-    configureServer(server) {
+    apply: "serve",
+    async configureServer(server) {
+      const { handleApiRequest } = await import("./router.ts")
+      const { setupWebSocketServer } = await import("./ws/server.ts")
+
       if (server.httpServer) {
         setupWebSocketServer(server.httpServer as any)
       }
