@@ -119,7 +119,12 @@ gpsSimulator.setOnTick((tick) => {
 })
 
 function parseUrl(url: string) {
-  const [pathname, search] = url.split("?")
+  const [rawPath, search] = (url || "").split("?")
+  let pathname = rawPath || "/"
+  if (!pathname.startsWith("/")) pathname = "/" + pathname
+  if (pathname.length > 1 && pathname.endsWith("/")) {
+    pathname = pathname.replace(/\/+$/, "")
+  }
   const query = new URLSearchParams(search || "")
   return { pathname, query }
 }

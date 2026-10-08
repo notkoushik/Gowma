@@ -12,18 +12,20 @@ export default async function handler(req: any, res: any) {
     return
   }
 
-  // Determine requested URL path
+  // Determine requested URL path directly from req.url
   let requestUrl = req.url || ""
-  if (req.query?.path) {
-    if (Array.isArray(req.query.path)) {
-      requestUrl = `/api/${req.query.path.join("/")}`
-    } else if (typeof req.query.path === "string") {
-      requestUrl = `/api/${req.query.path}`
+
+  // If req.url was rewritten to the route pattern, recover the real path
+  if (requestUrl.includes("[...path]") || requestUrl === "/api" || requestUrl === "/api/") {
+    if (req.headers["x-forwarded-uri"]) {
+      requestUrl = req.headers["x-forwarded-uri"] as string
+    } else if (req.query?.path) {
+      if (Array.isArray(req.query.path)) {
+        requestUrl = `/api/${req.query.path.join("/")}`
+      } else if (typeof req.query.path === "string") {
+        requestUrl = `/api/${req.query.path}`
+      }
     }
-  } else if (req.headers["x-matched-path"] && typeof req.headers["x-matched-path"] === "string") {
-    requestUrl = req.headers["x-matched-path"]
-  } else if (req.headers["x-forwarded-uri"] && typeof req.headers["x-forwarded-uri"] === "string") {
-    requestUrl = req.headers["x-forwarded-uri"]
   }
 
   // Preserve query string if present

@@ -1570,7 +1570,12 @@ gpsSimulator.setOnTick((tick) => {
   });
 });
 function parseUrl(url) {
-  const [pathname, search] = url.split("?");
+  const [rawPath, search] = (url || "").split("?");
+  let pathname = rawPath || "/";
+  if (!pathname.startsWith("/")) pathname = "/" + pathname;
+  if (pathname.length > 1 && pathname.endsWith("/")) {
+    pathname = pathname.replace(/\/+$/, "");
+  }
   const query = new URLSearchParams(search || "");
   return { pathname, query };
 }
@@ -4271,16 +4276,16 @@ async function handler(req, res) {
     return;
   }
   let requestUrl = req.url || "";
-  if (req.query?.path) {
-    if (Array.isArray(req.query.path)) {
-      requestUrl = `/api/${req.query.path.join("/")}`;
-    } else if (typeof req.query.path === "string") {
-      requestUrl = `/api/${req.query.path}`;
+  if (requestUrl.includes("[...path]") || requestUrl === "/api" || requestUrl === "/api/") {
+    if (req.headers["x-forwarded-uri"]) {
+      requestUrl = req.headers["x-forwarded-uri"];
+    } else if (req.query?.path) {
+      if (Array.isArray(req.query.path)) {
+        requestUrl = `/api/${req.query.path.join("/")}`;
+      } else if (typeof req.query.path === "string") {
+        requestUrl = `/api/${req.query.path}`;
+      }
     }
-  } else if (req.headers["x-matched-path"] && typeof req.headers["x-matched-path"] === "string") {
-    requestUrl = req.headers["x-matched-path"];
-  } else if (req.headers["x-forwarded-uri"] && typeof req.headers["x-forwarded-uri"] === "string") {
-    requestUrl = req.headers["x-forwarded-uri"];
   }
   const originalUrl = req.url || "";
   const qIdx = originalUrl.indexOf("?");
