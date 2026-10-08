@@ -3,6 +3,21 @@ import { signJwt, verifyJwt, type JwtPayload } from "./jwt.ts"
 import { getUserMeta, saveUserMeta, deleteUserMeta } from "../userMeta.ts"
 import { getGosalaMeta } from "../gosalaMeta.ts"
 
+export const DEFAULT_PASSWORDS: Record<string, string> = {
+  "koushik@gmail.com": "Koushik.git",
+  "rammohan@gmail.com": "Koushik.git",
+  "vikramaditya@gomaa.in": "OpsAdmin@2026!",
+  "rajesh@gomaa.in": "OpsAdmin2@2026!",
+  "sunil.pawar@gomaa.in": "koushik.git",
+  "radha@gmail.com": "koushik.git",
+  "ramesh.test@gomaa.in": "Mgr@Ramesh2026!",
+  "suryavardhan@gmail.com": "koushik.git",
+  "aruna@gmail.com": "koushik.git",
+  "hari@gmail.com": "koushik.git",
+}
+
+export const inMemoryPasswords = new Map<string, string>()
+
 export interface UserSessionData {
   token: string
   user: {
@@ -98,7 +113,10 @@ export async function authenticateOrResolveUser(
   let user: any = null
 
   if (isSuperAdminTarget) {
-    if (password && password !== "Koushik.git") {
+    if (!password) {
+      throw new Error("Password is required for Super Admin account")
+    }
+    if (password !== "Koushik.git") {
       throw new Error("Invalid password for Super Admin account")
     }
 
@@ -126,6 +144,7 @@ export async function authenticateOrResolveUser(
             name: "Koushik",
             phone: "+91 98000 00000",
             role: "SUPER_ADMIN",
+            password: "Koushik.git",
             isActive: true,
           },
           update: {
@@ -173,11 +192,20 @@ export async function authenticateOrResolveUser(
     if (!user) {
       // Auto-provision known baseline accounts if table exists or fallback
       const meta = getUserMeta(query)
-      if (meta.password || query === "rammohan@gmail.com" || query === "radha@gmail.com" || query.includes("admin")) {
-        const expectedPass = meta.password || (query === "rammohan@gmail.com" ? "Koushik.git" : "koushik.git")
-        if (password && password !== expectedPass) {
+      const knownExpectedPass =
+        inMemoryPasswords.get(query) ||
+        meta.password ||
+        DEFAULT_PASSWORDS[query]
+
+      if (knownExpectedPass || query.includes("admin") || query === "rammohan@gmail.com" || query === "radha@gmail.com") {
+        const passToRequire = knownExpectedPass || (query === "rammohan@gmail.com" ? "Koushik.git" : "koushik.git")
+        if (!password) {
+          throw new Error("Password is required")
+        }
+        if (password !== passToRequire) {
           throw new Error("Invalid credentials")
         }
+
         const feRole = query.includes("admin") ? "admin" : query.includes("driver") ? "driver" : query === "radha@gmail.com" ? "customer" : "manager"
         const dbRole = mapFrontendToDbRole(feRole)
         const name = query === "rammohan@gmail.com" ? "Rammohan" : query === "radha@gmail.com" ? "Radha" : query.split("@")[0]
@@ -189,6 +217,7 @@ export async function authenticateOrResolveUser(
               name: name.charAt(0).toUpperCase() + name.slice(1),
               phone: "+91 98490 12345",
               role: dbRole as any,
+              password: passToRequire,
               isActive: true,
             },
             include: { managerAssignments: { include: { gosala: true } } },
@@ -206,16 +235,24 @@ export async function authenticateOrResolveUser(
       }
     }
 
-    if (!user) return null
+    if (!user) {
+      throw new Error("Invalid credentials or user not found")
+    }
 
-    // Validate password for accounts if configured
-    if (user.role === "SUPER_ADMIN") {
-      if (password && password !== "Koushik.git") {
-        throw new Error("Invalid password for Super Admin account")
+    // Validate password for account
+    const userEmailKey = (user.email || "").toLowerCase()
+    const expectedPass =
+      user.password ||
+      inMemoryPasswords.get(userEmailKey) ||
+      inMemoryPasswords.get(user.id) ||
+      getUserMeta(userEmailKey).password ||
+      DEFAULT_PASSWORDS[userEmailKey]
+
+    if (expectedPass) {
+      if (!password) {
+        throw new Error("Password is required")
       }
-    } else {
-      const meta = getUserMeta(user.email || user.id)
-      if (meta.password && password && meta.password !== password) {
+      if (password !== expectedPass) {
         throw new Error("Invalid credentials")
       }
     }
@@ -349,6 +386,7 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
       email: emailNorm,
       phone: phoneNorm || "+91 98000 00000",
       role: dbRole as any,
+      password: payload.password || undefined,
       isActive: true,
     },
   })
@@ -389,6 +427,8 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
   // Save role-specific rich metadata to persistent store
   const metaPatch: any = {}
   if (payload.password) {
+    inMemoryPasswords.set(emailNorm, payload.password)
+    inMemoryPasswords.set(user.id, payload.password)
     metaPatch.password = payload.password
   }
   if (payload.role === "customer" && payload.customerData) {
@@ -571,7 +611,12 @@ export async function getAllUsers() {
           avatar: u.avatar,
           createdAt: u.createdAt,
           assignedGosalaNames: assignedGosalas.map((g: any) => g.name),
-          password: meta.password,
+          password:
+            u.password ||
+            inMemoryPasswords.get(u.email.toLowerCase()) ||
+            inMemoryPasswords.get(u.id) ||
+            meta.password ||
+            DEFAULT_PASSWORDS[u.email.toLowerCase()],
           driverData: meta.driverData,
           customerData: meta.customerData,
         }
@@ -593,12 +638,20 @@ export async function updateUser(id: string, updates: Partial<RegisterUserPayloa
   if (updates.phone) data.phone = updates.phone.trim()
   if (updates.role) data.role = mapFrontendToDbRole(updates.role) as any
   if (updates.isActive !== undefined) data.isActive = updates.isActive
+  if (updates.password) {
+    data.password = updates.password
+    inMemoryPasswords.set(id, updates.password)
+  }
 
   const updated = await prisma.user.update({
     where: { id },
     data,
     include: { managerAssignments: { include: { gosala: true } } },
   })
+
+  if (updates.password) {
+    inMemoryPasswords.set(updated.email.toLowerCase(), updates.password)
+  }
 
   // Update metadata
   const metaPatch: any = {}

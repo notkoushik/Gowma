@@ -22,6 +22,7 @@ import {
   getAllUsers,
   updateUser,
   deleteUser,
+  inMemoryPasswords,
 } from "./auth/authService.ts"
 
 type HandlerResponse = {
@@ -2060,6 +2061,14 @@ export async function handleApiRequest(
 
       if (body.password) {
         setUserMeta(user.email, { password: body.password })
+        inMemoryPasswords.set(user.email.toLowerCase(), body.password)
+        inMemoryPasswords.set(user.id, body.password)
+        try {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { password: body.password },
+          })
+        } catch {}
       }
 
       // Determine target Gaushalas (supports multiple or single)
@@ -2148,6 +2157,14 @@ export async function handleApiRequest(
     if (body.password) {
       setUserMeta(user.email, { password: body.password })
       setUserMeta(user.id, { password: body.password })
+      inMemoryPasswords.set(user.email.toLowerCase(), body.password)
+      inMemoryPasswords.set(user.id, body.password)
+      try {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { password: body.password },
+        })
+      } catch {}
     }
 
     // If gosalas array was provided, sync assignments!

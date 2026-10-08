@@ -348,14 +348,26 @@ export default function App() {
     } else {
       try {
         let email = ""
-        if (role === "super_admin") email = "superadmin@gomaa.in"
-        else if (role === "admin") email = "admin@gomaa.in"
-        else if (role === "manager") email = profiles?.manager?.email || "rahul.kamble@gomaa.in"
-        else if (role === "driver") email = profiles?.driver?.email || "sunil.pawar@gomaa.in"
-        else if (role === "customer") email = profiles?.customer?.email || "ananya.deshmukh@gmail.com"
+        let password = ""
+        if (role === "super_admin") {
+          email = "koushik@gmail.com"
+          password = "Koushik.git"
+        } else if (role === "admin") {
+          email = "vikramaditya@gomaa.in"
+          password = "OpsAdmin@2026!"
+        } else if (role === "manager") {
+          email = profiles?.manager?.email || "rammohan@gmail.com"
+          password = "Koushik.git"
+        } else if (role === "driver") {
+          email = profiles?.driver?.email || "sunil.pawar@gomaa.in"
+          password = "koushik.git"
+        } else if (role === "customer") {
+          email = profiles?.customer?.email || "radha@gmail.com"
+          password = "koushik.git"
+        }
 
         if (email) {
-          const authRes = await api.login(email, role)
+          const authRes = await api.login(email, role, password)
           if (authRes.ok && authRes.token) {
             setAuthSession(authRes.token, authRes.user)
           }

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "prisma generate && vite build",
+    "build": "node scripts/db-deploy.js && vite build",
     "preview": "vite preview",
     "format": "oxfmt src"
   },

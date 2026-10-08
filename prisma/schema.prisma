@@ -80,6 +80,7 @@ model User {
   name      String
   phone     String
   role      UserRole
+  password  String?
   avatar    String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
