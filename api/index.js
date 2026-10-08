@@ -4282,17 +4282,14 @@ function resolveRequestUrl(req) {
     const remainingQuery = parsed.searchParams.toString();
     return remainingQuery ? `${reconstructedPath}?${remainingQuery}` : reconstructedPath;
   }
-  if (parsed.pathname.includes("[...path]")) {
-    let pathSegments = [];
-    if (parsed.searchParams.has("path")) {
-      pathSegments = parsed.searchParams.getAll("path");
-      parsed.searchParams.delete("path");
-    } else if (req.query?.path) {
-      pathSegments = Array.isArray(req.query.path) ? req.query.path : [req.query.path];
-    }
-    const reconstructedPath = "/api/" + pathSegments.map((s) => s.replace(/^\/+|\/+$/g, "")).filter(Boolean).join("/");
+  const matchedPath = req.headers?.["x-matched-path"] || "";
+  if (matchedPath.startsWith("/api") && !matchedPath.includes("index.js")) {
     const remainingQuery = parsed.searchParams.toString();
-    return remainingQuery ? `${reconstructedPath}?${remainingQuery}` : reconstructedPath;
+    return remainingQuery ? `${matchedPath}?${remainingQuery}` : matchedPath;
+  }
+  const fwdUri = req.headers?.["x-forwarded-uri"] || "";
+  if (fwdUri.startsWith("/api")) {
+    return fwdUri;
   }
   let pathname = parsed.pathname;
   if (!pathname.startsWith("/api")) {

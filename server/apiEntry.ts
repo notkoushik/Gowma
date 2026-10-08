@@ -19,27 +19,19 @@ function resolveRequestUrl(req: any): string {
     return remainingQuery ? `${reconstructedPath}?${remainingQuery}` : reconstructedPath
   }
 
-  // 2. If URL has [...path], reconstruct path from query or searchParams
-  if (parsed.pathname.includes("[...path]")) {
-    let pathSegments: string[] = []
-    if (parsed.searchParams.has("path")) {
-      pathSegments = parsed.searchParams.getAll("path")
-      parsed.searchParams.delete("path")
-    } else if (req.query?.path) {
-      pathSegments = Array.isArray(req.query.path) ? req.query.path : [req.query.path]
-    }
-
-    const reconstructedPath =
-      "/api/" +
-      pathSegments
-        .map((s) => s.replace(/^\/+|\/+$/g, ""))
-        .filter(Boolean)
-        .join("/")
+  // 2. Check headers
+  const matchedPath = (req.headers?.["x-matched-path"] as string) || ""
+  if (matchedPath.startsWith("/api") && !matchedPath.includes("index.js")) {
     const remainingQuery = parsed.searchParams.toString()
-    return remainingQuery ? `${reconstructedPath}?${remainingQuery}` : reconstructedPath
+    return remainingQuery ? `${matchedPath}?${remainingQuery}` : matchedPath
   }
 
-  // 3. Normalize pathname so it always begins with /api
+  const fwdUri = (req.headers?.["x-forwarded-uri"] as string) || ""
+  if (fwdUri.startsWith("/api")) {
+    return fwdUri
+  }
+
+  // 3. Fallback normalization
   let pathname = parsed.pathname
   if (!pathname.startsWith("/api")) {
     pathname = "/api" + (pathname.startsWith("/") ? "" : "/") + pathname
