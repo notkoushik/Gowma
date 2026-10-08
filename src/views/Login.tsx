@@ -13,6 +13,7 @@ import {
   AlertCircle,
   KeyRound,
   Shield,
+  ShieldAlert,
   Check,
 } from "lucide-react"
 import { type RoleId } from "../data/roles"
