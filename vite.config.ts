@@ -4,28 +4,12 @@ import tailwindcss from "@tailwindcss/vite"
 import path from "node:path"
 
 import siteConfiguration from "./.figma/make/site.json"
+import { gOMAABackendPlugin } from "./server/vitePlugin.ts"
 
 // Vite config — https://vitejs.dev/config/
-export default defineConfig(async ({ command, mode }) => {
+export default defineConfig(({ mode }) => {
   // .figma/make/deploy-preview passes `--mode development` for cached-preview builds.
   const emitSourcemaps = mode === "development"
-
-  const plugins: Plugin[] = [
-    react(),
-    tailwindcss(),
-    figmaSiteConfiguration(siteConfiguration),
-    figmaErrorOverlayReplay(),
-    figmaReactRefreshBoundaryFallback(),
-    figmaMakeKitPlugin({ storiesGlob: "/src/**/*.stories.{ts,tsx,js,jsx}" }),
-  ]
-
-  if (command === "serve") {
-    const serverPluginPath = "./server/vitePlugin.ts"
-    const { gOMAABackendPlugin } = await import(
-      /* @vite-ignore */ serverPluginPath
-    )
-    plugins.push(gOMAABackendPlugin())
-  }
 
   return {
     base: process.env.FIGMA_PUBLIC_URL
@@ -35,7 +19,15 @@ export default defineConfig(async ({ command, mode }) => {
       sourcemap: emitSourcemaps ? "inline" : false,
       minify: !emitSourcemaps,
     },
-    plugins,
+    plugins: [
+      react(),
+      tailwindcss(),
+      gOMAABackendPlugin(),
+      figmaSiteConfiguration(siteConfiguration),
+      figmaErrorOverlayReplay(),
+      figmaReactRefreshBoundaryFallback(),
+      figmaMakeKitPlugin({ storiesGlob: "/src/**/*.stories.{ts,tsx,js,jsx}" }),
+    ],
     resolve: {
       alias: {
         "@": path.resolve(import.meta.dirname ?? __dirname, "./src"),

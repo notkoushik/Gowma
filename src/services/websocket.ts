@@ -100,7 +100,9 @@ export class WebSocketClient {
     }
 
     this.ws.onerror = (err) => {
-      console.warn("[WS] Socket error:", err)
+      if (this.reconnectAttempts <= 1 && typeof window !== "undefined" && window.location.hostname === "localhost") {
+        console.warn("[WS] Socket error:", err)
+      }
       this.ws?.close()
     }
   }
@@ -196,6 +198,14 @@ export class WebSocketClient {
 
   private scheduleReconnect() {
     if (this.reconnectTimeout || this.isExplicitlyClosed) return
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) return
+
+    const isServerlessHost =
+      typeof window !== "undefined" && window.location.hostname.includes("vercel.app")
+    if (isServerlessHost && this.reconnectAttempts >= 2) {
+      return
+    }
+
     this.reconnectAttempts++
     const delay = Math.min(
       1000 * Math.pow(1.5, this.reconnectAttempts - 1),
