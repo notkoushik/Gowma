@@ -1,4 +1,4 @@
-import { handleApiRequest } from "../server/router.ts"
+import { handleApiRequest } from "./router.ts"
 
 export default async function handler(req: any, res: any) {
   // CORS support
