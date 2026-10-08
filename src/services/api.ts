@@ -111,6 +111,10 @@ export const api = {
   },
 
   async getMe() {
+    const token = getAuthToken()
+    if (!token) {
+      return { ok: false, user: null }
+    }
     return request<{ ok: boolean; user: any }>("/api/auth/me")
   },
 
