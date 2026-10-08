@@ -795,11 +795,11 @@ export default function GosalaManagers() {
         </div>
 
         {currentRole === "super_admin" ? (
-          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
             <select
               value={adminPortfolioFilter}
               onChange={(e) => setAdminPortfolioFilter(e.target.value)}
-              className="bg-paper border border-amber-300 rounded px-2.5 py-1.5 text-[12px] text-ink font-medium outline-none focus:border-amber-500 transition shadow-2xs"
+              className="w-full sm:w-auto bg-paper border border-amber-300 rounded px-2.5 py-2 sm:py-1.5 text-[12px] text-ink font-medium outline-none focus:border-amber-500 transition shadow-2xs"
             >
               <option value="All">All Operations Portfolios ({gosalas.length} Sanctuaries)</option>
               {registeredOperationsAdmins.map((adm) => {
@@ -828,14 +828,14 @@ export default function GosalaManagers() {
                 setShowNewUserPassword(false)
                 setShowAddUserModal(true)
               }}
-              className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white text-[12px] font-semibold px-3 py-1.5 rounded transition shadow-xs cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white text-[12px] font-semibold px-3 py-2 sm:py-1.5 rounded transition shadow-xs cursor-pointer w-full sm:w-auto whitespace-nowrap"
             >
               <Plus size={13} />
               <span>Register Operations Admin</span>
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
             <span className="inline-flex items-center gap-1 font-mono text-[11px] bg-forest-soft text-forest px-2.5 py-1 rounded border border-forest/20 font-semibold">
               <ShieldCheck size={13} /> Strict Portfolio Isolation
             </span>
@@ -844,105 +844,72 @@ export default function GosalaManagers() {
       </div>
 
       {/* Top Banner / Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-card border border-line rounded-md p-4 flex items-center justify-between">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <div className="bg-card border border-line rounded-md p-3.5 sm:p-4 flex items-center justify-between">
           <div>
-            <div className="font-mono text-[11px] text-ink-faint uppercase">
+            <div className="font-mono text-[10.5px] sm:text-[11px] text-ink-faint uppercase">
               Registered Gaushalas
             </div>
-            <div className="font-serif text-[24px] font-bold text-ink mt-0.5">
+            <div className="font-serif text-[22px] sm:text-[24px] font-bold text-ink mt-0.5">
               {scopedGosalas.length}
             </div>
           </div>
-          <div className="h-10 w-10 rounded-full bg-forest-soft text-forest flex items-center justify-center">
-            <Building2 size={20} />
+          <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-forest-soft text-forest flex items-center justify-center shrink-0">
+            <Building2 size={18} />
           </div>
         </div>
 
-        <div className="bg-card border border-line rounded-md p-4 flex items-center justify-between">
+        <div className="bg-card border border-line rounded-md p-3.5 sm:p-4 flex items-center justify-between">
           <div>
-            <div className="font-mono text-[11px] text-ink-faint uppercase">
+            <div className="font-mono text-[10.5px] sm:text-[11px] text-ink-faint uppercase">
               Active Custodian Managers
             </div>
-            <div className="font-serif text-[24px] font-bold text-ink mt-0.5">
+            <div className="font-serif text-[22px] sm:text-[24px] font-bold text-ink mt-0.5">
               {activeManagersCount}
             </div>
           </div>
-          <div className="h-10 w-10 rounded-full bg-saffron-soft text-saffron-deep flex items-center justify-center">
-            <Users size={20} />
+          <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-saffron-soft text-saffron-deep flex items-center justify-center shrink-0">
+            <Users size={18} />
           </div>
         </div>
 
-        <div className="bg-card border border-line rounded-md p-4 flex items-center justify-between">
+        <div className="bg-card border border-line rounded-md p-3.5 sm:p-4 flex items-center justify-between">
           <div>
-            <div className="font-mono text-[11px] text-ink-faint uppercase">
+            <div className="font-mono text-[10.5px] sm:text-[11px] text-ink-faint uppercase">
               Unassigned / Admin Acting
             </div>
-            <div className="font-serif text-[24px] font-bold text-amber-700 dark:text-amber-400 mt-0.5">
+            <div className="font-serif text-[22px] sm:text-[24px] font-bold text-amber-700 dark:text-amber-400 mt-0.5">
               {unassignedSheltersCount}
             </div>
           </div>
-          <div className="h-10 w-10 rounded-full bg-amber-500/15 text-amber-600 flex items-center justify-center">
-            <ShieldAlert size={20} />
+          <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-amber-500/15 text-amber-600 flex items-center justify-center shrink-0">
+            <ShieldAlert size={18} />
           </div>
         </div>
       </div>
 
       {/* Main Panel */}
       <Panel>
-        <div className="p-5 border-b border-line flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <Eyebrow>Operations &amp; Custodian Governance</Eyebrow>
-            <h2 className="font-serif text-[20px] text-ink mt-0.5">
-              Gaushala Custodians &amp; Acting Matrix
-            </h2>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Tab selector */}
-            <div className="bg-paper border border-line rounded-sm p-0.5 flex items-center">
-              <button
-                onClick={() => setActiveTab("matrix")}
-                className={`px-3 py-1 text-[12px] font-mono rounded-sm transition cursor-pointer ${
-                  activeTab === "matrix"
-                    ? "bg-saffron text-white font-medium shadow-xs"
-                    : "text-ink-soft hover:text-ink"
-                }`}
-              >
-                Assignment Matrix
-              </button>
-              <button
-                onClick={() => setActiveTab("managers")}
-                className={`px-3 py-1 text-[12px] font-mono rounded-sm transition cursor-pointer ${
-                  activeTab === "managers"
-                    ? "bg-saffron text-white font-medium shadow-xs"
-                    : "text-ink-soft hover:text-ink"
-                }`}
-              >
-                Managers ({scopedManagers.length})
-              </button>
-              <button
-                onClick={() => setActiveTab("users")}
-                className={`px-3 py-1 text-[12px] font-mono rounded-sm transition cursor-pointer ${
-                  activeTab === "users"
-                    ? "bg-saffron text-white font-medium shadow-xs"
-                    : "text-ink-soft hover:text-ink"
-                }`}
-              >
-                All Users &amp; Roles ({users.length})
-              </button>
+        <div className="p-3.5 sm:p-5 border-b border-line space-y-3.5">
+          {/* Header Title + Action Buttons */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div>
+              <Eyebrow>Operations &amp; Custodian Governance</Eyebrow>
+              <h2 className="font-serif text-[18px] sm:text-[20px] text-ink mt-0.5 font-semibold">
+                Gaushala Custodians &amp; Acting Matrix
+              </h2>
             </div>
 
-            {/* Persistent, smooth action bar across all tabs */}
-            <div className="flex items-center gap-2 shrink-0">
+            {/* Persistent Action Bar - Clean responsive grid on mobile, row on desktop */}
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full lg:w-auto">
               {/* Register Gaushala Button */}
               <button
                 type="button"
                 onClick={openRegisterGosalaModal}
-                className="inline-flex items-center gap-1.5 h-8.5 bg-saffron hover:bg-saffron-deep text-white text-[12.5px] font-medium px-3.5 rounded-sm transition shadow-xs cursor-pointer whitespace-nowrap"
+                className="inline-flex items-center justify-center gap-1.5 h-9 bg-saffron hover:bg-saffron-deep text-white text-[12px] sm:text-[12.5px] font-medium px-3 sm:px-3.5 rounded-sm transition shadow-xs cursor-pointer whitespace-nowrap"
                 title="Register a new Gaushala sanctuary"
               >
-                <Building2 size={14} />
+                <Building2 size={14} className="shrink-0" />
                 <span>Register Gaushala</span>
               </button>
 
@@ -950,14 +917,14 @@ export default function GosalaManagers() {
               <button
                 type="button"
                 onClick={handleOpenAdd}
-                className="inline-flex items-center gap-1.5 h-8.5 bg-forest hover:bg-forest-deep text-white text-[12.5px] font-medium px-3.5 rounded-sm transition shadow-xs cursor-pointer whitespace-nowrap"
+                className="inline-flex items-center justify-center gap-1.5 h-9 bg-forest hover:bg-forest-deep text-white text-[12px] sm:text-[12.5px] font-medium px-3 sm:px-3.5 rounded-sm transition shadow-xs cursor-pointer whitespace-nowrap"
                 title="Add a new Gaushala custodian manager"
               >
-                <Plus size={14} />
+                <Plus size={14} className="shrink-0" />
                 <span>Add Manager</span>
               </button>
 
-              {/* Add Platform User Button */}
+              {/* Add Platform User Button (spans 2 cols on mobile) */}
               <button
                 type="button"
                 onClick={() => {
@@ -970,15 +937,51 @@ export default function GosalaManagers() {
                   setNewUserAddress("")
                   setShowAddUserModal(true)
                 }}
-                className={`inline-flex items-center gap-1.5 h-8.5 text-[12.5px] font-medium px-3.5 rounded-sm transition shadow-xs cursor-pointer whitespace-nowrap ${
+                className={`col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1.5 h-9 text-[12px] sm:text-[12.5px] font-medium px-3 sm:px-3.5 rounded-sm transition shadow-xs cursor-pointer whitespace-nowrap ${
                   activeTab === "users"
                     ? "bg-amber-600 hover:bg-amber-700 text-white"
                     : "bg-paper hover:bg-paper-deep text-ink border border-line"
                 }`}
                 title="Authorize a new devotee, driver, or user"
               >
-                <Plus size={14} />
-                <span>Add User</span>
+                <Plus size={14} className="shrink-0" />
+                <span>Add User / Role</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Tab Selector - Scrollable pill bar on mobile, seamless on desktop */}
+          <div className="w-full overflow-x-auto no-scrollbar pt-0.5">
+            <div className="bg-paper border border-line rounded-sm p-0.5 inline-flex items-center min-w-full sm:min-w-0 sm:w-fit">
+              <button
+                onClick={() => setActiveTab("matrix")}
+                className={`flex-1 sm:flex-initial text-center px-3 py-1.5 text-[11.5px] sm:text-[12px] font-mono rounded-sm transition cursor-pointer whitespace-nowrap ${
+                  activeTab === "matrix"
+                    ? "bg-saffron text-white font-medium shadow-xs"
+                    : "text-ink-soft hover:text-ink"
+                }`}
+              >
+                Assignment Matrix
+              </button>
+              <button
+                onClick={() => setActiveTab("managers")}
+                className={`flex-1 sm:flex-initial text-center px-3 py-1.5 text-[11.5px] sm:text-[12px] font-mono rounded-sm transition cursor-pointer whitespace-nowrap ${
+                  activeTab === "managers"
+                    ? "bg-saffron text-white font-medium shadow-xs"
+                    : "text-ink-soft hover:text-ink"
+                }`}
+              >
+                Managers ({scopedManagers.length})
+              </button>
+              <button
+                onClick={() => setActiveTab("users")}
+                className={`flex-1 sm:flex-initial text-center px-3 py-1.5 text-[11.5px] sm:text-[12px] font-mono rounded-sm transition cursor-pointer whitespace-nowrap ${
+                  activeTab === "users"
+                    ? "bg-saffron text-white font-medium shadow-xs"
+                    : "text-ink-soft hover:text-ink"
+                }`}
+              >
+                All Users &amp; Roles ({users.length})
               </button>
             </div>
           </div>
@@ -987,7 +990,125 @@ export default function GosalaManagers() {
         {/* TAB 1: ASSIGNMENT MATRIX */}
         {activeTab === "matrix" && (
           <div>
-            <div className="overflow-x-auto">
+            {/* Mobile Card View (md:hidden) */}
+            <div className="md:hidden divide-y divide-line">
+              {matrixData.map(
+                ({
+                  gosala,
+                  activeManagers,
+                  inactiveManagers,
+                  animalsCount,
+                }) => (
+                  <div key={gosala.id} className="p-3.5 space-y-2.5 hover:bg-paper/50 transition">
+                    {/* Top Row: Name + Status */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-semibold text-[13.5px] text-ink leading-snug">
+                          {gosala.name}
+                        </div>
+                        <div className="text-[11.5px] text-ink-faint flex items-center gap-1.5 mt-0.5">
+                          <MapPin size={11} className="text-saffron shrink-0" />
+                          <span>{gosala.region}</span>
+                          <span>·</span>
+                          <span className="font-medium text-ink-soft">{animalsCount} cows</span>
+                        </div>
+                      </div>
+                      {activeManagers.length > 0 ? (
+                        <Tag tone="ok">
+                          {activeManagers.length > 1 ? `${activeManagers.length} Staffed` : "Staffed"}
+                        </Tag>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10.5px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 font-semibold border border-amber-500/20 shrink-0">
+                          Admin Acting
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Custodian Box */}
+                    <div className="bg-card/70 border border-line rounded p-2.5 text-[12px]">
+                      <div className="text-[10px] font-mono uppercase tracking-wider text-ink-faint mb-1.5">
+                        Assigned Custodian
+                      </div>
+                      {activeManagers.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {activeManagers.map((m) => (
+                            <div key={m.id} className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <div className="h-6 w-6 rounded-full bg-forest-soft text-forest text-[10.5px] font-semibold flex items-center justify-center shrink-0">
+                                  {m.name.slice(0, 1)}
+                                </div>
+                                <span className="font-medium text-ink">{m.name}</span>
+                              </div>
+                              <span className="font-mono text-[10.5px] text-ink-faint">({m.id})</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : inactiveManagers.length > 0 ? (
+                        <div className="space-y-1">
+                          <div className="text-[11.5px] text-ink-faint line-through">
+                            {inactiveManagers[0].name} (Inactive)
+                          </div>
+                          <span className="inline-flex items-center gap-1 font-mono text-[10px] text-amber-700 dark:text-amber-400 font-semibold">
+                            <AlertTriangle size={10} /> Unassigned · Inactive Manager
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1.5 text-amber-700 dark:text-amber-400 font-mono text-[11px] font-medium">
+                          <ShieldAlert size={13} className="shrink-0 text-amber-600" />
+                          <span>Direct Operations Admin In-Charge</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Buttons Row */}
+                    <div className="flex items-center gap-2 pt-0.5">
+                      {activeManagers.length > 0 ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleTakeOverAsActing(gosala)}
+                            className="flex-1 inline-flex items-center justify-center gap-1 text-[11.5px] font-medium text-amber-800 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 py-2 px-2.5 rounded border border-amber-500/30 transition shadow-2xs cursor-pointer"
+                          >
+                            <ShieldCheck size={13} className="text-amber-600 shrink-0" />
+                            <span>Act as Manager</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenReassign(gosala)}
+                            className="flex-1 inline-flex items-center justify-center gap-1 text-[11.5px] font-medium text-saffron-deep bg-saffron-soft/60 hover:bg-saffron-soft py-2 px-2.5 rounded border border-saffron/30 transition cursor-pointer"
+                          >
+                            <ArrowRightLeft size={13} className="shrink-0" />
+                            <span>Reassign</span>
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReassign(gosala)}
+                          className="w-full inline-flex items-center justify-center gap-1.5 text-[12px] font-semibold bg-saffron text-white hover:bg-saffron-deep py-2.5 px-3 rounded shadow-xs transition cursor-pointer"
+                        >
+                          <Plus size={14} className="shrink-0" />
+                          <span>Appoint Sanctuary Manager</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ),
+              )}
+
+              {matrixData.length === 0 && (
+                <div className="py-12 px-4 text-center">
+                  <div className="h-10 w-10 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center mx-auto border border-amber-200 mb-2">
+                    <Building2 size={20} />
+                  </div>
+                  <div className="font-serif text-[15px] font-medium text-ink">No Gaushalas Registered</div>
+                  <p className="text-[12px] text-ink-faint mt-1">Click &quot;Register Gaushala&quot; above to add one.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Desktop Table View (hidden md:block) */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full border-collapse min-w-[760px]">
                 <thead>
                   <tr className="border-b border-line bg-card/60">
@@ -1211,8 +1332,135 @@ export default function GosalaManagers() {
               </div>
             </div>
 
-            {/* Managers Table */}
-            <div className="overflow-x-auto">
+            {/* Mobile Card View for Managers */}
+            <div className="md:hidden divide-y divide-line">
+              {filteredManagers.map((m) => {
+                const managerGosalas = getManagerAssignedGosalas(m)
+                const dynamicCowCount = animals.filter((a) =>
+                  managerGosalas.some(
+                    (gn) => gn.toLowerCase() === a.gosala.toLowerCase(),
+                  ),
+                ).length
+
+                return (
+                  <div key={m.id} className="p-3.5 space-y-2.5 hover:bg-paper/50 transition">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-9 w-9 rounded-full bg-saffron-soft text-saffron-deep font-semibold flex items-center justify-center text-[12px] shrink-0 border border-saffron/20">
+                          {m.name
+                            .split(" ")
+                            .map((x) => x[0])
+                            .join("")
+                            .slice(0, 2)}
+                        </div>
+                        <div>
+                          <div className="font-semibold text-[13.5px] text-ink leading-snug">
+                            {m.name}
+                          </div>
+                          <div className="font-mono text-[10.5px] text-ink-faint">
+                            {m.id} {m.region ? `· ${m.region}` : ""}
+                          </div>
+                        </div>
+                      </div>
+                      {m.status === "Active" ? (
+                        <Tag tone="ok">Active</Tag>
+                      ) : (
+                        <Tag tone="warn">Inactive</Tag>
+                      )}
+                    </div>
+
+                    <div>
+                      <div className="text-[10px] font-mono uppercase tracking-wider text-ink-faint mb-1 flex items-center justify-between">
+                        <span>Assigned Sanctuaries</span>
+                        <span className="font-medium text-ink-soft">{dynamicCowCount} cows</span>
+                      </div>
+                      {managerGosalas.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {managerGosalas.map((gn) => (
+                            <span
+                              key={gn}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-forest-soft text-forest border border-forest/20"
+                            >
+                              <Building2 size={10} className="shrink-0" />
+                              <span>{gn}</span>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 font-semibold">
+                          ⚠️ Unassigned
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-soft bg-card/60 border border-line rounded px-2.5 py-1.5 font-mono">
+                      <a href={`tel:${m.phone}`} className="flex items-center gap-1 hover:text-ink">
+                        <Phone size={11} className="text-ink-faint shrink-0" />
+                        <span>{m.phone}</span>
+                      </a>
+                      <span className="text-line-strong">·</span>
+                      <span className="truncate max-w-[170px]">{m.email}</span>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShareCredentials({
+                            name: m.name,
+                            role: "manager",
+                            roleLabel: "Gaushala Manager",
+                            email: m.email,
+                            phone: m.phone,
+                            password: m.password || "Mgr@Gomaa2026!",
+                            assignedScope: m.gosalas?.join(", ") || m.gosala,
+                            region: m.region,
+                          })
+                        }}
+                        className="inline-flex items-center justify-center gap-1 py-1.5 px-1.5 bg-paper border border-line rounded text-[11px] font-medium text-forest hover:bg-paper-deep transition shadow-2xs"
+                        title="View credentials"
+                      >
+                        <Key size={11} className="shrink-0" />
+                        <span>Pass</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(m)}
+                        className="inline-flex items-center justify-center gap-1 py-1.5 px-1.5 bg-paper border border-line rounded text-[11px] font-medium text-saffron-deep hover:bg-paper-deep transition shadow-2xs"
+                      >
+                        <Edit3 size={11} className="shrink-0" />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeactivatingManager(m)}
+                        className={`inline-flex items-center justify-center gap-1 py-1.5 px-1.5 bg-paper border border-line rounded text-[11px] font-medium transition shadow-2xs ${
+                          m.status === "Active" ? "text-amber-700 hover:bg-amber-50" : "text-forest hover:bg-forest-soft"
+                        }`}
+                      >
+                        <span>{m.status === "Active" ? "Pause" : "Resume"}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeletingManager(m)}
+                        className="inline-flex items-center justify-center gap-1 py-1.5 px-1.5 bg-paper border border-line rounded text-[11px] font-medium text-ink-faint hover:text-danger hover:bg-red-50 transition shadow-2xs"
+                      >
+                        <Trash2 size={11} className="shrink-0" />
+                        <span>Del</span>
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+              {filteredManagers.length === 0 && (
+                <div className="px-4 py-8 text-center text-ink-faint text-[13px]">
+                  No Gosala managers match your search criteria.
+                </div>
+              )}
+            </div>
+
+            {/* Desktop Managers Table */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full border-collapse min-w-[840px]">
                 <thead>
                   <tr className="border-b border-line bg-card/60">
@@ -1427,7 +1675,158 @@ export default function GosalaManagers() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile Card View for Users & Roles */}
+            <div className="md:hidden divide-y divide-line">
+              {users
+                .filter((u) => {
+                  const matchesQuery =
+                    !userQuery ||
+                    u.name.toLowerCase().includes(userQuery.toLowerCase()) ||
+                    u.email.toLowerCase().includes(userQuery.toLowerCase()) ||
+                    u.phone.includes(userQuery)
+                  const matchesRole =
+                    userRoleFilter === "All" || u.role === userRoleFilter
+                  return matchesQuery && matchesRole
+                })
+                .map((u) => {
+                  const isSa = u.role === "super_admin"
+                  const isAdm = u.role === "admin"
+                  const isMgr = u.role === "manager"
+                  const isDrv = u.role === "driver"
+                  const isCust = u.role === "customer"
+
+                  const roleBadge = isSa ? (
+                    <span className="font-mono text-[10px] bg-amber-500/15 text-amber-800 border border-amber-500/30 px-2 py-0.5 rounded font-bold inline-flex items-center gap-1">
+                      <Crown size={10} /> Super Admin
+                    </span>
+                  ) : isAdm ? (
+                    <span className="font-mono text-[10px] bg-forest/15 text-forest border border-forest/30 px-2 py-0.5 rounded font-semibold inline-flex items-center gap-1">
+                      <ShieldCheck size={10} /> Operations Admin
+                    </span>
+                  ) : isMgr ? (
+                    <span className="font-mono text-[10px] bg-saffron-soft text-saffron-deep border border-saffron/30 px-2 py-0.5 rounded font-medium inline-flex items-center gap-1">
+                      <Building2 size={10} /> Gaushala Manager
+                    </span>
+                  ) : isDrv ? (
+                    <span className="font-mono text-[10px] bg-blue-500/15 text-blue-800 border border-blue-500/30 px-2 py-0.5 rounded font-medium inline-flex items-center gap-1">
+                      <Truck size={10} /> Transit Pilot
+                    </span>
+                  ) : (
+                    <span className="font-mono text-[10px] bg-purple-500/15 text-purple-800 border border-purple-500/30 px-2 py-0.5 rounded font-medium inline-flex items-center gap-1">
+                      <HeartHandshake size={10} /> Devotee
+                    </span>
+                  )
+
+                  const boundScope = isMgr
+                    ? u.assignedGosalaNames?.join(", ") || "General Roster"
+                    : isDrv
+                      ? `${u.driverData?.vehicleNumber || "Fleet Van"} (${u.driverData?.gosalaBase || "Regional"})`
+                      : isCust
+                        ? u.customerData?.address || "Devotee Altar"
+                        : isSa
+                          ? "Central Treasury & Sovereign Governance"
+                          : "Regional Sanctuary Cluster"
+
+                  return (
+                    <div key={u.id} className="p-3.5 space-y-2.5 hover:bg-paper/50 transition">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="h-9 w-9 rounded-full bg-paper-deep text-ink flex items-center justify-center font-bold text-[12px] border border-line shrink-0">
+                            {u.name.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="font-semibold text-[13.5px] text-ink leading-snug">
+                              {u.name}
+                            </div>
+                            <div className="font-mono text-[10.5px] text-ink-faint">
+                              {u.id.slice(0, 8)}...
+                            </div>
+                          </div>
+                        </div>
+                        {roleBadge}
+                      </div>
+
+                      <div className="bg-card/70 border border-line rounded px-2.5 py-1.5 text-[11.5px]">
+                        <div className="text-[10px] font-mono uppercase tracking-wider text-ink-faint">
+                          JWT Scope / Facility
+                        </div>
+                        <div className="font-medium text-ink truncate mt-0.5" title={boundScope}>
+                          {boundScope}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-soft font-mono">
+                        <a href={`tel:${u.phone}`} className="flex items-center gap-1 hover:text-ink">
+                          <Phone size={11} className="text-ink-faint shrink-0" />
+                          <span>{u.phone}</span>
+                        </a>
+                        <span className="text-line-strong">·</span>
+                        <span className="truncate max-w-[170px]">{u.email}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 pt-1">
+                        {u.isActive ? (
+                          <Tag tone="ok">Active</Tag>
+                        ) : (
+                          <Tag tone="warn">Suspended</Tag>
+                        )}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const roleLabelMap: Record<string, string> = {
+                                customer: "Devotee (Customer)",
+                                driver: "Transit Pilot (Driver)",
+                                manager: "Gaushala Manager",
+                                admin: "Operations Admin",
+                                super_admin: "Super Admin",
+                              }
+                              setShareCredentials({
+                                name: u.name,
+                                role: u.role,
+                                roleLabel: roleLabelMap[u.role] || u.role,
+                                email: u.email,
+                                phone: u.phone,
+                                password:
+                                  (u as any).password ||
+                                  (u.email === "koushik@gmail.com"
+                                    ? "Koushik.git"
+                                    : "Gomaa@2026!"),
+                                assignedScope: (u as any).assignedGosalaNames?.join(", "),
+                              })
+                            }}
+                            className="inline-flex items-center gap-1 py-1 px-2.5 bg-paper border border-line rounded text-[11.5px] font-medium text-forest hover:bg-paper-deep transition shadow-2xs"
+                          >
+                            <Key size={11} />
+                            <span>Pass</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateUser(u.id, { isActive: !u.isActive })}
+                            className="inline-flex items-center gap-1 py-1 px-2.5 bg-paper border border-line rounded text-[11.5px] font-medium text-saffron-deep hover:bg-paper-deep transition shadow-2xs"
+                          >
+                            <span>{u.isActive ? "Suspend" : "Activate"}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Remove user ${u.name}?`)) {
+                                deleteUser(u.id)
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 py-1 px-2 bg-paper border border-line rounded text-[11.5px] font-medium text-ink-faint hover:text-danger hover:bg-red-50 transition shadow-2xs"
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+            </div>
+
+            {/* Desktop Users Table */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full border-collapse min-w-[760px]">
                 <thead>
                   <tr className="border-b border-line bg-card/60">

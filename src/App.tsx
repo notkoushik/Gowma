@@ -1009,7 +1009,7 @@ export default function App() {
           ))}
         </nav>
 
-        <main className="flex-1 p-5 lg:p-8">
+        <main className="flex-1 min-w-0 max-w-full overflow-x-hidden p-3 sm:p-5 lg:p-8">
           {view === "overview" && <Overview />}
           {view === "gosalas" && (
             <Gaushalas onNavigateToHerd={() => handleSetAdminView("animals")} />
