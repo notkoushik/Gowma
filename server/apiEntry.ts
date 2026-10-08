@@ -9,7 +9,17 @@ function resolveRequestUrl(req: any): string {
     parsed = new URL("/api", "http://localhost")
   }
 
-  // 1. If URL has [...path], reconstruct path from query or searchParams
+  // 1. If rewritten by vercel.json with __api_path
+  if (parsed.searchParams.has("__api_path")) {
+    const apiPath = parsed.searchParams.get("__api_path") || ""
+    parsed.searchParams.delete("__api_path")
+    const cleanSubpath = apiPath.replace(/^\/+|\/+$/g, "")
+    const reconstructedPath = cleanSubpath ? `/api/${cleanSubpath}` : "/api"
+    const remainingQuery = parsed.searchParams.toString()
+    return remainingQuery ? `${reconstructedPath}?${remainingQuery}` : reconstructedPath
+  }
+
+  // 2. If URL has [...path], reconstruct path from query or searchParams
   if (parsed.pathname.includes("[...path]")) {
     let pathSegments: string[] = []
     if (parsed.searchParams.has("path")) {
@@ -29,7 +39,7 @@ function resolveRequestUrl(req: any): string {
     return remainingQuery ? `${reconstructedPath}?${remainingQuery}` : reconstructedPath
   }
 
-  // 2. Normalize pathname so it always begins with /api
+  // 3. Normalize pathname so it always begins with /api
   let pathname = parsed.pathname
   if (!pathname.startsWith("/api")) {
     pathname = "/api" + (pathname.startsWith("/") ? "" : "/") + pathname

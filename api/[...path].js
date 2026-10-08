@@ -4274,6 +4274,14 @@ function resolveRequestUrl(req) {
   } catch {
     parsed = new URL("/api", "http://localhost");
   }
+  if (parsed.searchParams.has("__api_path")) {
+    const apiPath = parsed.searchParams.get("__api_path") || "";
+    parsed.searchParams.delete("__api_path");
+    const cleanSubpath = apiPath.replace(/^\/+|\/+$/g, "");
+    const reconstructedPath = cleanSubpath ? `/api/${cleanSubpath}` : "/api";
+    const remainingQuery = parsed.searchParams.toString();
+    return remainingQuery ? `${reconstructedPath}?${remainingQuery}` : reconstructedPath;
+  }
   if (parsed.pathname.includes("[...path]")) {
     let pathSegments = [];
     if (parsed.searchParams.has("path")) {
