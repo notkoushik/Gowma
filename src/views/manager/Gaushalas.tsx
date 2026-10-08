@@ -522,7 +522,7 @@ export default function Gaushalas({
   const { notify } = useToast()
 
   const activeAdminName = authUser?.name || profiles?.admin?.name || "Operations Admin"
-  const activeSuperAdminName = authUser?.name || profiles?.super_admin?.name || "Vikramaditya Hegde"
+  const activeSuperAdminName = authUser?.name || profiles?.super_admin?.name || "Koushik"
 
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("ALL")

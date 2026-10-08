@@ -59,9 +59,9 @@ export default function DesktopCustomer({
   myBookings: MyBooking[]
   onCreate: (s: BookingSummary) => void
 }) {
-  const { profiles, gosalas: storeGosalas, animals: storeAnimals, refreshAnimals } = useStore()
+  const { profiles, gosalas: storeGosalas, animals: storeAnimals, refreshAnimals, authUser } = useStore()
   const customerProfile = profiles?.customer
-  const devoteeName = customerProfile?.name || "Ananya Deshmukh"
+  const devoteeName = authUser?.name || customerProfile?.name || "Devotee"
 
   useEffect(() => {
     refreshAnimals?.().catch(() => {})
@@ -1050,7 +1050,7 @@ function TrackView({
 function ProfileView({ onOpenEditProfile }: { onOpenEditProfile: () => void }) {
   const { profiles } = useStore()
   const customerProfile = profiles?.customer
-  const devoteeName = customerProfile?.name || "Ananya Deshmukh"
+  const devoteeName = customerProfile?.name || "Devotee"
   const [openSection, setOpenSection] = useState<string | null>(null)
 
   return (

@@ -164,8 +164,8 @@ export default function BookingFlow({
   onClose: () => void
   onComplete: (summary: import("../CustomerApp").BookingSummary) => void
 }) {
-  const { pricingConfig, checkAnimalAvailability, profiles } = useStore()
-  const devoteeName = profiles?.customer?.name || "Devotee"
+  const { pricingConfig, checkAnimalAvailability, profiles, authUser } = useStore()
+  const devoteeName = authUser?.name || profiles?.customer?.name || "Devotee"
   const deviceLocation = useDeviceLocation()
 
   // Dynamic Pan-India Venue & Landmark Options based on Gaushala's geographic coordinates

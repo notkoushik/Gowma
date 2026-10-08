@@ -23,7 +23,15 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
     onGpsTick,
     onRoleAlert,
   } = options
-  const { currentRole, notify, patchBookingFromWs, refreshAnimals, refreshGosalas } = useStore()
+  const {
+    currentRole,
+    notify,
+    patchBookingFromWs,
+    refreshAnimals,
+    refreshGosalas,
+    activeProfile,
+    authUser,
+  } = useStore()
   const [isConnected, setIsConnected] = useState(wsClient.isConnected)
   const [lastGpsTick, setLastGpsTick] = useState<GpsTickPayload | null>(null)
 
@@ -49,10 +57,11 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
       if (gosalaName) {
         subs.add(`channel:gosala:${gosalaName}`)
       }
-      // Also subscribe to default gosala if not explicitly given
-      subs.add("channel:gosala:Shri Krishna Gaushala")
     } else if (currentRole === "driver") {
-      subs.add("channel:driver:Sunil Pawar")
+      const driverName = activeProfile?.name || authUser?.name
+      if (driverName) {
+        subs.add(`channel:driver:${driverName}`)
+      }
     }
 
     // Always listen to animals channel for catalog synchronization

@@ -1,0 +1,1064 @@
+{
+  "timestamp": "2026-10-05T18:52:56.685Z",
+  "description": "Snapshot archive prior to complete reset & Koushik Super Admin seeding",
+  "counts": {
+    "users": 27,
+    "bookings": 3,
+    "assignments": 6,
+    "auditTrails": 5,
+    "scheduleBlocks": 0,
+    "slotHolds": 0
+  },
+  "tables": {
+    "users": [
+      {
+        "id": "426643d2-0500-464a-a8ab-ba279281a51a",
+        "email": "superadmin@gomaa.in",
+        "name": "Vikramaditya Hegde",
+        "phone": "+91 98200 11000",
+        "role": "SUPER_ADMIN",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-09-28T18:22:07.713Z",
+        "updatedAt": "2026-09-28T18:22:07.713Z"
+      },
+      {
+        "id": "9e874227-8598-4ee2-b89e-57333f357abf",
+        "email": "admin@gomaa.in",
+        "name": "Priya Sharma",
+        "phone": "+91 98201 22000",
+        "role": "OPERATIONS_ADMIN",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-09-28T18:22:07.719Z",
+        "updatedAt": "2026-09-28T18:22:07.719Z"
+      },
+      {
+        "id": "c97d5acc-adba-40b3-aa88-0cdbcddb3859",
+        "email": "driver@gomaa.in",
+        "name": "Sunil Pawar",
+        "phone": "+91 98203 33001",
+        "role": "DRIVER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-09-28T18:22:07.721Z",
+        "updatedAt": "2026-09-28T18:22:07.721Z"
+      },
+      {
+        "id": "c1f00e9f-1f04-4363-9c59-00b153eba908",
+        "email": "arjun@gomaa.in",
+        "name": "Arjun More",
+        "phone": "+91 98203 33002",
+        "role": "DRIVER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-09-28T18:22:07.723Z",
+        "updatedAt": "2026-09-28T18:22:07.723Z"
+      },
+      {
+        "id": "63dcac8c-3303-4231-9a5a-af861283b276",
+        "email": "ganesh@gomaa.in",
+        "name": "Ganesh Patil",
+        "phone": "+91 98203 33003",
+        "role": "DRIVER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-09-28T18:22:07.725Z",
+        "updatedAt": "2026-09-28T18:22:07.725Z"
+      },
+      {
+        "id": "ce8da3e5-ec13-4c69-a7d0-d277daf73afd",
+        "email": "ananya@gomaa.in",
+        "name": "Ananya Deshmukh",
+        "phone": "+91 98204 11827",
+        "role": "CUSTOMER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-09-28T18:22:07.726Z",
+        "updatedAt": "2026-09-28T18:22:07.726Z"
+      },
+      {
+        "id": "90b512b6-04a7-4dc3-93ea-83c723359438",
+        "email": "rohan@gmail.com",
+        "name": "Rohan Iyer",
+        "phone": "+91 99872 33410",
+        "role": "CUSTOMER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-09-28T18:22:07.728Z",
+        "updatedAt": "2026-09-28T18:22:07.728Z"
+      },
+      {
+        "id": "4f0fa210-f691-4799-958c-58c911d36f4f",
+        "email": "meera@gmail.com",
+        "name": "Meera Kulkarni",
+        "phone": "+91 98765 00921",
+        "role": "CUSTOMER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-09-28T18:22:07.731Z",
+        "updatedAt": "2026-09-28T18:22:07.731Z"
+      },
+      {
+        "id": "fad1d13b-3edc-4cdb-8383-7022100bafa4",
+        "email": "vikram@gmail.com",
+        "name": "Vikram Joshi",
+        "phone": "+91 90045 71230",
+        "role": "CUSTOMER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-09-28T18:22:07.732Z",
+        "updatedAt": "2026-09-28T18:22:07.732Z"
+      },
+      {
+        "id": "0381c49e-1b32-421a-978a-05db86331139",
+        "email": "rameshwar@nandinigoseva.org",
+        "name": "Rameshwar Shinde",
+        "phone": "+91 98901 88321",
+        "role": "GOSALA_MANAGER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-09-28T18:22:07.735Z",
+        "updatedAt": "2026-09-28T18:22:07.735Z"
+      },
+      {
+        "id": "8237cc56-1ba0-4b80-894b-29b93868c3ad",
+        "email": "vitthal@kamdhenuseva.org",
+        "name": "Vitthal Patil",
+        "phone": "+91 99220 63819",
+        "role": "GOSALA_MANAGER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-09-28T18:22:07.740Z",
+        "updatedAt": "2026-09-28T18:22:07.740Z"
+      },
+      {
+        "id": "933c936e-23d1-49f9-88e1-ddec59f997d5",
+        "email": "nanikoushik96@gmail.com",
+        "name": "Devraj",
+        "phone": "+91 9848507545",
+        "role": "GOSALA_MANAGER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-10-01T15:35:43.871Z",
+        "updatedAt": "2026-10-01T15:35:43.871Z"
+      },
+      {
+        "id": "36794fd6-d7d2-40a3-af37-bc21b07c68f7",
+        "email": "radha.krishna.sharma@example.com",
+        "name": "Radha Krishna Sharma",
+        "phone": "+91 98205 99412",
+        "role": "CUSTOMER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-10-01T17:51:22.496Z",
+        "updatedAt": "2026-10-01T17:51:22.496Z"
+      },
+      {
+        "id": "928e4faa-2941-41f3-98b5-2ec65a0210e1",
+        "email": "test.devotee@example.com",
+        "name": "Test Devotee",
+        "phone": "+91 99999 99999",
+        "role": "CUSTOMER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-10-01T17:54:55.990Z",
+        "updatedAt": "2026-10-01T17:54:55.990Z"
+      },
+      {
+        "id": "0082e60e-1e1c-4045-87e7-0473aa22d85e",
+        "email": "tukaram@gopaltrust.org",
+        "name": "Tukaram Deshpande",
+        "phone": "+91 97640 19283",
+        "role": "GOSALA_MANAGER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-09-28T18:22:07.736Z",
+        "updatedAt": "2026-10-03T07:51:12.392Z"
+      },
+      {
+        "id": "751430cc-b9d1-4baa-aac0-97f888e02453",
+        "email": "sri.rajesh.varma@example.com",
+        "name": "Sri Rajesh Varma",
+        "phone": "+91 98204 11827",
+        "role": "CUSTOMER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-10-03T19:14:46.152Z",
+        "updatedAt": "2026-10-03T19:14:46.152Z"
+      },
+      {
+        "id": "e7c2ed7f-9baa-413b-b2e2-04cb168ad589",
+        "email": "vikramaditya.hegde@gomaa.in",
+        "name": "Vikramaditya Hegde",
+        "phone": "+91 98110 33456",
+        "role": "SUPER_ADMIN",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-10-04T07:07:44.218Z",
+        "updatedAt": "2026-10-04T07:07:44.218Z"
+      },
+      {
+        "id": "51086cd5-a0bb-4d7f-a2e1-61b599e6d31e",
+        "email": "rahul.kamble@gomaa.in",
+        "name": "Rahul Kamble",
+        "phone": "+91 98230 44910",
+        "role": "GOSALA_MANAGER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-10-03T07:47:34.977Z",
+        "updatedAt": "2026-10-04T09:18:19.949Z"
+      },
+      {
+        "id": "6394b8b5-d4e1-4696-9e38-c86816059a70",
+        "email": "ananya.deshmukh@gmail.com",
+        "name": "Ananya Deshmukh",
+        "phone": "+91 98230 44910",
+        "role": "CUSTOMER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-10-04T10:50:52.185Z",
+        "updatedAt": "2026-10-04T10:50:52.185Z"
+      },
+      {
+        "id": "ace02486-b826-46ec-8866-e5f32af7d45e",
+        "email": "priya.sharma@gomaa.in",
+        "name": "Priya Sharma",
+        "phone": "+91 98230 44910",
+        "role": "OPERATIONS_ADMIN",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-10-04T10:56:37.622Z",
+        "updatedAt": "2026-10-04T10:56:37.622Z"
+      },
+      {
+        "id": "8f4cb80f-a79b-4c4c-818e-e8e88e35c187",
+        "email": "rameshwar.shinde@gomaa.in",
+        "name": "Rahul Kamble",
+        "phone": "+91 98230 44910",
+        "role": "GOSALA_MANAGER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-10-04T11:07:00.068Z",
+        "updatedAt": "2026-10-04T11:07:00.068Z"
+      },
+      {
+        "id": "5aece57f-9233-41d2-9e82-82788d22a8c2",
+        "email": "meera.nambiar@gmail.com",
+        "name": "Meera Nambiar",
+        "phone": "+91 98450 11223",
+        "role": "CUSTOMER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-10-04T12:25:40.289Z",
+        "updatedAt": "2026-10-04T12:25:40.289Z"
+      },
+      {
+        "id": "06ced625-cf19-4dbf-a6ea-73a0ddbc2ef2",
+        "email": "balaji.rathod@gomaa.in",
+        "name": "Balaji Rathod",
+        "phone": "+91 97660 44556",
+        "role": "DRIVER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-10-04T12:25:40.327Z",
+        "updatedAt": "2026-10-04T12:25:40.327Z"
+      },
+      {
+        "id": "3505e2a1-e3a5-482c-aa80-c67372fcde37",
+        "email": "sunil.pawar@gomaa.in",
+        "name": "Sunil Pawar",
+        "phone": "+91 98201 55432",
+        "role": "DRIVER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-10-04T12:26:23.776Z",
+        "updatedAt": "2026-10-04T12:26:23.776Z"
+      },
+      {
+        "id": "75ec786a-3122-4daa-aa10-d0f550bd47d1",
+        "email": "mahadev@vrindavangosala.org",
+        "name": "Mahadev Joshi",
+        "phone": "+91 98500 77124",
+        "role": "GOSALA_MANAGER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-09-28T18:22:07.738Z",
+        "updatedAt": "2026-10-05T14:30:02.978Z"
+      },
+      {
+        "id": "5a9ddbfc-5ffa-42b4-9878-d213d70a1f75",
+        "email": "manager@gomaa.in",
+        "name": "Gajanan Kale",
+        "phone": "+91 98230 44102",
+        "role": "GOSALA_MANAGER",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-09-28T18:22:07.733Z",
+        "updatedAt": "2026-10-05T14:44:47.080Z"
+      },
+      {
+        "id": "b46d5f65-a278-423a-be0e-67e01910c872",
+        "email": "vikramaditya.ops@gomaa.in",
+        "name": "Vikramaditya Hegde (Operations)",
+        "phone": "+91 98110 33457",
+        "role": "OPERATIONS_ADMIN",
+        "avatar": null,
+        "isActive": true,
+        "createdAt": "2026-10-05T18:39:40.099Z",
+        "updatedAt": "2026-10-05T18:39:40.099Z"
+      }
+    ],
+    "bookings": [
+      {
+        "id": "GMA-77694",
+        "customerId": "5aece57f-9233-41d2-9e82-82788d22a8c2",
+        "gosalaId": "7dbbfeaa-e306-4721-8677-49789048bda2",
+        "animalId": "4f5addea-adfc-493c-bd69-5130f69997a5",
+        "driverId": "06ced625-cf19-4dbf-a6ea-73a0ddbc2ef2",
+        "customerName": "Meera Nambiar",
+        "customerPhone": "+91 98450 11223",
+        "animalName": "Nandini",
+        "animalType": "COW",
+        "gosalaName": "Surya",
+        "bookingDate": "2026-10-15",
+        "startTime": "09:00",
+        "endTime": "11:00",
+        "durationMin": 120,
+        "address": "22 Krishna Nivas, Jubilee Hills, Hyderabad",
+        "distanceKm": 8.5,
+        "baseRate": 3500,
+        "extraTimeFee": 0,
+        "transportFee": 450,
+        "addonsFee": 200,
+        "taxFee": 200,
+        "discountFee": 0,
+        "totalAmount": 4350,
+        "commissionPct": 20,
+        "commissionAmount": 700,
+        "gosalaPayable": 3450,
+        "status": "CONFIRMED",
+        "driverStage": 1,
+        "isPaid": true,
+        "freeKmSnapshot": 5,
+        "perKmSnapshot": 50,
+        "extraUnitRateSnapshot": 500,
+        "commissionSnapshot": 0,
+        "managerRemark": null,
+        "adminRemark": null,
+        "handoverOtp": "1354",
+        "handoverOtpVerified": false,
+        "handoverOtpVerifiedAt": null,
+        "driverPhone": "+91 97660 44556",
+        "driverVehiclePlate": "TS 09 EA 4402",
+        "driverVehicleModel": "Force Traveller Cattle Ambulance",
+        "driverRating": 4.9,
+        "driverTotalTrips": 184,
+        "driverAvatar": null,
+        "createdAt": "2026-10-04T12:25:59.912Z",
+        "updatedAt": "2026-10-04T12:27:19.649Z",
+        "pricingConfigId": 1
+      },
+      {
+        "id": "GMA-25261",
+        "customerId": "ce8da3e5-ec13-4c69-a7d0-d277daf73afd",
+        "gosalaId": "ff821881-60ed-429c-9a2c-ba53f5daa605",
+        "animalId": "4f5addea-adfc-493c-bd69-5130f69997a5",
+        "driverId": "c97d5acc-adba-40b3-aa88-0cdbcddb3859",
+        "customerName": "Ananya Deshmukh",
+        "customerPhone": "+91 98204 11827",
+        "animalName": "Sri mathi sri & Accompanying Baby Calf",
+        "animalType": "CALF",
+        "gosalaName": "Suryavanchi Gaushala",
+        "bookingDate": "5 Oct 2026",
+        "startTime": "10:00",
+        "endTime": "11:30",
+        "durationMin": 90,
+        "address": "Current Location: 3rd Street, Kothaguda, Hyderabad, Telangana - 500084",
+        "distanceKm": 11.8,
+        "baseRate": 3500,
+        "extraTimeFee": 550,
+        "transportFee": 240,
+        "addonsFee": 2380,
+        "taxFee": 800,
+        "discountFee": 0,
+        "totalAmount": 7470,
+        "commissionPct": 25,
+        "commissionAmount": 1013,
+        "gosalaPayable": 5657,
+        "status": "IN_SERVICE",
+        "driverStage": 7,
+        "isPaid": true,
+        "freeKmSnapshot": 5,
+        "perKmSnapshot": 35,
+        "extraUnitRateSnapshot": 550,
+        "commissionSnapshot": 1013,
+        "managerRemark": "Feasibility and animal health verified by Admin acting as Gaushala Custodian",
+        "adminRemark": "Final approval granted. Payment verified via gateway webhook.",
+        "handoverOtp": "5904",
+        "handoverOtpVerified": true,
+        "handoverOtpVerifiedAt": "2026-10-05T14:37:46.984Z",
+        "driverPhone": "+91 98201 55432",
+        "driverVehiclePlate": "MH-12-Q-4491",
+        "driverVehicleModel": "Force Traveller Cattle Ambulance",
+        "driverRating": 4.9,
+        "driverTotalTrips": 184,
+        "driverAvatar": null,
+        "createdAt": "2026-10-05T14:26:15.210Z",
+        "updatedAt": "2026-10-05T14:37:49.945Z",
+        "pricingConfigId": 1
+      },
+      {
+        "id": "GMA-25385",
+        "customerId": "6394b8b5-d4e1-4696-9e38-c86816059a70",
+        "gosalaId": "ff821881-60ed-429c-9a2c-ba53f5daa605",
+        "animalId": "53024f05-e43f-4e8b-9b20-b0dac6ac52f9",
+        "driverId": "c97d5acc-adba-40b3-aa88-0cdbcddb3859",
+        "customerName": "Ananya Deshmukh",
+        "customerPhone": "+91 98204 11827",
+        "animalName": "Madhavi",
+        "animalType": "COW",
+        "gosalaName": "Suryavanchi Gaushala",
+        "bookingDate": "5 Oct 2026",
+        "startTime": "13:00",
+        "endTime": "14:30",
+        "durationMin": 90,
+        "address": "Current Location: Narsingi / Gandipet (Outer Ring Road), Hyderabad, Telangana",
+        "distanceKm": 3,
+        "baseRate": 3500,
+        "extraTimeFee": 550,
+        "transportFee": 0,
+        "addonsFee": 1130,
+        "taxFee": 622,
+        "discountFee": 0,
+        "totalAmount": 5802,
+        "commissionPct": 25,
+        "commissionAmount": 1013,
+        "gosalaPayable": 4167,
+        "status": "IN_SERVICE",
+        "driverStage": 7,
+        "isPaid": true,
+        "freeKmSnapshot": 5,
+        "perKmSnapshot": 35,
+        "extraUnitRateSnapshot": 550,
+        "commissionSnapshot": 1013,
+        "managerRemark": "Operational feasibility & animal health verified",
+        "adminRemark": null,
+        "handoverOtp": "6119",
+        "handoverOtpVerified": true,
+        "handoverOtpVerifiedAt": "2026-10-05T14:45:56.004Z",
+        "driverPhone": "+91 98201 55432",
+        "driverVehiclePlate": "MH-12-Q-4491",
+        "driverVehicleModel": "Force Traveller Cattle Ambulance",
+        "driverRating": 4.9,
+        "driverTotalTrips": 184,
+        "driverAvatar": null,
+        "createdAt": "2026-10-05T14:43:49.647Z",
+        "updatedAt": "2026-10-05T14:46:06.176Z",
+        "pricingConfigId": 1
+      }
+    ],
+    "assignments": [
+      {
+        "id": "1728ac9f-1fca-4ab5-8f8b-ccb7608489e4",
+        "userId": "75ec786a-3122-4daa-aa10-d0f550bd47d1",
+        "gosalaId": "ff821881-60ed-429c-9a2c-ba53f5daa605",
+        "region": "Telangana - Narsingi / Gandipet (Outer Ring Road)",
+        "status": "Active",
+        "assignedAt": "2026-10-04T08:10:57.382Z"
+      },
+      {
+        "id": "4a628c18-3ffe-4426-9ecc-80a3c1dc3356",
+        "userId": "51086cd5-a0bb-4d7f-a2e1-61b599e6d31e",
+        "gosalaId": "7dbbfeaa-e306-4721-8677-49789048bda2",
+        "region": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+        "status": "Active",
+        "assignedAt": "2026-10-04T08:10:57.386Z"
+      },
+      {
+        "id": "6fb9bc3b-9fea-40fb-911d-ca8f8da857a6",
+        "userId": "0381c49e-1b32-421a-978a-05db86331139",
+        "gosalaId": "949694c1-5678-431e-87c0-125bf751a1ad",
+        "region": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+        "status": "Active",
+        "assignedAt": "2026-10-04T08:10:57.390Z"
+      },
+      {
+        "id": "5619d729-18b8-46be-8ac8-baebd04f1b18",
+        "userId": "8f4cb80f-a79b-4c4c-818e-e8e88e35c187",
+        "gosalaId": "7dbbfeaa-e306-4721-8677-49789048bda2",
+        "region": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+        "status": "Active",
+        "assignedAt": "2026-10-04T11:07:00.078Z"
+      },
+      {
+        "id": "68ac8529-9537-4c04-b827-c6eb093da5ff",
+        "userId": "5a9ddbfc-5ffa-42b4-9878-d213d70a1f75",
+        "gosalaId": "ff821881-60ed-429c-9a2c-ba53f5daa605",
+        "region": "Telangana - Narsingi / Gandipet (Outer Ring Road)",
+        "status": "Active",
+        "assignedAt": "2026-10-05T14:29:37.659Z"
+      },
+      {
+        "id": "6a429b8b-d10b-4e84-ba40-a4994ce25b89",
+        "userId": "5a9ddbfc-5ffa-42b4-9878-d213d70a1f75",
+        "gosalaId": "ee2561fe-06c1-479b-987c-ab4920db4e21",
+        "region": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+        "status": "Active",
+        "assignedAt": "2026-10-05T14:29:37.667Z"
+      }
+    ],
+    "auditTrails": [
+      {
+        "id": "26bba9dc-cb93-44e1-b5e9-ca7f529b4275",
+        "bookingId": "GMA-25261",
+        "actorId": "9e874227-8598-4ee2-b89e-57333f357abf",
+        "actorRole": "OPERATIONS_ADMIN",
+        "actorName": "Priya Sharma (Acting Manager)",
+        "action": "MANAGER_CONFIRMED",
+        "remark": "[Admin Acting as Manager] Feasibility and animal health verified by Admin acting as Gaushala Custodian",
+        "createdAt": "2026-10-05T14:36:01.726Z"
+      },
+      {
+        "id": "7002e4ef-b7af-4785-8c6e-04509ff26182",
+        "bookingId": "GMA-25261",
+        "actorId": "9e874227-8598-4ee2-b89e-57333f357abf",
+        "actorRole": "OPERATIONS_ADMIN",
+        "actorName": "Priya Sharma",
+        "action": "ADMIN_CONFIRMED",
+        "remark": "Final approval granted. Payment verified via gateway webhook.",
+        "createdAt": "2026-10-05T14:36:06.084Z"
+      },
+      {
+        "id": "9f2c2fe8-e3d3-4710-b11d-c755ab7fb812",
+        "bookingId": "GMA-25261",
+        "actorId": "c97d5acc-adba-40b3-aa88-0cdbcddb3859",
+        "actorRole": "DRIVER",
+        "actorName": "Sunil Pawar",
+        "action": "HANDOVER_VERIFIED",
+        "remark": "Customer Handover OTP verified (5904). Sacred Bovine received by devotee at 8:07:46 pm.",
+        "createdAt": "2026-10-05T14:37:46.991Z"
+      },
+      {
+        "id": "1285d2ff-9edb-4595-bfdc-ef2e7d9c8dcc",
+        "bookingId": "GMA-25385",
+        "actorId": "5a9ddbfc-5ffa-42b4-9878-d213d70a1f75",
+        "actorRole": "GOSALA_MANAGER",
+        "actorName": "Gajanan Kale",
+        "action": "MANAGER_CONFIRMED",
+        "remark": "Operational feasibility & animal health verified",
+        "createdAt": "2026-10-05T14:45:03.438Z"
+      },
+      {
+        "id": "e064b011-6f13-41d3-9245-c238d353a091",
+        "bookingId": "GMA-25385",
+        "actorId": "c97d5acc-adba-40b3-aa88-0cdbcddb3859",
+        "actorRole": "DRIVER",
+        "actorName": "Sunil Pawar",
+        "action": "HANDOVER_VERIFIED",
+        "remark": "Customer Handover OTP verified (6119). Sacred Bovine received by devotee at 8:15:56 pm.",
+        "createdAt": "2026-10-05T14:45:56.010Z"
+      }
+    ],
+    "scheduleBlocks": [],
+    "slotHolds": []
+  },
+  "meta": {
+    "usersMeta": {
+      "ananya.deshmukh@gmail.com": {
+        "customerData": {
+          "address": "14 Tulsi Nagar, Kondapur, Hyderabad",
+          "city": "Hyderabad",
+          "aadhaarNumber": "XXXX-XXXX-4819",
+          "memberSince": "Aug 2024",
+          "totalBookings": 4,
+          "preferredCeremony": "Griha Pravesh & Kamadhenu Puja"
+        }
+      },
+      "sunil.pawar@gomaa.in": {
+        "driverData": {
+          "driverId": "DRV-102",
+          "vehicleNumber": "MH-12-Q-4491",
+          "vehicleType": "Tata 407 (8ft Open Bed)",
+          "licenseNumber": "DL-142011009823",
+          "gosalaBase": "Surya",
+          "status": "Available",
+          "rating": 4.92,
+          "totalTrips": 1280
+        }
+      },
+      "meera.nambiar@gmail.com": {
+        "customerData": {
+          "address": "22 Krishna Nivas, Jubilee Hills, Hyderabad",
+          "city": "Hyderabad",
+          "preferredCeremony": "Kamadhenu Puja & Gau Seva",
+          "memberSince": "Oct 2026",
+          "totalBookings": 0
+        }
+      },
+      "5aece57f-9233-41d2-9e82-82788d22a8c2": {
+        "customerData": {
+          "address": "22 Krishna Nivas, Jubilee Hills, Hyderabad",
+          "city": "Hyderabad",
+          "preferredCeremony": "Kamadhenu Puja & Gau Seva",
+          "memberSince": "Oct 2026",
+          "totalBookings": 0
+        }
+      },
+      "balaji.rathod@gomaa.in": {
+        "driverData": {
+          "driverId": "DRV-06ce",
+          "status": "Available",
+          "rating": 5,
+          "totalTrips": 0,
+          "phone": "+91 97660 44556",
+          "vehicleNumber": "TS-09-EA-9912",
+          "vehicleType": "Tata 407 (Hydraulic Cattle Bed)",
+          "licenseNumber": "DL-042023001882",
+          "gosalaBase": "Surya"
+        }
+      },
+      "06ced625-cf19-4dbf-a6ea-73a0ddbc2ef2": {
+        "driverData": {
+          "driverId": "DRV-06ce",
+          "status": "Available",
+          "rating": 5,
+          "totalTrips": 0,
+          "phone": "+91 97660 44556",
+          "vehicleNumber": "TS-09-EA-9912",
+          "vehicleType": "Tata 407 (Hydraulic Cattle Bed)",
+          "licenseNumber": "DL-042023001882",
+          "gosalaBase": "Surya"
+        }
+      }
+    },
+    "gosalasMeta": {
+      "ee2561fe-06c1-479b-987c-ab4920db4e21": {
+        "photo": "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=480&fit=crop&auto=format",
+        "photos": [
+          "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=480&fit=crop&auto=format",
+          "https://images.unsplash.com/photo-1500595046743-cd271d694d30?w=800&h=480&fit=crop&auto=format"
+        ],
+        "trustRegistrationNo": "AWBI/2018/TG/HYD-4912",
+        "capacity": 65,
+        "establishedYear": "2018",
+        "landAcres": 6.5,
+        "visitingHours": "06:00 AM - 07:30 PM (Daily)",
+        "caretaker": "Gajanan Kale",
+        "caretakerPhone": "+91 98230 44102",
+        "facilities": [
+          "Padded Cattle Ambulance / Van",
+          "24/7 Pure Borewell Water & Trough",
+          "Certified Veterinary Medical Bay",
+          "Sacred Vedic Puja & Havan Courtyard"
+        ],
+        "baseCowPrice": 3500,
+        "basePairPrice": 4800,
+        "baseCalfPrice": 2500,
+        "baseBullPrice": 4000,
+        "baseBuffaloPrice": 3800,
+        "items": [
+          {
+            "id": "item-1791096282121",
+            "name": "Menthulu Flowers",
+            "category": "feed",
+            "price": 100,
+            "desc": "This is one of the most sacraid formation of item",
+            "maxQty": 5,
+            "inStock": true
+          },
+          {
+            "id": "item-mala",
+            "name": "Marigold Pooja Mala",
+            "desc": "Fresh consecrated floral garland for the holy cow",
+            "price": 150,
+            "category": "puja",
+            "inStock": true,
+            "maxQty": 5
+          },
+          {
+            "id": "item-fodder",
+            "name": "Fresh Green Grass Fodder",
+            "desc": "10 kg organic sweet grass basket (Grass Seva)",
+            "price": 120,
+            "category": "feed",
+            "inStock": true,
+            "maxQty": 10
+          },
+          {
+            "id": "item-chunni",
+            "name": "Pure Silk Chunni & Vastra",
+            "desc": "Ceremonial silk drape with golden zari border",
+            "price": 300,
+            "category": "decoration",
+            "inStock": true,
+            "maxQty": 3
+          },
+          {
+            "id": "item-jaggery",
+            "name": "Devotional Jaggery & Chana",
+            "desc": "Organic gur and roasted chana feeding plate",
+            "price": 180,
+            "category": "feed",
+            "inStock": true,
+            "maxQty": 5
+          },
+          {
+            "id": "item-ghee",
+            "name": "Pure Vedic A2 Gir Cow Ghee (500ml)",
+            "desc": "Traditional bilona churned Gaushala trust ghee",
+            "price": 950,
+            "category": "prasadam",
+            "inStock": true,
+            "maxQty": 4
+          },
+          {
+            "id": "item-dhoop",
+            "name": "Natural Gomaye Hawan Dhoop",
+            "desc": "Eco-friendly cow dung herbal dhoop cones (pack of 20)",
+            "price": 200,
+            "category": "puja",
+            "inStock": true,
+            "maxQty": 6
+          },
+          {
+            "id": "item-puja-kit",
+            "name": "Gau Pooja Kalash & Tilak Kit",
+            "desc": "Complete brass kalash, kumkum, akshata and bell set",
+            "price": 450,
+            "category": "puja",
+            "inStock": true,
+            "maxQty": 2
+          }
+        ],
+        "governingAdminRole": "admin",
+        "governingAdminName": "Priya Sharma",
+        "adminId": "USER-ADM-101",
+        "adminName": "Priya Sharma",
+        "managerName": "Gajanan Kale",
+        "managerId": "5a9ddbfc-5ffa-42b4-9878-d213d70a1f75"
+      },
+      "ramnath gaushala": {
+        "photo": "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=480&fit=crop&auto=format",
+        "photos": [
+          "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=480&fit=crop&auto=format",
+          "https://images.unsplash.com/photo-1500595046743-cd271d694d30?w=800&h=480&fit=crop&auto=format"
+        ],
+        "trustRegistrationNo": "AWBI/2018/TG/HYD-4912",
+        "capacity": 65,
+        "establishedYear": "2018",
+        "landAcres": 6.5,
+        "visitingHours": "06:00 AM - 07:30 PM (Daily)",
+        "caretaker": "Gajanan Kale",
+        "caretakerPhone": "+91 98230 44102",
+        "facilities": [
+          "Padded Cattle Ambulance / Van",
+          "24/7 Pure Borewell Water & Trough",
+          "Certified Veterinary Medical Bay",
+          "Sacred Vedic Puja & Havan Courtyard"
+        ],
+        "baseCowPrice": 3500,
+        "basePairPrice": 4800,
+        "baseCalfPrice": 2500,
+        "baseBullPrice": 4000,
+        "baseBuffaloPrice": 3800,
+        "items": [
+          {
+            "id": "item-1791096282121",
+            "name": "Menthulu Flowers",
+            "category": "feed",
+            "price": 100,
+            "desc": "This is one of the most sacraid formation of item",
+            "maxQty": 5,
+            "inStock": true
+          },
+          {
+            "id": "item-mala",
+            "name": "Marigold Pooja Mala",
+            "desc": "Fresh consecrated floral garland for the holy cow",
+            "price": 150,
+            "category": "puja",
+            "inStock": true,
+            "maxQty": 5
+          },
+          {
+            "id": "item-fodder",
+            "name": "Fresh Green Grass Fodder",
+            "desc": "10 kg organic sweet grass basket (Grass Seva)",
+            "price": 120,
+            "category": "feed",
+            "inStock": true,
+            "maxQty": 10
+          },
+          {
+            "id": "item-chunni",
+            "name": "Pure Silk Chunni & Vastra",
+            "desc": "Ceremonial silk drape with golden zari border",
+            "price": 300,
+            "category": "decoration",
+            "inStock": true,
+            "maxQty": 3
+          },
+          {
+            "id": "item-jaggery",
+            "name": "Devotional Jaggery & Chana",
+            "desc": "Organic gur and roasted chana feeding plate",
+            "price": 180,
+            "category": "feed",
+            "inStock": true,
+            "maxQty": 5
+          },
+          {
+            "id": "item-ghee",
+            "name": "Pure Vedic A2 Gir Cow Ghee (500ml)",
+            "desc": "Traditional bilona churned Gaushala trust ghee",
+            "price": 950,
+            "category": "prasadam",
+            "inStock": true,
+            "maxQty": 4
+          },
+          {
+            "id": "item-dhoop",
+            "name": "Natural Gomaye Hawan Dhoop",
+            "desc": "Eco-friendly cow dung herbal dhoop cones (pack of 20)",
+            "price": 200,
+            "category": "puja",
+            "inStock": true,
+            "maxQty": 6
+          },
+          {
+            "id": "item-puja-kit",
+            "name": "Gau Pooja Kalash & Tilak Kit",
+            "desc": "Complete brass kalash, kumkum, akshata and bell set",
+            "price": 450,
+            "category": "puja",
+            "inStock": true,
+            "maxQty": 2
+          }
+        ],
+        "governingAdminRole": "admin",
+        "governingAdminName": "Priya Sharma",
+        "adminId": "USER-ADM-101",
+        "adminName": "Priya Sharma",
+        "managerName": "Gajanan Kale",
+        "managerId": "5a9ddbfc-5ffa-42b4-9878-d213d70a1f75"
+      },
+      "7dbbfeaa-e306-4721-8677-49789048bda2": {
+        "photo": "https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?w=800&h=480&fit=crop&auto=format",
+        "photos": [
+          "https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?w=800&h=480&fit=crop&auto=format",
+          "https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?w=800&h=480&fit=crop&auto=format"
+        ],
+        "trustRegistrationNo": "AWBI/2021/TG/HYD-7104",
+        "capacity": 45,
+        "establishedYear": "2021",
+        "landAcres": 3.8,
+        "visitingHours": "06:30 AM - 07:00 PM (Daily)",
+        "caretaker": "Rahul Kamble",
+        "caretakerPhone": "+91 98230 44910",
+        "facilities": [
+          "24/7 Pure Borewell Water & Trough",
+          "Organic Green Fodder Pasture",
+          "Covered Weather-Proof Night Pens"
+        ],
+        "governingAdminRole": "admin",
+        "governingAdminName": "Priya Sharma",
+        "adminId": "USER-ADM-101",
+        "adminName": "Priya Sharma",
+        "managerName": "Rahul Kamble",
+        "managerId": "51086cd5-a0bb-4d7f-a2e1-61b599e6d31e"
+      },
+      "surya": {
+        "photo": "https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?w=800&h=480&fit=crop&auto=format",
+        "photos": [
+          "https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?w=800&h=480&fit=crop&auto=format",
+          "https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?w=800&h=480&fit=crop&auto=format"
+        ],
+        "trustRegistrationNo": "AWBI/2021/TG/HYD-7104",
+        "capacity": 45,
+        "establishedYear": "2021",
+        "landAcres": 3.8,
+        "visitingHours": "06:30 AM - 07:00 PM (Daily)",
+        "caretaker": "Rahul Kamble",
+        "caretakerPhone": "+91 98230 44910",
+        "facilities": [
+          "24/7 Pure Borewell Water & Trough",
+          "Organic Green Fodder Pasture",
+          "Covered Weather-Proof Night Pens"
+        ],
+        "governingAdminRole": "admin",
+        "governingAdminName": "Priya Sharma",
+        "adminId": "USER-ADM-101",
+        "adminName": "Priya Sharma",
+        "managerName": "Rahul Kamble",
+        "managerId": "51086cd5-a0bb-4d7f-a2e1-61b599e6d31e"
+      },
+      "ff821881-60ed-429c-9a2c-ba53f5daa605": {
+        "photo": "https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?w=800&h=480&fit=crop&auto=format",
+        "photos": [
+          "https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?w=800&h=480&fit=crop&auto=format",
+          "https://images.unsplash.com/photo-1589923188900-85dae523342b?w=800&h=480&fit=crop&auto=format",
+          "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=480&fit=crop&auto=format"
+        ],
+        "trustRegistrationNo": "AWBI/2019/TG/HYD-6380",
+        "capacity": 85,
+        "establishedYear": "2019",
+        "landAcres": 8.2,
+        "visitingHours": "06:00 AM - 08:00 PM (Daily)",
+        "caretaker": "Mahadev Joshi",
+        "caretakerPhone": "+91 98500 77124",
+        "facilities": [
+          "Padded Cattle Ambulance / Van",
+          "24/7 Pure Borewell Water & Trough",
+          "Certified Veterinary Medical Bay",
+          "Organic Green Fodder Pasture",
+          "Sacred Vedic Puja & Havan Courtyard",
+          "Non-Slip Rubber Flooring in Sheds"
+        ],
+        "governingAdminRole": "admin",
+        "governingAdminName": "Priya Sharma",
+        "adminId": "USER-ADM-101",
+        "adminName": "Priya Sharma",
+        "managerName": "Gajanan Kale",
+        "managerId": "MGR-5a9d"
+      },
+      "suryavanchi gaushala": {
+        "photo": "https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?w=800&h=480&fit=crop&auto=format",
+        "photos": [
+          "https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?w=800&h=480&fit=crop&auto=format",
+          "https://images.unsplash.com/photo-1589923188900-85dae523342b?w=800&h=480&fit=crop&auto=format",
+          "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=480&fit=crop&auto=format"
+        ],
+        "trustRegistrationNo": "AWBI/2019/TG/HYD-6380",
+        "capacity": 85,
+        "establishedYear": "2019",
+        "landAcres": 8.2,
+        "visitingHours": "06:00 AM - 08:00 PM (Daily)",
+        "caretaker": "Mahadev Joshi",
+        "caretakerPhone": "+91 98500 77124",
+        "facilities": [
+          "Padded Cattle Ambulance / Van",
+          "24/7 Pure Borewell Water & Trough",
+          "Certified Veterinary Medical Bay",
+          "Organic Green Fodder Pasture",
+          "Sacred Vedic Puja & Havan Courtyard",
+          "Non-Slip Rubber Flooring in Sheds"
+        ],
+        "governingAdminRole": "admin",
+        "governingAdminName": "Priya Sharma",
+        "adminId": "USER-ADM-101",
+        "adminName": "Priya Sharma",
+        "managerName": "Gajanan Kale",
+        "managerId": "MGR-5a9d"
+      },
+      "6c8664f1-0a9c-4b00-9f62-c669a938a4a2": {
+        "id": "GOS-TEST-1791051356057",
+        "managerName": "S. Ramanujam",
+        "capacity": 85,
+        "establishedYear": "2021",
+        "status": "Active",
+        "facilities": [
+          "Sacred Cow Gosala",
+          "Pure Mountain Spring Water"
+        ],
+        "lat": 13.6288,
+        "lng": 79.4192,
+        "governingAdminRole": "admin",
+        "governingAdminName": "Priya Sharma",
+        "adminId": "USER-ADM-101",
+        "adminName": "Priya Sharma",
+        "caretaker": "Dedicated Gosevak Caretaker"
+      },
+      "tirupati balaji sacred surabhi trust": {
+        "id": "GOS-TEST-1791051356057",
+        "managerName": "S. Ramanujam",
+        "capacity": 85,
+        "establishedYear": "2021",
+        "status": "Active",
+        "facilities": [
+          "Sacred Cow Gosala",
+          "Pure Mountain Spring Water"
+        ],
+        "lat": 13.6288,
+        "lng": 79.4192,
+        "governingAdminRole": "admin",
+        "governingAdminName": "Priya Sharma",
+        "adminId": "USER-ADM-101",
+        "adminName": "Priya Sharma",
+        "caretaker": "Dedicated Gosevak Caretaker"
+      },
+      "949694c1-5678-431e-87c0-125bf751a1ad": {
+        "governingAdminRole": "admin",
+        "governingAdminName": "Vikramaditya Hegde (Operations)",
+        "governingAdminEmail": "vikramaditya.ops@gomaa.in",
+        "adminId": "USER-OPS-VIKRAM",
+        "adminName": "Vikramaditya Hegde (Operations)",
+        "caretaker": "Rameshwar Shinde",
+        "managerName": "Rameshwar Shinde",
+        "managerId": "0381c49e-1b32-421a-978a-05db86331139",
+        "capacity": 100,
+        "establishedYear": "2016",
+        "trustRegistrationNo": "AWBI/2016/TG/HYD-CAPTAIN",
+        "facilities": [
+          "Padded Cattle Ambulance / Van",
+          "24/7 Pure Borewell Water & Trough",
+          "Certified Veterinary Medical Bay",
+          "Sacred Vedic Puja & Havan Courtyard",
+          "Organic Green Fodder Pasture"
+        ],
+        "photo": "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=480&fit=crop&auto=format"
+      },
+      "govardhan goseva trust": {
+        "governingAdminRole": "admin",
+        "governingAdminName": "Vikramaditya Hegde (Operations)",
+        "governingAdminEmail": "vikramaditya.ops@gomaa.in",
+        "adminId": "USER-OPS-VIKRAM",
+        "adminName": "Vikramaditya Hegde (Operations)",
+        "caretaker": "Rameshwar Shinde",
+        "managerName": "Rameshwar Shinde",
+        "managerId": "0381c49e-1b32-421a-978a-05db86331139",
+        "capacity": 100,
+        "establishedYear": "2016",
+        "trustRegistrationNo": "AWBI/2016/TG/HYD-CAPTAIN",
+        "facilities": [
+          "Padded Cattle Ambulance / Van",
+          "24/7 Pure Borewell Water & Trough",
+          "Certified Veterinary Medical Bay",
+          "Sacred Vedic Puja & Havan Courtyard",
+          "Organic Green Fodder Pasture"
+        ],
+        "photo": "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=480&fit=crop&auto=format"
+      },
+      "abe67188-22bb-4922-b6da-eaac984cd306": {
+        "capacity": 45,
+        "actAsManagerMyself": true,
+        "lat": 17.4156,
+        "lng": 78.4358,
+        "governingAdminRole": "admin",
+        "governingAdminName": "Priya Sharma",
+        "governingAdminEmail": "admin@gomaa.in",
+        "adminName": "Priya Sharma",
+        "adminId": "9e874227-8598-4ee2-b89e-57333f357abf",
+        "isActingManager": true,
+        "managerName": "Priya Sharma (Acting Manager)",
+        "managerId": "9e874227-8598-4ee2-b89e-57333f357abf",
+        "caretaker": "Priya Sharma (Acting Custodian)"
+      },
+      "vrindavan nandini sanctuary 4820": {
+        "capacity": 45,
+        "actAsManagerMyself": true,
+        "lat": 17.4156,
+        "lng": 78.4358,
+        "governingAdminRole": "admin",
+        "governingAdminName": "Priya Sharma",
+        "governingAdminEmail": "admin@gomaa.in",
+        "adminName": "Priya Sharma",
+        "adminId": "9e874227-8598-4ee2-b89e-57333f357abf",
+        "isActingManager": true,
+        "managerName": "Priya Sharma (Acting Manager)",
+        "managerId": "9e874227-8598-4ee2-b89e-57333f357abf",
+        "caretaker": "Priya Sharma (Acting Custodian)"
+      }
+    }
+  }
+}

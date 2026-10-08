@@ -20,19 +20,25 @@ import {
   MapPin,
   Eye,
   ArrowRight,
+  User,
+  Phone,
 } from "lucide-react"
 import { inr, type Booking } from "../../data/mock"
 import { useStore, useToast } from "../../store/store"
 import { Panel, PanelHead, StatusPill, Eyebrow } from "../../lib/ui"
+import CustomerDetailsModal from "../../components/CustomerDetailsModal"
+import {
+  normalizeDateStr,
+  getTodayReference,
+  isSameDate,
+  parseDateTimestamp,
+  getDateChipLabel,
+} from "../../lib/dateUtils"
 
 const hours = Array.from({ length: 11 }, (_, i) => 8 + i) // 08:00–18:00
 
-// Base reference date dynamically computed from current system date
-const TODAY_REFERENCE = new Date().toLocaleDateString("en-IN", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-})
+// Base reference date dynamically computed from current system date (standardized e.g. "5 Oct 2026")
+const TODAY_REFERENCE = getTodayReference()
 
 export default function Schedule() {
   const {
@@ -82,6 +88,8 @@ export default function Schedule() {
 
   const [selectedDate, setSelectedDate] = useState(TODAY_REFERENCE)
   const [selectedAnimal, setSelectedAnimal] = useState<string>("ALL")
+  const [customerModalBooking, setCustomerModalBooking] =
+    useState<Booking | null>(null)
 
   // Hover Popover State for Date Strip
   const [hoveredDate, setHoveredDate] = useState<string | null>(null)
@@ -127,12 +135,12 @@ export default function Schedule() {
     restingBufferInitiated: true,
   })
 
-  // 1. Dynamically Generate Available Dates from Bookings & Calendar Window
+  // 1. Dynamically Generate Available Dates from Bookings & Calendar Window (Strictly Normalized)
   const availableDates = useMemo(() => {
-    // Collect all unique dates from bookings
+    // Collect all unique dates from bookings (strictly normalized to prevent duplicate "05 Oct" vs "5 Oct")
     const uniqueDates = new Set<string>()
     bookings.forEach((b) => {
-      if (b.date) uniqueDates.add(b.date)
+      if (b.date) uniqueDates.add(normalizeDateStr(b.date))
     })
 
     // Dynamic rolling window: 2 days in past to 7 days ahead
@@ -140,52 +148,20 @@ export default function Schedule() {
     for (let offset = -2; offset <= 7; offset++) {
       const d = new Date(now)
       d.setDate(d.getDate() + offset)
-      const dateStr = d.toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
-      uniqueDates.add(dateStr)
-    }
-
-    // Parse and sort chronologically
-    const parseDateVal = (s: string) => {
-      const parts = s.split(" ")
-      if (parts.length === 3) {
-        const day = parseInt(parts[0], 10)
-        const monthMap: Record<string, number> = {
-          Jan: 0,
-          Feb: 1,
-          Mar: 2,
-          Apr: 3,
-          May: 4,
-          Jun: 5,
-          Jul: 6,
-          Aug: 7,
-          Sep: 8,
-          Oct: 9,
-          Nov: 10,
-          Dec: 11,
-        }
-        const month = monthMap[parts[1]] ?? 8
-        const year = parseInt(parts[2], 10)
-        return new Date(year, month, day).getTime()
-      }
-      return 0
+      uniqueDates.add(normalizeDateStr(d))
     }
 
     const sorted = Array.from(uniqueDates).sort(
-      (a, b) => parseDateVal(a) - parseDateVal(b),
+      (a, b) => parseDateTimestamp(a) - parseDateTimestamp(b),
     )
 
     return sorted.map((d) => {
-      const parts = d.split(" ")
-      const label = parts.length >= 2 ? `${parts[0]} ${parts[1]}` : d
-      const timeVal = parseDateVal(d)
-      const refTime = parseDateVal(TODAY_REFERENCE)
+      const label = getDateChipLabel(d)
+      const timeVal = parseDateTimestamp(d)
+      const refTime = parseDateTimestamp(TODAY_REFERENCE)
 
       let tag: "Today" | "Upcoming" | "Past" = "Upcoming"
-      if (d === TODAY_REFERENCE) {
+      if (isSameDate(d, TODAY_REFERENCE)) {
         tag = "Today"
       } else if (timeVal < refTime) {
         tag = "Past"
@@ -199,7 +175,7 @@ export default function Schedule() {
   const dayBookings = useMemo(() => {
     return bookings.filter(
       (b) =>
-        b.date === selectedDate &&
+        isSameDate(b.date, selectedDate) &&
         [
           "Confirmed",
           "In Service",
@@ -226,7 +202,7 @@ export default function Schedule() {
     if (!hoveredDate) return null
     const bList = bookings.filter(
       (b) =>
-        b.date === hoveredDate &&
+        isSameDate(b.date, hoveredDate) &&
         [
           "Confirmed",
           "In Service",
@@ -236,7 +212,7 @@ export default function Schedule() {
         ].includes(b.status),
     )
     const cows = Array.from(new Set(bList.map((b) => b.animal)))
-    const dateObj = availableDates.find((d) => d.value === hoveredDate)
+    const dateObj = availableDates.find((d) => isSameDate(d.value, hoveredDate))
     return {
       date: hoveredDate,
       tag: dateObj?.tag || "Upcoming",
@@ -362,10 +338,10 @@ export default function Schedule() {
             {/* Horizontal Scrollable Date Buttons with Hover Detection */}
             <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none">
               {availableDates.map((d) => {
-                const isActive = d.value === selectedDate
+                const isActive = isSameDate(d.value, selectedDate)
                 const dateBookingsCount = bookings.filter(
                   (b) =>
-                    b.date === d.value &&
+                    isSameDate(b.date, d.value) &&
                     [
                       "Confirmed",
                       "In Service",
@@ -768,8 +744,11 @@ export default function Schedule() {
                       {b.id}
                     </span>
                     <div>
-                      <div className="text-[13.5px] text-ink font-medium truncate flex items-center gap-1.5">
-                        <span>{b.customer}</span>
+                      <div className="text-[13.5px] text-ink font-medium truncate flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold">{b.customer}</span>
+                        <span className="text-[10px] font-medium text-forest bg-forest-soft px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                          <ShieldCheck size={11} /> Verified
+                        </span>
                         <span>·</span>
                         <span className="text-saffron-deep font-semibold">
                           {b.animal}
@@ -778,12 +757,20 @@ export default function Schedule() {
                           ({b.animalType})
                         </span>
                       </div>
-                      <div className="text-[11.5px] text-ink-faint flex items-center gap-2 mt-0.5">
+                      <div className="text-[11.5px] text-ink-faint flex items-center gap-2 mt-0.5 flex-wrap">
                         <span className="font-mono font-medium text-ink-soft">
                           {b.start}–{b.end}
                         </span>
                         <span>•</span>
-                        <span className="truncate max-w-[280px]">
+                        <a
+                          href={`tel:${b.phone}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="font-mono text-ink-soft hover:text-forest flex items-center gap-1"
+                        >
+                          <Phone size={11} /> {b.phone}
+                        </a>
+                        <span>•</span>
+                        <span className="truncate max-w-[260px]">
                           {b.address}
                         </span>
                       </div>
@@ -791,6 +778,16 @@ export default function Schedule() {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto flex-wrap">
+                    {/* View Complete Devotee Dossier & KYC */}
+                    <button
+                      onClick={() => setCustomerModalBooking(b)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-medium rounded border border-forest/30 bg-forest-soft text-forest hover:bg-forest/20 transition-colors cursor-pointer shadow-2xs"
+                      title="View complete customer dossier, identity documents & ceremonial protocol"
+                    >
+                      <User size={13} />
+                      <span>Devotee Details</span>
+                    </button>
+
                     <StatusPill status={b.status} />
 
                     {/* Departure Safety Check (Gate 1) */}
@@ -1054,6 +1051,13 @@ export default function Schedule() {
           </div>
         </div>
       )}
+
+      {/* Devotee Dossier & KYC Modal */}
+      <CustomerDetailsModal
+        booking={customerModalBooking}
+        isOpen={Boolean(customerModalBooking)}
+        onClose={() => setCustomerModalBooking(null)}
+      />
     </div>
   )
 }

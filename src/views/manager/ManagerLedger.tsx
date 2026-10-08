@@ -392,7 +392,7 @@ export default function ManagerLedger() {
       ritual: b.ritualPurpose || "Griha Pravesh & Puja",
       animal: b.animal,
       animalType: b.animalType,
-      driver: b.driver || "Sunil Pawar",
+      driver: b.driver || "Transit Driver",
       distanceKm: b.distanceKm || 0,
       totalPaid: b.total,
       netShare: net,
@@ -625,8 +625,8 @@ export default function ManagerLedger() {
     }
     // Dynamic fallback matching any assigned driver
     const fallback = inHouseDrivers[0] || {
-      name: "Sunil Pawar",
-      phone: "+91 98901 23456",
+      name: "Transit Driver",
+      phone: "+91 98901 00000",
       vehicleModel: "Tata 407 (Hydraulic Ramp)",
       vehiclePlate: "MH-12-PQ-9102",
     }
@@ -1622,7 +1622,7 @@ export default function ManagerLedger() {
                         <div className="text-[11.5px] text-ink-faint mt-0.5 flex items-center gap-2 flex-wrap">
                           <span>{g.gosalaObj?.trustRegistrationNo || "AWBI Reg: MAH-PUN-0421"}</span>
                           <span>•</span>
-                          <span>Caretaker: {g.gosalaObj?.caretaker || "Rameshwar Shastri"}</span>
+                          <span>Caretaker: {g.gosalaObj?.caretaker || "Assigned Caretaker"}</span>
                         </div>
                       </div>
 
@@ -2460,7 +2460,7 @@ export default function ManagerLedger() {
                               <div className="text-[11.5px] text-ink-faint mt-0.5 flex items-center gap-2 flex-wrap">
                                 <span>{g.gosalaObj?.trustRegistrationNo || "AWBI Reg: MAH-PUN-0421"}</span>
                                 <span>•</span>
-                                <span>Caretaker: {g.gosalaObj?.caretaker || "Rameshwar Shastri"}</span>
+                                <span>Caretaker: {g.gosalaObj?.caretaker || "Assigned Caretaker"}</span>
                               </div>
                             </div>
 
@@ -2733,7 +2733,7 @@ export default function ManagerLedger() {
                     Transport Route
                   </span>
                   <span className="text-ink font-medium">
-                    {receiptBooking.distanceKm} km · {receiptBooking.driver || "Sunil Pawar"}
+                    {receiptBooking.distanceKm} km · {receiptBooking.driver || "Transit Driver"}
                   </span>
                 </div>
               </div>

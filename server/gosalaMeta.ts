@@ -27,6 +27,8 @@ interface GosalaRichMeta {
   adminName?: string
   governingAdminRole?: "super_admin" | "admin" | string
   governingAdminName?: string
+  governingAdminEmail?: string
+  isActingManager?: boolean
   managerId?: string
   managerName?: string
 }

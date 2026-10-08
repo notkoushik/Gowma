@@ -21,12 +21,15 @@ import { slots, type Booking } from "../data/mock"
 import { useStore, type SlotAvailabilityStatus } from "../store/store"
 import { Panel, PanelHead, StatusPill, Eyebrow } from "../lib/ui"
 import type { Animal } from "../data/animals"
+import {
+  normalizeDateStr,
+  getTodayReference,
+  isSameDate,
+  parseDateTimestamp,
+  getDateChipLabel,
+} from "../lib/dateUtils"
 
-const TODAY_REFERENCE = new Date().toLocaleDateString("en-IN", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-})
+const TODAY_REFERENCE = getTodayReference()
 
 const legend = [
   {
@@ -107,11 +110,11 @@ export default function Availability() {
     left: 0,
   })
 
-  // 1. Dynamic Available Dates Generator
+  // 1. Dynamic Available Dates Generator (Strictly Normalized)
   const availableDates = useMemo(() => {
     const uniqueDates = new Set<string>()
     bookings.forEach((b) => {
-      if (b.date) uniqueDates.add(b.date)
+      if (b.date) uniqueDates.add(normalizeDateStr(b.date))
     })
 
     // Dynamic rolling window: 2 days in past to 7 days ahead
@@ -119,51 +122,20 @@ export default function Availability() {
     for (let offset = -2; offset <= 7; offset++) {
       const d = new Date(now)
       d.setDate(d.getDate() + offset)
-      const dateStr = d.toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
-      uniqueDates.add(dateStr)
-    }
-
-    const parseDateVal = (s: string) => {
-      const parts = s.split(" ")
-      if (parts.length === 3) {
-        const day = parseInt(parts[0], 10)
-        const monthMap: Record<string, number> = {
-          Jan: 0,
-          Feb: 1,
-          Mar: 2,
-          Apr: 3,
-          May: 4,
-          Jun: 5,
-          Jul: 6,
-          Aug: 7,
-          Sep: 8,
-          Oct: 9,
-          Nov: 10,
-          Dec: 11,
-        }
-        const month = monthMap[parts[1]] ?? 8
-        const year = parseInt(parts[2], 10)
-        return new Date(year, month, day).getTime()
-      }
-      return 0
+      uniqueDates.add(normalizeDateStr(d))
     }
 
     const sorted = Array.from(uniqueDates).sort(
-      (a, b) => parseDateVal(a) - parseDateVal(b),
+      (a, b) => parseDateTimestamp(a) - parseDateTimestamp(b),
     )
 
     return sorted.map((d) => {
-      const parts = d.split(" ")
-      const label = parts.length >= 2 ? `${parts[0]} ${parts[1]}` : d
-      const timeVal = parseDateVal(d)
-      const refTime = parseDateVal(TODAY_REFERENCE)
+      const label = getDateChipLabel(d)
+      const timeVal = parseDateTimestamp(d)
+      const refTime = parseDateTimestamp(TODAY_REFERENCE)
 
       let tag: "Today" | "Upcoming" | "Past" = "Upcoming"
-      if (d === TODAY_REFERENCE) {
+      if (isSameDate(d, TODAY_REFERENCE)) {
         tag = "Today"
       } else if (timeVal < refTime) {
         tag = "Past"
@@ -173,7 +145,7 @@ export default function Availability() {
     })
   }, [bookings])
 
-  const dateObj = availableDates.find((d) => d.value === selectedDate) || {
+  const dateObj = availableDates.find((d) => isSameDate(d.value, selectedDate)) || {
     label: selectedDate,
     value: selectedDate,
     tag: "Upcoming" as const,
@@ -307,10 +279,10 @@ export default function Availability() {
             {/* Scrollable Date Pills */}
             <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none">
               {availableDates.map((d) => {
-                const isActive = d.value === selectedDate
+                const isActive = isSameDate(d.value, selectedDate)
                 const dateBookingsCount = bookings.filter(
                   (b) =>
-                    b.date === d.value &&
+                    isSameDate(b.date, d.value) &&
                     [
                       "Confirmed",
                       "In Service",
@@ -561,7 +533,7 @@ export default function Availability() {
                 const dayBookings = bookings.filter(
                   (b) =>
                     b.animal.toLowerCase() === a.name.toLowerCase() &&
-                    b.date === selectedDate &&
+                    isSameDate(b.date, selectedDate) &&
                     b.status !== "Rejected" &&
                     b.status !== "Cancelled",
                 )
@@ -621,7 +593,7 @@ export default function Availability() {
                       const relBooking = bookings.find(
                         (b) =>
                           b.animal.toLowerCase() === a.name.toLowerCase() &&
-                          b.date === selectedDate &&
+                          isSameDate(b.date, selectedDate) &&
                           (b.id === check.bookingId ||
                             (b.start <= s && b.end >= s)),
                       )
@@ -736,7 +708,7 @@ export default function Availability() {
                   <span className="font-semibold text-ink">Devotee: </span>
                   {hoveredSlot.booking?.customer ||
                     hoveredSlot.check.customer ||
-                    "Ananya Deshmukh"}
+                    "Devotee"}
                 </div>
                 <div className="text-ink-faint text-[11px]">
                   <span>Seva: </span>

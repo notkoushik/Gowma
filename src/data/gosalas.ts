@@ -75,8 +75,11 @@ export type Gosala = {
 
   governingAdminName?: string
   governingAdminRole?: string
+  governingAdminEmail?: string
   adminId?: string
   adminName?: string
+  isActingManager?: boolean
+  actAsManagerMyself?: boolean
 }
 
 export type PartnershipTier = "PREFERRED" | "STANDARD" | "CHARITABLE" | "COMMERCIAL" | "CUSTOM"

@@ -241,6 +241,11 @@ type Store = {
   setAuthSession: (token: string, user: any) => void
   clearAuthSession: () => void
   reloadBackendState: () => Promise<void>
+  users: any[]
+  refreshUsers: () => Promise<any[]>
+  addUser: (userData: any) => Promise<any>
+  updateUser: (id: string, updates: any) => Promise<any>
+  deleteUser: (id: string) => Promise<any>
 }
 
 const StoreCtx = createContext<Store | null>(null)
@@ -384,6 +389,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return null
   })
   const [authUser, setAuthUser] = useState<any | null>(null)
+  const [users, setUsers] = useState<any[]>([])
   const [toasts, setToasts] = useState<Toast[]>([])
   const [notifications, setNotifications] = useState<AppNotification[]>([])
 
@@ -569,7 +575,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Sync state from backend on startup and session updates
   const loadBackendState = useCallback(async () => {
     try {
-      const [bkRes, prRes, mgRes, stRes, profRes, gosalaRes, animalRes, vetRes, schedRes, meRes] = await Promise.all([
+      const [bkRes, prRes, mgRes, stRes, profRes, gosalaRes, animalRes, vetRes, schedRes, meRes, usersRes] = await Promise.all([
         api.getBookings().catch(() => null),
         api.getPricingConfig().catch(() => null),
         api.getManagers().catch(() => null),
@@ -580,9 +586,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         api.getVets().catch(() => null),
         api.getSettlementSchedule().catch(() => null),
         api.getMe().catch(() => null),
+        api.getUsers().catch(() => null),
       ])
       if (meRes?.ok && meRes.user) {
         setAuthUser(meRes.user)
+      }
+      if (usersRes?.ok && Array.isArray(usersRes.users)) {
+        setUsers(usersRes.users)
       }
       if (bkRes?.bookings && Array.isArray(bkRes.bookings)) {
         const sanitized = bkRes.bookings.map((b: any) => ({
@@ -607,12 +617,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setProfiles((prev) => ({ ...prev, ...profRes.profiles }))
       }
       if (gosalaRes?.gosalas && Array.isArray(gosalaRes.gosalas)) {
-        setGosalas((prevLocal) => {
-          const localMap = new Map<string, Gosala>()
-          prevLocal.forEach((g) => {
-            localMap.set(g.id, g)
-            if (g.name) localMap.set(g.name.trim().toLowerCase(), g)
-          })
+        if (gosalaRes.gosalas.length === 0) {
+          setGosalas([])
+          try {
+            if (typeof window !== "undefined" && window.localStorage) {
+              localStorage.setItem("gomaa_gosalas", "[]")
+            }
+          } catch {}
+        } else {
+          setGosalas((prevLocal) => {
+            const localMap = new Map<string, Gosala>()
+            prevLocal.forEach((g) => {
+              localMap.set(g.id, g)
+              if (g.name) localMap.set(g.name.trim().toLowerCase(), g)
+            })
 
           const merged = gosalaRes.gosalas.map((serverG: any) => {
             const localG =
@@ -701,6 +719,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           } catch {}
           return merged
         })
+        }
       }
       if (animalRes?.animals && Array.isArray(animalRes.animals)) {
         setAnimals(animalRes.animals)
@@ -1256,7 +1275,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const createBooking = useCallback(
     (b: Booking, holdId?: string) => {
       setBookings((bs) => [b, ...bs])
-      api.createBooking(b, holdId).catch(console.error)
+      api
+        .createBooking(b, holdId)
+        .then(() => {
+          api
+            .getBookings()
+            .then((res) => {
+              if (res?.bookings && Array.isArray(res.bookings)) {
+                const sanitized = res.bookings.map((item: any) => ({
+                  ...item,
+                  handoverOtp: item.handoverOtp || "4819",
+                  handoverOtpVerified: Boolean(item.handoverOtpVerified),
+                }))
+                setBookings(sanitized)
+              }
+            })
+            .catch(() => {})
+        })
+        .catch(console.error)
       notify(
         `Booking ${b.id} placed · Payment verified server-side · Sent to manager review`,
         "ok",
@@ -1520,6 +1556,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [bookings, notify],
   )
 
+  const refreshUsers = useCallback(async () => {
+    try {
+      const res = await api.getUsers()
+      if (res?.ok && Array.isArray(res.users)) {
+        setUsers(res.users)
+        return res.users
+      }
+    } catch {}
+    return []
+  }, [])
+
   const addManager = useCallback(
     (mgr: Omit<GosalaManager, "id" | "assignedDate"> & { gosalas?: string[] }) => {
       const id = `MGR-${800 + managers.length + 1}`
@@ -1540,14 +1587,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         gosalas: mgr.gosalas || (mgr.gosala ? [mgr.gosala] : []),
       }
       setManagers((prev) => [newMgr, ...prev])
-      api.addManager(newMgr).catch(console.error)
+      api
+        .addManager(newMgr)
+        .then(() => {
+          refreshUsers()
+        })
+        .catch(console.error)
       const targetList =
         newMgr.gosalas && newMgr.gosalas.length > 0
           ? newMgr.gosalas.join(", ")
           : primaryGosala
       notify(`Manager ${mgr.name} assigned to ${targetList}`, "ok")
     },
-    [managers.length, notify],
+    [managers.length, notify, refreshUsers],
   )
 
   const updateManager = useCallback(
@@ -1706,6 +1758,63 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [notify],
   )
 
+  const addUser = useCallback(
+    async (userData: any) => {
+      try {
+        const res = await api.createUser(userData)
+        if (res?.ok) {
+          notify(`User ${userData.name || ""} created successfully`, "ok")
+          refreshUsers()
+          if (userData.role === "manager" || userData.role === "admin") {
+            api
+              .getManagers()
+              .then((mgRes) => {
+                if (mgRes?.managers && Array.isArray(mgRes.managers)) {
+                  setManagers(mgRes.managers)
+                }
+              })
+              .catch(() => {})
+          }
+          return res.user
+        }
+      } catch (err: any) {
+        notify(err.message || "Failed to create user", "err")
+      }
+    },
+    [notify, refreshUsers],
+  )
+
+  const updateUser = useCallback(
+    async (id: string, updates: any) => {
+      try {
+        const res = await api.updateUser(id, updates)
+        if (res?.ok) {
+          notify("User updated successfully", "ok")
+          refreshUsers()
+          return res.user
+        }
+      } catch (err: any) {
+        notify(err.message || "Failed to update user", "err")
+      }
+    },
+    [notify, refreshUsers],
+  )
+
+  const deleteUser = useCallback(
+    async (id: string) => {
+      try {
+        const res = await api.deleteUser(id)
+        if (res?.ok) {
+          notify("User removed from platform", "ok")
+          setUsers((prev) => prev.filter((u) => u.id !== id))
+        }
+      } catch (err: any) {
+        notify(err.message || "Failed to delete user", "err")
+      }
+    },
+    [notify],
+  )
+
   const store = useMemo(
     () => ({
       bookings,
@@ -1768,6 +1877,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setAuthSession,
       clearAuthSession,
       reloadBackendState: loadBackendState,
+      users,
+      refreshUsers,
+      addUser,
+      updateUser,
+      deleteUser,
     }),
     [
       bookings,
@@ -1829,6 +1943,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setAuthSession,
       clearAuthSession,
       loadBackendState,
+      users,
+      refreshUsers,
+      addUser,
+      updateUser,
+      deleteUser,
     ],
   )
 

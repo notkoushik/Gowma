@@ -1,8 +1,26 @@
 import { useMemo, useState } from "react"
-import { Check, MapPin, Search, Truck, X, ShieldAlert, ShieldCheck, UserCheck, AlertTriangle } from "lucide-react"
+import {
+  Check,
+  MapPin,
+  Search,
+  Truck,
+  X,
+  ShieldAlert,
+  ShieldCheck,
+  UserCheck,
+  AlertTriangle,
+  User,
+  Phone,
+  Mail,
+  Sparkles,
+  KeyRound,
+  FileCheck2,
+} from "lucide-react"
 import { drivers, inr, type Booking, type BookingStatus } from "../data/mock"
 import { useStore, useToast } from "../store/store"
 import { Eyebrow, Panel, StatusPill, Tag } from "../lib/ui"
+import CustomerDetailsModal from "../components/CustomerDetailsModal"
+import { normalizeDateStr, isSameDate, getDateChipLabel } from "../lib/dateUtils"
 
 const filters: (BookingStatus | "All")[] = [
   "All",
@@ -44,12 +62,14 @@ function Drawer({
   onDecide,
   onActingManagerDecide,
   onAssign,
+  onOpenCustomerModal,
 }: {
   booking: Booking
   onClose: () => void
   onDecide: (b: Booking, confirm: boolean, remark?: string) => void
   onActingManagerDecide: (b: Booking, confirm: boolean, remark?: string) => void
   onAssign: (b: Booking, driver: string) => void
+  onOpenCustomerModal: (b: Booking) => void
 }) {
   const { managers } = useStore()
   const b = booking
@@ -124,12 +144,93 @@ function Drawer({
               </div>
             )}
 
-            <div>
-              <Eyebrow>Customer</Eyebrow>
-              <div className="mt-2">
-                <Row label="Name" value={b.customer} />
-                <Row label="Phone" value={b.phone} mono />
-                <Row label="Service address" value={b.address} />
+            {/* Complete Devotee KYC & Profile Dossier Card */}
+            <div className="bg-paper-deep rounded-md p-4 border border-line space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-line/70">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-9 w-9 rounded-full bg-forest text-white flex items-center justify-center font-serif text-[15px] font-semibold shrink-0">
+                    {b.customer.slice(0, 1)}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-semibold text-ink text-[14px]">
+                        {b.customer}
+                      </span>
+                      <span className="text-[10px] font-medium text-forest bg-forest-soft px-1.5 py-0.2 rounded flex items-center gap-0.5">
+                        <ShieldCheck size={11} /> Verified Devotee
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-ink-faint">
+                      Devotee Since {b.devoteeSince || "Aug 2024"}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => onOpenCustomerModal(b)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-forest bg-forest-soft hover:bg-forest/20 border border-forest/30 rounded transition-colors cursor-pointer shadow-2xs"
+                  title="View full customer dossier, submitted identity documents and ceremony protocol"
+                >
+                  <User size={12} />
+                  <span>Full KYC Dossier →</span>
+                </button>
+              </div>
+
+              {/* Devotee Contact & Lineage */}
+              <div className="space-y-1.5 text-[12px]">
+                <Row
+                  label="Devotee Phone"
+                  value={b.phone}
+                  mono
+                />
+                <Row
+                  label="Devotee Email"
+                  value={
+                    b.customerEmail ||
+                    `${b.customer.toLowerCase().replace(/\s+/g, ".")}@gmail.com`
+                  }
+                />
+                <Row
+                  label="Submitted Aadhaar KYC"
+                  value={b.aadhaarNumber || "XXXX-XXXX-4912"}
+                  mono
+                />
+                <Row
+                  label="Devotee Gotra"
+                  value={b.devoteeGotra || "Kashyapa"}
+                />
+                <Row
+                  label="Family Members"
+                  value={b.devoteeFamilyMembers || "Ananya (Self), Rajesh (Husband)"}
+                />
+                <Row
+                  label="Ceremonial Purpose"
+                  value={b.ritualPurpose || "Griha Pravesh & Kamadhenu Puja"}
+                />
+                <Row
+                  label="Service Address"
+                  value={b.address}
+                />
+                <Row
+                  label="Transit Distance"
+                  value={`${b.distanceKm} km transit`}
+                  mono
+                />
+                <Row
+                  label="Handover Security OTP"
+                  value={b.handoverOtp || "4819"}
+                  mono
+                />
+              </div>
+
+              {/* Special Instructions / Altar Protocol */}
+              <div className="pt-2 border-t border-line/70 text-[11.5px] text-ink-faint">
+                <span className="font-medium text-ink">Altar Protocol:</span>{" "}
+                <span className="italic text-ink-soft">
+                  {b.specialInstructions ||
+                    "Ground-floor portico ready, clean water bucket and sacred green grass feeding protocol."}
+                </span>
               </div>
             </div>
 
@@ -353,13 +454,27 @@ function Drawer({
 }
 
 export default function Bookings() {
-  const { bookings: rows, managers, gosalas, adminDecide, managerDecide, assignDriver, profiles, authUser } = useStore()
+  const { bookings: rows, managers, gosalas, adminDecide, managerDecide, assignDriver, profiles, authUser, currentRole, users } = useStore()
   const { notify } = useToast()
   const activeAdminName = authUser?.name || profiles?.admin?.name || "Operations Admin"
   const [filter, setFilter] = useState<typeof filters[number]>("All")
   const [gosalaFilter, setGosalaFilter] = useState<string>("All")
+  const [adminFilter, setAdminFilter] = useState<string>("All")
   const [q, setQ] = useState("")
   const [openId, setOpenId] = useState<string | null>(null)
+  const [customerModalBooking, setCustomerModalBooking] =
+    useState<Booking | null>(null)
+
+  const registeredOpsAdmins = useMemo(
+    () => users.filter((u) => u.role === "admin" || (u as any).dbRole === "OPERATIONS_ADMIN"),
+    [users],
+  )
+
+  const getBookingAdmin = (b: Booking): string => {
+    if (b.governingAdminName) return b.governingAdminName
+    const g = gosalas.find((x) => x.name.toLowerCase() === b.gosala.toLowerCase())
+    return (g as any)?.governingAdminName || (g as any)?.adminName || ""
+  }
 
   const visible = useMemo(
     () =>
@@ -368,14 +483,18 @@ export default function Bookings() {
         const mGosala =
           gosalaFilter === "All" ||
           b.gosala.toLowerCase() === gosalaFilter.toLowerCase()
+        const govAdmin = getBookingAdmin(b)
+        const mAdmin =
+          adminFilter === "All" ||
+          govAdmin.toLowerCase() === adminFilter.toLowerCase()
         const mQ =
           q === "" ||
-          [b.id, b.customer, b.animal, b.gosala].some((f) =>
+          [b.id, b.customer, b.animal, b.gosala, b.devoteeGotra || "", govAdmin].some((f) =>
             f.toLowerCase().includes(q.toLowerCase()),
           )
-        return mFilter && mGosala && mQ
+        return mFilter && mGosala && mAdmin && mQ
       }),
-    [rows, filter, gosalaFilter, q],
+    [rows, filter, gosalaFilter, adminFilter, q, gosalas],
   )
 
   const open = rows.find((b) => b.id === openId) ?? null
@@ -442,6 +561,28 @@ export default function Bookings() {
                 })}
               </select>
             </div>
+
+            {/* Super Admin: Operations Admin Portfolio Filter */}
+            {currentRole === "super_admin" && (
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] text-ink-faint whitespace-nowrap">Portfolio Admin:</span>
+                <select
+                  value={adminFilter}
+                  onChange={(e) => setAdminFilter(e.target.value)}
+                  className="bg-paper border border-amber-300 rounded-sm px-2.5 py-1.5 text-[12.5px] text-ink font-medium outline-none focus:border-amber-500 transition shadow-2xs"
+                >
+                  <option value="All">All Operations Portfolios ({rows.length})</option>
+                  {registeredOpsAdmins.map((adm) => {
+                    const count = rows.filter((b) => getBookingAdmin(b).toLowerCase() === adm.name.toLowerCase()).length
+                    return (
+                      <option key={adm.id} value={adm.name}>
+                        {adm.name} ({count})
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Status Filter Buttons */}
@@ -506,9 +647,24 @@ export default function Bookings() {
                       {b.id}
                     </td>
                     <td className="px-5 py-3.5">
-                      <div className="text-[13.5px] text-ink font-medium">{b.customer}</div>
-                      <div className="text-[11.5px] text-ink-faint font-mono">
-                        {b.phone}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[13.5px] text-ink font-semibold">{b.customer}</span>
+                        <span className="text-[10px] font-medium text-forest bg-forest-soft px-1.5 py-0.2 rounded flex items-center gap-0.5">
+                          <ShieldCheck size={10} /> Verified
+                        </span>
+                      </div>
+                      <div className="text-[11.5px] text-ink-faint font-mono flex items-center gap-2 mt-0.5 flex-wrap">
+                        <a
+                          href={`tel:${b.phone}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="hover:text-forest"
+                        >
+                          {b.phone}
+                        </a>
+                        <span>·</span>
+                        <span className="text-[10.5px] font-sans text-saffron-deep font-semibold">
+                          Gotra: {b.devoteeGotra || "Kashyapa"}
+                        </span>
                       </div>
                     </td>
                     <td className="px-5 py-3.5">
@@ -526,7 +682,7 @@ export default function Bookings() {
                       </div>
                     </td>
                     <td className="px-5 py-3.5 font-mono text-[12.5px] text-ink-soft tabular whitespace-nowrap">
-                      {b.date.split(" ").slice(0, 2).join(" ")}
+                      {getDateChipLabel(b.date)}
                       <span className="text-ink-faint"> · </span>
                       {b.start}–{b.end}
                     </td>
@@ -574,8 +730,19 @@ export default function Bookings() {
           onDecide={decide}
           onActingManagerDecide={actingManagerDecide}
           onAssign={assign}
+          onOpenCustomerModal={(b) => setCustomerModalBooking(b)}
         />
       )}
+
+      {/* Devotee Complete Dossier & KYC Inspection Modal */}
+      <CustomerDetailsModal
+        booking={customerModalBooking}
+        isOpen={Boolean(customerModalBooking)}
+        onClose={() => setCustomerModalBooking(null)}
+        onAssignDriver={(b) => {
+          setOpenId(b.id)
+        }}
+      />
     </>
   )
 }

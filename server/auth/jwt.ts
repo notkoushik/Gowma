@@ -26,11 +26,28 @@ export interface JwtPayload {
   userId: string
   name: string
   email: string
+  phone?: string
   role: "super_admin" | "admin" | "manager" | "customer" | "driver"
   dbRole: "SUPER_ADMIN" | "OPERATIONS_ADMIN" | "GOSALA_MANAGER" | "CUSTOMER" | "DRIVER"
   gosalaIds: string[]
   gosalaNames: string[]
   adminId?: string
+  driverData?: {
+    driverId?: string
+    vehicleNumber?: string
+    vehicleType?: string
+    licenseNumber?: string
+    gosalaBase?: string
+    status?: string
+    phone?: string
+  }
+  customerData?: {
+    address?: string
+    city?: string
+    aadhaarNumber?: string
+    preferredCeremony?: string
+    totalBookings?: number
+  }
   iat?: number
   exp?: number
 }

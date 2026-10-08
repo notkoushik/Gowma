@@ -27,7 +27,7 @@ export const roles: Role[] = [
     id: "customer",
     name: "Customer",
     scope: "Booking · mobile app",
-    demoEmail: "ananya@gomaa.in",
+    demoEmail: "customer@gomaa.in",
     icon: User,
     summary:
       "Discovers nearby Gosalas, books an individual animal for a chosen slot, pays, and tracks the trip live.",
@@ -43,7 +43,7 @@ export const roles: Role[] = [
     id: "super_admin",
     name: "Super Admin (Captain)",
     scope: "Platform Captain & Master Authority",
-    demoEmail: "superadmin@gomaa.in",
+    demoEmail: "koushik@gmail.com",
     icon: Crown,
     summary:
       "The Platform Captain and supreme authority who controls everything in the application. Manages PostgreSQL Master Pricing configurations, distance formulas, commission splits, platform economics, and authorizes all treasury payout disbursements.",

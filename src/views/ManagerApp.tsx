@@ -28,6 +28,7 @@ import {
   ArrowRightLeft,
   ArrowRight,
   MapPin,
+  HeartHandshake,
 } from "lucide-react"
 import Queue from "./manager/Queue"
 import LiveTracking from "./manager/LiveTracking"
@@ -36,6 +37,7 @@ import Animals from "./manager/Animals"
 import Availability from "./Availability"
 import ManagerLedger from "./manager/ManagerLedger"
 import GaushalaProfileView from "./manager/GaushalaProfileView"
+import ManagerDevotees from "./manager/ManagerDevotees"
 import EditProfileModal from "../components/EditProfileModal"
 import { useStore } from "../store/store"
 import { initialProfiles } from "../data/profiles"
@@ -48,6 +50,7 @@ type MView =
   | "animals"
   | "gosalas"
   | "ledger"
+  | "devotees"
 
 const VALID_MANAGER_VIEWS: MView[] = [
   "queue",
@@ -57,6 +60,7 @@ const VALID_MANAGER_VIEWS: MView[] = [
   "animals",
   "gosalas",
   "ledger",
+  "devotees",
 ]
 
 function getInitialManagerView(): MView {
@@ -106,6 +110,10 @@ const titles: Record<MView, { title: string; desc: string }> = {
   ledger: {
     title: "My Gaushala Net Payouts",
     desc: "Dedicated 80% Gaushala trust revenue share & 100% transport pass-through",
+  },
+  devotees: {
+    title: "Devotees & Transit Fleet Registry",
+    desc: "Authorize devotees and transit pilots for your Gaushala with instant credential sharing",
   },
 }
 
@@ -444,6 +452,11 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
       id: "gosalas",
       label: "My Gaushala Facility",
       icon: Building2,
+    },
+    {
+      id: "devotees",
+      label: "Devotees & Drivers",
+      icon: HeartHandshake,
     },
     { id: "ledger", label: "My Gaushala Payouts", icon: Wallet },
     {
@@ -957,6 +970,13 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
             </div>
           )}
           {view === "ledger" && <ManagerLedger />}
+          {view === "devotees" && (
+            <ManagerDevotees
+              currentGosalaName={
+                currentGosalaObj?.name || currentGosala || "My Gaushala"
+              }
+            />
+          )}
         </main>
 
         {/* Mobile Fixed Native Bottom Navigation Bar */}
@@ -1124,6 +1144,36 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
                     </div>
                     <div className="text-[11px] text-ink-faint">
                       Premises, shed capacities &amp; AWBI trust details
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => {
+                    handleSetView("devotees")
+                    setMobileMoreOpen(false)
+                  }}
+                  className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition ${
+                    view === "devotees"
+                      ? "bg-forest-soft text-forest font-semibold"
+                      : "hover:bg-paper-deep text-ink"
+                  }`}
+                >
+                  <HeartHandshake
+                    size={18}
+                    className={
+                      view === "devotees" ? "text-forest" : "text-ink-faint"
+                    }
+                  />
+                  <div>
+                    <div className="text-[13px] flex items-center gap-1.5 font-medium">
+                      <span>Devotees &amp; Drivers</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-saffron-soft text-saffron-deep font-semibold">
+                        Users
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-ink-faint">
+                      Authorize devotees &amp; transit pilots with credentials
                     </div>
                   </div>
                 </button>

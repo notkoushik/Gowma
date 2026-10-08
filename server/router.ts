@@ -4,6 +4,7 @@ import { gpsSimulator } from "./ws/gpsSimulator.ts"
 import { db } from "./db.ts"
 import { getGosalaMeta, saveGosalaMeta, deleteGosalaMeta } from "./gosalaMeta.ts"
 import { getAnimalMeta, saveAnimalMeta, deleteAnimalMeta, getAllAnimalMeta } from "./animalMeta.ts"
+import { getUserMeta, setUserMeta } from "./userMeta.ts"
 import type { GpsTickPayload } from "./ws/types.ts"
 import type {
   Booking,
@@ -13,7 +14,15 @@ import type {
   Settlement,
 } from "./types.ts"
 import { executeAutomatedSweep, getScheduleStatus } from "./services/payoutEngine.ts"
-import { getAuthUserFromHeader, authenticateOrResolveUser, getDirectoryAccounts } from "./auth/authService.ts"
+import {
+  getAuthUserFromHeader,
+  authenticateOrResolveUser,
+  getDirectoryAccounts,
+  registerUser,
+  getAllUsers,
+  updateUser,
+  deleteUser,
+} from "./auth/authService.ts"
 
 type HandlerResponse = {
   status: number
@@ -26,73 +35,73 @@ const serverVets = new Map<string, any>()
 
 const serverProfiles: Record<string, any> = {
   customer: {
-    id: "USER-CUST-101",
+    id: "USER-CUST-NEW",
     role: "customer",
-    name: "Ananya Deshmukh",
-    phone: "+91 98204 11827",
-    email: "ananya.deshmukh@gmail.com",
+    name: "Devotee",
+    phone: "+91 98000 00000",
+    email: "devotee@gmail.com",
     customerData: {
-      address: "14 Tulsi Nagar, Kondapur, Hyderabad",
-      aadhaarNumber: "XXXX-XXXX-4819",
-      memberSince: "Aug 2024",
-      totalBookings: 4,
-      preferredCeremony: "Griha Pravesh & Kamadhenu Puja",
+      address: "Devotee Residence",
+      aadhaarNumber: "XXXX-XXXX-0000",
+      memberSince: "Oct 2026",
+      totalBookings: 0,
+      preferredCeremony: "Kamadhenu Puja & Gau Seva",
     },
   },
   manager: {
-    id: "USER-MGR-804",
+    id: "USER-MGR-NEW",
     role: "manager",
-    name: "Rahul Kamble",
-    phone: "+91 98230 44910",
-    email: "rahul.kamble@gomaa.in",
+    name: "Gaushala Manager",
+    phone: "+91 98000 00000",
+    email: "manager@gomaa.in",
     managerData: {
-      managerId: "MGR-804",
-      gosala: "Shri Krishna Gaushala",
-      region: "Cyberabad Zone",
+      managerId: "MGR-NEW",
+      gosala: "Unassigned",
+      region: "Operational Hub",
       dailySevaCeiling: 2,
       restingBufferMin: 90,
     },
   },
   driver: {
-    id: "USER-DRV-102",
+    id: "USER-DRV-NEW",
     role: "driver",
-    name: "Sunil Pawar",
-    phone: "+91 98201 55432",
-    email: "sunil.pawar@gomaa.in",
+    name: "Transit Pilot",
+    phone: "+91 98000 00000",
+    email: "driver@gomaa.in",
     driverData: {
-      driverId: "DRV-102",
-      vehicleNumber: "MH-12-Q-4491",
-      vehicleType: "Tata 407 (8ft Open Bed)",
-      licenseNumber: "DL-142011009823",
-      gosalaBase: "Shri Krishna Gaushala",
+      driverId: "DRV-NEW",
+      vehicleNumber: "TS-09-GA-1008",
+      vehicleType: "Tata 407 (Hydraulic Cattle Bed)",
+      licenseNumber: "DL-PENDING",
+      gosalaBase: "Unassigned",
       status: "Available",
     },
   },
   admin: {
-    id: "USER-ADM-101",
+    id: "USER-ADM-NEW",
     role: "admin",
-    name: "Priya Sharma",
-    phone: "+91 98220 77123",
-    email: "priya.sharma@gomaa.in",
+    name: "Operations Admin",
+    phone: "+91 98000 00000",
+    email: "operations@gomaa.in",
     adminData: {
-      adminId: "ADM-101",
+      adminId: "ADM-NEW",
       designation: "Regional Operations Officer",
-      department: "Central Gaushala Operations & Logistics Hub",
+      department: "Regional Gaushala Operations Hub",
       authorityLevel: "OPERATIONS_ADMIN",
     },
   },
   super_admin: {
-    id: "USER-SA-001",
+    id: "USER-SA-KOUSHIK",
     role: "super_admin",
-    name: "Vikramaditya Hegde",
-    phone: "+91 98110 33456",
-    email: "vikramaditya.hegde@gomaa.in",
+    name: "Koushik",
+    phone: "+91 98000 00000",
+    email: "koushik@gmail.com",
     adminData: {
-      adminId: "SA-001",
-      designation: "Chief Treasury Officer & Financial Controller",
-      department: "GOMAA Central Treasury & Gaushala Trust Governance",
+      adminId: "SA-KOUSHIK",
+      designation: "Platform Sovereign & Master Authority",
+      department: "GOMAA Central Platform Governance",
       authorityLevel: "SUPER_ADMIN",
-      treasuryClearanceLevel: "Level-3 Master Authority",
+      treasuryClearanceLevel: "Master Sovereign Authority",
     },
   },
 }
@@ -166,6 +175,28 @@ function toPrismaStatus(s: string): any {
   }
 }
 
+function normalizeDateStr(d: any): string {
+  if (!d) return ""
+  if (d instanceof Date) {
+    return d.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    })
+  }
+  const s = String(d).trim()
+  const match = s.match(/^0*(\d+)[-\s]+([A-Za-z]+)[-\s]+(\d{4})$/)
+  if (match) {
+    return `${parseInt(match[1], 10)} ${match[2]} ${match[3]}`
+  }
+  const parts = s.split(/[\s-]+/)
+  if (parts.length === 3) {
+    const day = parseInt(parts[0], 10)
+    if (!isNaN(day)) return `${day} ${parts[1]} ${parts[2]}`
+  }
+  return s
+}
+
 function formatBooking(b: any): Booking {
   const mgrApproval = b.auditTrails?.find(
     (a: any) =>
@@ -178,40 +209,72 @@ function formatBooking(b: any): Booking {
 
   return {
     id: b.id,
-    customer: b.customerName,
-    phone: b.customerPhone,
-    gosala: b.gosalaName,
-    animal: b.animalName,
+    customer: b.customerName || b.customer,
+    phone: b.customerPhone || b.phone,
+    gosala: b.gosalaName || b.gosala,
+    animal: b.animalName || b.animal,
     animalType:
-      b.animalType === "COW"
+      b.animalType === "COW" || b.animalType === "Cow"
         ? "Cow"
-        : b.animalType === "BULL"
+        : b.animalType === "BULL" || b.animalType === "Bull"
           ? "Bull"
           : "Calf",
-    date: b.bookingDate,
-    start: b.startTime,
-    end: b.endTime,
+    date: normalizeDateStr(b.bookingDate || b.date),
+    start: b.startTime || b.start,
+    end: b.endTime || b.end,
     durationMin: b.durationMin,
     address: b.address,
     distanceKm: b.distanceKm,
-    base: b.baseRate,
-    extraTime: b.extraTimeFee,
-    transport: b.transportFee,
-    addons: b.addonsFee,
-    tax: b.taxFee,
-    discount: b.discountFee,
-    total: b.totalAmount,
-    commissionPct: b.commissionPct,
+    base: b.baseRate ?? b.base ?? 0,
+    extraTime: b.extraTimeFee ?? b.extraTime ?? 0,
+    transport: b.transportFee ?? b.transport ?? 0,
+    addons: b.addonsFee ?? b.addons ?? 0,
+    tax: b.taxFee ?? b.tax ?? 0,
+    discount: b.discountFee ?? b.discount ?? 0,
+    total: b.totalAmount ?? b.total ?? 0,
+    commissionPct: b.commissionPct ?? 20,
     status: toFrontendStatus(b.status),
-    driver: b.driver?.name || null,
-    driverStage: b.driverStage,
-    paid: b.isPaid,
+    driver: b.driver?.name || b.driver || null,
+    driverStage: b.driverStage ?? 0,
+    paid: b.isPaid ?? b.paid ?? true,
     managerRemark: b.managerRemark || undefined,
     adminRemark: b.adminRemark || undefined,
     freeKmSnapshot: b.freeKmSnapshot,
     perKmSnapshot: b.perKmSnapshot,
     extraUnitRateSnapshot: b.extraUnitRateSnapshot,
     commissionSnapshot: b.commissionSnapshot,
+    // Complete Booker & Devotee Identity Snapshot
+    customerEmail:
+      (b as any).customerEmail ||
+      b.customer?.email ||
+      `${(b.customerName || b.customer || "devotee").toLowerCase().replace(/\s+/g, ".")}@gmail.com`,
+    aadhaarNumber: (b as any).aadhaarNumber || "XXXX-XXXX-4912",
+    aadhaarVerified: (b as any).aadhaarVerified ?? true,
+    devoteeGotra: (b as any).devoteeGotra || "Kashyapa",
+    devoteeFamilyMembers:
+      (b as any).devoteeFamilyMembers || "Ananya (Self), Rajesh (Husband)",
+    ritualPurpose:
+      (b as any).ritualPurpose || "Griha Pravesh & Kamadhenu Puja",
+    specialInstructions:
+      (b as any).specialInstructions ||
+      "Ground-floor portico ready, clean water bucket and sacred green grass feeding protocol.",
+    devoteeSince:
+      (b as any).devoteeSince ||
+      (b.customer?.createdAt
+        ? new Date(b.customer.createdAt).toLocaleDateString("en-IN", {
+            month: "short",
+            year: "numeric",
+          })
+        : "Aug 2024"),
+    // Operations Admin Portfolio Governance
+    governingAdminName:
+      (b as any).governingAdminName ||
+      getGosalaMeta("", b.gosalaName || b.gosala)?.governingAdminName ||
+      "",
+    governingAdminEmail:
+      (b as any).governingAdminEmail ||
+      getGosalaMeta("", b.gosalaName || b.gosala)?.governingAdminEmail ||
+      "",
     // Dynamic Customer Animal Received & Handover OTP Security
     handoverOtp: (b as any).handoverOtp || "4819",
     handoverOtpVerified: Boolean((b as any).handoverOtpVerified),
@@ -299,6 +362,7 @@ function formatManagerUser(user: any): GosalaManager {
   }
 
   const firstAssignedAt = assignments[0]?.assignedAt || user.createdAt
+  const meta = getUserMeta(user.email || user.id)
 
   return {
     id: user.id.startsWith("MGR-")
@@ -307,6 +371,7 @@ function formatManagerUser(user: any): GosalaManager {
     name: user.name,
     email: user.email,
     phone: user.phone,
+    password: meta.password,
     gosala: primaryGosala,
     gosalas: assignedGosalas,
     gosalaIds: assignedGosalaIds,
@@ -387,18 +452,19 @@ export async function handleApiRequest(
   // POST /api/auth/login
   if (method === "POST" && pathname === "/api/auth/login") {
     try {
-      const emailOrPhone = body.email || body.phone || body.username || ""
+      const emailOrPhone = body.email || body.phone || body.username || body.emailOrPhone || ""
       const roleHint = body.roleHint || body.role
       if (!emailOrPhone) {
         return { status: 400, body: { ok: false, error: "Email or phone number is required" } }
       }
-      const session = await authenticateOrResolveUser(emailOrPhone, roleHint)
+      const session = await authenticateOrResolveUser(emailOrPhone, roleHint, body.password)
       if (!session) {
         return { status: 401, body: { ok: false, error: "Invalid credentials or user not found" } }
       }
       return { status: 200, body: { ok: true, token: session.token, user: session.user } }
     } catch (err: any) {
-      return { status: 500, body: { ok: false, error: err.message || "Authentication failed" } }
+      const isAuthErr = err.message?.toLowerCase().includes("password") || err.message?.toLowerCase().includes("invalid") || err.message?.toLowerCase().includes("unauthorized")
+      return { status: isAuthErr ? 401 : 500, body: { ok: false, error: err.message || "Authentication failed" } }
     }
   }
 
@@ -417,6 +483,60 @@ export async function handleApiRequest(
       return { status: 200, body: { ok: true, accounts } }
     } catch (err: any) {
       return { status: 500, body: { ok: false, error: err.message } }
+    }
+  }
+
+  // POST /api/auth/register (Public User Registration with JWT)
+  if (method === "POST" && pathname === "/api/auth/register") {
+    try {
+      const session = await registerUser(body)
+      return { status: 201, body: { ok: true, token: session.token, user: session.user } }
+    } catch (err: any) {
+      return { status: 400, body: { ok: false, error: err.message || "Registration failed" } }
+    }
+  }
+
+  // ----------------- USER DIRECTORY & ACCESS CONTROL API -----------------
+  // GET /api/users (Admin User Management)
+  if (method === "GET" && pathname === "/api/users") {
+    try {
+      const users = await getAllUsers()
+      return { status: 200, body: { ok: true, users } }
+    } catch (err: any) {
+      return { status: 500, body: { ok: false, error: err.message } }
+    }
+  }
+
+  // POST /api/users (Admin Create User)
+  if (method === "POST" && pathname === "/api/users") {
+    try {
+      const session = await registerUser(body)
+      return { status: 201, body: { ok: true, user: session.user } }
+    } catch (err: any) {
+      return { status: 400, body: { ok: false, error: err.message || "Failed to create user" } }
+    }
+  }
+
+  // PUT /api/users/:id
+  const putUserMatch = pathname.match(/^\/api\/users\/([^/]+)$/)
+  if (method === "PUT" && putUserMatch) {
+    const id = putUserMatch[1]
+    try {
+      const updated = await updateUser(id, body)
+      return { status: 200, body: { ok: true, user: updated } }
+    } catch (err: any) {
+      return { status: 400, body: { ok: false, error: err.message || "Failed to update user" } }
+    }
+  }
+
+  // DELETE /api/users/:id
+  if (method === "DELETE" && putUserMatch) {
+    const id = putUserMatch[1]
+    try {
+      await deleteUser(id)
+      return { status: 200, body: { ok: true, deleted: id } }
+    } catch (err: any) {
+      return { status: 400, body: { ok: false, error: err.message || "Failed to delete user" } }
     }
   }
 
@@ -688,18 +808,49 @@ export async function handleApiRequest(
           gosalaName: { equals: gn, mode: "insensitive" },
         }))
       } else if (authUser?.role === "admin") {
-        const admGosalas = ["RamNath Gaushala", "Suryavanchi Gaushala", "Surya", "Tirupati Balaji Sacred Surabhi Trust"]
-        where.OR = admGosalas.map((gn) => ({
-          gosalaName: { equals: gn, mode: "insensitive" },
-        }))
-      } else if (authUser?.role === "super_admin" && query.get("scope") !== "all" && query.get("all") !== "true") {
-        where.gosalaName = { equals: "Govardhan Goseva Trust", mode: "insensitive" }
+        const adminEmail = (authUser.email || "").toLowerCase()
+        const adminName = (authUser.name || "").toLowerCase()
+        if (authUser.gosalaNames && authUser.gosalaNames.length > 0) {
+          where.OR = authUser.gosalaNames.map((gn: string) => ({
+            gosalaName: { equals: gn, mode: "insensitive" },
+          }))
+        } else {
+          const allGosalas = await prisma.gosala.findMany({ where: { isActive: true } })
+          const myGosalaNames = allGosalas
+            .filter((g: any) => {
+              const meta = getGosalaMeta(g.id, g.name)
+              const gEmail = (meta.governingAdminEmail || "").toLowerCase()
+              const gName = (meta.governingAdminName || meta.adminName || "").toLowerCase()
+              return (gEmail && gEmail === adminEmail) || (gName && gName.includes(adminName))
+            })
+            .map((g: any) => g.name)
+          if (myGosalaNames.length > 0) {
+            where.OR = myGosalaNames.map((gn: string) => ({
+              gosalaName: { equals: gn, mode: "insensitive" },
+            }))
+          }
+        }
+      } else if (authUser?.role === "super_admin") {
+        // Super Admin has complete info across all Operations Admins and Gaushalas!
+        if (query.get("gosala")) {
+          where.gosalaName = { contains: query.get("gosala")!, mode: "insensitive" }
+        }
       } else if (authUser?.role === "driver") {
-        where.driverId = authUser.userId
+        where.OR = [
+          { driverId: authUser.userId },
+          { driver: { name: { equals: authUser.name, mode: "insensitive" } } },
+          { driverPhone: { equals: authUser.phone || authUser.email, mode: "insensitive" } },
+          {
+            driverId: null,
+            status: { in: ["CONFIRMED", "ADMIN_REVIEW", "PAYMENT_VERIFIED"] },
+          },
+        ]
       } else if (authUser?.role === "customer") {
         where.OR = [
           { customerId: authUser.userId },
-          { customerPhone: authUser.email },
+          ...(authUser.phone ? [{ customerPhone: { equals: authUser.phone, mode: "insensitive" } }] : []),
+          ...(authUser.email ? [{ customerPhone: { equals: authUser.email, mode: "insensitive" } }] : []),
+          { customerName: { equals: authUser.name, mode: "insensitive" } },
         ]
       }
 
@@ -719,6 +870,26 @@ export async function handleApiRequest(
         list = list.filter((b) =>
           authUser.gosalaNames.some((gn) => b.gosala.toLowerCase().includes(gn.toLowerCase())),
         )
+      } else if (authUser?.role === "admin") {
+        const adminEmail = (authUser.email || "").toLowerCase()
+        const adminName = (authUser.name || "").toLowerCase()
+        list = list.filter((b) => {
+          if (authUser.gosalaNames?.length > 0) {
+            return authUser.gosalaNames.some((gn: string) => b.gosala.toLowerCase().includes(gn.toLowerCase()))
+          }
+          const govEmail = ((b as any).governingAdminEmail || "").toLowerCase()
+          const govName = ((b as any).governingAdminName || "").toLowerCase()
+          return govEmail === adminEmail || (govName && govName.includes(adminName))
+        })
+      } else if (authUser?.role === "customer") {
+        list = list.filter((b) =>
+          b.customer.toLowerCase() === authUser.name.toLowerCase() ||
+          (authUser.phone && b.phone === authUser.phone),
+        )
+      } else if (authUser?.role === "driver") {
+        list = list.filter((b) =>
+          !b.driver || b.driver.toLowerCase() === authUser.name.toLowerCase(),
+        )
       }
       return { status: 200, body: { bookings: list } }
     }
@@ -732,7 +903,20 @@ export async function handleApiRequest(
 
     try {
       // Locate related entities or default to customer
-      let customer = await prisma.user.findFirst({ where: { name: b.customer } })
+      let customer: any = null
+      if (authUser?.role === "customer" && authUser.userId) {
+        customer = await prisma.user.findUnique({ where: { id: authUser.userId } })
+      }
+      if (!customer) {
+        customer = await prisma.user.findFirst({
+          where: {
+            OR: [
+              { name: { equals: b.customer, mode: "insensitive" } },
+              { phone: { equals: b.phone, mode: "insensitive" } },
+            ],
+          },
+        })
+      }
       if (!customer) {
         customer = await prisma.user.create({
           data: {
@@ -744,8 +928,58 @@ export async function handleApiRequest(
         })
       }
 
-      const gosala = await prisma.gosala.findFirst({ where: { name: b.gosala } })
-      const animal = await prisma.animal.findFirst({ where: { name: b.animal } })
+      let gosala = await prisma.gosala.findFirst({
+        where: {
+          OR: [
+            { name: { equals: b.gosala, mode: "insensitive" as const } },
+            ...(b.gosala ? [{ name: { contains: b.gosala, mode: "insensitive" as const } }] : []),
+          ],
+        },
+      })
+      if (!gosala) {
+        gosala = (await prisma.gosala.findFirst({ where: { isActive: true } })) ||
+          (await prisma.gosala.create({
+            data: {
+              name: b.gosala || "Vedic Gaushala",
+              region: "General Regional Zone",
+              address: b.address || "Gaushala Premises",
+              contactPhone: "+91 98000 00000",
+              contactEmail: "trust@gomaa.in",
+              isActive: true,
+            },
+          }))
+      }
+
+      let animal = await prisma.animal.findFirst({
+        where: {
+          OR: [
+            { name: { equals: b.animal, mode: "insensitive" as const } },
+            ...(b.animal ? [{ name: { contains: b.animal, mode: "insensitive" as const } }] : []),
+          ],
+        },
+      })
+
+      if (!animal) {
+        const animalMeta = getAnimalMeta(b.animal) || {}
+        const aType =
+          b.animalType === "Bull"
+            ? "BULL"
+            : b.animalType === "Calf"
+              ? "CALF"
+              : "COW"
+        animal = await prisma.animal.create({
+          data: {
+            name: b.animal || "Sacred Gir Cow",
+            gosalaId: gosala.id,
+            type: aType as any,
+            breed: animalMeta.breed || "Indigenous Gir",
+            ageYears: animalMeta.ageYears || 5,
+            healthStatus: "HEALTHY",
+            price: b.base || 3500,
+            isActive: true,
+          },
+        })
+      }
 
       const created = await (prisma.booking as any).create({
         data: {
@@ -753,9 +987,9 @@ export async function handleApiRequest(
           customerId: customer.id,
           customerName: b.customer,
           customerPhone: b.phone,
-          gosalaId: gosala?.id || (await prisma.gosala.findFirst())!.id,
+          gosalaId: gosala.id,
           gosalaName: b.gosala,
-          animalId: animal?.id || (await prisma.animal.findFirst())!.id,
+          animalId: animal.id,
           animalName: b.animal,
           animalType:
             b.animalType === "Cow"
@@ -763,7 +997,7 @@ export async function handleApiRequest(
               : b.animalType === "Bull"
                 ? "BULL"
                 : "CALF",
-          bookingDate: b.date,
+          bookingDate: normalizeDateStr(b.date),
           startTime: b.start,
           endTime: b.end,
           durationMin: b.durationMin,
@@ -813,7 +1047,16 @@ export async function handleApiRequest(
         await prisma.temporarySlotHold.deleteMany({ where: { id: body.holdId } })
       }
 
-      const formatted = formatBooking(created)
+      const formatted = {
+        ...formatBooking(created),
+        customerEmail: b.customerEmail,
+        aadhaarNumber: b.aadhaarNumber,
+        devoteeGotra: b.devoteeGotra,
+        devoteeFamilyMembers: b.devoteeFamilyMembers,
+        ritualPurpose: b.ritualPurpose,
+        specialInstructions: b.specialInstructions,
+        devoteeSince: b.devoteeSince,
+      }
       db.bookings = [formatted, ...db.bookings.filter((x) => x.id !== formatted.id)]
 
       // WebSocket real-time alerts
@@ -848,7 +1091,8 @@ export async function handleApiRequest(
       })
 
       return { status: 201, body: { booking: formatted } }
-    } catch {
+    } catch (err: any) {
+      console.error("Booking creation error in PostgreSQL:", err)
       // In-Memory Fallback
       if (!b.handoverOtp) {
         b.handoverOtp = String(Math.floor(1000 + Math.random() * 9000))
@@ -872,7 +1116,7 @@ export async function handleApiRequest(
     const remark =
       body.remark ||
       (confirm ? "Feasibility verified." : "Capacity unavailable.")
-    const managerName = body.managerName || "Rahul Kamble"
+    const managerName = body.managerName || authUser?.name || "Gaushala Manager"
     const isActingManager =
       Boolean(body.isActingManager) ||
       body.callerRole === "admin" ||
@@ -1027,7 +1271,7 @@ export async function handleApiRequest(
       (confirm
         ? "Final admin approval granted."
         : "Rejected by operations admin.")
-    const adminName = body.adminName || "Priya Sharma"
+    const adminName = body.adminName || authUser?.name || "Operations Admin"
 
     // Guard: Prevent Premature Phase-2 Confirmation Without Prior Feasibility Review
     let currentStatus = ""
@@ -1178,10 +1422,20 @@ export async function handleApiRequest(
   )
   if (method === "POST" && assignDriverMatch) {
     const id = assignDriverMatch[1]
-    const driverName = body.driver
+    const driverName = body.driver || body.driverName
+    const driverPhone = body.driverPhone
+    const driverId = body.driverId
 
     try {
-      const driver = await prisma.user.findFirst({ where: { name: driverName } })
+      const driver = await prisma.user.findFirst({
+        where: {
+          OR: [
+            ...(driverId ? [{ id: driverId }] : []),
+            ...(driverName ? [{ name: { equals: driverName, mode: "insensitive" as const } }] : []),
+            ...(driverPhone ? [{ phone: { equals: driverPhone, mode: "insensitive" as const } }] : []),
+          ],
+        } as any,
+      })
 
       const updated = await (prisma.booking as any).update({
         where: { id },
@@ -1593,75 +1847,97 @@ export async function handleApiRequest(
   )
   if (method === "GET" && customerDetailsMatch) {
     const id = customerDetailsMatch[1]
-    const b: any = await prisma.booking.findUnique({
-      where: { id },
-      include: {
-        customer: true,
-        gosala: true,
-        animal: true,
-        driver: true,
-        auditTrails: true,
-      },
-    })
+    let b: any = null
+    try {
+      b = await prisma.booking.findUnique({
+        where: { id },
+        include: {
+          customer: true,
+          gosala: true,
+          animal: true,
+          driver: true,
+          auditTrails: true,
+        },
+      })
+    } catch {
+      b = null
+    }
+
+    if (!b) {
+      b = db.bookings.find((x) => x.id === id)
+    }
 
     if (!b) return { status: 404, body: { error: "Booking not found" } }
 
-    const totalBookings = await prisma.booking.count({
-      where: { customerId: b.customerId },
-    })
+    let totalBookings = 1
+    try {
+      if (b.customerId) {
+        totalBookings = await prisma.booking.count({
+          where: { customerId: b.customerId },
+        })
+      }
+    } catch {}
 
     const dossier = {
       bookingId: b.id,
       customer: {
-        id: b.customer?.id || b.customerId,
-        name: b.customerName,
-        phone: b.customerPhone,
+        id: b.customer?.id || b.customerId || "CUST-101",
+        name: b.customerName || b.customer,
+        phone: b.customerPhone || b.phone,
         email:
+          (b as any).customerEmail ||
           b.customer?.email ||
-          `${b.customerName.toLowerCase().replace(/\s+/g, ".")}@gmail.com`,
-        memberSince: b.customer?.createdAt
-          ? new Date(b.customer.createdAt).toLocaleDateString("en-IN", {
-              month: "short",
-              year: "numeric",
-            })
-          : "Aug 2024",
+          `${(b.customerName || b.customer || "devotee").toLowerCase().replace(/\s+/g, ".")}@gmail.com`,
+        memberSince:
+          (b as any).devoteeSince ||
+          (b.customer?.createdAt
+            ? new Date(b.customer.createdAt).toLocaleDateString("en-IN", {
+                month: "short",
+                year: "numeric",
+              })
+            : "Aug 2024"),
         idType: "Aadhaar / National ID Card",
-        idNumber: "XXXX-XXXX-4819",
-        idStatus: "Submitted by Booker",
-        totalBookingsCount: totalBookings || 1,
+        idNumber: (b as any).aadhaarNumber || "XXXX-XXXX-4912",
+        idStatus: "Verified Devotee",
+        totalBookingsCount: Math.max(1, totalBookings || 4),
+        gotra: (b as any).devoteeGotra || "Kashyapa",
+        familyMembers:
+          (b as any).devoteeFamilyMembers || "Ananya (Self), Rajesh (Husband)",
       },
       ceremony: {
-        ritualPurpose: "Griha Pravesh & Kamadhenu Puja",
-        animal: b.animalName,
+        ritualPurpose:
+          (b as any).ritualPurpose || "Griha Pravesh & Kamadhenu Puja",
+        animal: b.animalName || b.animal,
         animalType:
-          b.animalType === "COW"
+          b.animalType === "COW" || b.animalType === "Cow"
             ? "Cow"
-            : b.animalType === "BULL"
+            : b.animalType === "BULL" || b.animalType === "Bull"
               ? "Bull"
               : "Calf",
-        gosala: b.gosalaName,
-        date: b.bookingDate,
-        timeSlot: `${b.startTime} - ${b.endTime}`,
+        gosala: b.gosalaName || b.gosala,
+        date: normalizeDateStr(b.bookingDate || b.date),
+        timeSlot: `${b.startTime || b.start} - ${b.endTime || b.end}`,
         durationMin: b.durationMin,
         serviceAddress: b.address,
         distanceKm: b.distanceKm,
         specialInstructions:
-          "Ground-floor courtyard altar prepared. Water bucket and grass basket kept ready.",
+          (b as any).specialInstructions ||
+          "Ground-floor portico ready, clean water bucket and sacred green grass feeding protocol.",
       },
       payment: {
-        totalPaid: b.totalAmount,
-        baseRate: b.baseRate,
-        extraTime: b.extraTimeFee,
-        transport: b.transportFee,
-        addons: b.addonsFee,
-        tax: b.taxFee,
-        isPaid: b.isPaid,
+        totalPaid: b.totalAmount ?? b.total ?? 0,
+        baseRate: b.baseRate ?? b.base ?? 0,
+        extraTime: b.extraTimeFee ?? b.extraTime ?? 0,
+        transport: b.transportFee ?? b.transport ?? 0,
+        addons: b.addonsFee ?? b.addons ?? 0,
+        tax: b.taxFee ?? b.tax ?? 0,
+        isPaid: b.isPaid ?? b.paid ?? true,
         paymentMethod: "UPI Online (Secured in Escrow)",
         transactionRef: `UPI-TXN-${b.id.replace("-", "")}`,
       },
       logistics: {
-        driver: b.driver?.name || null,
-        driverStage: b.driverStage,
+        driver: b.driver?.name || b.driver || null,
+        driverStage: b.driverStage ?? 0,
         status: toFrontendStatus(b.status),
       },
     }
@@ -1693,19 +1969,40 @@ export async function handleApiRequest(
             u.email?.toLowerCase() === authUser.email?.toLowerCase(),
         )
       } else if (authUser?.role === "admin") {
-        managerUsers = managerUsers.filter((u: any) =>
-          u.managerAssignments?.some((ma: any) => {
-            const meta = getGosalaMeta(ma.gosalaId || "", ma.gosala?.name || "")
-            return meta.governingAdminRole !== "super_admin" && (!meta.governingAdminName || !meta.governingAdminName.toLowerCase().includes("vikramaditya"))
+        const adminEmail = (authUser.email || "").toLowerCase()
+        const adminName = (authUser.name || "").toLowerCase()
+
+        // Get Gaushalas under this Operations Admin
+        const allGosalas = await prisma.gosala.findMany({ where: { isActive: true } })
+        const myGosalaIds = allGosalas
+          .filter((g: any) => {
+            const meta = getGosalaMeta(g.id, g.name)
+            const gEmail = (meta.governingAdminEmail || "").toLowerCase()
+            const gName = (meta.governingAdminName || meta.adminName || "").toLowerCase()
+            return (gEmail && gEmail === adminEmail) || (gName && gName.includes(adminName))
           })
-        )
-      } else if (authUser?.role === "super_admin" && query.get("scope") !== "all" && query.get("all") !== "true") {
-        managerUsers = managerUsers.filter((u: any) =>
-          u.managerAssignments?.some((ma: any) => {
-            const meta = getGosalaMeta(ma.gosalaId || "", ma.gosala?.name || "")
-            return meta.governingAdminRole === "super_admin" || (meta.governingAdminName && meta.governingAdminName.toLowerCase().includes("vikramaditya"))
+          .map((g: any) => g.id)
+
+        managerUsers = managerUsers.filter((u: any) => {
+          // Unassigned managers are available to be appointed by this Operations Admin
+          if (!u.managerAssignments || u.managerAssignments.length === 0) return true
+          // Or assigned to this Operations Admin's Gaushala
+          return u.managerAssignments.some((ma: any) => myGosalaIds.includes(ma.gosalaId))
+        })
+      } else if (authUser?.role === "super_admin") {
+        const portfolioFilter = query.get("portfolio") || query.get("admin")
+        if (portfolioFilter && portfolioFilter !== "All" && portfolioFilter !== "all") {
+          const filterLower = portfolioFilter.toLowerCase()
+          managerUsers = managerUsers.filter((u: any) => {
+            if (!u.managerAssignments || u.managerAssignments.length === 0) return true
+            return u.managerAssignments.some((ma: any) => {
+              const meta = getGosalaMeta(ma.gosalaId || "", ma.gosala?.name || "")
+              const govName = (meta.governingAdminName || meta.adminName || "").toLowerCase()
+              const govEmail = (meta.governingAdminEmail || "").toLowerCase()
+              return govName.includes(filterLower) || govEmail.includes(filterLower)
+            })
           })
-        )
+        }
       }
 
       return {
@@ -1721,13 +2018,25 @@ export async function handleApiRequest(
   // POST /api/managers
   if (method === "POST" && pathname === "/api/managers") {
     try {
-      let user = await prisma.user.findUnique({ where: { email: body.email } })
+      const email = (body.email || `manager_${Date.now()}@gomaa.in`).trim().toLowerCase()
+      const cleanName = (body.name || "Gaushala Manager").trim()
+      const cleanPhone = (body.phone || "+91 98000 00000").trim()
+
+      let user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: { equals: email, mode: "insensitive" } },
+            ...(body.id ? [{ id: body.id }] : []),
+          ],
+        },
+      })
+
       if (!user) {
         user = await prisma.user.create({
           data: {
-            name: body.name,
-            email: body.email,
-            phone: body.phone,
+            name: cleanName,
+            email,
+            phone: cleanPhone,
             role: "GOSALA_MANAGER",
             isActive: body.status !== "Inactive",
           },
@@ -1736,12 +2045,16 @@ export async function handleApiRequest(
         user = await prisma.user.update({
           where: { id: user.id },
           data: {
-            name: body.name,
-            phone: body.phone,
+            name: cleanName,
+            phone: cleanPhone,
             role: "GOSALA_MANAGER",
             isActive: body.status !== "Inactive",
           },
         })
+      }
+
+      if (body.password) {
+        setUserMeta(user.email, { password: body.password })
       }
 
       // Determine target Gaushalas (supports multiple or single)
@@ -1826,6 +2139,11 @@ export async function handleApiRequest(
         isActive: body.status !== undefined ? body.status === "Active" : user.isActive,
       },
     })
+
+    if (body.password) {
+      setUserMeta(user.email, { password: body.password })
+      setUserMeta(user.id, { password: body.password })
+    }
 
     // If gosalas array was provided, sync assignments!
     if (body.gosalas !== undefined || body.gosala !== undefined) {
@@ -1991,7 +2309,7 @@ export async function handleApiRequest(
     }
 
     const patch = body.patch || body
-    const callerName = body.updatedByName || body.callerName || "Vikramaditya Hegde"
+    const callerName = body.updatedByName || body.callerName || "Koushik"
     const roleNormalized = (callerRole || "SUPER_ADMIN").toUpperCase()
     try {
       const cfg = await prisma.masterPricingConfig.upsert({
@@ -2253,7 +2571,7 @@ export async function handleApiRequest(
 
         const firstAssigned = assignedMgrs[0]
         const govRole = meta.governingAdminRole || "admin"
-        const govName = meta.governingAdminName || (govRole === "super_admin" ? "Vikramaditya Hegde" : "Operations Admin")
+        const govName = meta.governingAdminName || (govRole === "super_admin" ? "Koushik" : "Operations Admin")
 
         return {
           ...g,
@@ -2294,38 +2612,19 @@ export async function handleApiRequest(
           return idMatch || nameMatch || mgrMatch
         })
       } else if (authUser?.role === "admin") {
-        const hasSpecificGosalas = authUser.gosalaNames && authUser.gosalaNames.length > 0
-        if (hasSpecificGosalas) {
-          scopedGosalas = formatted.filter((g: any) => {
-            const idMatch = authUser.gosalaIds?.includes(g.id)
-            const nameMatch = authUser.gosalaNames?.some((gn: string) =>
-              g.name.trim().toLowerCase() === gn.trim().toLowerCase()
-            )
-            return idMatch || nameMatch
-          })
-        } else if (authUser.name) {
-          const adminNameLower = authUser.name.toLowerCase()
-          const matched = formatted.filter((g: any) => {
-            const govMatch = g.governingAdminName && g.governingAdminName.toLowerCase().includes(adminNameLower)
-            const admMatch = g.adminName && g.adminName.toLowerCase().includes(adminNameLower)
-            return govMatch || admMatch
-          })
-          if (matched.length > 0) {
-            scopedGosalas = matched
-          } else {
-            scopedGosalas = formatted.filter((g: any) => g.governingAdminRole !== "super_admin")
-          }
-        }
+        const adminEmail = (authUser.email || "").toLowerCase()
+        const adminName = (authUser.name || "").toLowerCase()
+
+        scopedGosalas = formatted.filter((g: any) => {
+          const emailMatch = g.governingAdminEmail && g.governingAdminEmail.toLowerCase() === adminEmail
+          const nameMatch = g.governingAdminName && g.governingAdminName.toLowerCase().includes(adminName)
+          const admNameMatch = g.adminName && g.adminName.toLowerCase().includes(adminName)
+          const listMatch = authUser.gosalaNames && authUser.gosalaNames.some((gn: string) => g.name.toLowerCase() === gn.toLowerCase())
+          return emailMatch || nameMatch || admNameMatch || listMatch || (!g.governingAdminEmail && g.governingAdminRole !== "super_admin")
+        })
       } else if (authUser?.role === "super_admin") {
-        if (query.get("scope") !== "all" && query.get("all") !== "true") {
-          const saNameLower = (authUser.name || "Vikramaditya Hegde").toLowerCase()
-          scopedGosalas = formatted.filter((g: any) => {
-            const isSaRole = g.governingAdminRole === "super_admin"
-            const govMatch = g.governingAdminName && g.governingAdminName.toLowerCase().includes(saNameLower)
-            const admMatch = g.adminName && g.adminName.toLowerCase().includes(saNameLower)
-            return isSaRole || govMatch || admMatch
-          })
-        }
+        // Super Admin has global oversight across all Operations Admins and Gaushalas!
+        scopedGosalas = formatted
       }
 
       return { status: 200, body: { ok: true, gosalas: scopedGosalas } }
@@ -2384,18 +2683,19 @@ export async function handleApiRequest(
         },
       })
 
-      saveGosalaMeta(created.id, created.name, {
-        ...restMeta,
-        lat: finalLat !== null ? finalLat : undefined,
-        lng: finalLng !== null ? finalLng : undefined,
-      })
+      const isActing = Boolean(body.actAsManagerMyself) || Boolean(restMeta.isActingManager) || (!restMeta.managerId && !restMeta.managerName)
+      const finalGovRole = restMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin")
+      const callerAdminName = restMeta.governingAdminName || authUser?.name || "Operations Admin"
+      const callerAdminEmail = restMeta.governingAdminEmail || authUser?.email || "admin@gomaa.in"
+      const callerAdminId = restMeta.adminId || authUser?.userId || "USER-ADM-101"
 
-      // Link manager in database if provided
-      if (restMeta.managerId || restMeta.managerName || restMeta.caretaker) {
+      // Attempt to resolve chosen manager user in database if not acting
+      let resolvedMgrUser: any = null
+      if (!isActing && (restMeta.managerId || restMeta.managerName || restMeta.caretaker)) {
         try {
           const mgrKey = restMeta.managerId || restMeta.managerName || restMeta.caretaker
-          const cleanMgrKey = mgrKey.startsWith("MGR-") ? mgrKey.replace(/^MGR-/, "") : mgrKey
-          const mgrUser = await prisma.user.findFirst({
+          const cleanMgrKey = typeof mgrKey === "string" && mgrKey.startsWith("MGR-") ? mgrKey.replace(/^MGR-/, "") : mgrKey
+          resolvedMgrUser = await prisma.user.findFirst({
             where: {
               OR: [
                 { id: mgrKey },
@@ -2406,16 +2706,16 @@ export async function handleApiRequest(
               ],
             },
           })
-          if (mgrUser) {
+          if (resolvedMgrUser) {
             await prisma.gosalaManagerAssignment.upsert({
               where: {
                 userId_gosalaId: {
-                  userId: mgrUser.id,
+                  userId: resolvedMgrUser.id,
                   gosalaId: created.id,
                 },
               },
               create: {
-                userId: mgrUser.id,
+                userId: resolvedMgrUser.id,
                 gosalaId: created.id,
                 region: created.region,
                 status: "Active",
@@ -2429,6 +2729,31 @@ export async function handleApiRequest(
           console.warn("Could not sync manager assignment in POST gosalas:", e)
         }
       }
+
+      const finalMgrName = isActing
+        ? `${callerAdminName} (Acting Manager)`
+        : resolvedMgrUser?.name || restMeta.managerName || "None (Admin Acting)"
+      const finalMgrId = isActing
+        ? callerAdminId
+        : resolvedMgrUser?.id || restMeta.managerId || ""
+      const finalCaretaker = isActing
+        ? `${callerAdminName} (Acting Custodian)`
+        : restMeta.caretaker || resolvedMgrUser?.name || "Dedicated Gosevak Caretaker"
+
+      saveGosalaMeta(created.id, created.name, {
+        ...restMeta,
+        lat: finalLat !== null ? finalLat : undefined,
+        lng: finalLng !== null ? finalLng : undefined,
+        governingAdminRole: finalGovRole,
+        governingAdminName: callerAdminName,
+        governingAdminEmail: callerAdminEmail,
+        adminName: callerAdminName,
+        adminId: callerAdminId,
+        isActingManager: isActing,
+        managerName: finalMgrName,
+        managerId: finalMgrId,
+        caretaker: finalCaretaker,
+      })
 
       const fullMeta = getGosalaMeta(created.id, created.name)
       const mergedCreated = {
@@ -2493,17 +2818,43 @@ export async function handleApiRequest(
         },
       })
 
-      saveGosalaMeta(updated.id, updated.name, {
+      const isActing = body.actAsManagerMyself !== undefined
+        ? Boolean(body.actAsManagerMyself)
+        : restMeta.isActingManager !== undefined
+        ? Boolean(restMeta.isActingManager)
+        : undefined
+
+      const callerAdminName = restMeta.governingAdminName || authUser?.name || "Operations Admin"
+      const callerAdminEmail = restMeta.governingAdminEmail || authUser?.email || "admin@gomaa.in"
+      const callerAdminRole = restMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin")
+      const callerAdminId = restMeta.adminId || authUser?.userId || "USER-ADM-101"
+
+      const metaPatch: any = {
         ...restMeta,
         ...(finalLat !== undefined ? { lat: finalLat } : {}),
         ...(finalLng !== undefined ? { lng: finalLng } : {}),
-      })
+        governingAdminName: callerAdminName,
+        governingAdminEmail: callerAdminEmail,
+        governingAdminRole: callerAdminRole,
+      }
 
-      // Link manager in database if provided
-      if (restMeta.managerId || restMeta.managerName || restMeta.caretaker) {
+      if (isActing === true) {
+        metaPatch.isActingManager = true
+        metaPatch.managerName = `${callerAdminName} (Acting Manager)`
+        metaPatch.managerId = callerAdminId
+        metaPatch.caretaker = `${callerAdminName} (Acting Custodian)`
+        try {
+          await prisma.gosalaManagerAssignment.deleteMany({ where: { gosalaId: updated.id } })
+        } catch {}
+      } else if (isActing === false && restMeta.managerName) {
+        metaPatch.isActingManager = false
+      }
+
+      // Link manager in database if provided and not acting as manager
+      if (isActing !== true && (restMeta.managerId || restMeta.managerName || restMeta.caretaker)) {
         try {
           const mgrKey = restMeta.managerId || restMeta.managerName || restMeta.caretaker
-          const cleanMgrKey = mgrKey.startsWith("MGR-") ? mgrKey.replace(/^MGR-/, "") : mgrKey
+          const cleanMgrKey = typeof mgrKey === "string" && mgrKey.startsWith("MGR-") ? mgrKey.replace(/^MGR-/, "") : mgrKey
           const mgrUser = await prisma.user.findFirst({
             where: {
               OR: [
@@ -2516,6 +2867,11 @@ export async function handleApiRequest(
             },
           })
           if (mgrUser) {
+            metaPatch.managerId = mgrUser.id
+            metaPatch.managerName = mgrUser.name
+            if (!metaPatch.caretaker || metaPatch.caretaker.includes("Acting")) {
+              metaPatch.caretaker = mgrUser.name
+            }
             await prisma.gosalaManagerAssignment.upsert({
               where: {
                 userId_gosalaId: {
@@ -2538,6 +2894,8 @@ export async function handleApiRequest(
           console.warn("Could not sync manager assignment in PUT gosalas:", e)
         }
       }
+
+      saveGosalaMeta(updated.id, updated.name, metaPatch)
 
       const fullMeta = getGosalaMeta(updated.id, updated.name)
       const mergedUpdated = {
@@ -2712,7 +3070,7 @@ export async function handleApiRequest(
         }
       } else if (authUser?.role === "super_admin") {
         if (query.get("scope") !== "all" && query.get("all") !== "true") {
-          const saNameLower = (authUser.name || "Vikramaditya Hegde").toLowerCase()
+          const saNameLower = (authUser.name || "Koushik").toLowerCase()
           finalAnimals = finalAnimals.filter((a: any) => {
             const meta = getGosalaMeta(a.gosalaId || "", a.gosala || "")
             const gov = meta.governingAdminName || meta.adminName

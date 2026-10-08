@@ -43,6 +43,18 @@ export type Booking = {
   extraUnitRateSnapshot?: number
   commissionSnapshot?: number
   createdAt?: string
+  // Booker Identity & Aadhaar KYC
+  customerEmail?: string
+  aadhaarNumber?: string
+  aadhaarVerified?: boolean
+  devoteeGotra?: string
+  devoteeFamilyMembers?: string | string[]
+  ritualPurpose?: string
+  specialInstructions?: string
+  devoteeSince?: string
+  // Operations Admin Portfolio Governance
+  governingAdminName?: string
+  governingAdminEmail?: string
   // Dynamic Customer Animal Received & Handover OTP Security
   handoverOtp?: string
   handoverOtpVerified?: boolean
@@ -79,6 +91,7 @@ export type GosalaManager = {
   name: string
   email: string
   phone: string
+  password?: string
   gosala: string
   gosalas?: string[]
   gosalaIds?: string[]

@@ -3172,13 +3172,13 @@ export default function Animals() {
                     Assigned Transporter / Driver:
                   </span>
                   <span className="font-medium text-ink">
-                    {selectedTrip.driver || "Sunil Pawar (Tata 407 carrier)"}
+                    {selectedTrip.driver || "Assigned Transit Driver"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-ink-faint">Gosevak Caretaker:</span>
                   <span className="font-medium text-ink">
-                    {selectedAnimal?.assignedHandler || "Rameshwar Shastri"}
+                    {selectedAnimal?.assignedHandler || "Assigned Caretaker"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">

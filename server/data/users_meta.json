@@ -1,0 +1,73 @@
+{
+  "ananya.deshmukh@gmail.com": {
+    "customerData": {
+      "address": "14 Tulsi Nagar, Kondapur, Hyderabad",
+      "city": "Hyderabad",
+      "aadhaarNumber": "XXXX-XXXX-4819",
+      "memberSince": "Aug 2024",
+      "totalBookings": 4,
+      "preferredCeremony": "Griha Pravesh & Kamadhenu Puja"
+    }
+  },
+  "sunil.pawar@gomaa.in": {
+    "driverData": {
+      "driverId": "DRV-102",
+      "vehicleNumber": "MH-12-Q-4491",
+      "vehicleType": "Tata 407 (8ft Open Bed)",
+      "licenseNumber": "DL-142011009823",
+      "gosalaBase": "Surya",
+      "status": "Available",
+      "rating": 4.92,
+      "totalTrips": 1280
+    }
+  },
+  "ramesh.test@gomaa.in": {
+    "password": "Mgr@Ramesh2026!"
+  },
+  "rammohan@gmail.com": {
+    "password": "Koushik.git"
+  },
+  "ramraj@gmail.com": {
+    "password": "koushik.giit"
+  },
+  "vikramaditya@gomaa.in": {
+    "password": "OpsAdmin@2026!"
+  },
+  "85a30374-064e-46c4-a1cb-48b6442577c3": {
+    "password": "OpsAdmin@2026!"
+  },
+  "rajesh@gomaa.in": {
+    "password": "OpsAdmin2@2026!"
+  },
+  "d3463f3b-bf2a-4219-ad1b-3bb63cbfcae1": {
+    "password": "OpsAdmin2@2026!"
+  },
+  "suryavardhan@gmail.com": {
+    "password": "koushik.git"
+  },
+  "radha@gmail.com": {
+    "password": "koushik.git",
+    "customerData": {
+      "address": "hyderabad",
+      "memberSince": "Oct 2026",
+      "totalBookings": 0
+    }
+  },
+  "5dd0d743-7a7f-48ef-9430-131a070e60dd": {
+    "password": "koushik.git",
+    "customerData": {
+      "address": "hyderabad",
+      "memberSince": "Oct 2026",
+      "totalBookings": 0
+    }
+  },
+  "aruna@gmail.com": {
+    "password": "koushik.git"
+  },
+  "d4d0fe1b-49bb-46cb-ad66-84dd9578e555": {
+    "password": "koushik.git"
+  },
+  "hari@gmail.com": {
+    "password": "koushik.git"
+  }
+}

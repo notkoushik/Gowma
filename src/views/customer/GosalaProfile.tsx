@@ -193,7 +193,7 @@ export function resolveGosalaDetail(
     address: found.address || found.region || "Sanctuary Premises",
     phone: found.contactPhone || "+91 98230 44910",
     email: found.email || "trust@gomaa.in",
-    managerName: found.managerName || "Rahul Kamble",
+    managerName: found.managerName || found.caretaker || "Gaushala Manager",
     managerInitials: initials,
     yearEstablished: Number(found.establishedYear) || 2024,
     registrationNo: found.trustRegistrationNo || "AWBI/TRUST/IN",

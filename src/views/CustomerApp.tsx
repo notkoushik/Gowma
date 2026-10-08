@@ -108,15 +108,23 @@ export function makeBooking(
   s: BookingSummary,
   customerProfile?: RoleProfile,
   defaultCommissionPct: number = 20,
+  authUser?: any,
 ): Booking {
-  const custName = customerProfile?.name || CURRENT_CUSTOMER
-  const custPhone = customerProfile?.phone || "+91 98204 11827"
+  const custName = authUser?.name || customerProfile?.name || CURRENT_CUSTOMER
+  const custPhone = authUser?.phone || customerProfile?.phone || "+91 98204 11827"
+  const custEmail = authUser?.email || customerProfile?.email || "devotee@gomaa.in"
   const custAadhaar =
-    customerProfile?.customerData?.aadhaarNumber || "•••• •••• 4912"
-  const custGotra = customerProfile?.customerData?.gotra || "Kashyapa"
+    authUser?.customerData?.aadhaarNumber ||
+    customerProfile?.customerData?.aadhaarNumber ||
+    "•••• •••• 4912"
+  const custGotra =
+    authUser?.customerData?.gotra ||
+    customerProfile?.customerData?.gotra ||
+    "Kashyapa"
   const custFamily =
+    authUser?.customerData?.familyMembers ||
     customerProfile?.customerData?.familyMembers ||
-    "Ananya (Self), Rajesh (Husband)"
+    "Family Members & Devotees"
   const custNotes =
     customerProfile?.customerData?.specialNotes ||
     "Ground-floor courtyard altar prepared. Water bucket and fresh grass kept ready."
@@ -129,6 +137,7 @@ export function makeBooking(
     id: "GMA-" + Math.floor(24818 + Math.random() * 900),
     customer: custName,
     phone: custPhone,
+    customerEmail: custEmail,
     aadhaarNumber: custAadhaar,
     devoteeGotra: custGotra,
     devoteeFamilyMembers: custFamily,
@@ -1091,7 +1100,7 @@ function MobileCustomer({
   myBookings: MyBooking[]
   onCreate: (s: BookingSummary) => void
 }) {
-  const { profiles, refreshAnimals } = useStore()
+  const { profiles, refreshAnimals, authUser } = useStore()
   const [tab, setTab] = useState<Tab>("discover")
 
   useEffect(() => {
@@ -1108,7 +1117,7 @@ function MobileCustomer({
   const [selectedTrackBookingId, setSelectedTrackBookingId] = useState<string | null>(null)
 
   const customerProfile = profiles?.customer
-  const devoteeName = customerProfile?.name || CURRENT_CUSTOMER
+  const devoteeName = authUser?.name || customerProfile?.name || CURRENT_CUSTOMER
 
   const activeTrip =
     (selectedTrackBookingId
@@ -1465,20 +1474,25 @@ function useIsDesktop() {
 }
 
 export default function CustomerApp({ onSignOut }: { onSignOut: () => void }) {
-  const { bookings, createBooking, profiles, pricingConfig } = useStore()
+  const { bookings, createBooking, profiles, pricingConfig, authUser } = useStore()
   const isDesktop = useIsDesktop()
   const customerProfile = profiles?.customer
-  const currentDevotee = customerProfile?.name || CURRENT_CUSTOMER
+  const currentDevotee = authUser?.name || customerProfile?.name || CURRENT_CUSTOMER
 
   const myBookings = bookings
-    .filter(
-      (b) => b.customer === currentDevotee || b.customer === CURRENT_CUSTOMER,
-    )
+    .filter((b) => {
+      if (authUser?.name && b.customer?.toLowerCase() === authUser.name.toLowerCase()) return true
+      if (authUser?.phone && b.phone === authUser.phone) return true
+      if (authUser?.email && (b as any).customerEmail === authUser.email) return true
+      if (b.customer === currentDevotee) return true
+      if (!authUser && b.customer === CURRENT_CUSTOMER) return true
+      return false
+    })
     .map(toMyBooking)
 
   const create = (s: BookingSummary) =>
     createBooking(
-      makeBooking(s, customerProfile, pricingConfig?.commissionPct),
+      makeBooking(s, customerProfile, pricingConfig?.commissionPct, authUser),
       s.holdId,
     )
 

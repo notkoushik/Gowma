@@ -40,6 +40,9 @@ import {
   Landmark,
   Star,
   Filter,
+  Maximize2,
+  Minimize2,
+  ChevronDown,
 } from "lucide-react"
 import {
   DEFAULT_GOSALA_OFFERINGS,
@@ -85,9 +88,16 @@ const CATEGORY_COLORS: Record<GosalaOfferingCategory, { bg: string; text: string
 interface PricingProps {
   initialSector?: "global" | "gosalas" | "commissions"
   onSectorChange?: (sector: "global" | "gosalas" | "commissions") => void
+  isMaximized?: boolean
+  onToggleMaximize?: () => void
 }
 
-export default function Pricing({ initialSector = "global", onSectorChange }: PricingProps) {
+export default function Pricing({
+  initialSector = "global",
+  onSectorChange,
+  isMaximized = false,
+  onToggleMaximize,
+}: PricingProps) {
   const { notify } = useToast()
   const {
     pricingConfig,
@@ -153,6 +163,10 @@ export default function Pricing({ initialSector = "global", onSectorChange }: Pr
   const [feeAppliedOn, setFeeAppliedOn] = useState<"base" | "total" | "transport">("total")
   const [feeDescription, setFeeDescription] = useState("")
   const [feeEnabled, setFeeEnabled] = useState(true)
+
+  // Maximize table view states
+  const [isLedgerMaximized, setIsLedgerMaximized] = useState(false)
+  const [isCattleTableMaximized, setIsCattleTableMaximized] = useState(false)
 
   useEffect(() => {
     setStandardMin(pricingConfig.standardMin ?? 60)
@@ -845,64 +859,107 @@ export default function Pricing({ initialSector = "global", onSectorChange }: Pr
           </h2>
         </div>
 
-        {/* 3-Sector Pill Switcher */}
-        <div className="inline-flex p-1 bg-paper-deep border border-line rounded-sm text-[12.5px] font-medium self-start sm:self-auto shadow-2xs overflow-x-auto max-w-full">
-          <button
-            onClick={() => handleSwitchSector("global")}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xs transition-all cursor-pointer whitespace-nowrap ${
-              sector === "global"
-                ? "bg-white text-ink font-semibold shadow-xs"
-                : "text-ink-soft hover:text-ink hover:bg-card/50"
-            }`}
-          >
-            <SlidersHorizontal
-              size={14}
-              className={sector === "global" ? "text-saffron-deep" : "text-ink-faint"}
-            />
-            <span>Global Master Rules</span>
-          </button>
-          <button
-            onClick={() => handleSwitchSector("gosalas")}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xs transition-all cursor-pointer whitespace-nowrap ${
-              sector === "gosalas"
-                ? "bg-white text-ink font-semibold shadow-xs"
-                : "text-ink-soft hover:text-ink hover:bg-card/50"
-            }`}
-          >
-            <Building2
-              size={14}
-              className={sector === "gosalas" ? "text-forest" : "text-ink-faint"}
-            />
-            <span>Gaushala Offerings</span>
-            {gosalas.length > 0 && (
-              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-paper text-ink-faint border border-line">
-                {gosalas.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => handleSwitchSector("commissions")}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xs transition-all cursor-pointer whitespace-nowrap ${
-              sector === "commissions"
-                ? "bg-gradient-to-r from-amber-600 to-amber-700 text-white font-semibold shadow-xs"
-                : "text-ink-soft hover:text-ink hover:bg-card/50"
-            }`}
-          >
-            <Percent
-              size={14}
-              className={sector === "commissions" ? "text-white" : "text-amber-700"}
-            />
-            <span>Commission &amp; Economics</span>
-            <span
-              className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
-                sector === "commissions"
-                  ? "bg-amber-900 text-amber-100"
-                  : "bg-amber-100 text-amber-900 border border-amber-300"
+        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+          {/* Sector Dropdown Selector */}
+          <div className="flex items-center gap-1.5 bg-paper border border-line rounded px-2.5 py-1.5 text-[12px] font-medium text-ink shadow-2xs">
+            <span className="text-ink-faint text-[10.5px] font-mono uppercase">Sector:</span>
+            <select
+              value={sector}
+              onChange={(e) => handleSwitchSector(e.target.value as any)}
+              className="bg-transparent border-none text-[12.5px] font-semibold text-ink outline-none cursor-pointer pr-1"
+              aria-label="Select Pricing Sector"
+            >
+              <option value="global">1. Global Master Rules</option>
+              <option value="gosalas">2. Gaushala Offerings ({gosalas.length})</option>
+              <option value="commissions">3. Commission &amp; Slabs</option>
+            </select>
+          </div>
+
+          {/* 3-Sector Pill Switcher */}
+          <div className="hidden lg:inline-flex p-1 bg-paper-deep border border-line rounded-sm text-[12.5px] font-medium shadow-2xs overflow-x-auto max-w-full">
+            <button
+              onClick={() => handleSwitchSector("global")}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xs transition-all cursor-pointer whitespace-nowrap ${
+                sector === "global"
+                  ? "bg-white text-ink font-semibold shadow-xs"
+                  : "text-ink-soft hover:text-ink hover:bg-card/50"
               }`}
             >
-              Custom Slabs
-            </span>
-          </button>
+              <SlidersHorizontal
+                size={14}
+                className={sector === "global" ? "text-saffron-deep" : "text-ink-faint"}
+              />
+              <span>Global Master Rules</span>
+            </button>
+            <button
+              onClick={() => handleSwitchSector("gosalas")}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xs transition-all cursor-pointer whitespace-nowrap ${
+                sector === "gosalas"
+                  ? "bg-white text-ink font-semibold shadow-xs"
+                  : "text-ink-soft hover:text-ink hover:bg-card/50"
+              }`}
+            >
+              <Building2
+                size={14}
+                className={sector === "gosalas" ? "text-forest" : "text-ink-faint"}
+              />
+              <span>Gaushala Offerings</span>
+              {gosalas.length > 0 && (
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-paper text-ink-faint border border-line">
+                  {gosalas.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => handleSwitchSector("commissions")}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xs transition-all cursor-pointer whitespace-nowrap ${
+                sector === "commissions"
+                  ? "bg-gradient-to-r from-amber-600 to-amber-700 text-white font-semibold shadow-xs"
+                  : "text-ink-soft hover:text-ink hover:bg-card/50"
+              }`}
+            >
+              <Percent
+                size={14}
+                className={sector === "commissions" ? "text-white" : "text-amber-700"}
+              />
+              <span>Commission &amp; Economics</span>
+              <span
+                className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                  sector === "commissions"
+                    ? "bg-amber-900 text-amber-100"
+                    : "bg-amber-100 text-amber-900 border border-amber-300"
+                }`}
+              >
+                Custom Slabs
+              </span>
+            </button>
+          </div>
+
+          {/* Maximize / Minimize View Toggle Button */}
+          {onToggleMaximize && (
+            <button
+              onClick={onToggleMaximize}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-[12px] font-medium transition cursor-pointer border shadow-2xs ${
+                isMaximized
+                  ? "bg-amber-600 text-white border-amber-600 hover:bg-amber-700"
+                  : "bg-paper text-ink-soft hover:text-ink hover:bg-paper-deep border-line"
+              }`}
+              title={isMaximized ? "Restore standard layout (Minimize)" : "Maximize Pricing Rules dashboard (Full Screen width)"}
+              aria-label={isMaximized ? "Restore standard layout" : "Maximize Pricing Rules dashboard"}
+            >
+              {isMaximized ? (
+                <>
+                  <Minimize2 size={13} className="text-amber-200" />
+                  <span>Restore View</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 size={13} className="text-amber-600" />
+                  <span>Maximize View</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -948,7 +1005,7 @@ export default function Pricing({ initialSector = "global", onSectorChange }: Pr
               <div className="flex items-center gap-3">
                 <span>Last Database Synced: <strong className="text-ink">{formattedUpdatedAt}</strong></span>
                 <span>•</span>
-                <span>Authorized By: <strong className="text-ink">{pricingConfig.updatedByName || "Vikramaditya Hegde"}</strong> ({pricingConfig.updatedByRole || "SUPER_ADMIN"})</span>
+                <span>Authorized By: <strong className="text-ink">{pricingConfig.updatedByName || "Koushik"}</strong> ({pricingConfig.updatedByRole || "SUPER_ADMIN"})</span>
               </div>
               <div className="flex items-center gap-1.5 text-forest font-sans font-medium text-[12px]">
                 <CheckCircle2 size={13} />
@@ -1455,12 +1512,34 @@ export default function Pricing({ initialSector = "global", onSectorChange }: Pr
           {/* Gaushala Selector & Filter Strip */}
           <div className="bg-card border border-line rounded-sm p-4 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Building2 size={16} className="text-forest" />
-                <span className="font-serif text-[15px] font-semibold text-ink">
-                  Select Gaushala to Manage Offerings &amp; Rates
-                </span>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Building2 size={16} className="text-forest" />
+                  <span className="font-serif text-[15px] font-semibold text-ink">
+                    Select Gaushala to Manage Offerings &amp; Rates
+                  </span>
+                </div>
+
+                {/* Direct Gaushala Dropdown Selector */}
+                {filteredGosalas.length > 0 && (
+                  <div className="flex items-center gap-1.5 bg-paper border border-line rounded px-2.5 py-1 text-[12px] shadow-2xs">
+                    <span className="text-[10.5px] font-mono text-ink-faint uppercase font-medium">Dropdown:</span>
+                    <select
+                      value={selectedGosalaId}
+                      onChange={(e) => setSelectedGosalaId(e.target.value)}
+                      className="bg-transparent border-none text-[12.5px] font-semibold text-ink outline-none cursor-pointer max-w-[240px] truncate"
+                      aria-label="Select Gaushala from dropdown"
+                    >
+                      {filteredGosalas.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name} ({animals.filter((a) => a.gosala === g.name).length} cows · {g.region})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
+
               <div className="relative w-full sm:w-64">
                 <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" />
                 <input
@@ -1896,13 +1975,22 @@ export default function Pricing({ initialSector = "global", onSectorChange }: Pr
               </div>
 
               {/* ---------------- SECTION A: Sacred Herd Cattle Darshan Rates ---------------- */}
-              <Panel>
+              <Panel className={isCattleTableMaximized ? "fixed inset-3 md:inset-6 z-50 overflow-y-auto bg-card shadow-2xl border-2 border-amber-400 rounded-sm" : ""}>
                 <PanelHead
                   title={`Sacred Cattle Darshan Pricing · ${activeGosala.name}`}
                   desc="Base 60-min ceremonial darshan booking rate per individual cow, bull, and calf"
                   right={
                     <div className="flex items-center gap-2">
                       <Tag tone="saffron">{gosalaAnimals.length} Bovines Registered</Tag>
+                      <button
+                        type="button"
+                        onClick={() => setIsCattleTableMaximized((prev) => !prev)}
+                        className="p-1.5 rounded border border-line bg-paper hover:bg-paper-deep text-ink-soft hover:text-ink transition cursor-pointer"
+                        title={isCattleTableMaximized ? "Restore Table View" : "Maximize Cattle Rates Table"}
+                        aria-label={isCattleTableMaximized ? "Restore Table View" : "Maximize Cattle Rates Table"}
+                      >
+                        {isCattleTableMaximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                      </button>
                     </div>
                   }
                 />
@@ -2238,7 +2326,7 @@ export default function Pricing({ initialSector = "global", onSectorChange }: Pr
           </div>
 
           {/* Master Gaushala Commission & Economics Ledger */}
-          <Panel>
+          <Panel className={isLedgerMaximized ? "fixed inset-3 md:inset-6 z-50 overflow-y-auto bg-card shadow-2xl border-2 border-amber-400 rounded-sm" : ""}>
             <PanelHead
               title="Individual Gaushala Economics Ledger"
               desc="Comprehensive settlement parameters, preferential partnership tiers, and tax profiles per sanctuary"
@@ -2253,6 +2341,15 @@ export default function Pricing({ initialSector = "global", onSectorChange }: Pr
                       className="w-full bg-paper border border-line rounded-xs pl-8 pr-2.5 py-1 text-[12px] text-ink placeholder:text-ink-faint outline-none focus:border-saffron"
                     />
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsLedgerMaximized((prev) => !prev)}
+                    className="p-1.5 rounded border border-line bg-paper hover:bg-paper-deep text-ink-soft hover:text-ink transition cursor-pointer"
+                    title={isLedgerMaximized ? "Restore Table View" : "Maximize Economics Ledger Fullscreen"}
+                    aria-label={isLedgerMaximized ? "Restore Table View" : "Maximize Economics Ledger Fullscreen"}
+                  >
+                    {isLedgerMaximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                  </button>
                 </div>
               }
             />
@@ -3443,6 +3540,18 @@ export default function Pricing({ initialSector = "global", onSectorChange }: Pr
             </button>
           </div>
         </div>
+      )}
+
+      {/* Backdrop overlay for maximized tables */}
+      {(isLedgerMaximized || isCattleTableMaximized) && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 animate-in fade-in duration-150 cursor-pointer"
+          onClick={() => {
+            setIsLedgerMaximized(false)
+            setIsCattleTableMaximized(false)
+          }}
+          title="Click to restore standard view"
+        />
       )}
     </div>
   )

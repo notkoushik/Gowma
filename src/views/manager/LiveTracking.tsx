@@ -1183,7 +1183,7 @@ export default function LiveTracking() {
                         Vehicle &amp; Driver
                       </div>
                       <div className="font-medium text-ink mt-0.5">
-                        {matchedBooking.driver || "Sunil Pawar"}
+                        {matchedBooking.driver || "Transit Driver"}
                       </div>
                       <div className="text-[11px] text-ink-faint font-mono">
                         Tata 407 (Padded Soft Ramp)
@@ -1390,7 +1390,7 @@ export default function LiveTracking() {
                   <div className="flex items-center justify-between bg-paper p-2.5 rounded border border-line">
                     <div>
                       <div className="font-serif text-[14.5px] font-semibold text-ink">
-                        {matchedBooking?.driver || "Sunil Pawar"}
+                        {matchedBooking?.driver || "Transit Driver"}
                       </div>
                       <div className="font-mono text-[11px] text-ink-faint mt-0.5">
                         Vehicle:{" "}
@@ -1447,10 +1447,10 @@ export default function LiveTracking() {
                         Devotee Name &amp; Phone
                       </div>
                       <div className="font-semibold text-ink mt-0.5">
-                        {matchedBooking?.customer || "Ananya Deshmukh"}
+                        {matchedBooking?.customer || "Devotee"}
                       </div>
                       <div className="font-mono text-ink-soft text-[11.5px]">
-                        {matchedBooking?.phone || "+91 98204 11827"}
+                        {matchedBooking?.phone || "+91 98000 00000"}
                       </div>
                     </div>
 

@@ -75,7 +75,7 @@ export default function LiveTripMap({
   bookingId,
   pickupLocation,
   dropLocation,
-  driverName = "Sunil Pawar",
+  driverName = "Transit Driver",
   stageIndex,
   distanceKm = 8,
   heightClass = "h-72 md:h-96",

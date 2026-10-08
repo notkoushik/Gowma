@@ -52,15 +52,62 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  async login(emailOrPhone: string, roleHint?: string) {
+  async login(emailOrPhone: string, roleHint?: string, password?: string) {
     const data = await request<{ ok: boolean; token: string; user: any }>("/api/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email: emailOrPhone, roleHint }),
+      body: JSON.stringify({ email: emailOrPhone, roleHint, password }),
     })
     if (data.token) {
       setAuthToken(data.token)
     }
     return data
+  },
+
+  async register(data: {
+    name: string
+    email: string
+    phone: string
+    role: "super_admin" | "admin" | "manager" | "customer" | "driver"
+    password?: string
+    customerData?: any
+    driverData?: any
+    managerData?: any
+    adminData?: any
+    gosalaId?: string
+    gosalaName?: string
+  }) {
+    const res = await request<{ ok: boolean; token: string; user: any }>("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+    if (res.token) {
+      setAuthToken(res.token)
+    }
+    return res
+  },
+
+  async getUsers() {
+    return request<{ ok: boolean; users: any[] }>("/api/users")
+  },
+
+  async createUser(data: any) {
+    return request<{ ok: boolean; user: any }>("/api/users", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+  },
+
+  async updateUser(id: string, updates: any) {
+    return request<{ ok: boolean; user: any }>(`/api/users/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(updates),
+    })
+  },
+
+  async deleteUser(id: string) {
+    return request<{ ok: boolean; deleted: string }>(`/api/users/${id}`, {
+      method: "DELETE",
+    })
   },
 
   async getMe() {

@@ -17,6 +17,9 @@ import {
   ShieldCheck,
   ShieldAlert,
   ChevronRight,
+  ChevronDown,
+  Maximize2,
+  Minimize2,
   Store,
   Percent,
 } from "lucide-react"
@@ -239,7 +242,36 @@ export default function App() {
   const [view, setView] = useState<View>(getInitialAdminView)
   const [pricingSector, setPricingSector] = useState<"global" | "gosalas" | "commissions">(getInitialPricingSector)
   const [isPricingMenuOpen, setIsPricingMenuOpen] = useState(true)
+  const [isMaximized, setIsMaximized] = useState(false)
   const [editAdminProfileOpen, setEditAdminProfileOpen] = useState(false)
+
+  // Listen for Escape key to exit maximized mode
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isMaximized) {
+        setIsMaximized(false)
+      }
+    }
+    const handleFsChange = () => {
+      if (!document.fullscreenElement && isMaximized) {
+        setIsMaximized(false)
+      }
+    }
+    window.addEventListener("keydown", handleKey)
+    document.addEventListener("fullscreenchange", handleFsChange)
+    return () => {
+      window.removeEventListener("keydown", handleKey)
+      document.removeEventListener("fullscreenchange", handleFsChange)
+    }
+  }, [isMaximized])
+
+  const toggleMaximize = () => {
+    const next = !isMaximized
+    setIsMaximized(next)
+    if (next) {
+      notify("Maximized view enabled · Press ESC or click Minimize to restore normal layout", "info")
+    }
+  }
 
   const handleSetPricingSector = (sec: "global" | "gosalas" | "commissions") => {
     setPricingSector(sec)
@@ -313,12 +345,20 @@ export default function App() {
     setAuth(role)
     if (!role) {
       clearAuthSession()
-    } else if (role === "admin" || role === "super_admin") {
+    } else {
       try {
-        const email = role === "super_admin" ? "superadmin@gomaa.in" : "admin@gomaa.in"
-        const authRes = await api.login(email, role)
-        if (authRes.ok && authRes.token) {
-          setAuthSession(authRes.token, authRes.user)
+        let email = ""
+        if (role === "super_admin") email = "superadmin@gomaa.in"
+        else if (role === "admin") email = "admin@gomaa.in"
+        else if (role === "manager") email = profiles?.manager?.email || "rahul.kamble@gomaa.in"
+        else if (role === "driver") email = profiles?.driver?.email || "sunil.pawar@gomaa.in"
+        else if (role === "customer") email = profiles?.customer?.email || "ananya.deshmukh@gmail.com"
+
+        if (email) {
+          const authRes = await api.login(email, role)
+          if (authRes.ok && authRes.token) {
+            setAuthSession(authRes.token, authRes.user)
+          }
         }
       } catch (err) {
         console.warn("JWT sync on role switch:", err)
@@ -573,7 +613,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-paper text-ink flex">
       {/* Sidebar */}
-      <aside className="hidden lg:flex w-[240px] shrink-0 flex-col border-r border-line bg-card sticky top-0 h-screen justify-between">
+      <aside className={`${isMaximized ? "hidden" : "hidden lg:flex"} w-[240px] shrink-0 flex-col border-r border-line bg-card sticky top-0 h-screen justify-between transition-all duration-200`}>
         <div className="flex flex-col min-h-0">
           <div className="px-5 h-16 flex items-center gap-3 border-b border-line shrink-0">
             <div
@@ -609,32 +649,51 @@ export default function App() {
               const active = view === n.id
 
               if (n.id === "pricing") {
-                const isOpen = active || isPricingMenuOpen
+                const isOpen = isPricingMenuOpen
                 return (
                   <div key={n.id} className="space-y-1">
-                    <button
-                      onClick={() => {
-                        handleSetAdminView("pricing")
-                        setIsPricingMenuOpen((prev) => !prev)
-                      }}
-                      className={`w-full flex items-center gap-3 rounded-sm px-3 py-2.5 text-[13.5px] transition-colors cursor-pointer ${
+                    <div
+                      className={`w-full flex items-center justify-between rounded-sm text-[13.5px] transition-colors ${
                         active
                           ? "bg-saffron-soft text-saffron-deep font-medium"
                           : "text-ink-soft hover:bg-paper-deep hover:text-ink"
                       }`}
                     >
-                      <n.icon
-                        size={17}
-                        className={active ? "text-saffron" : "text-ink-faint"}
-                      />
-                      <span className="truncate">{n.label}</span>
-                      <ChevronRight
-                        size={13}
-                        className={`ml-auto text-ink-faint transition-transform duration-200 ${
-                          isOpen ? "rotate-90 text-amber-600" : ""
-                        }`}
-                      />
-                    </button>
+                      <button
+                        onClick={() => {
+                          if (view !== "pricing") {
+                            handleSetAdminView("pricing")
+                            setIsPricingMenuOpen(true)
+                          } else {
+                            setIsPricingMenuOpen((prev) => !prev)
+                          }
+                        }}
+                        className="flex-1 flex items-center gap-3 px-3 py-2.5 text-left cursor-pointer min-w-0"
+                      >
+                        <n.icon
+                          size={17}
+                          className={active ? "text-saffron" : "text-ink-faint"}
+                        />
+                        <span className="truncate">{n.label}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setIsPricingMenuOpen((prev) => !prev)
+                        }}
+                        className="p-2 mr-1 text-ink-faint hover:text-amber-700 hover:bg-amber-100/50 rounded-xs transition cursor-pointer"
+                        title={isOpen ? "Collapse pricing sub-sectors" : "Expand pricing sub-sectors"}
+                        aria-label={isOpen ? "Collapse pricing sub-sectors" : "Expand pricing sub-sectors"}
+                      >
+                        <ChevronRight
+                          size={13}
+                          className={`transition-transform duration-200 ${
+                            isOpen ? "rotate-90 text-amber-600" : ""
+                          }`}
+                        />
+                      </button>
+                    </div>
 
                     {/* Integrated Sub-Menu: Clean, visible, NEVER clipped! */}
                     {isOpen && (
@@ -742,7 +801,7 @@ export default function App() {
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-[12.5px] text-ink truncate font-medium group-hover:text-saffron-deep flex items-center gap-1.5">
-                <span>{profiles?.[auth]?.name || (isSuperAdmin ? "Vikramaditya Hegde" : "Devendra Sharma")}</span>
+                <span>{profiles?.[auth]?.name || (isSuperAdmin ? "Koushik" : "Operations Admin")}</span>
               </div>
               <div className="text-[10.5px] text-ink-faint truncate font-mono">
                 {isSuperAdmin ? "Platform Captain · Master" : "Operations Lead · Regional Hub"}
@@ -850,6 +909,30 @@ export default function App() {
               <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-saffron" />
             </button>
 
+            {/* Maximize / Minimize Workspace Toggle */}
+            <button
+              onClick={toggleMaximize}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-[12px] font-medium transition cursor-pointer border ${
+                isMaximized
+                  ? "bg-amber-600 text-white border-amber-600 shadow-2xs hover:bg-amber-700"
+                  : "bg-card text-ink-soft hover:text-ink border-line hover:bg-paper-deep"
+              }`}
+              title={isMaximized ? "Exit Maximized View (Restore Sidebar)" : "Maximize Workspace (Hide Sidebar & Expand)"}
+              aria-label={isMaximized ? "Exit Maximized View" : "Maximize Workspace"}
+            >
+              {isMaximized ? (
+                <>
+                  <Minimize2 size={13} />
+                  <span className="hidden sm:inline">Minimize</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 size={13} />
+                  <span className="hidden sm:inline">Maximize</span>
+                </>
+              )}
+            </button>
+
             {/* Header Sign Out button */}
             <button
               onClick={() => handleSetAuth(null)}
@@ -894,6 +977,8 @@ export default function App() {
             <Pricing
               initialSector={pricingSector}
               onSectorChange={handleSetPricingSector}
+              isMaximized={isMaximized}
+              onToggleMaximize={toggleMaximize}
             />
           )}
           {view === "settlements" &&
@@ -913,6 +998,18 @@ export default function App() {
           role={auth}
           onClose={() => setEditAdminProfileOpen(false)}
         />
+      )}
+
+      {/* Floating Exit Maximize Badge when workspace is maximized */}
+      {isMaximized && (
+        <button
+          onClick={toggleMaximize}
+          className="fixed bottom-5 right-5 z-50 bg-ink/95 hover:bg-ink text-white px-4 py-2.5 rounded-full shadow-2xl border border-amber-500/50 flex items-center gap-2 text-[12.5px] font-medium backdrop-blur-md cursor-pointer transition-transform hover:scale-105 active:scale-95 animate-in fade-in"
+          title="Restore standard layout (or press Escape)"
+        >
+          <Minimize2 size={14} className="text-amber-400" />
+          <span>Exit Maximized View (ESC)</span>
+        </button>
       )}
     </div>
   )
