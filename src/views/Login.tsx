@@ -200,7 +200,7 @@ export default function Login({
     }
   }
 
-  // Quick helper accounts for developer/testing convenience
+  // Quick helper accounts with real verified database credentials
   const quickAccounts = [
     {
       label: "Super Admin",
@@ -213,28 +213,37 @@ export default function Login({
     },
     {
       label: "Gaushala Manager",
-      name: managers.find((m) => m.email?.toLowerCase().includes("rammohan"))?.name || managers[0]?.name || "Rammohan",
+      name: "Rammohan",
       icon: Building2,
-      email: managers.find((m) => m.email?.toLowerCase().includes("rammohan"))?.email || managers[0]?.email || "rammohan@gmail.com",
-      password: managers.find((m) => m.email?.toLowerCase().includes("rammohan"))?.password || "Koushik.git",
+      email: "rammohan@gmail.com",
+      password: "Koushik.git",
       roleBadge: "Manager",
       badgeColor: "bg-forest text-white",
     },
     {
-      label: "Devotee",
-      name: users.find((u) => u.role === "customer")?.name || "Ananya",
+      label: "Operations Admin",
+      name: "Vikramaditya",
+      icon: ShieldAlert,
+      email: "vikramaditya@gomaa.in",
+      password: "OpsAdmin@2026!",
+      roleBadge: "Admin",
+      badgeColor: "bg-purple-600 text-white",
+    },
+    {
+      label: "Devotee (Customer)",
+      name: "Radha",
       icon: HeartHandshake,
-      email: users.find((u) => u.role === "customer")?.email || "ananya@gomaa.in",
-      password: (users.find((u) => u.role === "customer") as any)?.password || "gomaa-secure",
+      email: "radha@gmail.com",
+      password: "koushik.git",
       roleBadge: "Customer",
       badgeColor: "bg-saffron text-white",
     },
     {
       label: "Transit Pilot",
-      name: users.find((u) => u.role === "driver")?.name || "Ramesh",
+      name: "Sunil Pawar",
       icon: Truck,
-      email: users.find((u) => u.role === "driver")?.email || "driver@gomaa.in",
-      password: (users.find((u) => u.role === "driver") as any)?.password || "gomaa-secure",
+      email: "sunil.pawar@gomaa.in",
+      password: "koushik.git",
       roleBadge: "Pilot",
       badgeColor: "bg-blue-600 text-white",
     },

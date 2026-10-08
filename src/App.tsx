@@ -147,8 +147,11 @@ function getInitialPricingSector(): "global" | "gosalas" | "commissions" {
 }
 
 function getInitialAuth(): RoleId | null {
+  const token = typeof window !== "undefined" ? localStorage.getItem("gomaa_auth_token") : null
+  if (!token) return null
+
   const fromHash = parseHash().role
-  if (fromHash !== undefined) return fromHash
+  if (fromHash !== undefined && fromHash !== null) return fromHash
   try {
     const saved = localStorage.getItem("gomaa_auth_role")
     if (saved === "login" || saved === "null") return null
@@ -156,7 +159,7 @@ function getInitialAuth(): RoleId | null {
       return saved as RoleId
     }
   } catch (e) {}
-  return "customer"
+  return null
 }
 
 function getInitialAdminView(): View {
@@ -341,62 +344,78 @@ export default function App() {
     }
   }, [auth, activeGosalaFilter, setActiveGosalaFilter])
 
-  const handleSetAuth = async (role: RoleId | null) => {
+  const handleLoginSuccess = (role: RoleId) => {
     setAuth(role)
-    if (!role) {
-      clearAuthSession()
-    } else {
-      try {
-        let email = ""
-        let password = ""
-        if (role === "super_admin") {
-          email = "koushik@gmail.com"
-          password = "Koushik.git"
-        } else if (role === "admin") {
-          email = "vikramaditya@gomaa.in"
-          password = "OpsAdmin@2026!"
-        } else if (role === "manager") {
-          email = profiles?.manager?.email || "rammohan@gmail.com"
-          password = "Koushik.git"
-        } else if (role === "driver") {
-          email = profiles?.driver?.email || "sunil.pawar@gomaa.in"
-          password = "koushik.git"
-        } else if (role === "customer") {
-          email = profiles?.customer?.email || "radha@gmail.com"
-          password = "koushik.git"
-        }
-
-        if (email) {
-          const authRes = await api.login(email, role, password)
-          if (authRes.ok && authRes.token) {
-            setAuthSession(authRes.token, authRes.user)
-          }
-        }
-      } catch (err) {
-        console.warn("JWT sync on role switch:", err)
-      }
-    }
     try {
-      if (role) {
-        localStorage.setItem("gomaa_auth_role", role)
-        if (role === "admin" || role === "super_admin") {
-          if (view === "pricing" && pricingSector === "gosalas") {
-            window.location.hash = `#${role}/pricing/gosalas`
-          } else {
-            window.location.hash = `#${role}/${view}`
-          }
-        } else if (role === "manager") {
-          const savedManagerView =
-            localStorage.getItem("gomaa_manager_view") || "queue"
-          window.location.hash = `#manager/${savedManagerView}`
+      localStorage.setItem("gomaa_auth_role", role)
+      if (role === "admin" || role === "super_admin") {
+        if (view === "pricing" && pricingSector === "gosalas") {
+          window.location.hash = `#${role}/pricing/gosalas`
         } else {
-          window.location.hash = `#${role}`
+          window.location.hash = `#${role}/${view}`
         }
+      } else if (role === "manager") {
+        const savedManagerView =
+          localStorage.getItem("gomaa_manager_view") || "queue"
+        window.location.hash = `#manager/${savedManagerView}`
       } else {
-        localStorage.setItem("gomaa_auth_role", "login")
-        window.location.hash = "#login"
+        window.location.hash = `#${role}`
       }
     } catch (e) {}
+  }
+
+  const handleSignOut = () => {
+    setAuth(null)
+    clearAuthSession()
+    try {
+      localStorage.setItem("gomaa_auth_role", "login")
+      window.location.hash = "#login"
+    } catch (e) {}
+  }
+
+  const handleSwitchRole = async (role: RoleId) => {
+    try {
+      let email = ""
+      let password = ""
+      if (role === "super_admin") {
+        email = "koushik@gmail.com"
+        password = "Koushik.git"
+      } else if (role === "admin") {
+        email = "vikramaditya@gomaa.in"
+        password = "OpsAdmin@2026!"
+      } else if (role === "manager") {
+        email = profiles?.manager?.email || "rammohan@gmail.com"
+        password = "Koushik.git"
+      } else if (role === "driver") {
+        email = profiles?.driver?.email || "sunil.pawar@gomaa.in"
+        password = "koushik.git"
+      } else if (role === "customer") {
+        email = profiles?.customer?.email || "radha@gmail.com"
+        password = "koushik.git"
+      }
+
+      if (email) {
+        const authRes = await api.login(email, role, password)
+        if (authRes.ok && authRes.token) {
+          setAuthSession(authRes.token, authRes.user)
+          handleLoginSuccess(role)
+          notify(`Switched session to ${role.replace("_", " ").toUpperCase()}`, "ok")
+        } else {
+          throw new Error("Invalid credentials or user not found")
+        }
+      }
+    } catch (err: any) {
+      console.warn("Authentication failed on role switch:", err)
+      notify(err.message || "Authentication failed: Invalid credentials", "err")
+    }
+  }
+
+  const handleSetAuth = (role: RoleId | null) => {
+    if (!role) {
+      handleSignOut()
+    } else {
+      handleSwitchRole(role)
+    }
   }
 
   const handleSetAdminView = (v: View, targetSector?: "global" | "gosalas" | "commissions") => {
@@ -470,26 +489,42 @@ export default function App() {
   // Listen to hash changes (back/forward or direct navigation)
   useEffect(() => {
     const onHashChange = () => {
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem("gomaa_auth_token")
+          : null
       const { role, subview, sector } = parseHash()
+
+      if (!token) {
+        setAuth(null)
+        if (window.location.hash && window.location.hash !== "#login") {
+          window.location.hash = "#login"
+        }
+        return
+      }
+
+      if (role === null) {
+        setAuth(null)
+        return
+      }
+
       if (role !== undefined) {
         setAuth(role)
-        if (role) {
-          localStorage.setItem("gomaa_auth_role", role)
-          if (
-            (role === "admin" || role === "super_admin") &&
-            subview &&
-            VALID_ADMIN_VIEWS.includes(subview as View)
-          ) {
-            setView(subview as View)
-            localStorage.setItem("gomaa_admin_view", subview)
-            if (subview === "pricing") {
-              if (sector === "gosalas") {
-                setPricingSector("gosalas")
-              } else if (sector === "commissions") {
-                setPricingSector("commissions")
-              } else {
-                setPricingSector("global")
-              }
+        localStorage.setItem("gomaa_auth_role", role)
+        if (
+          (role === "admin" || role === "super_admin") &&
+          subview &&
+          VALID_ADMIN_VIEWS.includes(subview as View)
+        ) {
+          setView(subview as View)
+          localStorage.setItem("gomaa_admin_view", subview)
+          if (subview === "pricing") {
+            if (sector === "gosalas") {
+              setPricingSector("gosalas")
+            } else if (sector === "commissions") {
+              setPricingSector("commissions")
+            } else {
+              setPricingSector("global")
             }
           }
         }
@@ -499,13 +534,13 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHashChange)
   }, [])
 
-  if (!auth) return <Login onSignIn={(role) => handleSetAuth(role)} />
+  if (!auth) return <Login onSignIn={(role) => handleLoginSuccess(role)} />
   if (auth === "customer")
-    return <CustomerApp onSignOut={() => handleSetAuth(null)} />
+    return <CustomerApp onSignOut={handleSignOut} />
   if (auth === "manager")
-    return <ManagerApp onSignOut={() => handleSetAuth(null)} />
+    return <ManagerApp onSignOut={handleSignOut} />
   if (auth === "driver")
-    return <DriverApp onSignOut={() => handleSetAuth(null)} />
+    return <DriverApp onSignOut={handleSignOut} />
 
   const isSuperAdmin = auth === "super_admin"
 

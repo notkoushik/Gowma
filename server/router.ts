@@ -2045,6 +2045,7 @@ export async function handleApiRequest(
             phone: cleanPhone,
             role: "GOSALA_MANAGER",
             isActive: body.status !== "Inactive",
+            password: body.password || undefined,
           },
         })
       } else {
@@ -2055,6 +2056,7 @@ export async function handleApiRequest(
             phone: cleanPhone,
             role: "GOSALA_MANAGER",
             isActive: body.status !== "Inactive",
+            ...(body.password ? { password: body.password } : {}),
           },
         })
       }
@@ -2063,12 +2065,6 @@ export async function handleApiRequest(
         setUserMeta(user.email, { password: body.password })
         inMemoryPasswords.set(user.email.toLowerCase(), body.password)
         inMemoryPasswords.set(user.id, body.password)
-        try {
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { password: body.password },
-          })
-        } catch {}
       }
 
       // Determine target Gaushalas (supports multiple or single)

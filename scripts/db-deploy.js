@@ -14,8 +14,11 @@ if (dbUrl && !dbUrl.includes("localhost") && !dbUrl.includes("127.0.0.1")) {
   try {
     execSync("npx prisma db push --accept-data-loss", { stdio: "inherit" })
     console.log("[Build] Cloud database schema synchronized successfully!")
+    console.log("[Build] Seeding baseline accounts to cloud database...")
+    execSync("node scripts/seed-cloud-db.js", { stdio: "inherit" })
+    console.log("[Build] Baseline accounts synchronized successfully!")
   } catch (err) {
-    console.warn("[Build] prisma db push notice (continuing build):", err.message)
+    console.warn("[Build] prisma db notice (continuing build):", err.message)
   }
 } else {
   console.log("[Build] Skipping cloud DB push (local/offline environment).")

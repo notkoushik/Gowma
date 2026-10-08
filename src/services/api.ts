@@ -115,7 +115,18 @@ export const api = {
     if (!token) {
       return { ok: false, user: null }
     }
-    return request<{ ok: boolean; user: any }>("/api/auth/me")
+    try {
+      return await request<{ ok: boolean; user: any }>("/api/auth/me")
+    } catch (err: any) {
+      if (err.message?.includes("401") || err.message?.toLowerCase().includes("unauthenticated")) {
+        setAuthToken(null)
+        try {
+          localStorage.removeItem("gomaa_auth_user")
+          localStorage.setItem("gomaa_auth_role", "login")
+        } catch {}
+      }
+      return { ok: false, user: null }
+    }
   },
 
   async getAccounts() {
