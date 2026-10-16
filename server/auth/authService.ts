@@ -160,11 +160,40 @@ export async function authenticateOrResolveUser(
     catch { throw new Error("Unable to secure account password") }
   }
 
-  // Resolve assigned Gaushalas
-  const assignedGosalas = (user.managerAssignments || []).map((a: any) => ({
-    id: a.gosala.id,
-    name: a.gosala.name,
-  }))
+  // Resolve assigned Gaushalas strictly verifying active custody
+  const assignedGosalas = (user.managerAssignments || [])
+    .filter((a: any) => {
+      if (!a.gosala) return false
+      if (user.role === "GOSALA_MANAGER") {
+        const meta = getGosalaMeta(a.gosala.id, a.gosala.name)
+        if (meta.isActingManager || meta.actAsManagerMyself) return false
+        const gMgrId = meta.managerId || ""
+        const gMgrName = (meta.managerName || "").toLowerCase()
+        const uCleanId = user.id.startsWith("MGR-") ? user.id.replace(/^MGR-/, "") : user.id
+        const uName = (user.name || "").toLowerCase()
+        if (gMgrId || (gMgrName && !gMgrName.includes("none"))) {
+          const idMatch = Boolean(
+            gMgrId &&
+              (gMgrId === user.id ||
+                gMgrId === `MGR-${uCleanId.slice(0, 4)}` ||
+                gMgrId === uCleanId ||
+                user.id.includes(gMgrId) ||
+                gMgrId.includes(uCleanId)),
+          )
+          const nameMatch = Boolean(
+            gMgrName &&
+              uName &&
+              (gMgrName === uName || gMgrName.includes(uName) || uName.includes(gMgrName)),
+          )
+          return idMatch || nameMatch
+        }
+      }
+      return true
+    })
+    .map((a: any) => ({
+      id: a.gosala.id,
+      name: a.gosala.name,
+    }))
 
   // If Operations Admin, link their specific portfolio Gaushalas dynamically
   if (user.role === "OPERATIONS_ADMIN") {

@@ -368,7 +368,35 @@ function formatBooking(b: any): Booking {
 }
 
 function formatManagerUser(user: any): GosalaManager {
-  const assignments = user.managerAssignments || []
+  const rawAssignments = user.managerAssignments || []
+  const assignments = rawAssignments.filter((a: any) => {
+    if (!a.gosala) return false
+    const meta = getGosalaMeta(a.gosala.id, a.gosala.name)
+    // If under admin custody or unassigned, this manager does not own it
+    if (meta.isActingManager || meta.actAsManagerMyself) return false
+    const gMgrId = meta.managerId || ""
+    const gMgrName = (meta.managerName || "").toLowerCase()
+    const uCleanId = user.id.startsWith("MGR-") ? user.id.replace(/^MGR-/, "") : user.id
+    const uName = (user.name || "").toLowerCase()
+
+    if (gMgrId || (gMgrName && !gMgrName.includes("none"))) {
+      const idMatch = Boolean(
+        gMgrId &&
+          (gMgrId === user.id ||
+            gMgrId === `MGR-${uCleanId.slice(0, 4)}` ||
+            gMgrId === uCleanId ||
+            user.id.includes(gMgrId) ||
+            gMgrId.includes(uCleanId)),
+      )
+      const nameMatch = Boolean(
+        gMgrName &&
+          uName &&
+          (gMgrName === uName || gMgrName.includes(uName) || uName.includes(gMgrName)),
+      )
+      return idMatch || nameMatch
+    }
+    return true
+  })
   const assignedGosalas: string[] = assignments
     .map((a: any) => a.gosala?.name)
     .filter(Boolean)
@@ -2543,6 +2571,13 @@ export async function handleApiRequest(
           },
         })
         if (targetGosala) {
+          // Relieve any prior managers for this Gaushala to enforce 1:1 invariant
+          await prisma.gosalaManagerAssignment.deleteMany({
+            where: {
+              gosalaId: targetGosala.id,
+              NOT: { userId: user.id },
+            },
+          })
           await prisma.gosalaManagerAssignment.upsert({
             where: {
               userId_gosalaId: {
@@ -2559,6 +2594,13 @@ export async function handleApiRequest(
             update: {
               status: "Active",
             },
+          })
+          saveGosalaMeta(targetGosala.id, targetGosala.name, {
+            managerId: user.id.startsWith("MGR-") ? user.id : `MGR-${user.id.slice(0, 4)}`,
+            managerName: user.name,
+            caretaker: user.name,
+            isActingManager: false,
+            actAsManagerMyself: false,
           })
         }
       }
@@ -2637,7 +2679,30 @@ export async function handleApiRequest(
         where: { userId: user.id },
       })
 
-      // Re-create new assignments
+      // Relieve this user from any Gaushalas that are not in targetGosalas
+      try {
+        const allActiveGosalas = await prisma.gosala.findMany({ where: { isActive: true } })
+        const uId = user.id
+        const uCleanId = uId.startsWith("MGR-") ? uId.replace(/^MGR-/, "") : uId
+        for (const g of allActiveGosalas) {
+          const meta = getGosalaMeta(g.id, g.name)
+          const isMgr = meta.managerId === uId || meta.managerId === `MGR-${uCleanId.slice(0, 4)}` || meta.managerId === uCleanId
+          if (isMgr) {
+            const isRetained = targetGosalas.some(tg => tg === g.id || tg.toLowerCase() === g.name.toLowerCase())
+            if (!isRetained) {
+              saveGosalaMeta(g.id, g.name, {
+                managerId: "",
+                managerName: "None (Admin Custody)",
+                caretaker: "None (Admin Custody)",
+                isActingManager: true,
+                actAsManagerMyself: true,
+              })
+            }
+          }
+        }
+      } catch {}
+
+      // Re-create new assignments with single-custodian enforcement
       for (const gNameOrId of targetGosalas) {
         if (!gNameOrId || gNameOrId === "Unassigned") continue
         const targetGosala = await prisma.gosala.findFirst({
@@ -2646,6 +2711,13 @@ export async function handleApiRequest(
           },
         })
         if (targetGosala) {
+          // Relieve any other manager who was previously assigned to this Gaushala
+          await prisma.gosalaManagerAssignment.deleteMany({
+            where: {
+              gosalaId: targetGosala.id,
+              NOT: { userId: user.id },
+            },
+          })
           await prisma.gosalaManagerAssignment.create({
             data: {
               userId: user.id,
@@ -2653,6 +2725,13 @@ export async function handleApiRequest(
               region: body.region || targetGosala.region,
               status: "Active",
             },
+          })
+          saveGosalaMeta(targetGosala.id, targetGosala.name, {
+            managerId: user.id.startsWith("MGR-") ? user.id : `MGR-${user.id.slice(0, 4)}`,
+            managerName: user.name,
+            caretaker: user.name,
+            isActingManager: false,
+            actAsManagerMyself: false,
           })
         }
       }
@@ -3048,7 +3127,31 @@ export async function handleApiRequest(
           email: m.user.email,
         }))
 
-        const firstAssigned = assignedMgrs[0]
+        const activeMgrId = meta.managerId || ""
+        const activeMgrName = (meta.managerName || "").toLowerCase()
+        const isUnderAdminCustody = Boolean(
+          meta.isActingManager ||
+          meta.actAsManagerMyself ||
+          activeMgrName.includes("none") ||
+          activeMgrName.includes("admin custody") ||
+          activeMgrName.includes("acting custodian")
+        )
+
+        // Strict single-custodian filter for assignedManagers to prevent zombie associations
+        const filteredAssignedMgrs = isUnderAdminCustody
+          ? []
+          : activeMgrId && !activeMgrId.startsWith("USER-")
+            ? assignedMgrs.filter((m: any) =>
+                m.id === activeMgrId ||
+                m.rawUserId === activeMgrId ||
+                activeMgrId.includes(m.rawUserId) ||
+                m.id.includes(activeMgrId),
+              )
+            : activeMgrName && !activeMgrName.includes("none") && !activeMgrName.includes("acting")
+              ? assignedMgrs.filter((m: any) => m.name.toLowerCase() === activeMgrName)
+              : assignedMgrs
+
+        const primaryAssigned = filteredAssignedMgrs[0] || (isUnderAdminCustody ? undefined : assignedMgrs[0])
         const govRole = meta.governingAdminRole || (g.adminId?.startsWith("USER-SA") ? "super_admin" : "admin")
         const govName = g.adminName || meta.governingAdminName || (govRole === "super_admin" ? "Koushik" : "Operations Admin")
         const govEmail = g.adminEmail || meta.governingAdminEmail || meta.adminEmail || ""
@@ -3066,11 +3169,14 @@ export async function handleApiRequest(
           longitude: lng,
           lat,
           lng,
-          assignedManagers: assignedMgrs,
-          managerName:
-            firstAssigned?.name || meta.managerName || meta.caretaker || "None (Admin Acting)",
-          managerId: firstAssigned?.id || meta.managerId || "",
-          caretaker: meta.caretaker || firstAssigned?.name || "Caretaker In-Charge",
+          assignedManagers: filteredAssignedMgrs,
+          managerName: isUnderAdminCustody
+            ? meta.managerName || "None (Admin Custody)"
+            : meta.managerName || primaryAssigned?.name || "None (Admin Acting)",
+          managerId: isUnderAdminCustody
+            ? ""
+            : meta.managerId || primaryAssigned?.id || "",
+          caretaker: meta.caretaker || primaryAssigned?.name || "Caretaker In-Charge",
           governingAdminRole: govRole,
           governingAdminName: govName,
           governingAdminEmail: govEmail,

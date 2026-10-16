@@ -103,9 +103,78 @@ export default function Login({
 
   const passwordInputRef = useRef<HTMLInputElement>(null)
 
-  // Helper to resolve all assigned Gaushalas for a manager from roster & network
+  // Helper to resolve all assigned Gaushalas for a manager strictly and accurately
   const resolveManagerGosalas = (m: any): string[] => {
     if (!m) return []
+
+    const mId = (m.id || "").trim()
+    const mCleanId = mId.startsWith("MGR-") ? mId.replace(/^MGR-/, "") : mId
+    const mRawId = ((m as any).rawUserId || "").trim()
+    const mName = (m.name || "").trim().toLowerCase()
+    const mEmail = (m.email || "").trim().toLowerCase()
+
+    const isManagerForGosala = (g: any): boolean => {
+      if (!g) return false
+      if (g.isActingManager || g.actAsManagerMyself) return false
+      if (
+        g.managerName &&
+        (g.managerName.includes("None") ||
+          g.managerName.includes("Acting Custodian") ||
+          g.managerName.includes("Admin Custody") ||
+          g.managerName.includes("Admin Acting"))
+      ) {
+        return false
+      }
+
+      const gMgrId = (g.managerId || "").trim()
+      const gMgrCleanId = gMgrId.startsWith("MGR-") ? gMgrId.replace(/^MGR-/, "") : gMgrId
+      const gMgrName = (g.managerName || "").trim().toLowerCase()
+
+      if (gMgrId || (gMgrName && !gMgrName.includes("none"))) {
+        const idMatch = Boolean(
+          gMgrId &&
+            (gMgrId === mId ||
+              gMgrId === mCleanId ||
+              (mRawId && gMgrId === mRawId) ||
+              mId.includes(gMgrId) ||
+              gMgrId.includes(mId)),
+        )
+        const nameMatch = Boolean(
+          gMgrName &&
+            mName &&
+            (gMgrName === mName ||
+              gMgrName.includes(mName) ||
+              mName.includes(gMgrName)),
+        )
+
+        if (idMatch || nameMatch) {
+          return true
+        }
+        // Strict exclusion: this Gaushala is staffed by someone else!
+        return false
+      }
+
+      if (Array.isArray(g.assignedManagers) && g.assignedManagers.length > 0) {
+        return g.assignedManagers.some((am: any) => {
+          const amId = (am.id || "").trim()
+          const amCleanId = amId.startsWith("MGR-") ? amId.replace(/^MGR-/, "") : amId
+          const amName = (am.name || "").trim().toLowerCase()
+          const amEmail = (am.email || "").trim().toLowerCase()
+          return (
+            (amId && (amId === mId || amId === mCleanId || (mRawId && amId === mRawId))) ||
+            (amName && mName && amName === mName) ||
+            (amEmail && mEmail && amEmail === mEmail)
+          )
+        })
+      }
+
+      return false
+    }
+
+    const mappedFromGosalas = gosalas
+      .filter((g) => isManagerForGosala(g))
+      .map((g) => g.name)
+
     const directList =
       m.gosalas && m.gosalas.length > 0
         ? m.gosalas
@@ -113,35 +182,15 @@ export default function Login({
           ? [m.gosala]
           : []
 
-    const mappedFromGosalas = gosalas
-      .filter((g) => {
-        if (
-          g.managerId &&
-          (g.managerId === m.id ||
-            m.id.includes(g.managerId) ||
-            g.managerId.includes(m.id) ||
-            ((m as any).rawUserId && g.managerId === (m as any).rawUserId))
-        )
-          return true
-        if (g.managerName && g.managerName.toLowerCase() === m.name.toLowerCase())
-          return true
-        if ((g as any).manager && (g as any).manager.toLowerCase() === m.name.toLowerCase())
-          return true
-        if ((g as any).caretaker && (g as any).caretaker.toLowerCase() === m.name.toLowerCase())
-          return true
-        if (Array.isArray(g.assignedManagers)) {
-          return g.assignedManagers.some(
-            (am) =>
-              am.id === m.id ||
-              am.name?.toLowerCase() === m.name.toLowerCase() ||
-              am.email?.toLowerCase() === m.email?.toLowerCase(),
-          )
-        }
-        return false
-      })
-      .map((g) => g.name)
+    const verifiedDirect = directList.filter((gName: string) => {
+      const match = gosalas.find(
+        (g) => g.name.toLowerCase() === gName.toLowerCase(),
+      )
+      if (!match) return false
+      return isManagerForGosala(match)
+    })
 
-    return Array.from(new Set([...directList, ...mappedFromGosalas])).filter(
+    return Array.from(new Set([...mappedFromGosalas, ...verifiedDirect])).filter(
       Boolean,
     )
   }

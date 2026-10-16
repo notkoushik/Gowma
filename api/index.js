@@ -1260,7 +1260,27 @@ async function authenticateOrResolveUser(emailOrPhone, roleHint, password) {
       throw new Error("Unable to secure account password");
     }
   }
-  const assignedGosalas = (user.managerAssignments || []).map((a) => ({
+  const assignedGosalas = (user.managerAssignments || []).filter((a) => {
+    if (!a.gosala) return false;
+    if (user.role === "GOSALA_MANAGER") {
+      const meta = getGosalaMeta(a.gosala.id, a.gosala.name);
+      if (meta.isActingManager || meta.actAsManagerMyself) return false;
+      const gMgrId = meta.managerId || "";
+      const gMgrName = (meta.managerName || "").toLowerCase();
+      const uCleanId = user.id.startsWith("MGR-") ? user.id.replace(/^MGR-/, "") : user.id;
+      const uName = (user.name || "").toLowerCase();
+      if (gMgrId || gMgrName && !gMgrName.includes("none")) {
+        const idMatch = Boolean(
+          gMgrId && (gMgrId === user.id || gMgrId === `MGR-${uCleanId.slice(0, 4)}` || gMgrId === uCleanId || user.id.includes(gMgrId) || gMgrId.includes(uCleanId))
+        );
+        const nameMatch = Boolean(
+          gMgrName && uName && (gMgrName === uName || gMgrName.includes(uName) || uName.includes(gMgrName))
+        );
+        return idMatch || nameMatch;
+      }
+    }
+    return true;
+  }).map((a) => ({
     id: a.gosala.id,
     name: a.gosala.name
   }));
@@ -3145,7 +3165,26 @@ function formatBooking(b) {
   };
 }
 function formatManagerUser(user) {
-  const assignments = user.managerAssignments || [];
+  const rawAssignments = user.managerAssignments || [];
+  const assignments = rawAssignments.filter((a) => {
+    if (!a.gosala) return false;
+    const meta2 = getGosalaMeta(a.gosala.id, a.gosala.name);
+    if (meta2.isActingManager || meta2.actAsManagerMyself) return false;
+    const gMgrId = meta2.managerId || "";
+    const gMgrName = (meta2.managerName || "").toLowerCase();
+    const uCleanId = user.id.startsWith("MGR-") ? user.id.replace(/^MGR-/, "") : user.id;
+    const uName = (user.name || "").toLowerCase();
+    if (gMgrId || gMgrName && !gMgrName.includes("none")) {
+      const idMatch = Boolean(
+        gMgrId && (gMgrId === user.id || gMgrId === `MGR-${uCleanId.slice(0, 4)}` || gMgrId === uCleanId || user.id.includes(gMgrId) || gMgrId.includes(uCleanId))
+      );
+      const nameMatch = Boolean(
+        gMgrName && uName && (gMgrName === uName || gMgrName.includes(uName) || uName.includes(gMgrName))
+      );
+      return idMatch || nameMatch;
+    }
+    return true;
+  });
   const assignedGosalas = assignments.map((a) => a.gosala?.name).filter(Boolean);
   const assignedGosalaIds = assignments.map((a) => a.gosala?.id).filter(Boolean);
   const primaryGosala = assignedGosalas[0] || "Unassigned";
@@ -4906,6 +4945,12 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           }
         });
         if (targetGosala) {
+          await prisma.gosalaManagerAssignment.deleteMany({
+            where: {
+              gosalaId: targetGosala.id,
+              NOT: { userId: user.id }
+            }
+          });
           await prisma.gosalaManagerAssignment.upsert({
             where: {
               userId_gosalaId: {
@@ -4922,6 +4967,13 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
             update: {
               status: "Active"
             }
+          });
+          saveGosalaMeta(targetGosala.id, targetGosala.name, {
+            managerId: user.id.startsWith("MGR-") ? user.id : `MGR-${user.id.slice(0, 4)}`,
+            managerName: user.name,
+            caretaker: user.name,
+            isActingManager: false,
+            actAsManagerMyself: false
           });
         }
       }
@@ -4986,6 +5038,28 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       await prisma.gosalaManagerAssignment.deleteMany({
         where: { userId: user.id }
       });
+      try {
+        const allActiveGosalas = await prisma.gosala.findMany({ where: { isActive: true } });
+        const uId = user.id;
+        const uCleanId = uId.startsWith("MGR-") ? uId.replace(/^MGR-/, "") : uId;
+        for (const g of allActiveGosalas) {
+          const meta = getGosalaMeta(g.id, g.name);
+          const isMgr = meta.managerId === uId || meta.managerId === `MGR-${uCleanId.slice(0, 4)}` || meta.managerId === uCleanId;
+          if (isMgr) {
+            const isRetained = targetGosalas.some((tg) => tg === g.id || tg.toLowerCase() === g.name.toLowerCase());
+            if (!isRetained) {
+              saveGosalaMeta(g.id, g.name, {
+                managerId: "",
+                managerName: "None (Admin Custody)",
+                caretaker: "None (Admin Custody)",
+                isActingManager: true,
+                actAsManagerMyself: true
+              });
+            }
+          }
+        }
+      } catch {
+      }
       for (const gNameOrId of targetGosalas) {
         if (!gNameOrId || gNameOrId === "Unassigned") continue;
         const targetGosala = await prisma.gosala.findFirst({
@@ -4994,6 +5068,12 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           }
         });
         if (targetGosala) {
+          await prisma.gosalaManagerAssignment.deleteMany({
+            where: {
+              gosalaId: targetGosala.id,
+              NOT: { userId: user.id }
+            }
+          });
           await prisma.gosalaManagerAssignment.create({
             data: {
               userId: user.id,
@@ -5001,6 +5081,13 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
               region: body.region || targetGosala.region,
               status: "Active"
             }
+          });
+          saveGosalaMeta(targetGosala.id, targetGosala.name, {
+            managerId: user.id.startsWith("MGR-") ? user.id : `MGR-${user.id.slice(0, 4)}`,
+            managerName: user.name,
+            caretaker: user.name,
+            isActingManager: false,
+            actAsManagerMyself: false
           });
         }
       }
@@ -5333,7 +5420,15 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           phone: m.user.phone,
           email: m.user.email
         }));
-        const firstAssigned = assignedMgrs[0];
+        const activeMgrId = meta.managerId || "";
+        const activeMgrName = (meta.managerName || "").toLowerCase();
+        const isUnderAdminCustody = Boolean(
+          meta.isActingManager || meta.actAsManagerMyself || activeMgrName.includes("none") || activeMgrName.includes("admin custody") || activeMgrName.includes("acting custodian")
+        );
+        const filteredAssignedMgrs = isUnderAdminCustody ? [] : activeMgrId && !activeMgrId.startsWith("USER-") ? assignedMgrs.filter(
+          (m) => m.id === activeMgrId || m.rawUserId === activeMgrId || activeMgrId.includes(m.rawUserId) || m.id.includes(activeMgrId)
+        ) : activeMgrName && !activeMgrName.includes("none") && !activeMgrName.includes("acting") ? assignedMgrs.filter((m) => m.name.toLowerCase() === activeMgrName) : assignedMgrs;
+        const primaryAssigned = filteredAssignedMgrs[0] || (isUnderAdminCustody ? void 0 : assignedMgrs[0]);
         const govRole = meta.governingAdminRole || (g.adminId?.startsWith("USER-SA") ? "super_admin" : "admin");
         const govName = g.adminName || meta.governingAdminName || (govRole === "super_admin" ? "Koushik" : "Operations Admin");
         const govEmail = g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "";
@@ -5350,10 +5445,10 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           longitude: lng,
           lat,
           lng,
-          assignedManagers: assignedMgrs,
-          managerName: firstAssigned?.name || meta.managerName || meta.caretaker || "None (Admin Acting)",
-          managerId: firstAssigned?.id || meta.managerId || "",
-          caretaker: meta.caretaker || firstAssigned?.name || "Caretaker In-Charge",
+          assignedManagers: filteredAssignedMgrs,
+          managerName: isUnderAdminCustody ? meta.managerName || "None (Admin Custody)" : meta.managerName || primaryAssigned?.name || "None (Admin Acting)",
+          managerId: isUnderAdminCustody ? "" : meta.managerId || primaryAssigned?.id || "",
+          caretaker: meta.caretaker || primaryAssigned?.name || "Caretaker In-Charge",
           governingAdminRole: govRole,
           governingAdminName: govName,
           governingAdminEmail: govEmail,

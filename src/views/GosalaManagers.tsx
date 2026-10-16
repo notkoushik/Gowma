@@ -226,8 +226,87 @@ export default function GosalaManagers() {
     }
   }
 
-  // Helper: Resolve all assigned Gaushalas for a manager dynamically from all links
+  // Helper: Strictly verify whether a Gaushala belongs to a given manager
+  const isManagerAssignedToGosala = (m: GosalaManager, g: any): boolean => {
+    if (!m || !g) return false
+
+    // If Gaushala is under admin custody or unassigned, no manager owns it
+    if (g.isActingManager || g.actAsManagerMyself) return false
+    if (
+      g.managerName &&
+      (g.managerName.includes("None") ||
+        g.managerName.includes("Acting Custodian") ||
+        g.managerName.includes("Admin Custody") ||
+        g.managerName.includes("Admin Acting"))
+    ) {
+      return false
+    }
+
+    const mId = (m.id || "").trim()
+    const mCleanId = mId.startsWith("MGR-") ? mId.replace(/^MGR-/, "") : mId
+    const mRawId = ((m as any).rawUserId || "").trim()
+    const mName = (m.name || "").trim().toLowerCase()
+    const mEmail = (m.email || "").trim().toLowerCase()
+
+    const gMgrId = (g.managerId || "").trim()
+    const gMgrCleanId = gMgrId.startsWith("MGR-") ? gMgrId.replace(/^MGR-/, "") : gMgrId
+    const gMgrName = (g.managerName || "").trim().toLowerCase()
+
+    // 1. If Gaushala has an explicit managerId or managerName assigned:
+    if (gMgrId || (gMgrName && !gMgrName.includes("none"))) {
+      const idMatch = Boolean(
+        gMgrId &&
+          (gMgrId === mId ||
+            gMgrId === mCleanId ||
+            (mRawId && gMgrId === mRawId) ||
+            mId.includes(gMgrId) ||
+            gMgrId.includes(mId)),
+      )
+      const nameMatch = Boolean(
+        gMgrName &&
+          mName &&
+          (gMgrName === mName ||
+            gMgrName.includes(mName) ||
+            mName.includes(gMgrName)),
+      )
+
+      // If either id or name matches this manager, it belongs to this manager!
+      if (idMatch || nameMatch) {
+        return true
+      }
+      // CRITICAL ROOT RULE: If Gaushala has an active custodian that is NOT m,
+      // it is definitively managed by someone else. Disqualify immediately!
+      return false
+    }
+
+    // 2. Fallback to assignedManagers list only if no primary manager conflict exists
+    if (Array.isArray(g.assignedManagers) && g.assignedManagers.length > 0) {
+      return g.assignedManagers.some((am: any) => {
+        const amId = (am.id || "").trim()
+        const amCleanId = amId.startsWith("MGR-") ? amId.replace(/^MGR-/, "") : amId
+        const amName = (am.name || "").trim().toLowerCase()
+        const amEmail = (am.email || "").trim().toLowerCase()
+        return (
+          (amId && (amId === mId || amId === mCleanId || (mRawId && amId === mRawId))) ||
+          (amName && mName && amName === mName) ||
+          (amEmail && mEmail && amEmail === mEmail)
+        )
+      })
+    }
+
+    return false
+  }
+
+  // Helper: Resolve all assigned Gaushalas for a manager dynamically from strictly verified links
   const getManagerAssignedGosalas = (m: GosalaManager): string[] => {
+    if (!m) return []
+
+    // 1. Direct verified Gaushalas from live gosalas state
+    const mappedFromGosalas = gosalas
+      .filter((g) => isManagerAssignedToGosala(m, g))
+      .map((g) => g.name)
+
+    // 2. Direct list from manager entity
     const directList =
       m.gosalas && m.gosalas.length > 0
         ? m.gosalas
@@ -235,32 +314,21 @@ export default function GosalaManagers() {
           ? [m.gosala]
           : []
 
-    const mappedFromGosalas = gosalas
-      .filter((g) => {
-        if (
-          g.managerId &&
-          (g.managerId === m.id ||
-            m.id.includes(g.managerId) ||
-            g.managerId.includes(m.id))
-        )
-          return true
-        if (g.managerName && g.managerName.toLowerCase() === m.name.toLowerCase())
-          return true
-        if (Array.isArray((g as any).assignedManagers)) {
-          return (g as any).assignedManagers.some(
-            (am: any) =>
-              am.id === m.id ||
-              am.name?.toLowerCase() === m.name.toLowerCase(),
-          )
-        }
-        return false
-      })
-      .map((g) => g.name)
+    // 3. Filter directList: every Gaushala MUST be verified against live gosalas state.
+    // If a Gaushala is found in gosalas and belongs to someone else, reject it!
+    const verifiedDirect = directList.filter((gName) => {
+      const match = gosalas.find(
+        (g) => g.name.toLowerCase() === gName.toLowerCase(),
+      )
+      if (!match) return false
+      return isManagerAssignedToGosala(m, match)
+    })
 
-    return Array.from(new Set([...directList, ...mappedFromGosalas])).filter(
+    return Array.from(new Set([...mappedFromGosalas, ...verifiedDirect])).filter(
       Boolean,
     )
   }
+
 
   const handleOpenAdd = () => {
     setEditingManager(null)
@@ -317,16 +385,64 @@ export default function GosalaManagers() {
         region: formRegion,
         animalsCount: totalCows,
       })
-      // Sync each selected Gaushala with managerId and managerName
+
+      // Relieve Gaushalas that were previously in this manager's portfolio but now deselected
+      const previousAssigned = getManagerAssignedGosalas(editingManager)
+      const removedGosalas = previousAssigned.filter(
+        (prevName) =>
+          !formSelectedGosalas.some(
+            (selName) => selName.toLowerCase() === prevName.toLowerCase(),
+          ),
+      )
+      for (const remName of removedGosalas) {
+        const found = gosalas.find(
+          (g) => g.name.toLowerCase() === remName.toLowerCase(),
+        )
+        if (found) {
+          updateGosala(found.id, {
+            managerId: "",
+            managerName: "None (Admin Custody)",
+            caretaker: "None (Admin Custody)",
+            isActingManager: true,
+            actAsManagerMyself: true,
+          } as any)
+        }
+      }
+
+      // Sync each selected Gaushala with managerId and managerName, AND relieve any prior managers
       for (const gName of formSelectedGosalas) {
         const found = gosalas.find(
           (g) => g.name.toLowerCase() === gName.toLowerCase(),
         )
         if (found) {
+          // Relieve any other manager who had this Gaushala
+          managers.forEach((otherMgr) => {
+            if (otherMgr.id !== editingManager.id) {
+              const otherList = getManagerAssignedGosalas(otherMgr)
+              if (
+                otherList.some(
+                  (gn) => gn.toLowerCase() === found.name.toLowerCase(),
+                )
+              ) {
+                const nextOtherList = otherList.filter(
+                  (gn) => gn.toLowerCase() !== found.name.toLowerCase(),
+                )
+                updateManager(otherMgr.id, {
+                  gosalas: nextOtherList,
+                  gosala: nextOtherList[0] || "Unassigned",
+                  status: nextOtherList.length === 0 ? "Inactive" : otherMgr.status,
+                })
+              }
+            }
+          })
+
           updateGosala(found.id, {
             managerId: editingManager.id,
             managerName: formName.trim(),
-          })
+            caretaker: formName.trim(),
+            isActingManager: false,
+            actAsManagerMyself: false,
+          } as any)
         }
       }
       setShowAddModal(false)
@@ -346,6 +462,40 @@ export default function GosalaManagers() {
         status: "Active",
         animalsCount: totalCows,
       })
+
+      // Relieve prior managers from any Gaushalas selected for this new manager
+      for (const gName of formSelectedGosalas) {
+        const found = gosalas.find(
+          (g) => g.name.toLowerCase() === gName.toLowerCase(),
+        )
+        if (found) {
+          managers.forEach((otherMgr) => {
+            const otherList = getManagerAssignedGosalas(otherMgr)
+            if (
+              otherList.some(
+                (gn) => gn.toLowerCase() === found.name.toLowerCase(),
+              )
+            ) {
+              const nextOtherList = otherList.filter(
+                (gn) => gn.toLowerCase() !== found.name.toLowerCase(),
+              )
+              updateManager(otherMgr.id, {
+                gosalas: nextOtherList,
+                gosala: nextOtherList[0] || "Unassigned",
+                status: nextOtherList.length === 0 ? "Inactive" : otherMgr.status,
+              })
+            }
+          })
+
+          updateGosala(found.id, {
+            managerName: formName.trim(),
+            caretaker: formName.trim(),
+            isActingManager: false,
+            actAsManagerMyself: false,
+          } as any)
+        }
+      }
+
       setShowAddModal(false)
       notify(
         `Added new Gaushala manager ${formName.trim()} (${formSelectedGosalas.length} assigned)`,
@@ -522,6 +672,29 @@ export default function GosalaManagers() {
     } else {
       const chosen = managers.find((m) => m.id === selectedManagerId)
       if (chosen) {
+        // --- RECIPROCAL RELIEF: Relieve any OTHER manager who was previously assigned to this Gaushala! ---
+        const prevAssignedManagers = managers.filter((m) => {
+          if (m.id === chosen.id) return false
+          const mList = getManagerAssignedGosalas(m)
+          return (
+            mList.some((gn) => gn.toLowerCase() === reassigningGosala.name.toLowerCase()) ||
+            m.id === reassigningGosala.managerId ||
+            (reassigningGosala.managerName && m.name.toLowerCase() === reassigningGosala.managerName.toLowerCase())
+          )
+        })
+
+        for (const prevMgr of prevAssignedManagers) {
+          const prevList = getManagerAssignedGosalas(prevMgr)
+          const newPrevList = prevList.filter(
+            (gn) => gn.toLowerCase() !== reassigningGosala.name.toLowerCase(),
+          )
+          updateManager(prevMgr.id, {
+            gosalas: newPrevList,
+            gosala: newPrevList[0] || "Unassigned",
+            status: newPrevList.length === 0 ? "Inactive" : prevMgr.status,
+          })
+        }
+
         const currentList = getManagerAssignedGosalas(chosen)
         const isExclusive = reassignMode === "exclusive"
         const nextList = isExclusive
