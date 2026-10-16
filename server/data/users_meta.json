@@ -196,5 +196,21 @@
       "memberSince": "Oct 2026",
       "totalBookings": 0
     }
+  },
+  "test.devotee.6baa9617@gomaa.test": {
+    "customerData": {
+      "city": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+      "preferredLanguage": "Telugu / English",
+      "memberSince": "Oct 2026",
+      "totalBookings": 0
+    }
+  },
+  "384ff6a3-e85a-4354-8ff5-9e87619b00fb": {
+    "customerData": {
+      "city": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+      "preferredLanguage": "Telugu / English",
+      "memberSince": "Oct 2026",
+      "totalBookings": 0
+    }
   }
 }
