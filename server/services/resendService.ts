@@ -136,12 +136,14 @@ export async function sendOtpEmail({
 
     if (!res.ok) {
       console.error("[Resend API Error]:", data)
+      console.log(`[FALLBACK CODE DISPATCH] Devotee OTP for ${toEmail}: ${otp}`)
       return {
         success: false,
         error: data.message || `Resend HTTP ${res.status}`,
       }
     }
 
+    console.log(`[Resend Success] Email OTP sent to ${toEmail} (MessageId: ${data.id})`)
     return {
       success: true,
       id: data.id,
