@@ -1979,15 +1979,17 @@ async function requestPasswordResetOtp(emailOrPhone, channel = "EMAIL", ipAddres
   }
   const rawDigits = emailOrPhone.replace(/\D/g, "").slice(-10);
   await ensureOtpTable();
-  const user = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { email: { equals: norm, mode: "insensitive" } },
-        { phone: { equals: norm, mode: "insensitive" } },
-        ...rawDigits.length === 10 ? [{ phone: { contains: rawDigits } }] : []
-      ],
-      isActive: true
+  const activeUsers = await prisma.user.findMany({
+    where: { isActive: true },
+    select: { id: true, email: true, phone: true, name: true }
+  });
+  const user = activeUsers.find((u) => {
+    if (u.email.toLowerCase() === norm) return true;
+    if (rawDigits.length === 10) {
+      const uDigits = (u.phone || "").replace(/\D/g, "").slice(-10);
+      if (uDigits && uDigits === rawDigits) return true;
     }
+    return false;
   });
   if (!user) {
     if (channel === "PHONE") {
@@ -2077,14 +2079,16 @@ async function verifyOtpAndGenerateResetToken(emailOrPhone, submittedOtp) {
   }
   const rawDigits = emailOrPhone.replace(/\D/g, "").slice(-10);
   await ensureOtpTable();
-  const user = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { email: { equals: norm, mode: "insensitive" } },
-        { phone: { equals: norm, mode: "insensitive" } },
-        ...rawDigits.length === 10 ? [{ phone: { contains: rawDigits } }] : []
-      ]
+  const allUsers = await prisma.user.findMany({
+    select: { id: true, email: true, phone: true, name: true }
+  });
+  const user = allUsers.find((u) => {
+    if (u.email.toLowerCase() === norm) return true;
+    if (rawDigits.length === 10) {
+      const uDigits = (u.phone || "").replace(/\D/g, "").slice(-10);
+      if (uDigits && uDigits === rawDigits) return true;
     }
+    return false;
   });
   const lookupIds = [norm];
   if (rawDigits.length === 10) lookupIds.push(rawDigits);
