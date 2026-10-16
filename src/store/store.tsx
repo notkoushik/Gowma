@@ -290,6 +290,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [animals, setAnimals] = useState<Animal[]>(() => {
     try {
       if (typeof window !== "undefined" && window.localStorage) {
+        if (localStorage.getItem("gomaa_cache_version") !== "v4") {
+          localStorage.removeItem("gomaa_sacred_animals")
+          localStorage.removeItem("gomaa_gosalas")
+          localStorage.removeItem("gomaa_empanelled_vets")
+          localStorage.setItem("gomaa_cache_version", "v4")
+          return []
+        }
         const saved = localStorage.getItem("gomaa_sacred_animals")
         if (saved) return JSON.parse(saved)
       }

@@ -43,8 +43,19 @@ async function seed() {
 
     const allowedEmails = superAdmins.map((s) => s.email.toLowerCase())
 
-    // 1. Purge legacy test records and accounts except Super Admins
+    // 1. Purge all test records, animals, gosalas, bookings, and accounts except Super Admins
     try {
+      console.log(`[Seed] Purging all bookings, slot holds, schedule blocks, animals, and gaushalas...`)
+      try { await prisma.temporarySlotHold.deleteMany() } catch {}
+      try { await prisma.animalScheduleBlock.deleteMany() } catch {}
+      try { await prisma.approvalAuditTrail.deleteMany() } catch {}
+      try { await prisma.booking.deleteMany() } catch {}
+      try { await prisma.settlementBatch.deleteMany() } catch {}
+      try { await prisma.gosalaOffering.deleteMany() } catch {}
+      try { await prisma.gosalaManagerAssignment.deleteMany() } catch {}
+      try { await prisma.animal.deleteMany() } catch {}
+      try { await prisma.gosala.deleteMany() } catch {}
+
       const nonSuperAdminUsers = await prisma.user.findMany({
         where: {
           email: { notIn: allowedEmails },
@@ -54,12 +65,6 @@ async function seed() {
 
       if (nonSuperAdminUsers.length > 0) {
         console.log(`[Seed] Purging ${nonSuperAdminUsers.length} non-superadmin accounts...`)
-        try { await prisma.gosalaManagerAssignment.deleteMany() } catch {}
-        try { await prisma.temporarySlotHold.deleteMany() } catch {}
-        try { await prisma.booking.deleteMany() } catch {}
-        try { await prisma.animalScheduleBlock.deleteMany() } catch {}
-        try { await prisma.approvalAuditTrail.deleteMany() } catch {}
-
         await prisma.user.deleteMany({
           where: {
             id: { in: nonSuperAdminUsers.map((u) => u.id) },

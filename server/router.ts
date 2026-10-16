@@ -479,7 +479,9 @@ export async function handleApiRequest(
       pathname === "/api/auth/accounts" ||
       pathname === "/api/health" ||
       pathname === "/api/hubs" ||
-      pathname === "/api/places/search"
+      pathname === "/api/places/search" ||
+      pathname === "/api/animals" ||
+      pathname === "/api/gosalas"
     ))
   if (!isPublicRoute && !authUser) {
     return { status: 401, body: { ok: false, error: "Authentication required" } }

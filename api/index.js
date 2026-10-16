@@ -427,83 +427,7 @@ import fs2 from "fs";
 import path2 from "path";
 var META_FILE_PATH2 = path2.resolve(process.cwd(), "server/data/animals_meta.json");
 var metaStore2 = {};
-var DEFAULT_SEEDS = {
-  vasanthi: {
-    name: "Vasanthi",
-    tagId: "IN-MH-12-8491",
-    type: "Cow",
-    breed: "Rathi",
-    gosala: "Surya",
-    age: "10 yrs",
-    ageYears: 10,
-    weight: "430 kg",
-    height: "135 cm",
-    category: "Ceremonial \xB7 Puja & Griha Pravesh",
-    price: 3500,
-    status: "Available",
-    assignedHandler: "Suresh Patil (Lead Gosevak)",
-    lactationStatus: "Pregnant / Gestating (Month 5)",
-    temperament: "Extremely Gentle with Children & Elders",
-    sacredMarks: "Devi Tilak on Forehead, Auspicious Swastika",
-    diet: "Fresh Napier Grass + Crushed Maize & Jaggery",
-    healthNotes: "Vitals normal, alert demeanor, clear hooves",
-    photo: "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=600&h=400&fit=crop&auto=format",
-    photos: ["https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=600&h=400&fit=crop&auto=format"],
-    maxDailyTrips: 2,
-    maxRadiusKm: 20,
-    cooldownMinutes: 90
-  },
-  madhavi: {
-    name: "Madhavi",
-    tagId: "IN-MH-12-8491",
-    type: "Cow",
-    breed: "Sahiwal",
-    gosala: "Surya",
-    age: "6 yrs",
-    ageYears: 6,
-    weight: "410 kg",
-    height: "132 cm",
-    category: "Ceremonial \xB7 Puja & Griha Pravesh",
-    price: 3500,
-    status: "Available",
-    assignedHandler: "Suresh Patil (Lead Gosevak)",
-    lactationStatus: "Pregnant / Gestating (Month 5)",
-    temperament: "Alert, Responsive & Accustomed to Crowd Darshan",
-    sacredMarks: "Holy Ghee Markings, Gold Horn Rings",
-    diet: "Sweet Sudan Sorghum & Hybrid Napier + Mineral Cake",
-    healthNotes: "Vitals normal, alert demeanor, clear hooves",
-    photo: "https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?w=600&h=400&fit=crop&auto=format",
-    photos: ["https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?w=600&h=400&fit=crop&auto=format"],
-    maxDailyTrips: 1,
-    maxRadiusKm: 8,
-    cooldownMinutes: 90
-  },
-  "sri mathi sri": {
-    name: "Sri mathi sri",
-    tagId: "IN-MH-12-8491",
-    type: "Cow",
-    breed: "Rathi",
-    gosala: "Surya",
-    age: "6 yrs",
-    ageYears: 6,
-    weight: "410 kg",
-    height: "132 cm",
-    category: "Kamadhenu Gau Seva",
-    price: 3500,
-    status: "Available",
-    assignedHandler: "Rameshwar Shastri (Senior Gosevak)",
-    lactationStatus: "Dry / Resting (Non Lactating)",
-    temperament: "Calm & Meditative during Vedic Chanting & Havan",
-    sacredMarks: "Natural Shankha & Chakra marks on flank",
-    diet: "Finely chopped tender green fodder + Soaked boiled barley",
-    healthNotes: "Vitals normal, alert demeanor, clear hooves",
-    photo: "https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?w=600&h=400&fit=crop&auto=format",
-    photos: ["https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?w=600&h=400&fit=crop&auto=format"],
-    maxDailyTrips: 2,
-    maxRadiusKm: 20,
-    cooldownMinutes: 90
-  }
-};
+var DEFAULT_SEEDS = {};
 function loadMetaStore2() {
   try {
     if (fs2.existsSync(META_FILE_PATH2)) {
@@ -3172,7 +3096,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   const { pathname, query } = parseUrl(rawUrl);
   if (!pathname.startsWith("/api/")) return null;
   const authUser = getAuthUserFromHeader(headers?.authorization || headers?.Authorization);
-  const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/auth/accounts" || pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/places/search");
+  const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/auth/accounts" || pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/places/search" || pathname === "/api/animals" || pathname === "/api/gosalas");
   if (!isPublicRoute && !authUser) {
     return { status: 401, body: { ok: false, error: "Authentication required" } };
   }
