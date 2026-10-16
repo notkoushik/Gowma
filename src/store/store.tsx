@@ -959,6 +959,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const merged = res.gosalas.map((serverG: any) => {
             const localG = localMap.get(serverG.id) || localMap.get(serverG.name?.trim().toLowerCase())
             return {
+              ...(localG || {}),
+              ...serverG,
               id: serverG.id,
               name: serverG.name,
               region: serverG.region || localG?.region || "Operational Sector",
@@ -983,6 +985,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 "Sacred Vedic Puja & Havan Courtyard",
               ],
               notes: serverG.notes || localG?.notes || "",
+              adminId: serverG.adminId || localG?.adminId || "",
+              adminEmail: serverG.adminEmail || serverG.governingAdminEmail || localG?.adminEmail || "",
+              adminName: serverG.adminName || serverG.governingAdminName || localG?.adminName || "",
+              governingAdminRole: serverG.governingAdminRole || localG?.governingAdminRole || "admin",
+              governingAdminName: serverG.governingAdminName || serverG.adminName || localG?.governingAdminName || "",
+              governingAdminEmail: serverG.governingAdminEmail || serverG.adminEmail || localG?.governingAdminEmail || "",
+              assignedManagers: serverG.assignedManagers || localG?.assignedManagers || [],
             } as Gosala
           })
           try {
@@ -1782,10 +1791,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
               })
               .catch(() => {})
           }
-          return res.user
+          return res.user || res
         }
+        notify(res?.error || "Failed to create user", "err")
+        return null
       } catch (err: any) {
         notify(err.message || "Failed to create user", "err")
+        return null
       }
     },
     [notify, refreshUsers],

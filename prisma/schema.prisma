@@ -112,6 +112,11 @@ model Gosala {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // Governing Operations Admin
+  adminId      String?
+  adminEmail   String?
+  adminName    String?
+
   // Custom Pricing & Offerings
   baseCowPrice     Int? @default(3500)
   baseBullPrice    Int? @default(4000)

@@ -1250,9 +1250,10 @@ async function authenticateOrResolveUser(emailOrPhone, roleHint, password) {
       const allGosalas = await prisma.gosala.findMany({ where: { isActive: true } });
       allGosalas.forEach((g) => {
         const meta = getGosalaMeta(g.id, g.name);
-        const govEmail = (meta.governingAdminEmail || "").toLowerCase();
-        const govName = (meta.governingAdminName || meta.adminName || "").toLowerCase();
-        if (govEmail && govEmail === adminEmail || govName && govName.includes(adminName)) {
+        const govEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase();
+        const govName = (g.adminName || meta.governingAdminName || meta.adminName || "").toLowerCase();
+        const isDirectMatch = g.adminId && g.adminId === user.id || govEmail && govEmail === adminEmail || govName && govName.includes(adminName);
+        if (isDirectMatch) {
           if (!assignedGosalas.some((x) => x.id === g.id)) {
             assignedGosalas.push({ id: g.id, name: g.name });
           }
@@ -1323,27 +1324,81 @@ async function authenticateOrResolveUser(emailOrPhone, roleHint, password) {
 async function registerUser(payload) {
   const emailNorm = payload.email.trim().toLowerCase();
   const rawDigits = (payload.phone || "").replace(/\D/g, "").slice(-10);
-  const phoneFormatted = rawDigits.length === 10 ? `+91 ${rawDigits}` : payload.phone.trim();
+  const hasValidPhone = rawDigits.length === 10;
+  const phoneFormatted = hasValidPhone ? `+91 ${rawDigits}` : `+91 98${Math.floor(1e7 + Math.random() * 9e7)}`;
   if (!payload.name || !payload.email || !payload.role) {
     throw new Error("Full name, email address, and role are required for registration");
   }
+  const phoneQuery = hasValidPhone ? [
+    { phone: { equals: `+91 ${rawDigits}` } },
+    { phone: { equals: `+91${rawDigits}` } },
+    { phone: { contains: rawDigits } }
+  ] : [];
   const existing = await prisma.user.findFirst({
     where: {
       OR: [
         { email: { equals: emailNorm, mode: "insensitive" } },
-        { phone: { equals: payload.phone.trim(), mode: "insensitive" } },
-        ...rawDigits.length === 10 ? [
-          { phone: { contains: rawDigits } },
-          { phone: { equals: `+91 ${rawDigits}` } },
-          { phone: { equals: `+91${rawDigits}` } }
-        ] : []
+        ...phoneQuery
       ]
+    },
+    include: {
+      managerAssignments: {
+        include: { gosala: true }
+      }
     }
   });
   if (existing) {
+    if (payload.role === "manager") {
+      let targetGosalaId = payload.gosalaId;
+      let gRec = null;
+      if (targetGosalaId) {
+        gRec = await prisma.gosala.findUnique({ where: { id: targetGosalaId } });
+      } else if (payload.gosalaName) {
+        gRec = await prisma.gosala.findFirst({
+          where: { name: { contains: payload.gosalaName, mode: "insensitive" } }
+        });
+        if (gRec) targetGosalaId = gRec.id;
+      }
+      if (targetGosalaId && gRec) {
+        await prisma.gosalaManagerAssignment.upsert({
+          where: {
+            userId_gosalaId: {
+              userId: existing.id,
+              gosalaId: targetGosalaId
+            }
+          },
+          create: {
+            userId: existing.id,
+            gosalaId: targetGosalaId,
+            region: gRec.region || "Cyberabad / Gachibowli Zone",
+            status: "Active"
+          },
+          update: {
+            status: "Active"
+          }
+        });
+      }
+      if (existing.role === "CUSTOMER") {
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: { role: "GOSALA_MANAGER" }
+        });
+      }
+      const updatedUser = await prisma.user.findUnique({
+        where: { id: existing.id },
+        include: {
+          managerAssignments: {
+            include: { gosala: true }
+          }
+        }
+      });
+      if (updatedUser) {
+        return buildUserSession(updatedUser);
+      }
+    }
     const isEmailMatch = existing.email.toLowerCase() === emailNorm;
     const exDigits = (existing.phone || "").replace(/\D/g, "").slice(-10);
-    const isPhoneMatch = rawDigits.length === 10 && exDigits === rawDigits;
+    const isPhoneMatch = hasValidPhone && exDigits === rawDigits;
     if (isEmailMatch && isPhoneMatch) {
       throw new Error(`An account with email "${emailNorm}" is already registered. Please sign in or use "Forgot Password".`);
     } else if (isEmailMatch) {
@@ -1363,7 +1418,7 @@ async function registerUser(payload) {
     data: {
       name: payload.name.trim(),
       email: emailNorm,
-      phone: phoneFormatted || "+91 98000 00000",
+      phone: phoneFormatted,
       role: dbRole,
       password: passwordHash,
       isActive: true
@@ -5290,8 +5345,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           email: m.user.email
         }));
         const firstAssigned = assignedMgrs[0];
-        const govRole = meta.governingAdminRole || "admin";
-        const govName = meta.governingAdminName || (govRole === "super_admin" ? "Koushik" : "Operations Admin");
+        const govRole = meta.governingAdminRole || (g.adminId?.startsWith("USER-SA") ? "super_admin" : "admin");
+        const govName = g.adminName || meta.governingAdminName || (govRole === "super_admin" ? "Koushik" : "Operations Admin");
+        const govEmail = g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "";
         return {
           ...g,
           ...meta,
@@ -5311,8 +5367,10 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           caretaker: meta.caretaker || firstAssigned?.name || "Caretaker In-Charge",
           governingAdminRole: govRole,
           governingAdminName: govName,
-          adminId: meta.adminId || (govRole === "super_admin" ? "USER-SA-001" : "USER-ADM-101"),
-          adminName: meta.adminName || govName
+          governingAdminEmail: govEmail,
+          adminId: g.adminId || meta.adminId || (govRole === "super_admin" ? "USER-SA-001" : ""),
+          adminName: g.adminName || meta.adminName || govName,
+          adminEmail: govEmail
         };
       });
       let scopedGosalas = formatted;
@@ -5331,12 +5389,15 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         const allowedIds = new Set(authUser.gosalaIds || []);
         const allowedNames = new Set((authUser.gosalaNames || []).map((name) => name.trim().toLowerCase()));
         const userEmail = (authUser.email || "").trim().toLowerCase();
+        const userName = (authUser.name || "").trim().toLowerCase();
         scopedGosalas = formatted.filter((g) => {
           const idMatch = allowedIds.has(g.id);
           const nameMatch = allowedNames.has(String(g.name).trim().toLowerCase());
-          const govEmailMatch = Boolean(userEmail && (g.governingAdminEmail || "").trim().toLowerCase() === userEmail);
+          const gGovEmail = String(g.governingAdminEmail || g.adminEmail || "").trim().toLowerCase();
+          const govEmailMatch = Boolean(userEmail && gGovEmail === userEmail);
           const adminIdMatch = Boolean(authUser.userId && g.adminId === authUser.userId);
-          return idMatch || nameMatch || govEmailMatch || adminIdMatch;
+          const adminNameMatch = Boolean(userName && String(g.governingAdminName || g.adminName || "").toLowerCase().includes(userName));
+          return idMatch || nameMatch || govEmailMatch || adminIdMatch || adminNameMatch;
         });
       } else if (authUser?.role === "super_admin") {
         scopedGosalas = formatted;
@@ -5369,6 +5430,11 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       }
       const finalLat = latitude !== void 0 ? Number(latitude) : lat !== void 0 ? Number(lat) : null;
       const finalLng = longitude !== void 0 ? Number(longitude) : lng !== void 0 ? Number(lng) : null;
+      const isActing = Boolean(body.actAsManagerMyself) || Boolean(restMeta.isActingManager) || !restMeta.managerId && !restMeta.managerName;
+      const finalGovRole = restMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin");
+      const callerAdminName = restMeta.governingAdminName || authUser?.name || "Operations Admin";
+      const callerAdminEmail = restMeta.governingAdminEmail || authUser?.email || "admin@gomaa.in";
+      const callerAdminId = restMeta.adminId || authUser?.userId || "USER-ADM-101";
       const created = await prisma.gosala.upsert({
         where: { name: name.trim() },
         create: {
@@ -5379,7 +5445,10 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           contactEmail: email || "trust@gomaa.in",
           latitude: finalLat,
           longitude: finalLng,
-          isActive: true
+          isActive: true,
+          adminId: callerAdminId,
+          adminEmail: callerAdminEmail,
+          adminName: callerAdminName
         },
         update: {
           region: region.trim(),
@@ -5388,14 +5457,12 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           contactEmail: email || void 0,
           latitude: finalLat,
           longitude: finalLng,
-          isActive: true
+          isActive: true,
+          adminId: callerAdminId,
+          adminEmail: callerAdminEmail,
+          adminName: callerAdminName
         }
       });
-      const isActing = Boolean(body.actAsManagerMyself) || Boolean(restMeta.isActingManager) || !restMeta.managerId && !restMeta.managerName;
-      const finalGovRole = restMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin");
-      const callerAdminName = restMeta.governingAdminName || authUser?.name || "Operations Admin";
-      const callerAdminEmail = restMeta.governingAdminEmail || authUser?.email || "admin@gomaa.in";
-      const callerAdminId = restMeta.adminId || authUser?.userId || "USER-ADM-101";
       let resolvedMgrUser = null;
       if (!isActing && (restMeta.managerId || restMeta.managerName || restMeta.caretaker)) {
         try {
@@ -5495,6 +5562,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       } = body;
       const finalLat = latitude !== void 0 ? Number(latitude) : lat !== void 0 ? Number(lat) : void 0;
       const finalLng = longitude !== void 0 ? Number(longitude) : lng !== void 0 ? Number(lng) : void 0;
+      const callerAdminName = restMeta.governingAdminName || restMeta.adminName || body.governingAdminName || body.adminName;
+      const callerAdminEmail = restMeta.governingAdminEmail || restMeta.adminEmail || body.governingAdminEmail || body.adminEmail;
+      const callerAdminId = restMeta.adminId || body.adminId;
       const updated = await prisma.gosala.update({
         where: { id },
         data: {
@@ -5504,21 +5574,27 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           contactPhone: contactPhone || void 0,
           contactEmail: email || void 0,
           latitude: finalLat,
-          longitude: finalLng
+          longitude: finalLng,
+          ...callerAdminId ? { adminId: callerAdminId } : {},
+          ...callerAdminEmail ? { adminEmail: callerAdminEmail } : {},
+          ...callerAdminName ? { adminName: callerAdminName } : {}
         }
       });
       const isActing = body.actAsManagerMyself !== void 0 ? Boolean(body.actAsManagerMyself) : restMeta.isActingManager !== void 0 ? Boolean(restMeta.isActingManager) : void 0;
-      const callerAdminName = restMeta.governingAdminName || authUser?.name || "Operations Admin";
-      const callerAdminEmail = restMeta.governingAdminEmail || authUser?.email || "admin@gomaa.in";
-      const callerAdminRole = restMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin");
-      const callerAdminId = restMeta.adminId || authUser?.userId || "USER-ADM-101";
+      const effectiveAdminName = callerAdminName || authUser?.name || "Operations Admin";
+      const effectiveAdminEmail = callerAdminEmail || authUser?.email || "admin@gomaa.in";
+      const effectiveAdminRole = restMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin");
+      const effectiveAdminId = callerAdminId || authUser?.userId || "USER-ADM-101";
       const metaPatch = {
         ...restMeta,
         ...finalLat !== void 0 ? { lat: finalLat } : {},
         ...finalLng !== void 0 ? { lng: finalLng } : {},
-        governingAdminName: callerAdminName,
-        governingAdminEmail: callerAdminEmail,
-        governingAdminRole: callerAdminRole
+        governingAdminName: effectiveAdminName,
+        governingAdminEmail: effectiveAdminEmail,
+        governingAdminRole: effectiveAdminRole,
+        adminName: effectiveAdminName,
+        adminEmail: effectiveAdminEmail,
+        adminId: effectiveAdminId
       };
       if (isActing === true) {
         metaPatch.isActingManager = true;
@@ -5552,6 +5628,14 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
             metaPatch.managerName = mgrUser.name;
             if (!metaPatch.caretaker || metaPatch.caretaker.includes("Acting")) {
               metaPatch.caretaker = mgrUser.name;
+            }
+            if (body.exclusiveManager) {
+              await prisma.gosalaManagerAssignment.deleteMany({
+                where: {
+                  userId: mgrUser.id,
+                  NOT: { gosalaId: updated.id }
+                }
+              });
             }
             await prisma.gosalaManagerAssignment.upsert({
               where: {

@@ -89,6 +89,96 @@ async function seed() {
         console.log("[Seed] devpulseorg@gmail.com synchronized with phone +91 7780740223 and password Koushik.git")
       }
     } catch {}
+
+    // 4. Ensure Operations Admin Admin_1 (alt.yq-fs88dj2@yopmail.com) exists with password Koushik.git
+    const admin1Email = "alt.yq-fs88dj2@yopmail.com"
+    let admin1User = await prisma.user.findFirst({
+      where: { email: { equals: admin1Email, mode: "insensitive" } },
+    })
+
+    if (!admin1User) {
+      admin1User = await prisma.user.create({
+        data: {
+          name: "Admin_1",
+          email: admin1Email,
+          phone: "+91 98222 33344",
+          role: "OPERATIONS_ADMIN",
+          password: hashPassword("Koushik.git"),
+          isActive: true,
+        },
+      })
+      console.log(`[Seed] Created Operations Admin: ${admin1Email}`)
+    } else {
+      admin1User = await prisma.user.update({
+        where: { id: admin1User.id },
+        data: {
+          name: "Admin_1",
+          role: "OPERATIONS_ADMIN",
+          password: hashPassword("Koushik.git"),
+          isActive: true,
+        },
+      })
+      console.log(`[Seed] Synchronized Operations Admin: ${admin1Email}`)
+    }
+
+    // 5. Ensure Gaushalas (Gaushala_01, Gaushala_02, Gaushala_03) exist and are governed by Admin_1
+    const defaultGosalas = [
+      {
+        name: "Gaushala_01",
+        region: "Hyderabad Central (Banjara Hills / Jubilee Hills)",
+        address: "Plot 42, Road No 12, Banjara Hills, Hyderabad, Telangana 500034",
+        contactPhone: "+91 98230 44910",
+        contactEmail: "gaushala1@gomaa.in",
+        latitude: 17.4156,
+        longitude: 78.4357,
+      },
+      {
+        name: "Gaushala_02",
+        region: "Cyberabad / Gachibowli Zone",
+        address: "Survey 88, Financial District, Gachibowli, Hyderabad, Telangana 500032",
+        contactPhone: "+91 98230 44911",
+        contactEmail: "gaushala2@gomaa.in",
+        latitude: 17.4401,
+        longitude: 78.3489,
+      },
+      {
+        name: "Gaushala_03",
+        region: "Secunderabad & Cantonment",
+        address: "Temple Road, Trimulgherry, Secunderabad, Telangana 500015",
+        contactPhone: "+91 98230 44912",
+        contactEmail: "gaushala3@gomaa.in",
+        latitude: 17.4721,
+        longitude: 78.5028,
+      },
+    ]
+
+    for (const gDef of defaultGosalas) {
+      const existingG = await prisma.gosala.findFirst({
+        where: { name: { equals: gDef.name, mode: "insensitive" } },
+      })
+      if (!existingG) {
+        await prisma.gosala.create({
+          data: {
+            ...gDef,
+            isActive: true,
+            adminId: admin1User.id,
+            adminEmail: admin1User.email,
+            adminName: admin1User.name,
+          },
+        })
+        console.log(`[Seed] Created sanctuary ${gDef.name} governed by ${admin1User.name}`)
+      } else {
+        await prisma.gosala.update({
+          where: { id: existingG.id },
+          data: {
+            adminId: admin1User.id,
+            adminEmail: admin1User.email,
+            adminName: admin1User.name,
+          },
+        })
+        console.log(`[Seed] Re-assigned sanctuary ${existingG.name} to ${admin1User.name}`)
+      }
+    }
   } catch (err) {
     console.warn("[Seed] Notice:", err.message)
   } finally {

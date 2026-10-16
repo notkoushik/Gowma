@@ -185,6 +185,8 @@ export default function GosalaManagers() {
   // Reassign Modal
   const [reassigningGosala, setReassigningGosala] = useState<Gosala | null>(null)
   const [selectedManagerId, setSelectedManagerId] = useState<string>("")
+  const [reassignMode, setReassignMode] = useState<"exclusive" | "multicustody">("exclusive")
+  const [reassignAdminEmail, setReassignAdminEmail] = useState<string>("")
 
   // Form state
   const [formName, setFormName] = useState("")
@@ -395,6 +397,12 @@ export default function GosalaManagers() {
 
   const handleOpenReassign = (g: Gosala) => {
     setReassigningGosala(g)
+    setReassignMode("exclusive")
+    setReassignAdminEmail(
+      (g as any).adminEmail ||
+      (g as any).governingAdminEmail ||
+      ""
+    )
     // Find current manager ID if any
     const cur = managers.find((m) => {
       const gList = getManagerAssignedGosalas(m)
@@ -442,11 +450,45 @@ export default function GosalaManagers() {
 
   const handleSaveReassignment = () => {
     if (!reassigningGosala) return
+    const callerName = currentRole === "super_admin" ? activeSuperAdminName : activeAdminName
+
+    let nextAdminPatch: any = {}
+    if (currentRole === "super_admin") {
+      if (!reassignAdminEmail || reassignAdminEmail === "super_admin" || reassignAdminEmail === authUser?.email) {
+        nextAdminPatch = {
+          governingAdminRole: "super_admin",
+          governingAdminName: activeSuperAdminName,
+          governingAdminEmail: authUser?.email || "superadmin@gomaa.in",
+          adminId: "USER-SA-001",
+          adminName: activeSuperAdminName,
+          adminEmail: authUser?.email || "superadmin@gomaa.in",
+        }
+      } else {
+        const selectedOps = registeredOperationsAdmins.find(
+          (a) =>
+            a.email.toLowerCase() === reassignAdminEmail.toLowerCase() ||
+            a.id === reassignAdminEmail ||
+            a.name.toLowerCase() === reassignAdminEmail.toLowerCase(),
+        )
+        if (selectedOps) {
+          nextAdminPatch = {
+            governingAdminRole: "admin",
+            governingAdminName: selectedOps.name,
+            governingAdminEmail: selectedOps.email,
+            adminId: selectedOps.id,
+            adminName: selectedOps.name,
+            adminEmail: selectedOps.email,
+          }
+        }
+      }
+    }
 
     if (selectedManagerId === "ACTING_ADMIN") {
       handleTakeOverAsActing(reassigningGosala)
+      if (Object.keys(nextAdminPatch).length > 0) {
+        updateGosala(reassigningGosala.id, nextAdminPatch as any)
+      }
     } else if (selectedManagerId === "UNASSIGNED") {
-      const callerName = currentRole === "super_admin" ? activeSuperAdminName : activeAdminName
       const assignedMgrs = managers.filter((m) => {
         const gList = getManagerAssignedGosalas(m)
         return (
@@ -471,18 +513,38 @@ export default function GosalaManagers() {
         caretaker: `${callerName} (Admin Custodian)`,
         isActingManager: true,
         actAsManagerMyself: true,
+        ...nextAdminPatch,
       } as any)
       notify(
-        `${reassigningGosala.name} is now unassigned. Operations Admin will act as Custodian.`,
+        `${reassigningGosala.name} is now unassigned. Admin will act as Custodian.`,
         "warn",
       )
     } else {
       const chosen = managers.find((m) => m.id === selectedManagerId)
       if (chosen) {
         const currentList = getManagerAssignedGosalas(chosen)
-        const nextList = Array.from(
-          new Set([...currentList, reassigningGosala.name]),
-        )
+        const isExclusive = reassignMode === "exclusive"
+        const nextList = isExclusive
+          ? [reassigningGosala.name]
+          : Array.from(new Set([...currentList, reassigningGosala.name]))
+
+        // If exclusive transfer, relieve this manager from their other gaushalas
+        if (isExclusive && currentList.length > 0) {
+          currentList.forEach((prevGName) => {
+            const prevG = gosalas.find(
+              (g) => g.name.toLowerCase() === prevGName.toLowerCase(),
+            )
+            if (prevG && prevG.id !== reassigningGosala.id) {
+              updateGosala(prevG.id, {
+                managerId: "",
+                managerName: "None (Admin Custody)",
+                caretaker: `${callerName} (Admin Custodian)`,
+                isActingManager: true,
+                actAsManagerMyself: true,
+              } as any)
+            }
+          })
+        }
 
         updateManager(chosen.id, {
           gosalas: nextList,
@@ -495,11 +557,15 @@ export default function GosalaManagers() {
           caretaker: chosen.name,
           isActingManager: false,
           actAsManagerMyself: false,
+          exclusiveManager: isExclusive,
+          ...nextAdminPatch,
         } as any)
         notify(
-          `Assigned ${chosen.name} as Manager for ${reassigningGosala.name}. (${nextList.length} Gaushala${nextList.length > 1 ? "s" : ""} managed by ${chosen.name})`,
+          `Assigned ${chosen.name} as Manager for ${reassigningGosala.name}. (${nextList.length} Gaushala${nextList.length > 1 ? "s" : ""} in portfolio)`,
           "ok",
         )
+      } else if (Object.keys(nextAdminPatch).length > 0) {
+        updateGosala(reassigningGosala.id, nextAdminPatch as any)
       }
     }
     setReassigningGosala(null)
@@ -514,11 +580,40 @@ export default function GosalaManagers() {
       const adminName = (authUser?.name || activeAdminName || "").toLowerCase()
 
       return gosalas.filter((g: any) => {
-        const emailMatch = g.governingAdminEmail && g.governingAdminEmail.toLowerCase() === adminEmail
-        const nameMatch = g.governingAdminName && g.governingAdminName.toLowerCase().includes(adminName)
-        const admNameMatch = g.adminName && g.adminName.toLowerCase().includes(adminName)
-        const listMatch = authUser?.gosalaNames && authUser.gosalaNames.some((gn: string) => g.name.toLowerCase() === gn.toLowerCase())
-        return emailMatch || nameMatch || admNameMatch || listMatch || (!g.governingAdminEmail && g.governingAdminRole !== "super_admin")
+        const emailMatch = Boolean(
+          adminEmail &&
+            ((g.adminEmail && g.adminEmail.toLowerCase() === adminEmail) ||
+              (g.governingAdminEmail &&
+                g.governingAdminEmail.toLowerCase() === adminEmail)),
+        )
+        const nameMatch = Boolean(
+          adminName &&
+            ((g.adminName && g.adminName.toLowerCase().includes(adminName)) ||
+              (g.governingAdminName &&
+                g.governingAdminName.toLowerCase().includes(adminName))),
+        )
+        const admIdMatch = Boolean(
+          authUser?.userId && g.adminId === authUser.userId,
+        )
+        const listMatch = Boolean(
+          authUser?.gosalaNames &&
+            authUser.gosalaNames.some(
+              (gn: string) => g.name.toLowerCase() === gn.toLowerCase(),
+            ),
+        )
+        const idMatch = Boolean(
+          authUser?.gosalaIds && authUser.gosalaIds.includes(g.id),
+        )
+        return (
+          emailMatch ||
+          nameMatch ||
+          admIdMatch ||
+          listMatch ||
+          idMatch ||
+          (!g.governingAdminEmail &&
+            !g.adminEmail &&
+            g.governingAdminRole !== "super_admin")
+        )
       })
     }
     if (currentRole === "super_admin") {
@@ -527,7 +622,11 @@ export default function GosalaManagers() {
       }
       return gosalas.filter((g: any) => {
         const govName = g.governingAdminName || g.adminName || ""
-        return govName.toLowerCase() === adminPortfolioFilter.toLowerCase()
+        const govEmail = g.governingAdminEmail || g.adminEmail || ""
+        return (
+          govName.toLowerCase() === adminPortfolioFilter.toLowerCase() ||
+          govEmail.toLowerCase() === adminPortfolioFilter.toLowerCase()
+        )
       })
     }
     return gosalas
@@ -2062,7 +2161,7 @@ export default function GosalaManagers() {
                 <select
                   value={selectedManagerId}
                   onChange={(e) => setSelectedManagerId(e.target.value)}
-                  className="w-full bg-paper border border-line rounded-md px-3.5 py-2.5 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
+                  className="w-full bg-paper border border-line rounded-md px-3.5 py-2.5 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition cursor-pointer"
                 >
                   <option value="ACTING_ADMIN">
                     🛡️ Act as Manager / Custodian Myself ({currentRole === "super_admin" ? activeSuperAdminName : activeAdminName})
@@ -2084,10 +2183,90 @@ export default function GosalaManagers() {
                     )
                   })}
                 </select>
-                <p className="text-[11.5px] text-ink-faint mt-2 leading-relaxed">
-                  Assigning a manager to this facility adds it to their management portfolio without removing their other Gaushalas.
-                </p>
               </div>
+
+              {/* Multi-Custody Conflict Warning & Mode Selection */}
+              {(() => {
+                const chosenMgr = managers.find((m) => m.id === selectedManagerId)
+                if (!chosenMgr) return null
+                const otherGosalas = getManagerAssignedGosalas(chosenMgr).filter(
+                  (gn) => gn.toLowerCase() !== reassigningGosala.name.toLowerCase()
+                )
+                if (otherGosalas.length === 0) return null
+
+                return (
+                  <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-md text-[12px] space-y-2.5 animate-fade-in">
+                    <div className="font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1.5 text-[12.5px]">
+                      <span>⚠️ Multi-Facility Custody Notice</span>
+                    </div>
+                    <p className="text-ink text-[12px] leading-relaxed">
+                      <strong>{chosenMgr.name}</strong> is currently assigned to <strong>{otherGosalas.join(", ")}</strong>. Choose the assignment protocol:
+                    </p>
+                    <div className="space-y-2 pt-1 border-t border-amber-500/20">
+                      <label className="flex items-start gap-2.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="custodyProtocol"
+                          checked={reassignMode === "exclusive"}
+                          onChange={() => setReassignMode("exclusive")}
+                          className="mt-0.5 text-saffron focus:ring-saffron"
+                        />
+                        <div>
+                          <div className="font-semibold text-ink text-[12px]">
+                            Exclusive Transfer (Recommended)
+                          </div>
+                          <div className="text-[11px] text-ink-muted">
+                            Assign {chosenMgr.name} solely to {reassigningGosala.name}. They will be relieved from {otherGosalas.join(", ")}.
+                          </div>
+                        </div>
+                      </label>
+                      <label className="flex items-start gap-2.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="custodyProtocol"
+                          checked={reassignMode === "multicustody"}
+                          onChange={() => setReassignMode("multicustody")}
+                          className="mt-0.5 text-saffron focus:ring-saffron"
+                        />
+                        <div>
+                          <div className="font-semibold text-ink text-[12px]">
+                            Joint Multi-Custody Portfolio
+                          </div>
+                          <div className="text-[11px] text-ink-muted">
+                            Maintain existing assignments and authorize joint management across {otherGosalas.length + 1} facilities simultaneously.
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {/* Governing Operations Admin Reassignment (Super Admin only) */}
+              {currentRole === "super_admin" && (
+                <div>
+                  <label className="block text-[12.5px] font-semibold text-ink mb-1.5">
+                    Governing Operations Admin Portfolio
+                  </label>
+                  <select
+                    value={reassignAdminEmail}
+                    onChange={(e) => setReassignAdminEmail(e.target.value)}
+                    className="w-full bg-paper border border-line rounded-md px-3.5 py-2.5 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition cursor-pointer"
+                  >
+                    <option value="">
+                      👑 Direct Super Admin Oversight ({activeSuperAdminName}) - Platform Managed
+                    </option>
+                    {registeredOperationsAdmins.map((adm) => (
+                      <option key={adm.id} value={adm.email}>
+                        👤 {adm.name} ({adm.email})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-ink-faint mt-1">
+                    Assign which Operations Admin oversees this Gaushala's bookings and daily operations.
+                  </p>
+                </div>
+              )}
 
               <div className="pt-4 border-t border-line flex items-center justify-end gap-2.5">
                 <button
@@ -3133,7 +3312,10 @@ export default function GosalaManagers() {
                 } else if (newUserRole === "manager") {
                   payload.gosalaName = newUserGosala
                 }
-                await addUser(payload)
+                const createdUser = await addUser(payload)
+                if (!createdUser) {
+                  return
+                }
                 setShowAddUserModal(false)
 
                 const roleLabelMap: Record<string, string> = {
@@ -3149,7 +3331,7 @@ export default function GosalaManagers() {
                   role: newUserRole,
                   roleLabel: roleLabelMap[newUserRole] || newUserRole,
                   email: newUserEmail.trim(),
-                  phone: newUserPhone.trim(),
+                  phone: createdUser.phone || newUserPhone.trim(),
                   password: passwordToSave,
                   assignedScope:
                     newUserRole === "manager"

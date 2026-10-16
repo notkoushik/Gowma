@@ -146,9 +146,13 @@ export async function authenticateOrResolveUser(
       const allGosalas = await prisma.gosala.findMany({ where: { isActive: true } })
       allGosalas.forEach((g: any) => {
         const meta = getGosalaMeta(g.id, g.name)
-        const govEmail = (meta.governingAdminEmail || "").toLowerCase()
-        const govName = (meta.governingAdminName || meta.adminName || "").toLowerCase()
-        if ((govEmail && govEmail === adminEmail) || (govName && govName.includes(adminName))) {
+        const govEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase()
+        const govName = (g.adminName || meta.governingAdminName || meta.adminName || "").toLowerCase()
+        const isDirectMatch =
+          (g.adminId && g.adminId === user.id) ||
+          (govEmail && govEmail === adminEmail) ||
+          (govName && govName.includes(adminName))
+        if (isDirectMatch) {
           if (!assignedGosalas.some((x: any) => x.id === g.id)) {
             assignedGosalas.push({ id: g.id, name: g.name })
           }
@@ -236,33 +240,94 @@ export async function authenticateOrResolveUser(
 export async function registerUser(payload: RegisterUserPayload): Promise<UserSessionData> {
   const emailNorm = payload.email.trim().toLowerCase()
   const rawDigits = (payload.phone || "").replace(/\D/g, "").slice(-10)
-  const phoneFormatted = rawDigits.length === 10 ? `+91 ${rawDigits}` : payload.phone.trim()
+  const hasValidPhone = rawDigits.length === 10
+  // Generate random 10-digit number starting with 98 if no valid phone provided to avoid duplicate key or fallback collision
+  const phoneFormatted = hasValidPhone ? `+91 ${rawDigits}` : `+91 98${Math.floor(10000000 + Math.random() * 90000000)}`
 
   if (!payload.name || !payload.email || !payload.role) {
     throw new Error("Full name, email address, and role are required for registration")
   }
 
   // Check if user already exists
+  const phoneQuery = hasValidPhone
+    ? [
+        { phone: { equals: `+91 ${rawDigits}` } },
+        { phone: { equals: `+91${rawDigits}` } },
+        { phone: { contains: rawDigits } },
+      ]
+    : []
+
   const existing = await prisma.user.findFirst({
     where: {
       OR: [
         { email: { equals: emailNorm, mode: "insensitive" } },
-        { phone: { equals: payload.phone.trim(), mode: "insensitive" } },
-        ...(rawDigits.length === 10
-          ? [
-              { phone: { contains: rawDigits } },
-              { phone: { equals: `+91 ${rawDigits}` } },
-              { phone: { equals: `+91${rawDigits}` } },
-            ]
-          : []),
+        ...phoneQuery,
       ],
+    },
+    include: {
+      managerAssignments: {
+        include: { gosala: true },
+      },
     },
   })
 
   if (existing) {
+    // If appointing an existing user as manager, link them gracefully without crashing
+    if (payload.role === "manager") {
+      let targetGosalaId = payload.gosalaId
+      let gRec: any = null
+      if (targetGosalaId) {
+        gRec = await prisma.gosala.findUnique({ where: { id: targetGosalaId } })
+      } else if (payload.gosalaName) {
+        gRec = await prisma.gosala.findFirst({
+          where: { name: { contains: payload.gosalaName, mode: "insensitive" } },
+        })
+        if (gRec) targetGosalaId = gRec.id
+      }
+
+      if (targetGosalaId && gRec) {
+        await prisma.gosalaManagerAssignment.upsert({
+          where: {
+            userId_gosalaId: {
+              userId: existing.id,
+              gosalaId: targetGosalaId,
+            },
+          },
+          create: {
+            userId: existing.id,
+            gosalaId: targetGosalaId,
+            region: gRec.region || "Cyberabad / Gachibowli Zone",
+            status: "Active",
+          },
+          update: {
+            status: "Active",
+          },
+        })
+      }
+
+      if (existing.role === "CUSTOMER") {
+        await prisma.user.update({
+          where: { id: existing.id },
+          data: { role: "GOSALA_MANAGER" },
+        })
+      }
+
+      const updatedUser = await prisma.user.findUnique({
+        where: { id: existing.id },
+        include: {
+          managerAssignments: {
+            include: { gosala: true },
+          },
+        },
+      })
+      if (updatedUser) {
+        return buildUserSession(updatedUser)
+      }
+    }
+
     const isEmailMatch = existing.email.toLowerCase() === emailNorm
     const exDigits = (existing.phone || "").replace(/\D/g, "").slice(-10)
-    const isPhoneMatch = rawDigits.length === 10 && exDigits === rawDigits
+    const isPhoneMatch = hasValidPhone && exDigits === rawDigits
 
     if (isEmailMatch && isPhoneMatch) {
       throw new Error(`An account with email "${emailNorm}" is already registered. Please sign in or use "Forgot Password".`)
@@ -286,7 +351,7 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
     data: {
       name: payload.name.trim(),
       email: emailNorm,
-      phone: phoneFormatted || "+91 98000 00000",
+      phone: phoneFormatted,
       role: dbRole as any,
       password: passwordHash,
       isActive: true,

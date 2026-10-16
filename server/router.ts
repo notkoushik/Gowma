@@ -3049,8 +3049,9 @@ export async function handleApiRequest(
         }))
 
         const firstAssigned = assignedMgrs[0]
-        const govRole = meta.governingAdminRole || "admin"
-        const govName = meta.governingAdminName || (govRole === "super_admin" ? "Koushik" : "Operations Admin")
+        const govRole = meta.governingAdminRole || (g.adminId?.startsWith("USER-SA") ? "super_admin" : "admin")
+        const govName = g.adminName || meta.governingAdminName || (govRole === "super_admin" ? "Koushik" : "Operations Admin")
+        const govEmail = g.adminEmail || meta.governingAdminEmail || meta.adminEmail || ""
 
         return {
           ...g,
@@ -3072,8 +3073,10 @@ export async function handleApiRequest(
           caretaker: meta.caretaker || firstAssigned?.name || "Caretaker In-Charge",
           governingAdminRole: govRole,
           governingAdminName: govName,
-          adminId: meta.adminId || (govRole === "super_admin" ? "USER-SA-001" : "USER-ADM-101"),
-          adminName: meta.adminName || govName,
+          governingAdminEmail: govEmail,
+          adminId: g.adminId || meta.adminId || (govRole === "super_admin" ? "USER-SA-001" : ""),
+          adminName: g.adminName || meta.adminName || govName,
+          adminEmail: govEmail,
         }
       })
 
@@ -3094,13 +3097,16 @@ export async function handleApiRequest(
         const allowedIds = new Set(authUser.gosalaIds || [])
         const allowedNames = new Set((authUser.gosalaNames || []).map((name) => name.trim().toLowerCase()))
         const userEmail = (authUser.email || "").trim().toLowerCase()
+        const userName = (authUser.name || "").trim().toLowerCase()
         // Fail closed: only Gaushalas assigned to this Operations Admin or created by them
         scopedGosalas = formatted.filter((g: any) => {
           const idMatch = allowedIds.has(g.id)
           const nameMatch = allowedNames.has(String(g.name).trim().toLowerCase())
-          const govEmailMatch = Boolean(userEmail && (g.governingAdminEmail || "").trim().toLowerCase() === userEmail)
+          const gGovEmail = String(g.governingAdminEmail || g.adminEmail || "").trim().toLowerCase()
+          const govEmailMatch = Boolean(userEmail && gGovEmail === userEmail)
           const adminIdMatch = Boolean(authUser.userId && (g.adminId === authUser.userId))
-          return idMatch || nameMatch || govEmailMatch || adminIdMatch
+          const adminNameMatch = Boolean(userName && String(g.governingAdminName || g.adminName || "").toLowerCase().includes(userName))
+          return idMatch || nameMatch || govEmailMatch || adminIdMatch || adminNameMatch
         })
       } else if (authUser?.role === "super_admin") {
         // Super Admin has global oversight across all Operations Admins and Gaushalas!
@@ -3140,6 +3146,12 @@ export async function handleApiRequest(
       const finalLat = latitude !== undefined ? Number(latitude) : lat !== undefined ? Number(lat) : null
       const finalLng = longitude !== undefined ? Number(longitude) : lng !== undefined ? Number(lng) : null
 
+      const isActing = Boolean(body.actAsManagerMyself) || Boolean(restMeta.isActingManager) || (!restMeta.managerId && !restMeta.managerName)
+      const finalGovRole = restMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin")
+      const callerAdminName = restMeta.governingAdminName || authUser?.name || "Operations Admin"
+      const callerAdminEmail = restMeta.governingAdminEmail || authUser?.email || "admin@gomaa.in"
+      const callerAdminId = restMeta.adminId || authUser?.userId || "USER-ADM-101"
+
       const created = await prisma.gosala.upsert({
         where: { name: name.trim() },
         create: {
@@ -3151,6 +3163,9 @@ export async function handleApiRequest(
           latitude: finalLat,
           longitude: finalLng,
           isActive: true,
+          adminId: callerAdminId,
+          adminEmail: callerAdminEmail,
+          adminName: callerAdminName,
         },
         update: {
           region: region.trim(),
@@ -3160,14 +3175,11 @@ export async function handleApiRequest(
           latitude: finalLat,
           longitude: finalLng,
           isActive: true,
+          adminId: callerAdminId,
+          adminEmail: callerAdminEmail,
+          adminName: callerAdminName,
         },
       })
-
-      const isActing = Boolean(body.actAsManagerMyself) || Boolean(restMeta.isActingManager) || (!restMeta.managerId && !restMeta.managerName)
-      const finalGovRole = restMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin")
-      const callerAdminName = restMeta.governingAdminName || authUser?.name || "Operations Admin"
-      const callerAdminEmail = restMeta.governingAdminEmail || authUser?.email || "admin@gomaa.in"
-      const callerAdminId = restMeta.adminId || authUser?.userId || "USER-ADM-101"
 
       // Attempt to resolve chosen manager user in database if not acting
       let resolvedMgrUser: any = null
@@ -3285,6 +3297,10 @@ export async function handleApiRequest(
       const finalLat = latitude !== undefined ? Number(latitude) : lat !== undefined ? Number(lat) : undefined
       const finalLng = longitude !== undefined ? Number(longitude) : lng !== undefined ? Number(lng) : undefined
 
+      const callerAdminName = restMeta.governingAdminName || restMeta.adminName || body.governingAdminName || body.adminName
+      const callerAdminEmail = restMeta.governingAdminEmail || restMeta.adminEmail || body.governingAdminEmail || body.adminEmail
+      const callerAdminId = restMeta.adminId || body.adminId
+
       const updated = await prisma.gosala.update({
         where: { id },
         data: {
@@ -3295,6 +3311,9 @@ export async function handleApiRequest(
           contactEmail: email || undefined,
           latitude: finalLat,
           longitude: finalLng,
+          ...(callerAdminId ? { adminId: callerAdminId } : {}),
+          ...(callerAdminEmail ? { adminEmail: callerAdminEmail } : {}),
+          ...(callerAdminName ? { adminName: callerAdminName } : {}),
         },
       })
 
@@ -3304,18 +3323,21 @@ export async function handleApiRequest(
         ? Boolean(restMeta.isActingManager)
         : undefined
 
-      const callerAdminName = restMeta.governingAdminName || authUser?.name || "Operations Admin"
-      const callerAdminEmail = restMeta.governingAdminEmail || authUser?.email || "admin@gomaa.in"
-      const callerAdminRole = restMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin")
-      const callerAdminId = restMeta.adminId || authUser?.userId || "USER-ADM-101"
+      const effectiveAdminName = callerAdminName || authUser?.name || "Operations Admin"
+      const effectiveAdminEmail = callerAdminEmail || authUser?.email || "admin@gomaa.in"
+      const effectiveAdminRole = restMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin")
+      const effectiveAdminId = callerAdminId || authUser?.userId || "USER-ADM-101"
 
       const metaPatch: any = {
         ...restMeta,
         ...(finalLat !== undefined ? { lat: finalLat } : {}),
         ...(finalLng !== undefined ? { lng: finalLng } : {}),
-        governingAdminName: callerAdminName,
-        governingAdminEmail: callerAdminEmail,
-        governingAdminRole: callerAdminRole,
+        governingAdminName: effectiveAdminName,
+        governingAdminEmail: effectiveAdminEmail,
+        governingAdminRole: effectiveAdminRole,
+        adminName: effectiveAdminName,
+        adminEmail: effectiveAdminEmail,
+        adminId: effectiveAdminId,
       }
 
       if (isActing === true) {
@@ -3351,6 +3373,14 @@ export async function handleApiRequest(
             metaPatch.managerName = mgrUser.name
             if (!metaPatch.caretaker || metaPatch.caretaker.includes("Acting")) {
               metaPatch.caretaker = mgrUser.name
+            }
+            if (body.exclusiveManager) {
+              await prisma.gosalaManagerAssignment.deleteMany({
+                where: {
+                  userId: mgrUser.id,
+                  NOT: { gosalaId: updated.id },
+                },
+              })
             }
             await prisma.gosalaManagerAssignment.upsert({
               where: {
