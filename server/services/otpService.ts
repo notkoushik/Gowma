@@ -185,19 +185,28 @@ export async function requestPasswordResetOtp(
 
   // 5. Out-of-band delivery
   if (channel === "EMAIL") {
-    await sendOtpEmail({
+    const emailResult = await sendOtpEmail({
       toEmail: user.email,
       userName: user.name,
       otp: rawOtp,
       expiryMinutes: 10,
     })
+    if (!emailResult.success) {
+      console.warn("[Email OTP Dispatch Notice]:", emailResult.error)
+    }
   } else {
-    // Phone channel (for SMS delivery via Fast2SMS / Twilio)
-    await sendOtpSms({
+    // Phone channel (for SMS delivery via Fast2SMS / Twilio / MSG91)
+    const smsResult = await sendOtpSms({
       toPhone: user.phone || emailOrPhone,
       otp: rawOtp,
       expiryMinutes: 10,
     })
+    if (!smsResult.success) {
+      throw new Error(
+        smsResult.error ||
+        "Carrier SMS dispatch is currently unavailable. Please use 'Email Address' verification to receive your 6-digit code."
+      )
+    }
   }
 
   const targetIdentifier = channel === "PHONE" ? (user.phone || emailOrPhone) : user.email

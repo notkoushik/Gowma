@@ -20,6 +20,11 @@ interface ResendSendResult {
 }
 
 import nodemailer from "nodemailer"
+import dns from "node:dns"
+
+try {
+  dns.setServers(["8.8.8.8", "1.1.1.1"])
+} catch {}
 
 export async function sendOtpEmail({
   toEmail,
@@ -84,13 +89,28 @@ export async function sendOtpEmail({
 `
 
   // 1. Direct Gmail SMTP (Google App Password)
-  const gmailUser = process.env.GMAIL_USER || ""
-  const gmailPass = (process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g, "")
+  const gmailUser = (process.env.GMAIL_USER || "").replace(/["']/g, "").trim()
+  const gmailPass = (process.env.GMAIL_APP_PASSWORD || "").replace(/["'\s]/g, "").trim()
 
   if (gmailUser && gmailPass) {
     try {
+      const hostIp = await new Promise<string>((resolve) => {
+        const timeout = setTimeout(() => resolve("192.178.211.108"), 1000)
+        dns.resolve4("smtp.gmail.com", (err, addresses) => {
+          clearTimeout(timeout)
+          if (!err && addresses && addresses.length > 0) {
+            resolve(addresses[0])
+          } else {
+            resolve("192.178.211.108")
+          }
+        })
+      })
+
       const transporter = nodemailer.createTransport({
-        service: "gmail",
+        host: hostIp,
+        port: 465,
+        secure: true,
+        tls: { servername: "smtp.gmail.com" },
         auth: {
           user: gmailUser,
           pass: gmailPass,
@@ -108,7 +128,6 @@ export async function sendOtpEmail({
       return { success: true, id: info.messageId }
     } catch (err: any) {
       console.error("[Gmail SMTP Error]:", err.message)
-      // Fall through to Resend or simulated
     }
   }
 
