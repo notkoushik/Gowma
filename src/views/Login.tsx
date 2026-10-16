@@ -426,10 +426,14 @@ export default function Login({
       return
     }
 
+    const targetId =
+      forgotIdentifier.trim() ||
+      (forgotChannel === "EMAIL" ? forgotEmail.trim().toLowerCase() : `+91 ${forgotPhone.replace(/\D/g, "")}`)
+
     try {
       // 1. Verify OTP and get scoped reset token
       const verifyRes = await api.verifyOtp({
-        emailOrPhone: forgotIdentifier.trim(),
+        emailOrPhone: targetId,
         otp: forgotOtp.trim(),
       })
 
@@ -439,7 +443,7 @@ export default function Login({
 
       // 2. Reset password using cryptographic token
       const resetRes = await api.resetPassword({
-        emailOrPhone: forgotIdentifier.trim(),
+        emailOrPhone: targetId,
         resetToken: verifyRes.resetToken,
         newPassword: forgotNewPassword,
       })
@@ -614,7 +618,21 @@ export default function Login({
                   <button
                     type="button"
                     onClick={() => {
-                      setForgotIdentifier(emailInput.trim())
+                      const trimmed = emailInput.trim()
+                      if (trimmed.includes("@")) {
+                        setForgotEmail(trimmed)
+                        setForgotChannel("EMAIL")
+                        setForgotIdentifier(trimmed)
+                      } else if (trimmed) {
+                        const digits = trimmed.replace(/\D/g, "").slice(0, 10)
+                        setForgotPhone(digits)
+                        setForgotChannel("PHONE")
+                        setForgotIdentifier(`+91 ${digits}`)
+                      } else {
+                        setForgotEmail("")
+                        setForgotPhone("")
+                        setForgotIdentifier("")
+                      }
                       setForgotError(null)
                       setForgotStep("request")
                       setShowForgotModal(true)

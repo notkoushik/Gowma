@@ -195,7 +195,10 @@ export async function requestPasswordResetOtp(
       expiryMinutes: 10,
     })
     if (!emailResult.success) {
-      console.warn("[Email OTP Dispatch Notice]:", emailResult.error)
+      throw new Error(
+        emailResult.error ||
+        "Email verification dispatch is temporarily unavailable. Please verify your email configuration or try again in a few moments."
+      )
     }
   } else {
     // Phone channel (for SMS delivery via Fast2SMS / Twilio / MSG91)
@@ -265,32 +268,35 @@ export async function verifyOtpAndGenerateResetToken(
   }
   const uniqueIds = Array.from(new Set(lookupIds))
 
-  // Find latest active, unused OTP for any of these identifiers
+  // Find all active, unused OTPs for any of these identifiers
   const rows: any[] = await prisma.$queryRawUnsafe(
     `SELECT * FROM "verification_otps" 
      WHERE "identifier" = ANY($1::text[]) AND "purpose" = 'PASSWORD_RESET' AND "used" = false AND "expiresAt" > NOW() 
-     ORDER BY "createdAt" DESC LIMIT 1`,
+     ORDER BY "createdAt" DESC`,
     uniqueIds
   )
 
-  const record = rows[0]
-  if (!record) {
+  if (!rows || rows.length === 0) {
     throw new Error("No active verification code found for this account. Please click 'Resend Code' to receive a new 6-digit OTP.")
   }
 
-  if (record.attempts >= record.maxAttempts) {
-    throw new Error("Maximum incorrect attempts exceeded. This code has been invalidated for security. Please click 'Resend Code'.")
+  // Check all unexpired, active OTP records for a match
+  let matchedRecord: any = null
+  for (const r of rows) {
+    if (r.attempts < r.maxAttempts && verifyOtpHash(cleanOtp, r.otpHash)) {
+      matchedRecord = r
+      break
+    }
   }
 
-  // Verify scrypt hash
-  const isValid = verifyOtpHash(cleanOtp, record.otpHash)
-  if (!isValid) {
-    // Increment attempt counter
+  if (!matchedRecord) {
+    // Increment attempt counter on the latest row
+    const latest = rows[0]
     await prisma.$executeRawUnsafe(
       `UPDATE "verification_otps" SET "attempts" = "attempts" + 1 WHERE "id" = $1`,
-      record.id
+      latest.id
     )
-    const remaining = record.maxAttempts - (record.attempts + 1)
+    const remaining = latest.maxAttempts - (latest.attempts + 1)
     throw new Error(`Invalid verification code. ${remaining > 0 ? `${remaining} attempts remaining.` : "Code locked. Please click 'Resend Code'."}`)
   }
 
@@ -298,7 +304,7 @@ export async function verifyOtpAndGenerateResetToken(
   const resetToken = signResetToken({
     purpose: "PASSWORD_RESET",
     identifier: user ? user.email.toLowerCase() : norm,
-    otpId: record.id,
+    otpId: matchedRecord.id,
   }, 600)
 
   return {

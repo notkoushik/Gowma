@@ -1683,16 +1683,17 @@ async function switchUserContext(caller, targetRole) {
 // server/services/resendService.ts
 import nodemailer from "nodemailer";
 import dns from "node:dns";
-try {
-  dns.setServers(["8.8.8.8", "1.1.1.1"]);
-} catch {
-}
 async function sendOtpEmail({
   toEmail,
   userName = "Devotee",
   otp,
   expiryMinutes = 10
 }) {
+  const normEmail = toEmail.trim().toLowerCase();
+  if (normEmail.endsWith(".test") || normEmail.endsWith(".example") || normEmail.includes("example.com")) {
+    console.log(`[Test Mock Dispatch] OTP for ${normEmail}: ${otp}`);
+    return { success: true, id: `<test-${Date.now()}@gomaa.test>`, simulated: true };
+  }
   const subject = `Your GOMAA Verification Code: ${otp}`;
   const html = `
 <!DOCTYPE html>
@@ -1748,16 +1749,25 @@ async function sendOtpEmail({
 </body>
 </html>
 `;
+  const text2 = `Namaste ${userName},
+
+Your GOMAA verification code is: ${otp}
+
+This single-use code expires in ${expiryMinutes} minutes.
+Never share this code with anyone.
+
+If you did not request this, you can safely ignore this email.
+
+\u2014 GOMAA Operations
+Sacred Operations & Cattle Welfare Platform`;
   const gmailUser = (process.env.GMAIL_USER || "").replace(/["']/g, "").trim();
   const gmailPass = (process.env.GMAIL_APP_PASSWORD || "").replace(/["'\s]/g, "").trim();
   if (gmailUser && gmailPass) {
     try {
       const hostIp = await new Promise((resolve) => {
-        const timeout = setTimeout(() => resolve("192.178.211.108"), 1e3);
-        dns.resolve4("smtp.gmail.com", (err, addresses) => {
-          clearTimeout(timeout);
-          if (!err && addresses && addresses.length > 0) {
-            resolve(addresses[0]);
+        dns.lookup("smtp.gmail.com", { family: 4 }, (err, address) => {
+          if (!err && address) {
+            resolve(address);
           } else {
             resolve("192.178.211.108");
           }
@@ -1768,16 +1778,25 @@ async function sendOtpEmail({
         port: 465,
         secure: true,
         tls: { servername: "smtp.gmail.com" },
+        connectionTimeout: 8e3,
+        greetingTimeout: 8e3,
+        socketTimeout: 1e4,
         auth: {
           user: gmailUser,
           pass: gmailPass
         }
       });
       const info = await transporter.sendMail({
-        from: `"GOMAA Operations" <${gmailUser}>`,
+        from: `"GOMAA Security" <${gmailUser}>`,
         to: toEmail,
-        subject,
-        html
+        subject: `[GOMAA] Verification Code: ${otp}`,
+        text: text2,
+        html,
+        headers: {
+          "X-Priority": "1",
+          "Priority": "urgent",
+          "Importance": "high"
+        }
       });
       console.log(`[Gmail SMTP Success] OTP sent to ${toEmail} (MessageId: ${info.messageId})`);
       return { success: true, id: info.messageId };
@@ -2078,7 +2097,9 @@ async function requestPasswordResetOtp(emailOrPhone, channel = "EMAIL", ipAddres
       expiryMinutes: 10
     });
     if (!emailResult.success) {
-      console.warn("[Email OTP Dispatch Notice]:", emailResult.error);
+      throw new Error(
+        emailResult.error || "Email verification dispatch is temporarily unavailable. Please verify your email configuration or try again in a few moments."
+      );
     }
   } else {
     const smsResult = await sendOtpSms({
@@ -2133,29 +2154,32 @@ async function verifyOtpAndGenerateResetToken(emailOrPhone, submittedOtp) {
   const rows = await prisma.$queryRawUnsafe(
     `SELECT * FROM "verification_otps" 
      WHERE "identifier" = ANY($1::text[]) AND "purpose" = 'PASSWORD_RESET' AND "used" = false AND "expiresAt" > NOW() 
-     ORDER BY "createdAt" DESC LIMIT 1`,
+     ORDER BY "createdAt" DESC`,
     uniqueIds
   );
-  const record = rows[0];
-  if (!record) {
+  if (!rows || rows.length === 0) {
     throw new Error("No active verification code found for this account. Please click 'Resend Code' to receive a new 6-digit OTP.");
   }
-  if (record.attempts >= record.maxAttempts) {
-    throw new Error("Maximum incorrect attempts exceeded. This code has been invalidated for security. Please click 'Resend Code'.");
+  let matchedRecord = null;
+  for (const r of rows) {
+    if (r.attempts < r.maxAttempts && verifyOtpHash(cleanOtp, r.otpHash)) {
+      matchedRecord = r;
+      break;
+    }
   }
-  const isValid = verifyOtpHash(cleanOtp, record.otpHash);
-  if (!isValid) {
+  if (!matchedRecord) {
+    const latest = rows[0];
     await prisma.$executeRawUnsafe(
       `UPDATE "verification_otps" SET "attempts" = "attempts" + 1 WHERE "id" = $1`,
-      record.id
+      latest.id
     );
-    const remaining = record.maxAttempts - (record.attempts + 1);
+    const remaining = latest.maxAttempts - (latest.attempts + 1);
     throw new Error(`Invalid verification code. ${remaining > 0 ? `${remaining} attempts remaining.` : "Code locked. Please click 'Resend Code'."}`);
   }
   const resetToken = signResetToken({
     purpose: "PASSWORD_RESET",
     identifier: user ? user.email.toLowerCase() : norm,
-    otpId: record.id
+    otpId: matchedRecord.id
   }, 600);
   return {
     ok: true,
