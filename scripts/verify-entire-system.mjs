@@ -67,10 +67,10 @@ async function run() {
     harness.assert(unauthUsers?.status === 401, "GET /api/users without token returns 401")
 
     const unauthGosalas = await handleApiRequest("GET", "/api/gosalas", "")
-    harness.assert(unauthGosalas?.status === 401, "GET /api/gosalas without token returns 401")
+    harness.assert(unauthGosalas?.status === 200, "GET /api/gosalas is public for devotee landing page browsing (200)")
 
     const unauthAnimals = await handleApiRequest("GET", "/api/animals", "")
-    harness.assert(unauthAnimals?.status === 401, "GET /api/animals without token returns 401")
+    harness.assert(unauthAnimals?.status === 200, "GET /api/animals is public for devotee landing page browsing (200)")
 
     const unauthHold = await handleApiRequest("POST", "/api/hold", JSON.stringify({
       animal: testAnimal.name,
