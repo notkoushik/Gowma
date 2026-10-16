@@ -62,6 +62,38 @@ export function verifyOtpHash(otp: string, storedHash: string): boolean {
   return bufExpected.length === bufActual.length && crypto.timingSafeEqual(bufExpected, bufActual)
 }
 
+let otpTableVerified = false
+export async function ensureOtpTable() {
+  if (otpTableVerified) return
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "verification_otps" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "identifier" TEXT NOT NULL,
+        "otpHash" TEXT NOT NULL,
+        "channel" TEXT NOT NULL DEFAULT 'EMAIL',
+        "purpose" TEXT NOT NULL DEFAULT 'PASSWORD_RESET',
+        "attempts" INTEGER NOT NULL DEFAULT 0,
+        "maxAttempts" INTEGER NOT NULL DEFAULT 5,
+        "expiresAt" TIMESTAMP(3) NOT NULL,
+        "used" BOOLEAN NOT NULL DEFAULT false,
+        "usedAt" TIMESTAMP(3),
+        "ipAddress" TEXT,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `)
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE INDEX IF NOT EXISTS "verification_otps_identifier_purpose_used_idx" 
+          ON "verification_otps"("identifier", "purpose", "used");
+      `)
+    } catch {}
+    otpTableVerified = true
+  } catch (err: any) {
+    console.warn("[OTP Schema Self-Heal Notice]:", err.message)
+  }
+}
+
 /**
  * Request a One-Time Password for password recovery
  */
@@ -74,6 +106,9 @@ export async function requestPasswordResetOtp(
   if (!norm) {
     throw new Error("Registered email or phone number is required")
   }
+
+  // Ensure table exists in database
+  await ensureOtpTable()
 
   // 1. Verify that user exists in PostgreSQL database
   const user = await prisma.user.findFirst({
@@ -168,6 +203,8 @@ export async function verifyOtpAndGenerateResetToken(
   if (!norm || !cleanOtp) {
     throw new Error("Email/phone and 6-digit verification code are required")
   }
+
+  await ensureOtpTable()
 
   // Find latest active, unused OTP for identifier
   const rows: any[] = await prisma.$queryRawUnsafe(

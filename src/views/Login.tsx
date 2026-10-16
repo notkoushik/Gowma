@@ -1,4 +1,4 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import {
   ArrowRight,
   Eye,
@@ -90,6 +90,14 @@ export default function Login({
   const [forgotMaskedTarget, setForgotMaskedTarget] = useState("")
   const [forgotError, setForgotError] = useState<string | null>(null)
   const [isForgotSubmitting, setIsForgotSubmitting] = useState(false)
+  const [resendCooldown, setResendCooldown] = useState<number>(0)
+
+  // Countdown timer for Resend OTP
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = setTimeout(() => setResendCooldown((c) => c - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [resendCooldown])
 
   const passwordInputRef = useRef<HTMLInputElement>(null)
 
@@ -321,12 +329,41 @@ export default function Login({
       if (res?.ok) {
         setForgotMaskedTarget(res.maskedTarget || cleanId)
         setForgotStep("verify")
+        setResendCooldown(45)
         notify(res.message || "Verification code dispatched.", "ok")
       } else {
         setForgotError("Could not dispatch verification code. Please try again.")
       }
     } catch (err: any) {
       setForgotError(err.message || "Failed to send verification code.")
+    } finally {
+      setIsForgotSubmitting(false)
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Forgot Password: Resend Code
+  // --------------------------------------------------------------------------
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || isForgotSubmitting) return
+    setIsForgotSubmitting(true)
+    setForgotError(null)
+
+    const cleanId = forgotIdentifier.trim()
+    try {
+      const res = await api.forgotPassword({
+        emailOrPhone: cleanId,
+        channel: forgotChannel,
+      })
+
+      if (res?.ok) {
+        setResendCooldown(45)
+        notify("A fresh 6-digit verification code has been dispatched.", "ok")
+      } else {
+        setForgotError("Could not resend code. Please wait a moment and try again.")
+      }
+    } catch (err: any) {
+      setForgotError(err.message || "Failed to resend verification code.")
     } finally {
       setIsForgotSubmitting(false)
     }
@@ -841,7 +878,7 @@ export default function Login({
                       }`}
                     >
                       <Mail size={14} />
-                      <span>Email OTP (Resend)</span>
+                      <span>Email Verification</span>
                     </button>
 
                     <button
@@ -854,7 +891,7 @@ export default function Login({
                       }`}
                     >
                       <Smartphone size={14} />
-                      <span>Mobile OTP (Firebase)</span>
+                      <span>Mobile SMS OTP</span>
                     </button>
                   </div>
                 </div>
@@ -929,9 +966,19 @@ export default function Login({
                 </div>
 
                 <div>
-                  <label className="block text-[12px] text-ink-soft font-medium mb-1">
-                    Enter 6-Digit Verification Code (OTP)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[12px] text-ink-soft font-medium">
+                      Enter 6-Digit Verification Code (OTP)
+                    </label>
+                    <button
+                      type="button"
+                      disabled={resendCooldown > 0 || isForgotSubmitting}
+                      onClick={handleResendOtp}
+                      className="text-[11.5px] text-saffron hover:text-saffron-deep font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend Code"}
+                    </button>
+                  </div>
                   <input
                     type="text"
                     required
@@ -942,6 +989,17 @@ export default function Login({
                     placeholder="123456"
                     className="w-full text-center font-mono text-[22px] tracking-[0.3em] font-bold bg-paper border border-line rounded-sm py-2 text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
                   />
+                  <div className="flex items-center justify-between text-[11px] text-ink-faint mt-1 px-0.5">
+                    <span>Didn't receive the verification code?</span>
+                    <button
+                      type="button"
+                      disabled={resendCooldown > 0 || isForgotSubmitting}
+                      onClick={handleResendOtp}
+                      className="text-saffron hover:text-saffron-deep font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {resendCooldown > 0 ? `Wait ${resendCooldown}s` : "Resend OTP"}
+                    </button>
+                  </div>
                 </div>
 
                 <div>
@@ -958,7 +1016,7 @@ export default function Login({
                       required
                       value={forgotNewPassword}
                       onChange={(e) => setForgotNewPassword(e.target.value)}
-                      placeholder="Min 8 characters"
+                      placeholder="Enter new password (min. 8 characters)"
                       className="w-full bg-paper border border-line rounded-sm pl-9 pr-8 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
                     />
                     <button
@@ -985,7 +1043,7 @@ export default function Login({
                       required
                       value={forgotConfirmPassword}
                       onChange={(e) => setForgotConfirmPassword(e.target.value)}
-                      placeholder="Repeat new password"
+                      placeholder="Confirm new password"
                       className="w-full bg-paper border border-line rounded-sm pl-9 pr-3 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
                     />
                   </div>

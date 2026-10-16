@@ -1960,11 +1960,44 @@ function verifyOtpHash(otp, storedHash) {
   const bufActual = Buffer.from(derived);
   return bufExpected.length === bufActual.length && crypto6.timingSafeEqual(bufExpected, bufActual);
 }
+var otpTableVerified = false;
+async function ensureOtpTable() {
+  if (otpTableVerified) return;
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "verification_otps" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "identifier" TEXT NOT NULL,
+        "otpHash" TEXT NOT NULL,
+        "channel" TEXT NOT NULL DEFAULT 'EMAIL',
+        "purpose" TEXT NOT NULL DEFAULT 'PASSWORD_RESET',
+        "attempts" INTEGER NOT NULL DEFAULT 0,
+        "maxAttempts" INTEGER NOT NULL DEFAULT 5,
+        "expiresAt" TIMESTAMP(3) NOT NULL,
+        "used" BOOLEAN NOT NULL DEFAULT false,
+        "usedAt" TIMESTAMP(3),
+        "ipAddress" TEXT,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE INDEX IF NOT EXISTS "verification_otps_identifier_purpose_used_idx" 
+          ON "verification_otps"("identifier", "purpose", "used");
+      `);
+    } catch {
+    }
+    otpTableVerified = true;
+  } catch (err) {
+    console.warn("[OTP Schema Self-Heal Notice]:", err.message);
+  }
+}
 async function requestPasswordResetOtp(emailOrPhone, channel = "EMAIL", ipAddress) {
   const norm = emailOrPhone.trim().toLowerCase();
   if (!norm) {
     throw new Error("Registered email or phone number is required");
   }
+  await ensureOtpTable();
   const user = await prisma.user.findFirst({
     where: {
       OR: [
@@ -2036,6 +2069,7 @@ async function verifyOtpAndGenerateResetToken(emailOrPhone, submittedOtp) {
   if (!norm || !cleanOtp) {
     throw new Error("Email/phone and 6-digit verification code are required");
   }
+  await ensureOtpTable();
   const rows = await prisma.$queryRawUnsafe(
     `SELECT * FROM "verification_otps" 
      WHERE "identifier" = $1 AND "purpose" = 'PASSWORD_RESET' AND "used" = false AND "expiresAt" > NOW() 

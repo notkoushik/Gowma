@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build:api": "esbuild server/apiEntry.ts --bundle --platform=node --format=esm --packages=external --outfile=api/index.js",
-    "build": "prisma generate && npm run build:api && vite build",
+    "build": "node scripts/db-deploy.js && npm run build:api && vite build",
     "preview": "vite preview",
     "format": "oxfmt src",
     "test": "node --test scripts/test-authorization-policy.mjs scripts/test-hold-booking-contracts.mjs scripts/test-p1-contracts.mjs scripts/test-password-security.mjs scripts/test-razorpay-security.mjs scripts/test-role-isolation-contracts.mjs",
