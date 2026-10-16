@@ -1658,7 +1658,7 @@ try {
   dns.setServers(["8.8.8.8", "1.1.1.1"]);
 } catch {
 }
-async function sendOtpEmail2({
+async function sendOtpEmail({
   toEmail,
   userName = "Devotee",
   otp,
@@ -2042,7 +2042,7 @@ async function requestPasswordResetOtp(emailOrPhone, channel = "EMAIL", ipAddres
     }
   }
   if (channel === "EMAIL") {
-    const emailResult = await sendOtpEmail2({
+    const emailResult = await sendOtpEmail({
       toEmail: user.email,
       userName: user.name,
       otp: rawOtp,

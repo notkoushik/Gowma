@@ -34,6 +34,7 @@ import {
   verifyOtpAndGenerateResetToken,
   resetPasswordWithToken,
 } from "./services/otpService.ts"
+import { sendOtpEmail } from "./services/resendService.ts"
 import { canUseLiveTracking, canAccessBooking } from "./auth/authorization.ts"
 import {
   getAllOperationalHubs,
