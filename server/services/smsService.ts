@@ -34,20 +34,42 @@ export async function sendOtpSms({
     : ""
   const e164Phone = toPhone.startsWith("+") ? toPhone.replace(/\s+/g, "") : `+${rawDigits}`
 
-  const fast2smsKey =
-    process.env.FAST2SMS_API_KEY ||
-    Buffer.from("TVVOZDdWSnJBdzBCbUhiNVExSURFdmMzRmxrUjYyVENZaGluU2E4S2VmUGp1OXF6b0d1cUpmc25BeURPNkZqbEJFYkt6bXZlYzk0Q05TNVo=", "base64").toString("utf-8")
-  const twilioSid = process.env.TWILIO_ACCOUNT_SID || ""
-  const twilioAuth = process.env.TWILIO_AUTH_TOKEN || ""
-  const twilioFrom = process.env.TWILIO_PHONE_NUMBER || ""
+  const msg91AuthKey = (process.env.MSG91_AUTH_KEY || "").trim()
+  const msg91TemplateId = (process.env.MSG91_TEMPLATE_ID || "").trim()
+  const fast2smsKey = (process.env.FAST2SMS_API_KEY || "").trim()
+  const twilioSid = (process.env.TWILIO_ACCOUNT_SID || "").trim()
+  const twilioAuth = (process.env.TWILIO_AUTH_TOKEN || "").trim()
+  const twilioFrom = (process.env.TWILIO_PHONE_NUMBER || "").trim()
 
-  // 1. Fast2SMS (India domestic OTP route)
+  // 1. MSG91 (Enterprise Indian OTP Gateway)
+  if (msg91AuthKey && indian10Digits) {
+    try {
+      const templateParam = msg91TemplateId ? `&template_id=${encodeURIComponent(msg91TemplateId)}` : ""
+      const url = `https://control.msg91.com/api/v5/otp?mobile=91${indian10Digits}&authkey=${encodeURIComponent(msg91AuthKey)}&otp=${encodeURIComponent(otp)}${templateParam}`
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (data?.type === "success" || res.ok) {
+        return { success: true, provider: "msg91" as any, messageId: data.message }
+      }
+      console.warn("[MSG91 Notice]:", data)
+    } catch (err: any) {
+      console.error("[MSG91 Error]:", err.message)
+    }
+  }
+
+  // 2. Fast2SMS (India domestic OTP route)
   if (fast2smsKey && indian10Digits) {
     try {
       const res = await fetch("https://www.fast2sms.com/dev/bulkV2", {
         method: "POST",
         headers: {
-          authorization: fast2smsKey.trim(),
+          authorization: fast2smsKey,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -67,7 +89,7 @@ export async function sendOtpSms({
     }
   }
 
-  // 2. Twilio SMS
+  // 3. Twilio SMS (Global & Indian carrier gateway)
   if (twilioSid && twilioAuth && twilioFrom) {
     try {
       const basicAuth = Buffer.from(`${twilioSid}:${twilioAuth}`).toString("base64")
@@ -98,51 +120,13 @@ export async function sendOtpSms({
     }
   }
 
-  // 3. Fallback: Out-of-band delivery + Email notification to nanikoushik96@gmail.com
+  // 4. Fallback: Out-of-band console simulation for testing & dev
   console.log(`\n========================================================================`)
   console.log(`[MOBILE SMS OTP DISPATCH] Out-of-band delivery to: ${toPhone}`)
   console.log(`[VERIFICATION CODE] ${otp}`)
   console.log(`[EXPIRY] Valid for ${expiryMinutes} minutes.`)
-  console.log(`[LIVE DISPATCH NOTE] Fast2SMS returned status 999/996 (requires one-time ₹100 transaction).`)
+  console.log(`[LIVE DISPATCH NOTE] Configure MSG91_AUTH_KEY, FAST2SMS_API_KEY, or TWILIO credentials in Vercel to dispatch live SMS to carrier handsets.`)
   console.log(`========================================================================\n`)
-
-  // Deliver backup alert to verified developer email (nanikoushik96@gmail.com) via Resend
-  const resendKey =
-    process.env.RESEND_API_KEY ||
-    Buffer.from("cmVfNWlGaExUSGlfR2pGRXFoMnBWZ2dRQWVVWXlvNkdCNHZF", "base64").toString("utf-8")
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "GOMAA Operations <onboarding@resend.dev>"
-
-  if (resendKey) {
-    try {
-      await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${resendKey.trim()}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: fromEmail,
-          to: ["nanikoushik96@gmail.com"],
-          subject: `[GOMAA Mobile SMS OTP for ${toPhone}]: ${otp}`,
-          html: `
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; background: #ffffff; border: 1px solid #e6e0d4; border-radius: 8px; padding: 28px;">
-              <div style="font-size: 18px; font-weight: bold; color: #d97706; margin-bottom: 8px;">GOMAA Mobile SMS OTP</div>
-              <p style="font-size: 13.5px; color: #444; line-height: 1.5;">
-                A mobile verification code was requested for phone number: <strong>${toPhone}</strong>.
-              </p>
-              <div style="background: #fffbeb; border: 2px dashed #f59e0b; border-radius: 6px; padding: 16px; text-align: center; margin: 20px 0;">
-                <div style="font-family: monospace; font-size: 32px; font-weight: bold; letter-spacing: 0.25em; color: #b45309;">${otp}</div>
-                <div style="font-size: 11.5px; color: #78716c; margin-top: 6px;">Expires in ${expiryMinutes} minutes</div>
-              </div>
-              <p style="font-size: 12px; color: #666; background: #f5f5f4; border-radius: 4px; padding: 10px;">
-                <strong>Fast2SMS Note:</strong> Fast2SMS requires a one-time ₹100 account transaction on fast2sms.com before live SMS can be routed to mobile carriers. This backup code has been delivered to your verified developer email for testing.
-              </p>
-            </div>
-          `,
-        }),
-      })
-    } catch {}
-  }
 
   return { success: true, provider: "simulated", simulated: true }
 }

@@ -1813,14 +1813,14 @@ async function sendOtpEmail({
       console.error("[Gmail SMTP Error]:", err.message);
     }
   }
-  const apiKey = process.env.RESEND_API_KEY || Buffer.from("cmVfNWlGaExUSGlfR2pGRXFoMnBWZ2dRQWVVWXlvNkdCNHZF", "base64").toString("utf-8");
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "GOMAA Operations <onboarding@resend.dev>";
-  if (apiKey && apiKey.trim() !== "") {
+  const apiKey = (process.env.RESEND_API_KEY || "").trim();
+  const fromEmail = (process.env.RESEND_FROM_EMAIL || "GOMAA Operations <onboarding@resend.dev>").trim();
+  if (apiKey) {
     try {
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${apiKey.trim()}`,
+          Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -1833,49 +1833,7 @@ async function sendOtpEmail({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         console.error("[Resend API Error]:", data);
-        console.log(`[FALLBACK CODE DISPATCH] Devotee OTP for ${toEmail}: ${otp}`);
-        if (data?.statusCode === 403 && toEmail.toLowerCase() !== "nanikoushik96@gmail.com") {
-          console.warn(`[Resend Free Tier]: Cannot send to ${toEmail}. Re-routing OTP to verified account owner nanikoushik96@gmail.com...`);
-          const forwardSubject = `[GOMAA Verification Code for ${toEmail}]: ${otp}`;
-          const forwardHtml = `
-          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; background: #ffffff; border: 1px solid #e6e0d4; border-radius: 8px; padding: 28px;">
-            <div style="font-size: 18px; font-weight: bold; color: #d97706; margin-bottom: 8px;">GOMAA Verification Alert</div>
-            <p style="font-size: 13.5px; color: #444; line-height: 1.5;">
-              A password reset was requested for <strong>${toEmail}</strong> (${userName}).
-            </p>
-            <p style="font-size: 12px; color: #666; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 4px; padding: 10px;">
-              <strong>Free Tier Notice:</strong> Resend's free tier (<code>onboarding@resend.dev</code>) delivers all testing emails directly to the account owner (<strong>nanikoushik96@gmail.com</strong>).
-            </p>
-            <div style="background: #fffbeb; border: 2px dashed #f59e0b; border-radius: 6px; padding: 16px; text-align: center; margin: 20px 0;">
-              <div style="font-family: monospace; font-size: 32px; font-weight: bold; letter-spacing: 0.25em; color: #b45309;">${otp}</div>
-              <div style="font-size: 11.5px; color: #78716c; margin-top: 6px;">Expires in ${expiryMinutes} minutes</div>
-            </div>
-            <p style="font-size: 11px; color: #a8a29e; text-align: center; margin-top: 24px;">GOMAA Platform Identity Protection</p>
-          </div>
-        `;
-          try {
-            const fwdRes = await fetch("https://api.resend.com/emails", {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${apiKey.trim()}`,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({
-                from: fromEmail,
-                to: ["nanikoushik96@gmail.com"],
-                subject: forwardSubject,
-                html: forwardHtml
-              })
-            });
-            const fwdData = await fwdRes.json().catch(() => ({}));
-            if (fwdRes.ok) {
-              console.log(`[Resend Free Tier Re-route Success]: Delivered OTP for ${toEmail} to nanikoushik96@gmail.com (ID: ${fwdData.id})`);
-              return { success: true, id: fwdData.id };
-            }
-          } catch (fwdErr) {
-            console.error("[Resend Forwarding Error]:", fwdErr.message);
-          }
-        }
+        console.log(`[FALLBACK CODE DISPATCH] OTP for ${toEmail}: ${otp}`);
         return {
           success: false,
           error: data.message || `Resend HTTP ${res.status}`
@@ -1888,6 +1846,10 @@ async function sendOtpEmail({
       };
     } catch (err) {
       console.error("[Resend Fetch Error]:", err.message);
+      return {
+        success: false,
+        error: err.message
+      };
     }
   }
   console.log(`
@@ -1909,16 +1871,37 @@ async function sendOtpSms({
   const rawDigits = toPhone.replace(/\D/g, "");
   const indian10Digits = rawDigits.length === 12 && rawDigits.startsWith("91") ? rawDigits.slice(2) : rawDigits.length === 10 ? rawDigits : "";
   const e164Phone = toPhone.startsWith("+") ? toPhone.replace(/\s+/g, "") : `+${rawDigits}`;
-  const fast2smsKey = process.env.FAST2SMS_API_KEY || Buffer.from("TVVOZDdWSnJBdzBCbUhiNVExSURFdmMzRmxrUjYyVENZaGluU2E4S2VmUGp1OXF6b0d1cUpmc25BeURPNkZqbEJFYkt6bXZlYzk0Q05TNVo=", "base64").toString("utf-8");
-  const twilioSid = process.env.TWILIO_ACCOUNT_SID || "";
-  const twilioAuth = process.env.TWILIO_AUTH_TOKEN || "";
-  const twilioFrom = process.env.TWILIO_PHONE_NUMBER || "";
+  const msg91AuthKey = (process.env.MSG91_AUTH_KEY || "").trim();
+  const msg91TemplateId = (process.env.MSG91_TEMPLATE_ID || "").trim();
+  const fast2smsKey = (process.env.FAST2SMS_API_KEY || "").trim();
+  const twilioSid = (process.env.TWILIO_ACCOUNT_SID || "").trim();
+  const twilioAuth = (process.env.TWILIO_AUTH_TOKEN || "").trim();
+  const twilioFrom = (process.env.TWILIO_PHONE_NUMBER || "").trim();
+  if (msg91AuthKey && indian10Digits) {
+    try {
+      const templateParam = msg91TemplateId ? `&template_id=${encodeURIComponent(msg91TemplateId)}` : "";
+      const url = `https://control.msg91.com/api/v5/otp?mobile=91${indian10Digits}&authkey=${encodeURIComponent(msg91AuthKey)}&otp=${encodeURIComponent(otp)}${templateParam}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data?.type === "success" || res.ok) {
+        return { success: true, provider: "msg91", messageId: data.message };
+      }
+      console.warn("[MSG91 Notice]:", data);
+    } catch (err) {
+      console.error("[MSG91 Error]:", err.message);
+    }
+  }
   if (fast2smsKey && indian10Digits) {
     try {
       const res = await fetch("https://www.fast2sms.com/dev/bulkV2", {
         method: "POST",
         headers: {
-          authorization: fast2smsKey.trim(),
+          authorization: fast2smsKey,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -1968,43 +1951,9 @@ async function sendOtpSms({
   console.log(`[MOBILE SMS OTP DISPATCH] Out-of-band delivery to: ${toPhone}`);
   console.log(`[VERIFICATION CODE] ${otp}`);
   console.log(`[EXPIRY] Valid for ${expiryMinutes} minutes.`);
-  console.log(`[LIVE DISPATCH NOTE] Fast2SMS returned status 999/996 (requires one-time \u20B9100 transaction).`);
+  console.log(`[LIVE DISPATCH NOTE] Configure MSG91_AUTH_KEY, FAST2SMS_API_KEY, or TWILIO credentials in Vercel to dispatch live SMS to carrier handsets.`);
   console.log(`========================================================================
 `);
-  const resendKey = process.env.RESEND_API_KEY || Buffer.from("cmVfNWlGaExUSGlfR2pGRXFoMnBWZ2dRQWVVWXlvNkdCNHZF", "base64").toString("utf-8");
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "GOMAA Operations <onboarding@resend.dev>";
-  if (resendKey) {
-    try {
-      await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${resendKey.trim()}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          from: fromEmail,
-          to: ["nanikoushik96@gmail.com"],
-          subject: `[GOMAA Mobile SMS OTP for ${toPhone}]: ${otp}`,
-          html: `
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; background: #ffffff; border: 1px solid #e6e0d4; border-radius: 8px; padding: 28px;">
-              <div style="font-size: 18px; font-weight: bold; color: #d97706; margin-bottom: 8px;">GOMAA Mobile SMS OTP</div>
-              <p style="font-size: 13.5px; color: #444; line-height: 1.5;">
-                A mobile verification code was requested for phone number: <strong>${toPhone}</strong>.
-              </p>
-              <div style="background: #fffbeb; border: 2px dashed #f59e0b; border-radius: 6px; padding: 16px; text-align: center; margin: 20px 0;">
-                <div style="font-family: monospace; font-size: 32px; font-weight: bold; letter-spacing: 0.25em; color: #b45309;">${otp}</div>
-                <div style="font-size: 11.5px; color: #78716c; margin-top: 6px;">Expires in ${expiryMinutes} minutes</div>
-              </div>
-              <p style="font-size: 12px; color: #666; background: #f5f5f4; border-radius: 4px; padding: 10px;">
-                <strong>Fast2SMS Note:</strong> Fast2SMS requires a one-time \u20B9100 account transaction on fast2sms.com before live SMS can be routed to mobile carriers. This backup code has been delivered to your verified developer email for testing.
-              </p>
-            </div>
-          `
-        })
-      });
-    } catch {
-    }
-  }
   return { success: true, provider: "simulated", simulated: true };
 }
 
