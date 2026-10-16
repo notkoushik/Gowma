@@ -98,8 +98,23 @@ export async function authenticateOrResolveUser(
 ): Promise<UserSessionData | null> {
   const query = (emailOrPhone || "").trim().toLowerCase()
   if (!query) throw new Error("Email, phone, or user ID is required")
+  const rawDigits = emailOrPhone.replace(/\D/g, "").slice(-10)
+
   const user: any = await prisma.user.findFirst({
-    where: { OR: [{ id: query }, { email: { equals: query, mode: "insensitive" } }, { phone: { equals: query, mode: "insensitive" } }] },
+    where: {
+      OR: [
+        { id: query },
+        { email: { equals: query, mode: "insensitive" } },
+        { phone: { equals: query, mode: "insensitive" } },
+        ...(rawDigits.length === 10
+          ? [
+              { phone: { contains: rawDigits } },
+              { phone: { equals: `+91 ${rawDigits}` } },
+              { phone: { equals: `+91${rawDigits}` } },
+            ]
+          : []),
+      ],
+    },
     include: { managerAssignments: { include: { gosala: true } } },
   })
   if (!user) throw new Error("Invalid credentials or user not found")
@@ -220,7 +235,8 @@ export async function authenticateOrResolveUser(
  */
 export async function registerUser(payload: RegisterUserPayload): Promise<UserSessionData> {
   const emailNorm = payload.email.trim().toLowerCase()
-  const phoneNorm = payload.phone.trim()
+  const rawDigits = (payload.phone || "").replace(/\D/g, "").slice(-10)
+  const phoneFormatted = rawDigits.length === 10 ? `+91 ${rawDigits}` : payload.phone.trim()
 
   if (!payload.name || !payload.email || !payload.role) {
     throw new Error("Full name, email address, and role are required for registration")
@@ -231,13 +247,32 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
     where: {
       OR: [
         { email: { equals: emailNorm, mode: "insensitive" } },
-        { phone: { equals: phoneNorm, mode: "insensitive" } },
+        { phone: { equals: payload.phone.trim(), mode: "insensitive" } },
+        ...(rawDigits.length === 10
+          ? [
+              { phone: { contains: rawDigits } },
+              { phone: { equals: `+91 ${rawDigits}` } },
+              { phone: { equals: `+91${rawDigits}` } },
+            ]
+          : []),
       ],
     },
   })
 
   if (existing) {
-    throw new Error(`An account with email "${emailNorm}" or phone "${phoneNorm}" is already registered. Please sign in instead.`)
+    const isEmailMatch = existing.email.toLowerCase() === emailNorm
+    const exDigits = (existing.phone || "").replace(/\D/g, "").slice(-10)
+    const isPhoneMatch = rawDigits.length === 10 && exDigits === rawDigits
+
+    if (isEmailMatch && isPhoneMatch) {
+      throw new Error(`An account with email "${emailNorm}" is already registered. Please sign in or use "Forgot Password".`)
+    } else if (isEmailMatch) {
+      throw new Error(`An account with email "${emailNorm}" is already registered. Please sign in instead, or use "Forgot Password" to reset your password.`)
+    } else if (isPhoneMatch) {
+      throw new Error(`The mobile number "${payload.phone.trim()}" is already registered with another account. Please sign in with your registered email or use a different phone number.`)
+    } else {
+      throw new Error(`An account with matching credentials is already registered. Please sign in instead.`)
+    }
   }
 
   const dbRole = mapFrontendToDbRole(payload.role)
@@ -251,7 +286,7 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
     data: {
       name: payload.name.trim(),
       email: emailNorm,
-      phone: phoneNorm || "+91 98000 00000",
+      phone: phoneFormatted || "+91 98000 00000",
       role: dbRole as any,
       password: passwordHash,
       isActive: true,

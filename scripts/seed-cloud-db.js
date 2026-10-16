@@ -70,6 +70,25 @@ async function seed() {
         console.log(`[Seed] Super Admin re-verified: ${sa.email}`)
       }
     }
+
+    // 3. Ensure test devotee account devpulseorg@gmail.com is aligned with Koushik.git password & 7780740223 phone
+    try {
+      const devPulse = await prisma.user.findFirst({
+        where: { email: { equals: "devpulseorg@gmail.com", mode: "insensitive" } },
+      })
+      if (devPulse) {
+        await prisma.user.update({
+          where: { id: devPulse.id },
+          data: {
+            name: "test-01",
+            phone: "+91 7780740223",
+            password: hashPassword("Koushik.git"),
+            isActive: true,
+          },
+        })
+        console.log("[Seed] devpulseorg@gmail.com synchronized with phone +91 7780740223 and password Koushik.git")
+      }
+    } catch {}
   } catch (err) {
     console.warn("[Seed] Notice:", err.message)
   } finally {
