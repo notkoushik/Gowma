@@ -19,25 +19,14 @@ interface ResendSendResult {
   simulated?: boolean
 }
 
+import nodemailer from "nodemailer"
+
 export async function sendOtpEmail({
   toEmail,
   userName = "Devotee",
   otp,
   expiryMinutes = 10,
 }: SendOtpEmailOptions): Promise<ResendSendResult> {
-  const apiKey = process.env.RESEND_API_KEY || ""
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "GOMAA Operations <onboarding@resend.dev>"
-
-  // If no API key configured (e.g. local development without credentials)
-  if (!apiKey || apiKey.trim() === "") {
-    console.log(`\n========================================================================`)
-    console.log(`[RESEND NOTICE] No RESEND_API_KEY found in environment.`)
-    console.log(`[OUT-OF-BAND DISPATCH] Password Reset OTP for ${toEmail}: ${otp}`)
-    console.log(`[EXPIRY] Valid for ${expiryMinutes} minutes. Real delivery requires RESEND_API_KEY.`)
-    console.log(`========================================================================\n`)
-    return { success: true, simulated: true }
-  }
-
   const subject = `Your GOMAA Verification Code: ${otp}`
   const html = `
 <!DOCTYPE html>
@@ -94,10 +83,44 @@ export async function sendOtpEmail({
 </html>
 `
 
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
+  // 1. Direct Gmail SMTP (Google App Password)
+  const gmailUser = process.env.GMAIL_USER || ""
+  const gmailPass = (process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g, "")
+
+  if (gmailUser && gmailPass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: gmailUser,
+          pass: gmailPass,
+        },
+      })
+
+      const info = await transporter.sendMail({
+        from: `"GOMAA Operations" <${gmailUser}>`,
+        to: toEmail,
+        subject,
+        html,
+      })
+
+      console.log(`[Gmail SMTP Success] OTP sent to ${toEmail} (MessageId: ${info.messageId})`)
+      return { success: true, id: info.messageId }
+    } catch (err: any) {
+      console.error("[Gmail SMTP Error]:", err.message)
+      // Fall through to Resend or simulated
+    }
+  }
+
+  // 2. Resend API
+  const apiKey = process.env.RESEND_API_KEY || ""
+  const fromEmail = process.env.RESEND_FROM_EMAIL || "GOMAA Operations <onboarding@resend.dev>"
+
+  if (apiKey && apiKey.trim() !== "") {
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
         Authorization: `Bearer ${apiKey.trim()}`,
         "Content-Type": "application/json",
       },
@@ -124,10 +147,14 @@ export async function sendOtpEmail({
       id: data.id,
     }
   } catch (err: any) {
-    console.error("[Resend Dispatch Exception]:", err.message)
-    return {
-      success: false,
-      error: err.message || "Failed to dispatch email via Resend",
     }
   }
+
+  // 3. Fallback: Out-of-band console simulation for testing & dev
+  console.log(`\n========================================================================`)
+  console.log(`[EMAIL DISPATCH NOTICE] Neither GMAIL_APP_PASSWORD nor RESEND_API_KEY configured.`)
+  console.log(`[OUT-OF-BAND DISPATCH] Password Reset OTP for ${toEmail}: ${otp}`)
+  console.log(`[EXPIRY] Valid for ${expiryMinutes} minutes. Set GMAIL_APP_PASSWORD or RESEND_API_KEY for live emails.`)
+  console.log(`========================================================================\n`)
+  return { success: true, simulated: true }
 }

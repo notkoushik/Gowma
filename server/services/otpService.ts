@@ -2,6 +2,7 @@ import { prisma } from "../prisma.ts"
 import { hashPassword, verifyPassword } from "../auth/password.ts"
 import { signResetToken, verifyResetToken } from "../auth/jwt.ts"
 import { sendOtpEmail } from "./resendService.ts"
+import { sendOtpSms } from "./smsService.ts"
 import crypto from "node:crypto"
 
 export interface OtpRequestResult {
@@ -136,15 +137,21 @@ export async function requestPasswordResetOtp(
       expiryMinutes: 10,
     })
   } else {
-    // Phone channel (for SMS delivery or Firebase integration)
-    console.log(`\n[SMS OTP DISPATCH] 6-digit code for ${user.phone}: ${rawOtp}`)
+    // Phone channel (for SMS delivery via Fast2SMS / Twilio)
+    await sendOtpSms({
+      toPhone: user.phone,
+      otp: rawOtp,
+      expiryMinutes: 10,
+    })
   }
+
+  const targetIdentifier = channel === "PHONE" ? user.phone : user.email
 
   return {
     ok: true,
-    message: `A 6-digit verification code has been dispatched to ${maskIdentifier(user.email, channel)}.`,
+    message: `A 6-digit verification code has been dispatched to ${maskIdentifier(targetIdentifier, channel)}.`,
     channel,
-    maskedTarget: maskIdentifier(user.email, channel),
+    maskedTarget: maskIdentifier(targetIdentifier, channel),
   }
 }
 

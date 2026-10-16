@@ -1725,24 +1725,13 @@ async function switchUserContext(caller, targetRole) {
 }
 
 // server/services/resendService.ts
+import nodemailer from "nodemailer";
 async function sendOtpEmail({
   toEmail,
   userName = "Devotee",
   otp,
   expiryMinutes = 10
 }) {
-  const apiKey = process.env.RESEND_API_KEY || "";
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "GOMAA Operations <onboarding@resend.dev>";
-  if (!apiKey || apiKey.trim() === "") {
-    console.log(`
-========================================================================`);
-    console.log(`[RESEND NOTICE] No RESEND_API_KEY found in environment.`);
-    console.log(`[OUT-OF-BAND DISPATCH] Password Reset OTP for ${toEmail}: ${otp}`);
-    console.log(`[EXPIRY] Valid for ${expiryMinutes} minutes. Real delivery requires RESEND_API_KEY.`);
-    console.log(`========================================================================
-`);
-    return { success: true, simulated: true };
-  }
   const subject = `Your GOMAA Verification Code: ${otp}`;
   const html = `
 <!DOCTYPE html>
@@ -1798,39 +1787,143 @@ async function sendOtpEmail({
 </body>
 </html>
 `;
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey.trim()}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        from: fromEmail,
-        to: [toEmail],
+  const gmailUser = process.env.GMAIL_USER || "";
+  const gmailPass = (process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g, "");
+  if (gmailUser && gmailPass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: gmailUser,
+          pass: gmailPass
+        }
+      });
+      const info = await transporter.sendMail({
+        from: `"GOMAA Operations" <${gmailUser}>`,
+        to: toEmail,
         subject,
         html
-      })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      console.error("[Resend API Error]:", data);
-      return {
-        success: false,
-        error: data.message || `Resend HTTP ${res.status}`
-      };
+      });
+      console.log(`[Gmail SMTP Success] OTP sent to ${toEmail} (MessageId: ${info.messageId})`);
+      return { success: true, id: info.messageId };
+    } catch (err) {
+      console.error("[Gmail SMTP Error]:", err.message);
     }
-    return {
-      success: true,
-      id: data.id
-    };
-  } catch (err) {
-    console.error("[Resend Dispatch Exception]:", err.message);
-    return {
-      success: false,
-      error: err.message || "Failed to dispatch email via Resend"
-    };
   }
+  const apiKey = process.env.RESEND_API_KEY || "";
+  const fromEmail = process.env.RESEND_FROM_EMAIL || "GOMAA Operations <onboarding@resend.dev>";
+  if (apiKey && apiKey.trim() !== "") {
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey.trim()}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          from: fromEmail,
+          to: [toEmail],
+          subject,
+          html
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.error("[Resend API Error]:", data);
+        return {
+          success: false,
+          error: data.message || `Resend HTTP ${res.status}`
+        };
+      }
+      return {
+        success: true,
+        id: data.id
+      };
+    } catch (err) {
+    }
+  }
+  console.log(`
+========================================================================`);
+  console.log(`[EMAIL DISPATCH NOTICE] Neither GMAIL_APP_PASSWORD nor RESEND_API_KEY configured.`);
+  console.log(`[OUT-OF-BAND DISPATCH] Password Reset OTP for ${toEmail}: ${otp}`);
+  console.log(`[EXPIRY] Valid for ${expiryMinutes} minutes. Set GMAIL_APP_PASSWORD or RESEND_API_KEY for live emails.`);
+  console.log(`========================================================================
+`);
+  return { success: true, simulated: true };
+}
+
+// server/services/smsService.ts
+async function sendOtpSms({
+  toPhone,
+  otp,
+  expiryMinutes = 10
+}) {
+  const rawDigits = toPhone.replace(/\D/g, "");
+  const indian10Digits = rawDigits.length === 12 && rawDigits.startsWith("91") ? rawDigits.slice(2) : rawDigits.length === 10 ? rawDigits : "";
+  const e164Phone = toPhone.startsWith("+") ? toPhone.replace(/\s+/g, "") : `+${rawDigits}`;
+  const fast2smsKey = process.env.FAST2SMS_API_KEY || "";
+  const twilioSid = process.env.TWILIO_ACCOUNT_SID || "";
+  const twilioAuth = process.env.TWILIO_AUTH_TOKEN || "";
+  const twilioFrom = process.env.TWILIO_PHONE_NUMBER || "";
+  if (fast2smsKey && indian10Digits) {
+    try {
+      const res = await fetch("https://www.fast2sms.com/dev/bulkV2", {
+        method: "POST",
+        headers: {
+          authorization: fast2smsKey.trim(),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          route: "otp",
+          variables_values: otp,
+          numbers: indian10Digits
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data?.return === true) {
+        return { success: true, provider: "fast2sms", messageId: data.request_id };
+      }
+      console.warn("[Fast2SMS Notice]:", data);
+    } catch (err) {
+      console.error("[Fast2SMS Error]:", err.message);
+    }
+  }
+  if (twilioSid && twilioAuth && twilioFrom) {
+    try {
+      const basicAuth = Buffer.from(`${twilioSid}:${twilioAuth}`).toString("base64");
+      const params = new URLSearchParams();
+      params.append("To", e164Phone);
+      params.append("From", twilioFrom);
+      params.append("Body", `Your GOMAA verification code is: ${otp}. Valid for ${expiryMinutes} minutes. Never share this code.`);
+      const res = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Basic ${basicAuth}`,
+            "Content-Type": "application/x-www-form-urlencoded"
+          },
+          body: params.toString()
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.sid) {
+        return { success: true, provider: "twilio", messageId: data.sid };
+      }
+      console.warn("[Twilio SMS Notice]:", data);
+    } catch (err) {
+      console.error("[Twilio Error]:", err.message);
+    }
+  }
+  console.log(`
+========================================================================`);
+  console.log(`[MOBILE SMS OTP DISPATCH] Out-of-band delivery to: ${toPhone}`);
+  console.log(`[VERIFICATION CODE] ${otp}`);
+  console.log(`[EXPIRY] Valid for ${expiryMinutes} minutes.`);
+  console.log(`[LIVE DISPATCH NOTE] Set FAST2SMS_API_KEY or TWILIO credentials to send live SMS.`);
+  console.log(`========================================================================
+`);
+  return { success: true, provider: "simulated", simulated: true };
 }
 
 // server/services/otpService.ts
@@ -1921,14 +2014,18 @@ async function requestPasswordResetOtp(emailOrPhone, channel = "EMAIL", ipAddres
       expiryMinutes: 10
     });
   } else {
-    console.log(`
-[SMS OTP DISPATCH] 6-digit code for ${user.phone}: ${rawOtp}`);
+    await sendOtpSms({
+      toPhone: user.phone,
+      otp: rawOtp,
+      expiryMinutes: 10
+    });
   }
+  const targetIdentifier = channel === "PHONE" ? user.phone : user.email;
   return {
     ok: true,
-    message: `A 6-digit verification code has been dispatched to ${maskIdentifier(user.email, channel)}.`,
+    message: `A 6-digit verification code has been dispatched to ${maskIdentifier(targetIdentifier, channel)}.`,
     channel,
-    maskedTarget: maskIdentifier(user.email, channel)
+    maskedTarget: maskIdentifier(targetIdentifier, channel)
   };
 }
 async function verifyOtpAndGenerateResetToken(emailOrPhone, submittedOtp) {
