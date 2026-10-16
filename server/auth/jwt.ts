@@ -1,8 +1,18 @@
 import crypto from "crypto"
 
-const JWT_SECRET =
+const FALLBACK_JWT_SECRET =
+  "gomaa_secure_jwt_secret_shield_prod_2026_pan_india_vedic_cow_sanctuary_987654321"
+
+export const JWT_SECRET =
   process.env.GOMAA_JWT_SECRET ||
-  "gomaa_sacred_enterprise_jwt_secret_2026_vedic_welfare_mesh"
+  process.env.JWT_SECRET ||
+  FALLBACK_JWT_SECRET
+
+if (process.env.NODE_ENV === "production" && JWT_SECRET === FALLBACK_JWT_SECRET) {
+  console.warn(
+    "[Security Notice] Using built-in fallback JWT_SECRET. For production, set GOMAA_JWT_SECRET in your Vercel Environment Variables."
+  )
+}
 
 function base64UrlEncode(strOrBuffer: string | Buffer): string {
   const buf =
@@ -32,6 +42,9 @@ export interface JwtPayload {
   gosalaIds: string[]
   gosalaNames: string[]
   adminId?: string
+  originalRole?: "super_admin" | "admin"
+  isContextSwitched?: boolean
+  contextSwitchedAt?: number
   driverData?: {
     driverId?: string
     vehicleNumber?: string
@@ -132,5 +145,87 @@ export function verifyJwt(
     return { valid: true, payload }
   } catch (err: any) {
     return { valid: false, error: err.message || "Invalid payload JSON" }
+  }
+}
+
+export interface ResetTokenPayload {
+  purpose: "PASSWORD_RESET"
+  identifier: string
+  otpId: string
+  iat?: number
+  exp?: number
+}
+
+/**
+ * Sign a single-use Password Reset Token (10 min expiry)
+ */
+export function signResetToken(
+  payload: Omit<ResetTokenPayload, "iat" | "exp">,
+  expiresInSeconds: number = 600,
+): string {
+  const header = { alg: "HS256", typ: "JWT" }
+  const nowSec = Math.floor(Date.now() / 1000)
+  const fullPayload: ResetTokenPayload = {
+    ...payload,
+    iat: nowSec,
+    exp: nowSec + expiresInSeconds,
+  }
+
+  const encodedHeader = base64UrlEncode(JSON.stringify(header))
+  const encodedPayload = base64UrlEncode(JSON.stringify(fullPayload))
+  const dataToSign = `${encodedHeader}.${encodedPayload}`
+
+  const signature = crypto
+    .createHmac("sha256", JWT_SECRET)
+    .update(dataToSign)
+    .digest()
+
+  return `${dataToSign}.${base64UrlEncode(signature)}`
+}
+
+/**
+ * Verify a single-use Password Reset Token
+ */
+export function verifyResetToken(
+  token: string,
+): { valid: boolean; payload?: ResetTokenPayload; error?: string } {
+  if (!token || typeof token !== "string") {
+    return { valid: false, error: "Token missing" }
+  }
+
+  const parts = token.trim().split(".")
+  if (parts.length !== 3) {
+    return { valid: false, error: "Malformed token format" }
+  }
+
+  const [encodedHeader, encodedPayload, encodedSignature] = parts
+  const dataToSign = `${encodedHeader}.${encodedPayload}`
+
+  const expectedSignature = crypto
+    .createHmac("sha256", JWT_SECRET)
+    .update(dataToSign)
+    .digest()
+  const expectedEncoded = base64UrlEncode(expectedSignature)
+
+  const bufExpected = Buffer.from(expectedEncoded)
+  const bufActual = Buffer.from(encodedSignature)
+
+  if (
+    bufExpected.length !== bufActual.length ||
+    !crypto.timingSafeEqual(bufExpected, bufActual)
+  ) {
+    return { valid: false, error: "Invalid signature" }
+  }
+
+  try {
+    const payloadStr = base64UrlDecode(encodedPayload)
+    const payload: ResetTokenPayload = JSON.parse(payloadStr)
+    const nowSec = Math.floor(Date.now() / 1000)
+    if (payload.exp && payload.exp < nowSec) {
+      return { valid: false, error: "Token has expired", payload }
+    }
+    return { valid: true, payload }
+  } catch (err: any) {
+    return { valid: false, error: err.message || "Malformed payload JSON" }
   }
 }

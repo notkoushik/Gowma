@@ -54,6 +54,7 @@ export type Booking = {
   perKmSnapshot?: number
   extraUnitRateSnapshot?: number
   commissionSnapshot?: number
+  quoteToken?: string
   createdAt?: string
   // Booker Identity & Aadhaar KYC
   aadhaarNumber?: string

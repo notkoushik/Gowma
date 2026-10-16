@@ -20,10 +20,12 @@ var prisma = new Proxy({}, {
 // server/ws/hub.ts
 var WebSocketHub = class {
   clients = /* @__PURE__ */ new Map();
+  identities = /* @__PURE__ */ new Map();
   channels = /* @__PURE__ */ new Map();
   isAliveMap = /* @__PURE__ */ new WeakMap();
-  register(ws) {
+  register(ws, identity) {
     this.clients.set(ws, /* @__PURE__ */ new Set());
+    this.identities.set(ws, identity);
     this.isAliveMap.set(ws, true);
     ws.on("pong", () => {
       this.isAliveMap.set(ws, true);
@@ -58,9 +60,15 @@ var WebSocketHub = class {
       }
     }
     this.clients.delete(ws);
+    this.identities.delete(ws);
   }
   subscribe(ws, channel) {
     if (!channel || typeof channel !== "string") return;
+    const identity = this.identities.get(ws);
+    if (!identity || !this.canAccessChannel(identity, channel)) {
+      this.send(ws, { event: "ERROR", data: { message: "Unauthorized channel" } });
+      return;
+    }
     let clientSubs = this.clients.get(ws);
     if (!clientSubs) {
       clientSubs = /* @__PURE__ */ new Set();
@@ -123,7 +131,7 @@ var WebSocketHub = class {
         if (msg.channel) this.unsubscribe(ws, msg.channel);
         break;
       case "DRIVER_TELEMETRY":
-        if (msg.channel && msg.payload) {
+        if (msg.channel && msg.payload && this.canPublishTelemetry(ws, msg.channel, msg.payload)) {
           this.broadcastToChannel(msg.channel, "GPS_TICK", msg.payload);
         }
         break;
@@ -133,6 +141,20 @@ var WebSocketHub = class {
           data: { message: `Unknown client action: ${msg.action}` }
         });
     }
+  }
+  canAccessChannel(identity, channel) {
+    if (identity.role === "super_admin") return false;
+    if (identity.role === "admin") return channel === "channel:admin" || channel.startsWith("channel:booking:");
+    if (identity.role === "manager") {
+      return identity.gosalaNames.some((name) => channel === `channel:gosala:${name}`) || channel.startsWith("channel:booking:");
+    }
+    if (identity.role === "driver") return channel.startsWith("channel:booking:") || channel === `channel:driver:${identity.name}`;
+    if (identity.role === "customer") return channel.startsWith("channel:booking:");
+    return false;
+  }
+  canPublishTelemetry(ws, channel, payload) {
+    const identity = this.identities.get(ws);
+    return !!identity && (identity.role === "driver" || identity.role === "admin" || identity.role === "super_admin") && this.clients.get(ws)?.has(channel) === true && typeof payload.lat === "number" && typeof payload.lng === "number" && payload.lat >= -90 && payload.lat <= 90 && payload.lng >= -180 && payload.lng <= 180;
   }
   send(ws, msg) {
     if (ws.readyState === ws.OPEN) {
@@ -718,6 +740,16 @@ async function executeAutomatedSweep(options) {
     }
     return b.status === "Completed" || b.status === "In Service" || b.status === "Confirmed" || b.handoverOtpVerified === true;
   });
+  if (eligibleBookings.length > 0 && process.env.GOMAA_PAYOUT_PROVIDER_ENABLED !== "true") {
+    return {
+      success: false,
+      disbursedBatches: [],
+      totalDisbursed: 0,
+      totalRetained: 0,
+      cycle,
+      message: "Payout provider is not configured; no settlement was created."
+    };
+  }
   const gosalaGroups = /* @__PURE__ */ new Map();
   eligibleBookings.forEach((b) => {
     const gName = b.gosala || "Shri Krishna Gaushala";
@@ -727,8 +759,14 @@ async function executeAutomatedSweep(options) {
     gosalaGroups.get(gName).push(b);
   });
   if (gosalaGroups.size === 0) {
-    const defaultName = options.targetGosala || "Shri Krishna Gaushala";
-    gosalaGroups.set(defaultName, []);
+    return {
+      success: true,
+      disbursedBatches: [],
+      totalDisbursed: 0,
+      totalRetained: 0,
+      cycle,
+      message: "No eligible bookings are ready for settlement."
+    };
   }
   const disbursedBatches = [];
   let totalDisbursed = 0;
@@ -762,10 +800,6 @@ async function executeAutomatedSweep(options) {
         payableAmount += bookingPayable;
         commissionAmount += bookingCommission;
       }
-    } else {
-      grossAmount = 45e3;
-      commissionAmount = Math.round(grossAmount * defaultCommPct / 100);
-      payableAmount = grossAmount - commissionAmount;
     }
     const bank = resolveGaushalaBankDetails(gName, options.serverProfiles, gosalaRecord);
     const utr = generateRbiUtr(bank.ifsc);
@@ -776,7 +810,7 @@ async function executeAutomatedSweep(options) {
       batchLabel: batchWeekLabel,
       gosalaName: gName,
       gosalaId: gosalaRecord?.id,
-      sevasCount: bks.length || 6,
+      sevasCount: bks.length,
       grossAmount,
       commissionPct: defaultCommPct,
       commissionAmount,
@@ -922,9 +956,63 @@ async function getScheduleStatus() {
   };
 }
 
+// server/services/pricingService.ts
+function calculateBookingPrice(params) {
+  const cfg = db.pricingConfig;
+  const base = params.baseRate ?? 3500;
+  const durationMin = params.durationMin || cfg.standardMin || 60;
+  const standardMin = cfg.standardMin || 60;
+  const extraMin = Math.max(0, durationMin - standardMin);
+  const unitMin = params.extraUnitMin ?? (cfg.extraUnitMin || 30);
+  const unitRate = params.extraUnitRate ?? (cfg.extraUnitRate || 500);
+  const extraUnits = Math.ceil(extraMin / unitMin);
+  const extraTime = extraUnits * unitRate;
+  const distanceKm = params.distanceKm || 0;
+  const freeKm = params.freeKm ?? (cfg.freeKm || 5);
+  const perKm = params.perKm ?? (cfg.perKm || 50);
+  const chargeableKm = Math.max(0, Math.round((distanceKm - freeKm) * 10) / 10);
+  const transport = Math.round(chargeableKm * perKm / 10) * 10;
+  const addons = params.addonsCost || 0;
+  const discount = params.discount || 0;
+  const subtotal = Math.max(0, base + extraTime + transport + addons - discount);
+  const taxPct = params.taxPct !== void 0 ? params.taxPct : cfg.taxPct || 12;
+  const tax = Math.round(subtotal * taxPct / 100);
+  const total = subtotal + tax;
+  const commissionPct = params.commissionPct !== void 0 ? params.commissionPct : cfg.commissionPct || 20;
+  const sevaTotal = base + extraTime;
+  const commission = params.commissionFlat !== void 0 && params.commissionFlat !== null ? params.commissionFlat : Math.round(sevaTotal * commissionPct / 100);
+  const passThrough = transport + addons;
+  const gosalaPayable = Math.max(0, sevaTotal - commission) + passThrough;
+  return {
+    base,
+    extraTime,
+    transport,
+    addons,
+    tax,
+    discount,
+    total,
+    commission,
+    commissionPct,
+    gosalaPayable,
+    freeKmSnapshot: freeKm,
+    perKmSnapshot: perKm,
+    extraUnitRateSnapshot: unitRate,
+    chargeableKm
+  };
+}
+
+// server/services/quoteService.ts
+import crypto2 from "node:crypto";
+
 // server/auth/jwt.ts
 import crypto from "crypto";
-var JWT_SECRET = process.env.GOMAA_JWT_SECRET || "gomaa_sacred_enterprise_jwt_secret_2026_vedic_welfare_mesh";
+var FALLBACK_JWT_SECRET = "gomaa_secure_jwt_secret_shield_prod_2026_pan_india_vedic_cow_sanctuary_987654321";
+var JWT_SECRET = process.env.GOMAA_JWT_SECRET || process.env.JWT_SECRET || FALLBACK_JWT_SECRET;
+if (process.env.NODE_ENV === "production" && JWT_SECRET === FALLBACK_JWT_SECRET) {
+  console.warn(
+    "[Security Notice] Using built-in fallback JWT_SECRET. For production, set GOMAA_JWT_SECRET in your Vercel Environment Variables."
+  );
+}
 function base64UrlEncode(strOrBuffer) {
   const buf = typeof strOrBuffer === "string" ? Buffer.from(strOrBuffer, "utf-8") : strOrBuffer;
   return buf.toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
@@ -983,20 +1071,172 @@ function verifyJwt(token) {
     return { valid: false, error: err.message || "Invalid payload JSON" };
   }
 }
+function signResetToken(payload, expiresInSeconds = 600) {
+  const header = { alg: "HS256", typ: "JWT" };
+  const nowSec = Math.floor(Date.now() / 1e3);
+  const fullPayload = {
+    ...payload,
+    iat: nowSec,
+    exp: nowSec + expiresInSeconds
+  };
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedPayload = base64UrlEncode(JSON.stringify(fullPayload));
+  const dataToSign = `${encodedHeader}.${encodedPayload}`;
+  const signature = crypto.createHmac("sha256", JWT_SECRET).update(dataToSign).digest();
+  return `${dataToSign}.${base64UrlEncode(signature)}`;
+}
+function verifyResetToken(token) {
+  if (!token || typeof token !== "string") {
+    return { valid: false, error: "Token missing" };
+  }
+  const parts = token.trim().split(".");
+  if (parts.length !== 3) {
+    return { valid: false, error: "Malformed token format" };
+  }
+  const [encodedHeader, encodedPayload, encodedSignature] = parts;
+  const dataToSign = `${encodedHeader}.${encodedPayload}`;
+  const expectedSignature = crypto.createHmac("sha256", JWT_SECRET).update(dataToSign).digest();
+  const expectedEncoded = base64UrlEncode(expectedSignature);
+  const bufExpected = Buffer.from(expectedEncoded);
+  const bufActual = Buffer.from(encodedSignature);
+  if (bufExpected.length !== bufActual.length || !crypto.timingSafeEqual(bufExpected, bufActual)) {
+    return { valid: false, error: "Invalid signature" };
+  }
+  try {
+    const payloadStr = base64UrlDecode(encodedPayload);
+    const payload = JSON.parse(payloadStr);
+    const nowSec = Math.floor(Date.now() / 1e3);
+    if (payload.exp && payload.exp < nowSec) {
+      return { valid: false, error: "Token has expired", payload };
+    }
+    return { valid: true, payload };
+  } catch (err) {
+    return { valid: false, error: err.message || "Malformed payload JSON" };
+  }
+}
+
+// server/services/quoteService.ts
+function encode(value) {
+  return Buffer.from(JSON.stringify(value)).toString("base64url");
+}
+function issueQuote(customerId, values2, ttlSeconds = 300) {
+  const payload = { customerId, values: values2, exp: Math.floor(Date.now() / 1e3) + ttlSeconds };
+  const body = encode(payload);
+  const signature = crypto2.createHmac("sha256", JWT_SECRET).update(body).digest("base64url");
+  return `${body}.${signature}`;
+}
+function verifyQuote(token, customerId) {
+  const [body, signature] = String(token || "").split(".");
+  if (!body || !signature) throw new Error("Invalid quote");
+  const expected = crypto2.createHmac("sha256", JWT_SECRET).update(body).digest("base64url");
+  const a = Buffer.from(signature);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto2.timingSafeEqual(a, b)) throw new Error("Invalid quote signature");
+  const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+  if (payload.exp < Math.floor(Date.now() / 1e3) || payload.customerId !== customerId) throw new Error("Quote expired or not owned by customer");
+  return payload;
+}
+
+// server/router.ts
+import crypto7 from "node:crypto";
+
+// server/services/razorpayService.ts
+import crypto3 from "node:crypto";
+var API = "https://api.razorpay.com/v1";
+var HEX = /^[0-9a-f]+$/i;
+function config(overrides = {}) {
+  const keyId = overrides.keyId ?? process.env.RAZORPAY_KEY_ID;
+  const keySecret = overrides.keySecret ?? process.env.RAZORPAY_KEY_SECRET;
+  if (!keyId || !keySecret || !keyId.startsWith("rzp_test_")) throw new Error("Razorpay is not configured for test mode");
+  return { keyId, keySecret, timeoutMs: overrides.timeoutMs ?? 8e3, fetch: overrides.fetch ?? fetch };
+}
+function text(v, name) {
+  if (typeof v !== "string" || !v || v.length > 512) throw new Error(`Invalid ${name}`);
+  return v;
+}
+function amount(v) {
+  if (!Number.isSafeInteger(v) || v <= 0) throw new Error("Invalid amount");
+  return v;
+}
+function digest(token) {
+  return crypto3.createHash("sha256").update(token).digest("hex");
+}
+function equalHex(actual, expected) {
+  if (typeof actual !== "string" || actual.length !== expected.length || !HEX.test(actual)) return false;
+  return crypto3.timingSafeEqual(Buffer.from(actual, "hex"), Buffer.from(expected, "hex"));
+}
+async function request(path5, options, method = "GET", body) {
+  const c = config(options);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), c.timeoutMs);
+  try {
+    const response = await c.fetch(`${API}${path5}`, { method, signal: controller.signal, headers: { Authorization: `Basic ${Buffer.from(`${c.keyId}:${c.keySecret}`).toString("base64")}`, ...body ? { "Content-Type": "application/json" } : {} }, ...body ? { body: JSON.stringify(body) } : {} });
+    if (!response.ok) throw new Error("Razorpay provider request failed");
+    return await response.json();
+  } catch {
+    throw new Error("Razorpay provider unavailable");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function verifyCapturedPayment(input, options = {}) {
+  const paymentId = text(input?.paymentId, "payment");
+  const orderId = text(input?.orderId, "order");
+  const signature = text(input?.signature, "signature");
+  const customerId = text(input?.customerId, "customer");
+  const quoteToken = text(input?.quoteToken, "quote");
+  const holdId = text(input?.holdId, "hold");
+  const amountPaise = amount(input?.amountPaise);
+  const c = config(options);
+  const expected = crypto3.createHmac("sha256", c.keySecret).update(`${orderId}|${paymentId}`).digest("hex");
+  if (!equalHex(signature, expected)) throw new Error("Invalid payment signature");
+  const [payment, order] = await Promise.all([request(`/payments/${encodeURIComponent(paymentId)}`, options), request(`/orders/${encodeURIComponent(orderId)}`, options)]);
+  if (payment.id !== paymentId || payment.order_id !== void 0 && payment.order_id !== orderId || payment.captured !== true || payment.status !== "captured" || payment.currency !== "INR" || payment.amount !== amountPaise) throw new Error("Payment verification failed");
+  if (order.id !== orderId || order.amount !== amountPaise || order.currency !== "INR" || order.status !== "paid") throw new Error("Order verification failed");
+  const notes = order.notes ?? {};
+  if (notes.customerId !== customerId || notes.holdId !== holdId || notes.quoteDigest !== digest(quoteToken)) throw new Error("Order ownership verification failed");
+  return { paymentId, orderId, customerId, holdId, amountPaise };
+}
+async function createPaymentOrder(input, options = {}) {
+  const customerId = text(input?.customerId, "customer");
+  const quoteToken = text(input?.quoteToken, "quote");
+  const holdId = text(input?.holdId, "hold");
+  const amountPaise = amount(input?.amountPaise);
+  const order = await request("/orders", options, "POST", { amount: amountPaise, currency: "INR", notes: { customerId, holdId, quoteDigest: digest(quoteToken) } });
+  if (typeof order.id !== "string" || !order.id) throw new Error("Razorpay returned an invalid order");
+  return { orderId: order.id, amountPaise, currency: "INR" };
+}
+function verifyWebhookSignature(rawBody, signature, secret) {
+  const webhookSecret = secret ?? process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (!webhookSecret) throw new Error("Razorpay webhook secret is not configured");
+  if (typeof signature !== "string" || !signature) return false;
+  if (typeof rawBody !== "string") return false;
+  const expected = crypto3.createHmac("sha256", webhookSecret).update(rawBody).digest("hex");
+  return equalHex(signature, expected);
+}
+
+// server/auth/password.ts
+import crypto4 from "node:crypto";
+var KEY_LENGTH = 64;
+function hashPassword(password) {
+  if (!password || password.length < 8) throw new Error("Password must be at least 8 characters");
+  const salt = crypto4.randomBytes(16).toString("hex");
+  const derived = crypto4.scryptSync(password, salt, KEY_LENGTH);
+  return `scrypt$${salt}$${derived.toString("hex")}`;
+}
+function isPasswordHash(value) {
+  return typeof value === "string" && /^scrypt\$[a-f0-9]{32}\$[a-f0-9]{128}$/.test(value);
+}
+function verifyPassword(password, stored) {
+  if (!isPasswordHash(stored)) return false;
+  const [, salt, expectedHex] = stored.split("$");
+  const actual = crypto4.scryptSync(password, salt, KEY_LENGTH);
+  const expected = Buffer.from(expectedHex, "hex");
+  return expected.length === actual.length && crypto4.timingSafeEqual(expected, actual);
+}
 
 // server/auth/authService.ts
-var DEFAULT_PASSWORDS = {
-  "koushik@gmail.com": "Koushik.git",
-  "rammohan@gmail.com": "Koushik.git",
-  "vikramaditya@gomaa.in": "OpsAdmin@2026!",
-  "rajesh@gomaa.in": "OpsAdmin2@2026!",
-  "sunil.pawar@gomaa.in": "koushik.git",
-  "radha@gmail.com": "koushik.git",
-  "ramesh.test@gomaa.in": "Mgr@Ramesh2026!",
-  "suryavardhan@gmail.com": "koushik.git",
-  "aruna@gmail.com": "koushik.git",
-  "hari@gmail.com": "koushik.git"
-};
+import crypto5 from "node:crypto";
 var inMemoryPasswords = /* @__PURE__ */ new Map();
 function mapDbRoleToFrontend(role) {
   switch (role) {
@@ -1038,132 +1278,28 @@ function getAuthUserFromHeader(authHeader) {
 }
 async function authenticateOrResolveUser(emailOrPhone, roleHint, password) {
   const query = (emailOrPhone || "").trim().toLowerCase();
-  const isSuperAdminTarget = query === "koushik@gmail.com" || roleHint === "super_admin" && (query === "" || query === "koushik@gmail.com");
-  let user = null;
-  if (isSuperAdminTarget) {
-    if (!password) {
-      throw new Error("Password is required for Super Admin account");
-    }
-    if (password !== "Koushik.git") {
-      throw new Error("Invalid password for Super Admin account");
-    }
-    try {
-      user = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { id: "USER-SA-KOUSHIK" },
-            { email: { equals: "koushik@gmail.com", mode: "insensitive" } }
-          ]
-        },
-        include: {
-          managerAssignments: {
-            include: { gosala: true }
-          }
-        }
-      });
-      if (!user) {
-        user = await prisma.user.upsert({
-          where: { email: "koushik@gmail.com" },
-          create: {
-            id: "USER-SA-KOUSHIK",
-            email: "koushik@gmail.com",
-            name: "Koushik",
-            phone: "+91 98000 00000",
-            role: "SUPER_ADMIN",
-            password: "Koushik.git",
-            isActive: true
-          },
-          update: {
-            role: "SUPER_ADMIN",
-            isActive: true
-          },
-          include: {
-            managerAssignments: {
-              include: { gosala: true }
-            }
-          }
-        });
-      }
-    } catch {
-      user = {
-        id: "USER-SA-KOUSHIK",
-        email: "koushik@gmail.com",
-        name: "Koushik",
-        phone: "+91 98000 00000",
-        role: "SUPER_ADMIN",
-        managerAssignments: []
-      };
-    }
+  if (!query) throw new Error("Email, phone, or user ID is required");
+  const user = await prisma.user.findFirst({
+    where: { OR: [{ id: query }, { email: { equals: query, mode: "insensitive" } }, { phone: { equals: query, mode: "insensitive" } }] },
+    include: { managerAssignments: { include: { gosala: true } } }
+  });
+  if (!user) throw new Error("Invalid credentials or user not found");
+  if (user.isActive === false) throw new Error("Account is inactive");
+  if (!password) throw new Error("Password is required");
+  if (isPasswordHash(user.password)) {
+    if (!verifyPassword(password, user.password)) throw new Error("Invalid credentials");
   } else {
+    const stored = typeof user.password === "string" ? user.password : "";
+    const a = Buffer.from(password);
+    const b = Buffer.from(stored);
+    const valid = a.length === b.length && crypto5.timingSafeEqual(a, b);
+    if (!valid) throw new Error("Invalid credentials");
     try {
-      user = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { id: query },
-            { email: { equals: query, mode: "insensitive" } },
-            { phone: { equals: query, mode: "insensitive" } }
-          ]
-        },
-        include: {
-          managerAssignments: {
-            include: { gosala: true }
-          }
-        }
-      });
+      await prisma.user.update({ where: { id: user.id }, data: { password: hashPassword(password) } });
     } catch {
-      user = null;
-    }
-    if (!user) {
-      const meta = getUserMeta(query);
-      const knownExpectedPass = inMemoryPasswords.get(query) || meta.password || DEFAULT_PASSWORDS[query];
-      if (knownExpectedPass || query.includes("admin") || query === "rammohan@gmail.com" || query === "radha@gmail.com") {
-        const passToRequire = knownExpectedPass || (query === "rammohan@gmail.com" ? "Koushik.git" : "koushik.git");
-        if (!password) {
-          throw new Error("Password is required");
-        }
-        if (password !== passToRequire) {
-          throw new Error("Invalid credentials");
-        }
-        const feRole2 = query.includes("admin") ? "admin" : query.includes("driver") ? "driver" : query === "radha@gmail.com" ? "customer" : "manager";
-        const dbRole = mapFrontendToDbRole(feRole2);
-        const name = query === "rammohan@gmail.com" ? "Rammohan" : query === "radha@gmail.com" ? "Radha" : query.split("@")[0];
-        try {
-          user = await prisma.user.create({
-            data: {
-              email: query,
-              name: name.charAt(0).toUpperCase() + name.slice(1),
-              phone: "+91 98490 12345",
-              role: dbRole,
-              password: passToRequire,
-              isActive: true
-            },
-            include: { managerAssignments: { include: { gosala: true } } }
-          });
-        } catch {
-          user = {
-            id: `USER-${query.slice(0, 4).toUpperCase()}`,
-            email: query,
-            name: name.charAt(0).toUpperCase() + name.slice(1),
-            phone: "+91 98490 12345",
-            role: dbRole,
-            managerAssignments: []
-          };
-        }
-      }
-    }
-    if (!user) {
-      throw new Error("Invalid credentials or user not found");
-    }
-    const userEmailKey = (user.email || "").toLowerCase();
-    const expectedPass = user.password || inMemoryPasswords.get(userEmailKey) || inMemoryPasswords.get(user.id) || getUserMeta(userEmailKey).password || DEFAULT_PASSWORDS[userEmailKey] || (userEmailKey.includes("admin") ? "OpsAdmin@2026!" : "koushik.git");
-    if (!password) {
-      throw new Error("Password is required");
-    }
-    if (password !== expectedPass) {
-      throw new Error("Invalid credentials");
+      throw new Error("Unable to secure account password");
     }
   }
-  if (!user) return null;
   const assignedGosalas = (user.managerAssignments || []).map((a) => ({
     id: a.gosala.id,
     name: a.gosala.name
@@ -1209,6 +1345,7 @@ async function authenticateOrResolveUser(emailOrPhone, roleHint, password) {
     totalBookings: 4,
     preferredCeremony: "Griha Pravesh & Kamadhenu Puja"
   } : void 0;
+  const isSuper = feRole === "super_admin";
   const token = signJwt({
     userId: user.id,
     name: user.name,
@@ -1219,6 +1356,8 @@ async function authenticateOrResolveUser(emailOrPhone, roleHint, password) {
     gosalaIds,
     gosalaNames,
     adminId: feRole === "admin" ? user.id : void 0,
+    originalRole: isSuper ? "super_admin" : void 0,
+    isContextSwitched: false,
     driverData,
     customerData
   });
@@ -1234,6 +1373,8 @@ async function authenticateOrResolveUser(emailOrPhone, roleHint, password) {
       avatar: user.avatar,
       gosalas: assignedGosalas,
       assignedGosalaNames: gosalaNames,
+      originalRole: isSuper ? "super_admin" : void 0,
+      isContextSwitched: false,
       driverData,
       customerData,
       adminData: userMeta.adminData
@@ -1258,13 +1399,17 @@ async function registerUser(payload) {
     throw new Error(`An account with email "${emailNorm}" or phone "${phoneNorm}" is already registered. Please sign in instead.`);
   }
   const dbRole = mapFrontendToDbRole(payload.role);
+  if (!payload.password || payload.password.length < 8) {
+    throw new Error("Password must be at least 8 characters");
+  }
+  const passwordHash = hashPassword(payload.password);
   const user = await prisma.user.create({
     data: {
       name: payload.name.trim(),
       email: emailNorm,
       phone: phoneNorm || "+91 98000 00000",
       role: dbRole,
-      password: payload.password || void 0,
+      password: passwordHash,
       isActive: true
     }
   });
@@ -1300,11 +1445,6 @@ async function registerUser(payload) {
     }
   }
   const metaPatch = {};
-  if (payload.password) {
-    inMemoryPasswords.set(emailNorm, payload.password);
-    inMemoryPasswords.set(user.id, payload.password);
-    metaPatch.password = payload.password;
-  }
   if (payload.role === "customer" && payload.customerData) {
     metaPatch.customerData = {
       ...payload.customerData,
@@ -1392,51 +1532,11 @@ async function getDirectoryAccounts() {
         };
       });
     }
+    return [];
   } catch (err) {
-    console.warn("[getDirectoryAccounts] DB query failed, using baseline fallback:", err);
+    console.warn("[getDirectoryAccounts] DB query failed:", err);
+    return [];
   }
-  return [
-    {
-      id: "USER-SA-KOUSHIK",
-      name: "Koushik",
-      email: "koushik@gmail.com",
-      phone: "+91 98000 00000",
-      role: "super_admin",
-      dbRole: "SUPER_ADMIN",
-      assignedGosalaNames: ["All Network Gaushalas"],
-      primaryGosala: "Platform Governance"
-    },
-    {
-      id: "USER-MGR-RAM",
-      name: "Rammohan",
-      email: "rammohan@gmail.com",
-      phone: "+91 98490 12345",
-      role: "manager",
-      dbRole: "GOSALA_MANAGER",
-      assignedGosalaNames: ["Sri Govardhana Sanctuary"],
-      primaryGosala: "Sri Govardhana Sanctuary"
-    },
-    {
-      id: "USER-OPS-VIKRAM",
-      name: "Vikramaditya",
-      email: "vikramaditya@gomaa.in",
-      phone: "+91 98200 11223",
-      role: "admin",
-      dbRole: "OPERATIONS_ADMIN",
-      assignedGosalaNames: ["South Regional Sanctuaries"],
-      primaryGosala: "South Regional Sanctuaries"
-    },
-    {
-      id: "USER-CUST-RADHA",
-      name: "Radha",
-      email: "radha@gmail.com",
-      phone: "+91 98200 44556",
-      role: "customer",
-      dbRole: "CUSTOMER",
-      assignedGosalaNames: [],
-      primaryGosala: "Devotee"
-    }
-  ];
 }
 async function getAllUsers() {
   try {
@@ -1466,16 +1566,16 @@ async function getAllUsers() {
           avatar: u.avatar,
           createdAt: u.createdAt,
           assignedGosalaNames: assignedGosalas.map((g) => g.name),
-          password: u.password || inMemoryPasswords.get(u.email.toLowerCase()) || inMemoryPasswords.get(u.id) || meta.password || DEFAULT_PASSWORDS[u.email.toLowerCase()],
           driverData: meta.driverData,
           customerData: meta.customerData
         };
       });
     }
+    return [];
   } catch (err) {
-    console.warn("[getAllUsers] DB query failed, using baseline fallback:", err);
+    console.warn("[getAllUsers] DB query failed:", err);
+    return [];
   }
-  return await getDirectoryAccounts();
 }
 async function updateUser(id, updates) {
   const data = {};
@@ -1484,19 +1584,14 @@ async function updateUser(id, updates) {
   if (updates.role) data.role = mapFrontendToDbRole(updates.role);
   if (updates.isActive !== void 0) data.isActive = updates.isActive;
   if (updates.password) {
-    data.password = updates.password;
-    inMemoryPasswords.set(id, updates.password);
+    data.password = hashPassword(updates.password);
   }
   const updated = await prisma.user.update({
     where: { id },
     data,
     include: { managerAssignments: { include: { gosala: true } } }
   });
-  if (updates.password) {
-    inMemoryPasswords.set(updated.email.toLowerCase(), updates.password);
-  }
   const metaPatch = {};
-  if (updates.password) metaPatch.password = updates.password;
   if (updates.customerData) metaPatch.customerData = updates.customerData;
   if (updates.driverData) metaPatch.driverData = updates.driverData;
   if (updates.managerData) metaPatch.managerData = updates.managerData;
@@ -1504,7 +1599,8 @@ async function updateUser(id, updates) {
     saveUserMeta(updated.email, metaPatch);
     saveUserMeta(updated.id, metaPatch);
   }
-  return updated;
+  const { password: _password, ...safeUpdated } = updated;
+  return safeUpdated;
 }
 async function deleteUser(id) {
   const u = await prisma.user.findUnique({ where: { id } });
@@ -1513,6 +1609,997 @@ async function deleteUser(id) {
     deleteUserMeta(u.id);
   }
   return prisma.user.delete({ where: { id } });
+}
+async function switchUserContext(caller, targetRole) {
+  if (!caller || !caller.userId) {
+    const err = new Error("Unauthenticated: Valid session token is required to switch context");
+    err.status = 401;
+    throw err;
+  }
+  if (targetRole !== "super_admin" && targetRole !== "admin") {
+    const err = new Error("Invalid target role. Context switching is strictly limited to 'super_admin' or 'admin'");
+    err.status = 400;
+    throw err;
+  }
+  const dbUser = await prisma.user.findUnique({
+    where: { id: caller.userId },
+    include: { managerAssignments: { include: { gosala: true } } }
+  });
+  if (!dbUser || dbUser.isActive === false) {
+    const err = new Error("Account not found or inactive");
+    err.status = 401;
+    throw err;
+  }
+  if (dbUser.role !== "SUPER_ADMIN") {
+    console.warn(`[SECURITY ALERT] Unauthorized context switch attempt by non-super-admin user ${dbUser.email} (DB Role: ${dbUser.role})`);
+    const err = new Error("Forbidden: Only genuine Super Admin accounts can switch execution context");
+    err.status = 403;
+    throw err;
+  }
+  const userMeta = getUserMeta(dbUser.email || dbUser.id);
+  if (targetRole === "admin") {
+    const adminEmail = (dbUser.email || "").toLowerCase();
+    const allGosalas = await prisma.gosala.findMany({ where: { isActive: true } });
+    const personalGosalas = [];
+    allGosalas.forEach((g) => {
+      const meta = getGosalaMeta(g.id, g.name);
+      const govEmail = (meta.governingAdminEmail || "").toLowerCase();
+      const adminIdMatch = meta.adminId === dbUser.id;
+      if (govEmail === adminEmail || adminIdMatch) {
+        personalGosalas.push({ id: g.id, name: g.name });
+      }
+    });
+    const gosalaIds = personalGosalas.map((g) => g.id);
+    const gosalaNames = personalGosalas.map((g) => g.name);
+    const token = signJwt({
+      userId: dbUser.id,
+      name: dbUser.name,
+      email: dbUser.email,
+      phone: dbUser.phone,
+      role: "admin",
+      dbRole: "OPERATIONS_ADMIN",
+      gosalaIds,
+      gosalaNames,
+      adminId: dbUser.id,
+      originalRole: "super_admin",
+      isContextSwitched: true,
+      contextSwitchedAt: Math.floor(Date.now() / 1e3),
+      driverData: caller.driverData,
+      customerData: caller.customerData
+    });
+    return {
+      token,
+      user: {
+        id: dbUser.id,
+        name: dbUser.name,
+        email: dbUser.email,
+        phone: dbUser.phone,
+        role: "admin",
+        dbRole: "OPERATIONS_ADMIN",
+        avatar: dbUser.avatar,
+        gosalas: personalGosalas,
+        assignedGosalaNames: gosalaNames,
+        originalRole: "super_admin",
+        isContextSwitched: true,
+        driverData: caller.driverData,
+        customerData: caller.customerData,
+        adminData: userMeta.adminData
+      }
+    };
+  } else {
+    const token = signJwt({
+      userId: dbUser.id,
+      name: dbUser.name,
+      email: dbUser.email,
+      phone: dbUser.phone,
+      role: "super_admin",
+      dbRole: "SUPER_ADMIN",
+      gosalaIds: [],
+      gosalaNames: ["All Network Gaushalas"],
+      originalRole: "super_admin",
+      isContextSwitched: false,
+      contextSwitchedAt: Math.floor(Date.now() / 1e3),
+      driverData: caller.driverData,
+      customerData: caller.customerData
+    });
+    return {
+      token,
+      user: {
+        id: dbUser.id,
+        name: dbUser.name,
+        email: dbUser.email,
+        phone: dbUser.phone,
+        role: "super_admin",
+        dbRole: "SUPER_ADMIN",
+        avatar: dbUser.avatar,
+        gosalas: [],
+        assignedGosalaNames: ["All Network Gaushalas"],
+        originalRole: "super_admin",
+        isContextSwitched: false,
+        driverData: caller.driverData,
+        customerData: caller.customerData,
+        adminData: userMeta.adminData
+      }
+    };
+  }
+}
+
+// server/services/resendService.ts
+async function sendOtpEmail({
+  toEmail,
+  userName = "Devotee",
+  otp,
+  expiryMinutes = 10
+}) {
+  const apiKey = process.env.RESEND_API_KEY || "";
+  const fromEmail = process.env.RESEND_FROM_EMAIL || "GOMAA Operations <onboarding@resend.dev>";
+  if (!apiKey || apiKey.trim() === "") {
+    console.log(`
+========================================================================`);
+    console.log(`[RESEND NOTICE] No RESEND_API_KEY found in environment.`);
+    console.log(`[OUT-OF-BAND DISPATCH] Password Reset OTP for ${toEmail}: ${otp}`);
+    console.log(`[EXPIRY] Valid for ${expiryMinutes} minutes. Real delivery requires RESEND_API_KEY.`);
+    console.log(`========================================================================
+`);
+    return { success: true, simulated: true };
+  }
+  const subject = `Your GOMAA Verification Code: ${otp}`;
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GOMAA Verification Code</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f7f5f0; margin: 0; padding: 24px; color: #201c16; }
+    .card { max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 8px; border: 1px solid #e6e0d4; padding: 36px 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+    .header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; border-bottom: 1px solid #f0ebe0; padding-bottom: 16px; }
+    .logo-badge { width: 36px; height: 36px; background-color: #d97706; color: #ffffff; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; }
+    .brand-title { font-size: 20px; font-weight: 700; color: #201c16; margin: 0; }
+    .brand-sub { font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; color: #78716c; margin: 2px 0 0 0; }
+    .greeting { font-size: 15px; font-weight: 600; color: #201c16; margin-bottom: 8px; }
+    .lead-text { font-size: 13.5px; line-height: 1.5; color: #44403c; margin-bottom: 24px; }
+    .otp-container { background: #fffbeb; border: 1.5px dashed #f59e0b; border-radius: 6px; padding: 18px; text-align: center; margin: 24px 0; }
+    .otp-code { font-family: 'Courier New', monospace; font-size: 32px; font-weight: 800; letter-spacing: 0.25em; color: #b45309; }
+    .otp-hint { font-size: 11.5px; color: #78716c; margin-top: 6px; }
+    .security-notice { font-size: 12px; line-height: 1.5; color: #78716c; background: #f5f5f4; border-radius: 4px; padding: 12px 14px; margin-top: 24px; }
+    .footer { margin-top: 32px; text-align: center; font-size: 11px; color: #a8a29e; border-top: 1px solid #f0ebe0; padding-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="logo-badge">G</div>
+      <div>
+        <h1 class="brand-title">GOMAA</h1>
+        <p class="brand-sub">Sacred Operations &amp; Welfare Platform</p>
+      </div>
+    </div>
+    
+    <div class="greeting">Namaste ${userName},</div>
+    <p class="lead-text">
+      We received a request to verify your identity and reset your account password on the GOMAA platform.
+      Please use the single-use verification code below:
+    </p>
+
+    <div class="otp-container">
+      <div class="otp-code">${otp}</div>
+      <div class="otp-hint">Expires in ${expiryMinutes} minutes \xB7 Never share this code with anyone</div>
+    </div>
+
+    <div class="security-notice">
+      <strong>Security Alert:</strong> If you did not initiate this password recovery request, your account may be secure, but someone may have typed your email address by mistake. You can safely ignore this email; no changes have been made to your credentials.
+    </div>
+
+    <div class="footer">
+      GOMAA Sacred Operations Platform \xB7 Governed by Vedic Care &amp; Multi-Tenant Platform Security
+    </div>
+  </div>
+</body>
+</html>
+`;
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey.trim()}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [toEmail],
+        subject,
+        html
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error("[Resend API Error]:", data);
+      return {
+        success: false,
+        error: data.message || `Resend HTTP ${res.status}`
+      };
+    }
+    return {
+      success: true,
+      id: data.id
+    };
+  } catch (err) {
+    console.error("[Resend Dispatch Exception]:", err.message);
+    return {
+      success: false,
+      error: err.message || "Failed to dispatch email via Resend"
+    };
+  }
+}
+
+// server/services/otpService.ts
+import crypto6 from "node:crypto";
+function maskIdentifier(id, channel) {
+  if (channel === "EMAIL" || id.includes("@")) {
+    const [local, domain] = id.split("@");
+    if (!domain) return id;
+    const visible = local.length > 2 ? local[0] + "***" + local[local.length - 1] : local[0] + "***";
+    return `${visible}@${domain}`;
+  } else {
+    const clean = id.replace(/\s+/g, "");
+    if (clean.length > 6) {
+      return clean.slice(0, 4) + "******" + clean.slice(-2);
+    }
+    return id;
+  }
+}
+function hashOtp(otp) {
+  const salt = crypto6.randomBytes(16).toString("hex");
+  const derived = crypto6.scryptSync(otp, salt, 32);
+  return `scrypt$${salt}$${derived.toString("hex")}`;
+}
+function verifyOtpHash(otp, storedHash) {
+  if (!storedHash || !storedHash.startsWith("scrypt$")) return false;
+  const parts = storedHash.split("$");
+  if (parts.length !== 3) return false;
+  const [, salt, digest2] = parts;
+  if (!salt || !digest2) return false;
+  const derived = crypto6.scryptSync(otp, salt, 32).toString("hex");
+  const bufExpected = Buffer.from(digest2);
+  const bufActual = Buffer.from(derived);
+  return bufExpected.length === bufActual.length && crypto6.timingSafeEqual(bufExpected, bufActual);
+}
+async function requestPasswordResetOtp(emailOrPhone, channel = "EMAIL", ipAddress) {
+  const norm = emailOrPhone.trim().toLowerCase();
+  if (!norm) {
+    throw new Error("Registered email or phone number is required");
+  }
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: { equals: norm, mode: "insensitive" } },
+        { phone: { equals: norm, mode: "insensitive" } }
+      ],
+      isActive: true
+    }
+  });
+  if (!user) {
+    return {
+      ok: true,
+      message: "If your account is registered, a 6-digit verification code has been dispatched.",
+      channel,
+      maskedTarget: maskIdentifier(norm, channel)
+    };
+  }
+  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1e3);
+  const recentCountRows = await prisma.$queryRawUnsafe(
+    `SELECT COUNT(*)::int as count FROM "verification_otps" 
+     WHERE "identifier" = $1 AND "purpose" = 'PASSWORD_RESET' AND "createdAt" > $2`,
+    user.email.toLowerCase(),
+    fifteenMinutesAgo
+  );
+  const recentCount = recentCountRows[0]?.count || 0;
+  if (recentCount >= 3) {
+    throw new Error("Too many verification requests. Please wait 15 minutes before requesting another code.");
+  }
+  const rawOtp = crypto6.randomInt(1e5, 999999).toString();
+  const otpHash = hashOtp(rawOtp);
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1e3);
+  const otpId = crypto6.randomUUID();
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "verification_otps" 
+     ("id", "identifier", "otpHash", "channel", "purpose", "attempts", "maxAttempts", "expiresAt", "used", "ipAddress", "createdAt") 
+     VALUES ($1, $2, $3, $4, 'PASSWORD_RESET', 0, 5, $5, false, $6, NOW())`,
+    otpId,
+    user.email.toLowerCase(),
+    otpHash,
+    channel,
+    expiresAt,
+    ipAddress || null
+  );
+  if (channel === "EMAIL") {
+    await sendOtpEmail({
+      toEmail: user.email,
+      userName: user.name,
+      otp: rawOtp,
+      expiryMinutes: 10
+    });
+  } else {
+    console.log(`
+[SMS OTP DISPATCH] 6-digit code for ${user.phone}: ${rawOtp}`);
+  }
+  return {
+    ok: true,
+    message: `A 6-digit verification code has been dispatched to ${maskIdentifier(user.email, channel)}.`,
+    channel,
+    maskedTarget: maskIdentifier(user.email, channel)
+  };
+}
+async function verifyOtpAndGenerateResetToken(emailOrPhone, submittedOtp) {
+  const norm = emailOrPhone.trim().toLowerCase();
+  const cleanOtp = (submittedOtp || "").trim();
+  if (!norm || !cleanOtp) {
+    throw new Error("Email/phone and 6-digit verification code are required");
+  }
+  const rows = await prisma.$queryRawUnsafe(
+    `SELECT * FROM "verification_otps" 
+     WHERE "identifier" = $1 AND "purpose" = 'PASSWORD_RESET' AND "used" = false AND "expiresAt" > NOW() 
+     ORDER BY "createdAt" DESC LIMIT 1`,
+    norm
+  );
+  const record = rows[0];
+  if (!record) {
+    throw new Error("Verification code has expired or was not found. Please request a new code.");
+  }
+  if (record.attempts >= record.maxAttempts) {
+    throw new Error("Maximum incorrect attempts exceeded. This code has been invalidated for security. Please request a new code.");
+  }
+  const isValid = verifyOtpHash(cleanOtp, record.otpHash);
+  if (!isValid) {
+    await prisma.$executeRawUnsafe(
+      `UPDATE "verification_otps" SET "attempts" = "attempts" + 1 WHERE "id" = $1`,
+      record.id
+    );
+    const remaining = record.maxAttempts - (record.attempts + 1);
+    throw new Error(`Invalid verification code. ${remaining > 0 ? `${remaining} attempts remaining.` : "Code locked."}`);
+  }
+  const resetToken = signResetToken({
+    purpose: "PASSWORD_RESET",
+    identifier: norm,
+    otpId: record.id
+  }, 600);
+  return {
+    ok: true,
+    resetToken,
+    message: "Identity verified successfully. You may now set a new password."
+  };
+}
+async function resetPasswordWithToken(emailOrPhone, resetToken, newPassword) {
+  const norm = emailOrPhone.trim().toLowerCase();
+  if (!norm || !resetToken || !newPassword) {
+    throw new Error("Email, reset token, and new password are required");
+  }
+  if (newPassword.length < 8) {
+    throw new Error("Password must be at least 8 characters long");
+  }
+  const verified = verifyResetToken(resetToken);
+  if (!verified.valid || !verified.payload || verified.payload.purpose !== "PASSWORD_RESET") {
+    throw new Error("Invalid or expired reset token. Please restart the verification process.");
+  }
+  if (verified.payload.identifier.toLowerCase() !== norm) {
+    throw new Error("Reset token does not match the requested account identity.");
+  }
+  const otpId = verified.payload.otpId;
+  if (otpId) {
+    const otpRows = await prisma.$queryRawUnsafe(
+      `SELECT "used" FROM "verification_otps" WHERE "id" = $1`,
+      otpId
+    );
+    if (otpRows[0]?.used === true) {
+      throw new Error("This reset token has already been used. Please request a new code.");
+    }
+  }
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: { equals: norm, mode: "insensitive" } },
+        { phone: { equals: norm, mode: "insensitive" } }
+      ],
+      isActive: true
+    }
+  });
+  if (!user) {
+    throw new Error("Account not found");
+  }
+  const newHash = hashPassword(newPassword);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { password: newHash }
+  });
+  if (otpId) {
+    await prisma.$executeRawUnsafe(
+      `UPDATE "verification_otps" SET "used" = true, "usedAt" = NOW() WHERE "id" = $1`,
+      otpId
+    );
+  }
+  console.log(`[SECURITY AUDIT] Password successfully reset for user ${user.email} (${user.id})`);
+  return {
+    ok: true,
+    message: "Password updated successfully. You can now sign in with your new password.",
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email
+    }
+  };
+}
+
+// server/auth/authorization.ts
+var normalize = (value) => String(value ?? "").trim().toLowerCase();
+var values = (items) => Array.isArray(items) ? items.map(normalize).filter(Boolean) : [];
+function getAllowedGosalaIds(user) {
+  return Array.from(/* @__PURE__ */ new Set([...values(user.gosalaIds), ...values(user.gosalaNames)]));
+}
+function hasGosalaScope(user, resource) {
+  const allowed = new Set(getAllowedGosalaIds(user));
+  if (!allowed.size) return false;
+  return [resource.id, resource.gosalaId, resource.name, resource.gosala].map(normalize).some((value) => value !== "" && allowed.has(value));
+}
+function canAccessBooking(user, booking) {
+  if (user.role === "super_admin") return true;
+  if (user.role === "customer") return normalize(booking.customerId) !== "" && normalize(booking.customerId) === normalize(user.userId);
+  if (user.role === "driver") return normalize(booking.driverId) !== "" && normalize(booking.driverId) === normalize(user.userId);
+  if (user.role === "admin" || user.role === "manager") return hasGosalaScope(user, booking);
+  return false;
+}
+function canUseLiveTracking(user) {
+  return user.role !== "super_admin" && (user.role === "admin" || user.role === "manager" || user.role === "customer" || user.role === "driver");
+}
+
+// server/services/hubService.ts
+import fs4 from "fs";
+import path4 from "path";
+var CUSTOM_HUBS_FILE = path4.resolve(process.cwd(), "server/data/custom_hubs.json");
+var BASELINE_INDIAN_HUBS = [
+  // --- TELANGANA ---
+  {
+    id: "hub-hyd-central",
+    state: "Telangana",
+    city: "Hyderabad",
+    name: "Hyderabad Central (Banjara Hills / Jubilee Hills)",
+    zone: "Central",
+    lat: 17.4156,
+    lng: 78.4358,
+    defaultMaxRadiusKm: 35,
+    pincodePrefixes: ["500034", "500033", "500082"],
+    isFeatured: true
+  },
+  {
+    id: "hub-hyd-west",
+    state: "Telangana",
+    city: "Hyderabad",
+    name: "Cyberabad / Gachibowli (HITEC City)",
+    zone: "West",
+    lat: 17.4401,
+    lng: 78.3489,
+    defaultMaxRadiusKm: 35,
+    pincodePrefixes: ["500032", "500081", "500084"],
+    isFeatured: true
+  },
+  {
+    id: "hub-hyd-southwest",
+    state: "Telangana",
+    city: "Hyderabad",
+    name: "Narsingi / Gandipet (Outer Ring Road)",
+    zone: "South",
+    lat: 17.3753,
+    lng: 78.3615,
+    defaultMaxRadiusKm: 40,
+    pincodePrefixes: ["500075", "500089"],
+    isFeatured: true
+  },
+  {
+    id: "hub-hyd-secunderabad",
+    state: "Telangana",
+    city: "Secunderabad",
+    name: "Secunderabad / Cantonment (Kompally)",
+    zone: "North",
+    lat: 17.4399,
+    lng: 78.4983,
+    defaultMaxRadiusKm: 35,
+    pincodePrefixes: ["500003", "500010", "500014"],
+    isFeatured: true
+  },
+  {
+    id: "hub-warangal",
+    state: "Telangana",
+    city: "Warangal",
+    name: "Warangal & Hanamkonda Heritage Belt",
+    zone: "Central",
+    lat: 17.9689,
+    lng: 79.5941,
+    defaultMaxRadiusKm: 40,
+    pincodePrefixes: ["506001", "506002"]
+  },
+  // --- ANDHRA PRADESH ---
+  {
+    id: "hub-vijayawada",
+    state: "Andhra Pradesh",
+    city: "Vijayawada",
+    name: "Vijayawada & Amaravati Capital Belt (Krishna Valley)",
+    zone: "East",
+    lat: 16.5062,
+    lng: 80.648,
+    defaultMaxRadiusKm: 45,
+    pincodePrefixes: ["520001", "520010"],
+    isFeatured: true
+  },
+  {
+    id: "hub-tirupati",
+    state: "Andhra Pradesh",
+    city: "Tirupati",
+    name: "Tirupati & Alipiri Foothills (Sri Venkateswara Sanctuary)",
+    zone: "South",
+    lat: 13.6288,
+    lng: 79.4192,
+    defaultMaxRadiusKm: 40,
+    pincodePrefixes: ["517501", "517507"],
+    isFeatured: true
+  },
+  {
+    id: "hub-visakhapatnam",
+    state: "Andhra Pradesh",
+    city: "Visakhapatnam",
+    name: "Visakhapatnam Coastal Sanctuary Corridor",
+    zone: "East",
+    lat: 17.6868,
+    lng: 83.2185,
+    defaultMaxRadiusKm: 40,
+    pincodePrefixes: ["530001", "530017"]
+  },
+  // --- MAHARASHTRA ---
+  {
+    id: "hub-pune-central",
+    state: "Maharashtra",
+    city: "Pune",
+    name: "Pune & Pimpri-Chinchwad (Mulshi / Alandi Belt)",
+    zone: "Central",
+    lat: 18.5204,
+    lng: 73.8567,
+    defaultMaxRadiusKm: 45,
+    pincodePrefixes: ["411001", "411038"],
+    isFeatured: true
+  },
+  {
+    id: "hub-mumbai-suburbs",
+    state: "Maharashtra",
+    city: "Mumbai",
+    name: "Mumbai Western Suburbs (Borivali / Andheri)",
+    zone: "West",
+    lat: 19.2288,
+    lng: 72.8541,
+    defaultMaxRadiusKm: 35,
+    pincodePrefixes: ["400092", "400053"],
+    isFeatured: true
+  },
+  {
+    id: "hub-nashik-panchavati",
+    state: "Maharashtra",
+    city: "Nashik",
+    name: "Nashik & Trimbakeshwar (Panchavati / Godavari Valley)",
+    zone: "North",
+    lat: 19.9975,
+    lng: 73.7898,
+    defaultMaxRadiusKm: 45,
+    pincodePrefixes: ["422001", "422003"],
+    isFeatured: true
+  },
+  // --- KARNATAKA ---
+  {
+    id: "hub-blr-south",
+    state: "Karnataka",
+    city: "Bengaluru",
+    name: "Bengaluru South (Kanakapura Rd / Jayanagar)",
+    zone: "South",
+    lat: 12.8716,
+    lng: 77.5446,
+    defaultMaxRadiusKm: 40,
+    pincodePrefixes: ["560062", "560041"],
+    isFeatured: true
+  },
+  {
+    id: "hub-blr-east",
+    state: "Karnataka",
+    city: "Bengaluru",
+    name: "Bengaluru East (Whitefield / Indiranagar)",
+    zone: "East",
+    lat: 12.9698,
+    lng: 77.7499,
+    defaultMaxRadiusKm: 40,
+    pincodePrefixes: ["560066", "560038"],
+    isFeatured: true
+  },
+  {
+    id: "hub-mysuru",
+    state: "Karnataka",
+    city: "Mysuru",
+    name: "Mysuru Chamundi Heritage Foothills",
+    zone: "South",
+    lat: 12.2958,
+    lng: 76.6394,
+    defaultMaxRadiusKm: 40,
+    pincodePrefixes: ["570001", "570010"]
+  },
+  // --- GUJARAT ---
+  {
+    id: "hub-ahmedabad-central",
+    state: "Gujarat",
+    city: "Ahmedabad",
+    name: "Ahmedabad & Gandhinagar (Sabarmati Corridor)",
+    zone: "Central",
+    lat: 23.0225,
+    lng: 72.5714,
+    defaultMaxRadiusKm: 40,
+    pincodePrefixes: ["380001", "380015"],
+    isFeatured: true
+  },
+  {
+    id: "hub-surat",
+    state: "Gujarat",
+    city: "Surat",
+    name: "Surat & Tapi River Goseva Sanctuary",
+    zone: "South",
+    lat: 21.1702,
+    lng: 72.8311,
+    defaultMaxRadiusKm: 35,
+    pincodePrefixes: ["395001", "395007"]
+  },
+  // --- NORTH INDIA (DELHI NCR & UTTAR PRADESH) ---
+  {
+    id: "hub-delhi-gurgaon",
+    state: "Delhi NCR",
+    city: "Delhi NCR",
+    name: "South Delhi & Gurugram Aravalli Belt",
+    zone: "North",
+    lat: 28.4595,
+    lng: 77.0266,
+    defaultMaxRadiusKm: 45,
+    pincodePrefixes: ["122001", "110030"],
+    isFeatured: true
+  },
+  {
+    id: "hub-vrindavan-mathura",
+    state: "Uttar Pradesh",
+    city: "Mathura",
+    name: "Vrindavan & Govardhan Sacred Braj Corridor",
+    zone: "North",
+    lat: 27.5806,
+    lng: 77.7006,
+    defaultMaxRadiusKm: 50,
+    pincodePrefixes: ["281121", "281502"],
+    isFeatured: true
+  },
+  {
+    id: "hub-varanasi-kashi",
+    state: "Uttar Pradesh",
+    city: "Varanasi",
+    name: "Varanasi (Kashi Sacred Ganga Gaushala Zone)",
+    zone: "North",
+    lat: 25.3176,
+    lng: 82.9739,
+    defaultMaxRadiusKm: 40,
+    pincodePrefixes: ["221001", "221005"],
+    isFeatured: true
+  },
+  // --- RAJASTHAN ---
+  {
+    id: "hub-jaipur",
+    state: "Rajasthan",
+    city: "Jaipur",
+    name: "Jaipur & Amer Divine Heritage Belt",
+    zone: "West",
+    lat: 26.9124,
+    lng: 75.7873,
+    defaultMaxRadiusKm: 45,
+    pincodePrefixes: ["302001", "302015"],
+    isFeatured: true
+  },
+  // --- TAMIL NADU ---
+  {
+    id: "hub-chennai",
+    state: "Tamil Nadu",
+    city: "Chennai",
+    name: "Chennai & Kanchipuram Temple Sanctuary Belt",
+    zone: "South",
+    lat: 13.0827,
+    lng: 80.2707,
+    defaultMaxRadiusKm: 40,
+    pincodePrefixes: ["600001", "600028"],
+    isFeatured: true
+  },
+  {
+    id: "hub-coimbatore",
+    state: "Tamil Nadu",
+    city: "Coimbatore",
+    name: "Coimbatore Western Ghats Foothills",
+    zone: "South",
+    lat: 11.0168,
+    lng: 76.9558,
+    defaultMaxRadiusKm: 40,
+    pincodePrefixes: ["641001", "641018"]
+  }
+];
+var customHubsCache = [];
+var isLoaded = false;
+function ensureCustomHubsLoaded() {
+  if (isLoaded) return;
+  try {
+    if (fs4.existsSync(CUSTOM_HUBS_FILE)) {
+      const raw = fs4.readFileSync(CUSTOM_HUBS_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        customHubsCache = parsed;
+      }
+    }
+  } catch (err) {
+    console.warn("[HubService] Could not read custom_hubs.json:", err);
+    customHubsCache = [];
+  } finally {
+    isLoaded = true;
+  }
+}
+function persistCustomHubs() {
+  try {
+    const dir = path4.dirname(CUSTOM_HUBS_FILE);
+    if (!fs4.existsSync(dir)) {
+      fs4.mkdirSync(dir, { recursive: true });
+    }
+    fs4.writeFileSync(CUSTOM_HUBS_FILE, JSON.stringify(customHubsCache, null, 2), "utf-8");
+  } catch (err) {
+    console.error("[HubService] Failed to write custom_hubs.json:", err);
+  }
+}
+function getAllOperationalHubs() {
+  ensureCustomHubsLoaded();
+  return [...BASELINE_INDIAN_HUBS, ...customHubsCache];
+}
+function createOperationalHub(payload) {
+  ensureCustomHubsLoaded();
+  const cleanState = (payload.state || "").trim();
+  const cleanCity = (payload.city || "").trim();
+  const cleanName = (payload.name || "").trim();
+  if (!cleanState) {
+    throw new Error("State is required to register an operational hub.");
+  }
+  if (!cleanCity) {
+    throw new Error("City / District name is required.");
+  }
+  if (!cleanName) {
+    throw new Error("Hub / Sanctuary belt name is required.");
+  }
+  const lat = Number(payload.lat);
+  const lng = Number(payload.lng);
+  if (isNaN(lat) || isNaN(lng) || lat < 6 || lat > 38 || lng < 68 || lng > 98) {
+    throw new Error("Valid geographic coordinates within India are required.");
+  }
+  let zone = payload.zone || "Central";
+  const sLower = cleanState.toLowerCase();
+  if (sLower.includes("karnataka") || sLower.includes("tamil") || sLower.includes("kerala") || sLower.includes("andhra") || sLower.includes("telangana")) {
+    zone = "South";
+  } else if (sLower.includes("delhi") || sLower.includes("uttar") || sLower.includes("punjab") || sLower.includes("haryana")) {
+    zone = "North";
+  } else if (sLower.includes("maharashtra") || sLower.includes("gujarat") || sLower.includes("rajasthan") || sLower.includes("goa")) {
+    zone = "West";
+  } else if (sLower.includes("bengal") || sLower.includes("odisha") || sLower.includes("bihar") || sLower.includes("assam")) {
+    zone = "East";
+  }
+  const slug = `${cleanCity.toLowerCase().replace(/[^a-z0-9]/g, "")}-${Date.now().toString(36)}`;
+  const newHub = {
+    id: `hub-custom-${slug}`,
+    state: cleanState,
+    city: cleanCity,
+    name: cleanName,
+    zone,
+    lat,
+    lng,
+    defaultMaxRadiusKm: Math.max(10, Math.min(150, Number(payload.defaultMaxRadiusKm) || 35)),
+    pincodePrefixes: Array.isArray(payload.pincodePrefixes) ? payload.pincodePrefixes.filter(Boolean) : [],
+    isCustom: true,
+    createdAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  customHubsCache.push(newHub);
+  persistCustomHubs();
+  return newHub;
+}
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
+}
+function findNearestOperationalHub(lat, lng) {
+  const allHubs = getAllOperationalHubs();
+  let closest = allHubs[0];
+  let minDist = Infinity;
+  for (const h of allHubs) {
+    const d = haversineKm(lat, lng, h.lat, h.lng);
+    if (d < minDist) {
+      minDist = d;
+      closest = h;
+    }
+  }
+  return { hub: closest, distanceKm: minDist };
+}
+
+// server/services/googlePlacesService.ts
+function extractCoordsFromGoogleUrl(url) {
+  if (!url) return null;
+  const atMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (atMatch) {
+    const lat = parseFloat(atMatch[1]);
+    const lng = parseFloat(atMatch[2]);
+    if (isValidLatLong(lat, lng)) return { lat, lng };
+  }
+  const protoMatch = url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  if (protoMatch) {
+    const lat = parseFloat(protoMatch[1]);
+    const lng = parseFloat(protoMatch[2]);
+    if (isValidLatLong(lat, lng)) return { lat, lng };
+  }
+  const qMatch = url.match(/[?&](?:q|query)=(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (qMatch) {
+    const lat = parseFloat(qMatch[1]);
+    const lng = parseFloat(qMatch[2]);
+    if (isValidLatLong(lat, lng)) return { lat, lng };
+  }
+  const llMatch = url.match(/[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (llMatch) {
+    const lat = parseFloat(llMatch[1]);
+    const lng = parseFloat(llMatch[2]);
+    if (isValidLatLong(lat, lng)) return { lat, lng };
+  }
+  return null;
+}
+function extractPlaceNameFromGoogleUrl(url) {
+  if (!url) return null;
+  const placeMatch = url.match(/\/place\/([^/@?]+)/);
+  if (placeMatch && placeMatch[1]) {
+    try {
+      const decoded = decodeURIComponent(placeMatch[1].replace(/\+/g, " "));
+      if (decoded.trim().length > 0) return decoded.trim();
+    } catch {
+    }
+  }
+  return null;
+}
+function parseRawCoordinates(input) {
+  if (!input) return null;
+  const trimmed = input.trim();
+  const decMatch = trimmed.match(/^(-?\d{1,2}(?:\.\d+)?)[,\s]+(-?\d{1,3}(?:\.\d+)?)$/);
+  if (decMatch) {
+    const lat = parseFloat(decMatch[1]);
+    const lng = parseFloat(decMatch[2]);
+    if (isValidLatLong(lat, lng)) return { lat, lng };
+  }
+  const dmsRegex = /(\d+)[°\s]+(\d+)['\s]+([\d.]+)?["\s]*([NSEW])/gi;
+  const matches = [...trimmed.matchAll(dmsRegex)];
+  if (matches.length === 2) {
+    const convertDms = (deg, min, sec, dir) => {
+      let val = parseFloat(deg) + parseFloat(min) / 60 + (sec ? parseFloat(sec) / 3600 : 0);
+      if (dir.toUpperCase() === "S" || dir.toUpperCase() === "W") val = -val;
+      return val;
+    };
+    const lat = convertDms(matches[0][1], matches[0][2], matches[0][3], matches[0][4]);
+    const lng = convertDms(matches[1][1], matches[1][2], matches[1][3], matches[1][4]);
+    if (isValidLatLong(lat, lng)) return { lat, lng };
+  }
+  return null;
+}
+function isValidLatLong(lat, lng) {
+  return !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+}
+async function expandGoogleShortUrl(shortUrl) {
+  try {
+    const res = await fetch(shortUrl, {
+      method: "HEAD",
+      redirect: "manual",
+      signal: AbortSignal.timeout(4e3)
+    });
+    const loc = res.headers.get("location");
+    if (loc) {
+      if (loc.includes("maps.app.goo.gl") || loc.includes("goo.gl/maps")) {
+        return expandGoogleShortUrl(loc);
+      }
+      return loc;
+    }
+    return shortUrl;
+  } catch (err) {
+    return shortUrl;
+  }
+}
+async function resolveGoogleMapsLinkOrCoords(input) {
+  const cleanInput = (input || "").trim();
+  if (!cleanInput) return null;
+  const directCoords = parseRawCoordinates(cleanInput);
+  if (directCoords) {
+    const nearest = findNearestOperationalHub(directCoords.lat, directCoords.lng);
+    return {
+      id: `coord-${directCoords.lat.toFixed(4)}-${directCoords.lng.toFixed(4)}`,
+      name: `Gaushala Premise (${directCoords.lat.toFixed(4)}, ${directCoords.lng.toFixed(4)})`,
+      address: `Coordinates: ${directCoords.lat.toFixed(5)}, ${directCoords.lng.toFixed(5)} near ${nearest.hub.city}, ${nearest.hub.state}`,
+      city: nearest.hub.city,
+      state: nearest.hub.state,
+      lat: directCoords.lat,
+      lng: directCoords.lng,
+      source: "coordinates",
+      hubId: nearest.hub.id,
+      hubName: nearest.hub.name,
+      suggestedRegion: `${nearest.hub.name} (${nearest.hub.city}, ${nearest.hub.state})`
+    };
+  }
+  if (cleanInput.includes("google.com/maps") || cleanInput.includes("maps.app.goo.gl") || cleanInput.includes("goo.gl/maps") || cleanInput.startsWith("http")) {
+    let targetUrl = cleanInput;
+    if (cleanInput.includes("maps.app.goo.gl") || cleanInput.includes("goo.gl/maps")) {
+      targetUrl = await expandGoogleShortUrl(cleanInput);
+    }
+    const coords = extractCoordsFromGoogleUrl(targetUrl);
+    const placeName = extractPlaceNameFromGoogleUrl(targetUrl);
+    if (coords) {
+      const nearest = findNearestOperationalHub(coords.lat, coords.lng);
+      const name = placeName || "Custom Gaushala from Google Maps";
+      const address = placeName ? `${placeName}, ${nearest.hub.city}, ${nearest.hub.state}` : `Google Maps Pin: ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)} (${nearest.hub.city}, ${nearest.hub.state})`;
+      return {
+        id: `gmaps-${coords.lat.toFixed(4)}-${coords.lng.toFixed(4)}`,
+        name,
+        address,
+        city: nearest.hub.city,
+        state: nearest.hub.state,
+        lat: coords.lat,
+        lng: coords.lng,
+        source: "google_maps_link",
+        hubId: nearest.hub.id,
+        hubName: nearest.hub.name,
+        suggestedRegion: `${nearest.hub.name} (${nearest.hub.city}, ${nearest.hub.state})`
+      };
+    }
+  }
+  return null;
+}
+async function searchGooglePlacesApi(query, apiKey) {
+  const key = apiKey || process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY;
+  if (!key) {
+    return [];
+  }
+  const cleanQuery = query.trim();
+  if (!cleanQuery) return [];
+  try {
+    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
+      cleanQuery
+    )}&region=in&key=${key}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(4e3) });
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data.results)) return [];
+    return data.results.slice(0, 5).map((p) => {
+      const lat = p.geometry?.location?.lat || 17.4156;
+      const lng = p.geometry?.location?.lng || 78.4358;
+      const nearest = findNearestOperationalHub(lat, lng);
+      return {
+        id: `gplaces-${p.place_id}`,
+        name: p.name,
+        address: p.formatted_address || `${p.name}, India`,
+        city: nearest.hub.city,
+        state: nearest.hub.state,
+        lat,
+        lng,
+        source: "google_places_api",
+        hubId: nearest.hub.id,
+        hubName: nearest.hub.name,
+        suggestedRegion: `${nearest.hub.name} (${nearest.hub.city}, ${nearest.hub.state})`
+      };
+    });
+  } catch (err) {
+    console.warn("Google Places API search failed:", err);
+    return [];
+  }
 }
 
 // server/router.ts
@@ -1840,6 +2927,27 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   const { pathname, query } = parseUrl(rawUrl);
   if (!pathname.startsWith("/api/")) return null;
   const authUser = getAuthUserFromHeader(headers?.authorization || headers?.Authorization);
+  const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/auth/accounts" || pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/places/search");
+  if (!isPublicRoute && !authUser) {
+    return { status: 401, body: { ok: false, error: "Authentication required" } };
+  }
+  const requireRole = (...roles) => authUser && roles.includes(authUser.role) ? null : { status: 403, body: { ok: false, error: "Insufficient privileges" } };
+  if (method === "POST" && pathname === "/api/hold" || method === "POST" && pathname === "/api/hold/release" || method === "POST" && pathname === "/api/bookings") {
+    const denied = requireRole("customer");
+    if (denied) return denied;
+  }
+  if ((method === "GET" || method === "POST") && pathname === "/api/users") {
+    const denied = requireRole("admin", "super_admin");
+    if (denied) return denied;
+  }
+  if ((method === "PUT" || method === "DELETE") && /^\/api\/users\/[^/]+$/.test(pathname)) {
+    const denied = requireRole("admin", "super_admin");
+    if (denied) return denied;
+  }
+  if ((method === "PUT" || method === "PATCH") && (pathname === "/api/pricing-config" || pathname === "/api/pricing/config") || method === "POST" && pathname.startsWith("/api/settlements/")) {
+    const denied = requireRole("super_admin");
+    if (denied) return denied;
+  }
   let body = {};
   if (typeof rawBody === "string" && rawBody.trim()) {
     try {
@@ -1887,6 +2995,95 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       return { status: 201, body: { ok: true, token: session.token, user: session.user } };
     } catch (err) {
       return { status: 400, body: { ok: false, error: err.message || "Registration failed" } };
+    }
+  }
+  if (method === "POST" && pathname === "/api/auth/forgot-password") {
+    try {
+      const emailOrPhone = body?.emailOrPhone || body?.email || body?.phone || "";
+      const channel = body?.channel || (emailOrPhone.includes("@") ? "EMAIL" : "PHONE");
+      const result = await requestPasswordResetOtp(emailOrPhone, channel, headers?.["x-forwarded-for"] || "");
+      return { status: 200, body: result };
+    } catch (err) {
+      return { status: 400, body: { ok: false, error: err.message || "Failed to process verification request" } };
+    }
+  }
+  if (method === "POST" && pathname === "/api/auth/verify-otp") {
+    try {
+      const emailOrPhone = body?.emailOrPhone || body?.email || body?.phone || "";
+      const otp = body?.otp || body?.code || "";
+      const result = await verifyOtpAndGenerateResetToken(emailOrPhone, otp);
+      return { status: 200, body: result };
+    } catch (err) {
+      return { status: 400, body: { ok: false, error: err.message || "Invalid or expired verification code" } };
+    }
+  }
+  if (method === "POST" && pathname === "/api/auth/reset-password") {
+    try {
+      const emailOrPhone = body?.emailOrPhone || body?.email || body?.phone || "";
+      const resetToken = body?.resetToken || body?.token || "";
+      const newPassword = body?.newPassword || body?.password || "";
+      const result = await resetPasswordWithToken(emailOrPhone, resetToken, newPassword);
+      return { status: 200, body: result };
+    } catch (err) {
+      return { status: 400, body: { ok: false, error: err.message || "Failed to reset password" } };
+    }
+  }
+  if (method === "POST" && pathname === "/api/auth/switch-context") {
+    if (!authUser) {
+      return { status: 401, body: { ok: false, error: "Unauthenticated session" } };
+    }
+    const targetRole = body?.targetRole || body?.role;
+    if (!targetRole || targetRole !== "super_admin" && targetRole !== "admin") {
+      return { status: 400, body: { ok: false, error: "Invalid targetRole. Must be 'super_admin' or 'admin'" } };
+    }
+    try {
+      const session = await switchUserContext(authUser, targetRole);
+      return { status: 200, body: { ok: true, token: session.token, user: session.user } };
+    } catch (err) {
+      const status = err.status || (err.message?.includes("Forbidden") ? 403 : 500);
+      return { status, body: { ok: false, error: err.message || "Failed to switch role context" } };
+    }
+  }
+  if (method === "GET" && pathname === "/api/hubs") {
+    try {
+      const hubs = getAllOperationalHubs();
+      return { status: 200, body: { ok: true, hubs } };
+    } catch (err) {
+      return { status: 500, body: { ok: false, error: err.message } };
+    }
+  }
+  if (method === "POST" && pathname === "/api/hubs") {
+    const denied = requireRole("admin", "super_admin");
+    if (denied) return denied;
+    try {
+      const newHub = createOperationalHub(body);
+      return { status: 201, body: { ok: true, hub: newHub } };
+    } catch (err) {
+      return { status: 400, body: { ok: false, error: err.message || "Could not register operational hub" } };
+    }
+  }
+  if (method === "GET" && pathname === "/api/places/search") {
+    try {
+      const q = String(query?.get("q") || "").trim();
+      const places = await searchGooglePlacesApi(q);
+      return { status: 200, body: { ok: true, places } };
+    } catch (err) {
+      return { status: 500, body: { ok: false, error: err.message } };
+    }
+  }
+  if (method === "POST" && pathname === "/api/places/resolve-link") {
+    try {
+      const input = String(body?.url || body?.input || "").trim();
+      if (!input) {
+        return { status: 400, body: { ok: false, error: "Missing 'url' or 'input' parameter" } };
+      }
+      const resolved = await resolveGoogleMapsLinkOrCoords(input);
+      if (!resolved) {
+        return { status: 404, body: { ok: false, error: "Could not extract location or coordinates from the provided Google Maps link." } };
+      }
+      return { status: 200, body: { ok: true, place: resolved } };
+    } catch (err) {
+      return { status: 500, body: { ok: false, error: err.message } };
     }
   }
   if (method === "GET" && pathname === "/api/users") {
@@ -2030,24 +3227,50 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       where: { name: body.animal }
     });
     if (!animal) return { status: 404, body: { error: "Animal not found" } };
-    const ttl = (Number(body.ttlSeconds) || 300) * 1e3;
-    const hold = await prisma.temporarySlotHold.create({
-      data: {
-        id: "HOLD-" + Date.now().toString(36).toUpperCase(),
-        animalId: animal.id,
-        date: body.date,
-        startTime: body.start,
-        durationMin: Number(body.durationMin) || 60,
-        customerName: body.customerName || "Customer",
-        expiresAt: new Date(Date.now() + ttl)
-      }
-    });
+    const ttlSeconds = Math.min(600, Math.max(60, Number(body.ttlSeconds) || 300));
+    const ttl = ttlSeconds * 1e3;
+    let hold;
+    try {
+      hold = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM animals WHERE id = ${animal.id} FOR UPDATE`;
+        const existingHold = await tx.temporarySlotHold.findFirst({
+          where: { animalId: animal.id, date: body.date, status: "ACTIVE", expiresAt: { gt: /* @__PURE__ */ new Date() } }
+        });
+        if (existingHold) throw new Error("This slot is already held");
+        const holdStart = toMinutes(body.start);
+        const holdEnd = holdStart + (Number(body.durationMin) || 60);
+        const bookings = await tx.booking.findMany({ where: { animalId: animal.id, bookingDate: body.date, status: { notIn: ["REJECTED", "CANCELLED"] } } });
+        if (bookings.some((booking) => holdStart < toMinutes(booking.endTime) && holdEnd > toMinutes(booking.startTime))) {
+          throw new Error("This slot is already booked");
+        }
+        return tx.temporarySlotHold.create({
+          data: {
+            id: "HOLD-" + crypto7.randomUUID().replace(/-/g, "").slice(0, 20).toUpperCase(),
+            animalId: animal.id,
+            date: body.date,
+            startTime: body.start,
+            durationMin: Number(body.durationMin) || 60,
+            customerName: authUser?.name || "Customer",
+            customerId: authUser?.userId,
+            status: "ACTIVE",
+            expiresAt: new Date(Date.now() + ttl)
+          }
+        });
+      });
+    } catch (err) {
+      const message = err?.message || "Unable to create hold";
+      return { status: message.includes("already") ? 409 : 500, body: { success: false, reason: message } };
+    }
     return { status: 200, body: { success: true, hold } };
   }
   if (method === "POST" && pathname === "/api/hold/release") {
-    await prisma.temporarySlotHold.deleteMany({
-      where: { id: body.holdId }
-    });
+    const hold = await prisma.temporarySlotHold.findUnique({ where: { id: body.holdId } });
+    if (!hold) return { status: 404, body: { released: false, error: "Hold not found" } };
+    if (hold.customerId !== authUser?.userId && !["admin", "super_admin"].includes(authUser?.role || "")) {
+      return { status: 403, body: { released: false, error: "Hold belongs to another customer" } };
+    }
+    if (hold.status !== "ACTIVE") return { status: 409, body: { released: false, error: "Hold is no longer active" } };
+    await prisma.temporarySlotHold.update({ where: { id: hold.id }, data: { status: "RELEASED", releasedAt: /* @__PURE__ */ new Date() } });
     return { status: 200, body: { released: true } };
   }
   if (method === "POST" && pathname === "/api/pricing/calculate") {
@@ -2115,7 +3338,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     const commission = sanctuaryCommFlat !== void 0 && sanctuaryCommFlat !== null ? sanctuaryCommFlat : Math.round(sevaTotal * commissionPct / 100);
     const passThrough = transport + addons;
     const gosalaPayable = Math.max(0, sevaTotal - commission) + passThrough;
-    return {
+    const pricingResult = {
       status: 200,
       body: {
         base,
@@ -2134,6 +3357,118 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         chargeableKm
       }
     };
+    const quoteToken = authUser ? issueQuote(authUser.userId, {
+      gosalaId: body.gosalaId,
+      gosala: body.gosala,
+      animal: body.animal,
+      durationMin,
+      distanceKm,
+      ...pricingResult.body
+    }) : void 0;
+    return { ...pricingResult, body: { ...pricingResult.body, quoteToken } };
+  }
+  if (method === "POST" && pathname === "/api/payments/razorpay/order") {
+    const denied = requireRole("customer");
+    if (denied) return denied;
+    try {
+      const quoteToken = String(body.quoteToken || "");
+      const quote = verifyQuote(quoteToken, authUser.userId).values;
+      const amountPaise = Number(quote.total) * 100;
+      if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) {
+        return { status: 400, body: { error: "Quote has an invalid payment amount" } };
+      }
+      const result = await createPaymentOrder({
+        customerId: authUser.userId,
+        quoteToken,
+        holdId: String(body.holdId || ""),
+        amountPaise
+      });
+      return { status: 201, body: { ok: true, ...result, keyId: process.env.RAZORPAY_KEY_ID } };
+    } catch (err) {
+      return { status: 503, body: { ok: false, error: err.message || "Payment provider unavailable" } };
+    }
+  }
+  if (method === "POST" && pathname === "/api/payments/webhook") {
+    const webhookSignature = headers?.["x-razorpay-signature"] || headers?.["X-Razorpay-Signature"];
+    if (!webhookSignature || typeof webhookSignature !== "string") {
+      return { status: 400, body: { ok: false, error: "Missing webhook signature" } };
+    }
+    try {
+      const isValid = verifyWebhookSignature(rawBody, webhookSignature);
+      if (!isValid) {
+        return { status: 400, body: { ok: false, error: "Invalid webhook signature" } };
+      }
+    } catch (err) {
+      return { status: 500, body: { ok: false, error: err?.message || "Webhook verification failed" } };
+    }
+    let payload = {};
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      return { status: 400, body: { ok: false, error: "Invalid JSON payload" } };
+    }
+    const event = payload.event;
+    const paymentEntity = payload.payload?.payment?.entity;
+    const orderEntity = payload.payload?.order?.entity;
+    try {
+      if (event === "payment.captured" || event === "order.paid") {
+        const orderId = orderEntity?.id || paymentEntity?.order_id;
+        const paymentId = paymentEntity?.id;
+        if (orderId) {
+          const booking = await prisma.booking.findFirst({
+            where: {
+              OR: [
+                { paymentOrderId: orderId },
+                ...paymentId ? [{ paymentId }] : []
+              ]
+            }
+          });
+          if (booking) {
+            await prisma.booking.update({
+              where: { id: booking.id },
+              data: {
+                paymentStatus: "CAPTURED",
+                isPaid: true,
+                paymentId: paymentId || booking.paymentId,
+                paymentOrderId: orderId || booking.paymentOrderId,
+                paymentCapturedAt: booking.paymentCapturedAt || /* @__PURE__ */ new Date()
+              }
+            });
+          }
+        }
+      } else if (event === "payment.failed") {
+        const orderId = orderEntity?.id || paymentEntity?.order_id;
+        const paymentId = paymentEntity?.id;
+        if (orderId) {
+          const booking = await prisma.booking.findFirst({
+            where: {
+              OR: [
+                { paymentOrderId: orderId },
+                ...paymentId ? [{ paymentId }] : []
+              ]
+            }
+          });
+          if (booking && booking.paymentStatus !== "CAPTURED") {
+            await prisma.booking.update({
+              where: { id: booking.id },
+              data: {
+                paymentStatus: "FAILED"
+              }
+            });
+          }
+        }
+      }
+      return {
+        status: 200,
+        body: { ok: true, received: true, event }
+      };
+    } catch (err) {
+      console.error("[Razorpay Webhook Error]:", err);
+      return {
+        status: 500,
+        body: { ok: false, error: "Webhook reconciliation failed" }
+      };
+    }
   }
   if (method === "GET" && pathname === "/api/bookings") {
     const gosala = query.get("gosala");
@@ -2233,31 +3568,72 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     const b = body.booking;
     if (!b || !b.id)
       return { status: 400, body: { error: "Missing booking payload" } };
+    if (authUser?.role !== "customer") {
+      return { status: 403, body: { error: "Only customers may create bookings" } };
+    }
+    const quoteToken = body.quoteToken || b.quoteToken;
+    if (!quoteToken) return { status: 400, body: { error: "A current server quote is required" } };
+    let quote;
     try {
+      quote = verifyQuote(quoteToken, authUser.userId).values;
+    } catch (err) {
+      return { status: 409, body: { error: err.message } };
+    }
+    if (quote.gosala !== b.gosala || quote.animal !== b.animal || quote.durationMin !== Number(b.durationMin)) {
+      return { status: 409, body: { error: "Booking no longer matches the quoted service" } };
+    }
+    if (b.customer && b.customer.trim().toLowerCase() !== authUser.name.trim().toLowerCase()) {
+      return { status: 403, body: { error: "Booking customer does not match authenticated account" } };
+    }
+    const calculated = calculateBookingPrice({
+      baseRate: Number(b.base) || 0,
+      durationMin: Number(b.durationMin) || 60,
+      distanceKm: Number(b.distanceKm) || 0,
+      addonsCost: Number(b.addons) || 0,
+      discount: Number(b.discount) || 0,
+      commissionPct: Number(b.commissionPct) || 20,
+      freeKm: Number(b.freeKmSnapshot) || void 0,
+      perKm: Number(b.perKmSnapshot) || void 0,
+      extraUnitRate: Number(b.extraUnitRateSnapshot) || void 0
+    });
+    const moneyMatches = calculated.total === Number(b.total) && calculated.tax === Number(b.tax) && calculated.transport === Number(b.transport) && calculated.extraTime === Number(b.extraTime) && calculated.commission === Number(b.commissionSnapshot);
+    if (!moneyMatches) {
+      return { status: 400, body: { error: "Booking quote is stale or was modified. Recalculate before submitting." } };
+    }
+    const payment = body.payment || {};
+    if (!payment.paymentId || !payment.orderId || !payment.signature) {
+      return { status: 402, body: { error: "Verified Razorpay payment is required before booking" } };
+    }
+    const expectedPaise = Number(quote.total) * 100;
+    if (!Number.isSafeInteger(expectedPaise) || Number(payment.amountPaise) !== expectedPaise) {
+      return { status: 402, body: { error: "Payment amount does not match the server quote" } };
+    }
+    try {
+      await verifyCapturedPayment({
+        paymentId: payment.paymentId,
+        orderId: payment.orderId,
+        signature: payment.signature,
+        customerId: authUser.userId,
+        quoteToken,
+        amountPaise: expectedPaise,
+        holdId: String(body.holdId || b.holdId || "")
+      });
+    } catch (err) {
+      return { status: 402, body: { error: err.message || "Payment verification failed" } };
+    }
+    try {
+      const existingBooking = await prisma.booking.findUnique({ where: { id: b.id } });
+      if (existingBooking) {
+        if (existingBooking.customerId !== authUser.userId) {
+          return { status: 409, body: { error: "Booking ID is already used by another customer" } };
+        }
+        return { status: 409, body: { error: "Booking request was already processed", booking: formatBooking(existingBooking) } };
+      }
       let customer = null;
       if (authUser?.role === "customer" && authUser.userId) {
         customer = await prisma.user.findUnique({ where: { id: authUser.userId } });
       }
-      if (!customer) {
-        customer = await prisma.user.findFirst({
-          where: {
-            OR: [
-              { name: { equals: b.customer, mode: "insensitive" } },
-              { phone: { equals: b.phone, mode: "insensitive" } }
-            ]
-          }
-        });
-      }
-      if (!customer) {
-        customer = await prisma.user.create({
-          data: {
-            name: b.customer,
-            email: `${b.customer.toLowerCase().replace(/\s+/g, ".")}@example.com`,
-            phone: b.phone || "+91 98000 00000",
-            role: "CUSTOMER"
-          }
-        });
-      }
+      if (!customer) return { status: 401, body: { error: "Authenticated customer account was not found" } };
       let gosala = await prisma.gosala.findFirst({
         where: {
           OR: [
@@ -2302,54 +3678,66 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           }
         });
       }
-      const created = await prisma.booking.create({
-        data: {
-          id: b.id,
-          customerId: customer.id,
-          customerName: b.customer,
-          customerPhone: b.phone,
-          gosalaId: gosala.id,
-          gosalaName: b.gosala,
-          animalId: animal.id,
-          animalName: b.animal,
-          animalType: b.animalType === "Cow" ? "COW" : b.animalType === "Bull" ? "BULL" : "CALF",
-          bookingDate: normalizeDateStr(b.date),
-          startTime: b.start,
-          endTime: b.end,
-          durationMin: b.durationMin,
-          address: b.address,
-          distanceKm: b.distanceKm,
-          baseRate: b.base ?? 0,
-          extraTimeFee: b.extraTime ?? 0,
-          transportFee: b.transport ?? 0,
-          addonsFee: b.addons ?? 0,
-          taxFee: b.tax ?? 0,
-          discountFee: b.discount ?? 0,
-          totalAmount: b.total ?? 0,
-          commissionPct: b.commissionPct ?? 20,
-          commissionAmount: b.commissionSnapshot !== void 0 && b.commissionSnapshot !== null ? b.commissionSnapshot : Math.round(
-            ((b.base ?? 0) + (b.extraTime ?? 0)) * (b.commissionPct ?? 20) / 100
-          ),
-          gosalaPayable: Math.max(
-            0,
-            (b.base ?? 0) + (b.extraTime ?? 0) - (b.commissionSnapshot !== void 0 && b.commissionSnapshot !== null ? b.commissionSnapshot : Math.round(
+      const created = await prisma.$transaction(async (tx) => {
+        const holdId = body.holdId || b.holdId;
+        if (!holdId) throw new Error("Booking hold is required");
+        const ownedHold = await tx.temporarySlotHold.findUnique({ where: { id: holdId } });
+        if (!ownedHold || ownedHold.customerId !== authUser.userId || ownedHold.status !== "ACTIVE" || ownedHold.expiresAt <= /* @__PURE__ */ new Date()) {
+          throw new Error("Hold is expired, consumed, or not owned by this customer");
+        }
+        const createdBooking = await tx.booking.create({
+          data: {
+            id: b.id,
+            customerId: customer.id,
+            customerName: b.customer,
+            customerPhone: b.phone,
+            gosalaId: gosala.id,
+            gosalaName: b.gosala,
+            animalId: animal.id,
+            animalName: b.animal,
+            animalType: b.animalType === "Cow" ? "COW" : b.animalType === "Bull" ? "BULL" : "CALF",
+            bookingDate: normalizeDateStr(b.date),
+            startTime: b.start,
+            endTime: b.end,
+            durationMin: b.durationMin,
+            address: b.address,
+            distanceKm: b.distanceKm,
+            baseRate: b.base ?? 0,
+            extraTimeFee: b.extraTime ?? 0,
+            transportFee: b.transport ?? 0,
+            addonsFee: b.addons ?? 0,
+            taxFee: b.tax ?? 0,
+            discountFee: b.discount ?? 0,
+            totalAmount: b.total ?? 0,
+            commissionPct: b.commissionPct ?? 20,
+            commissionAmount: b.commissionSnapshot !== void 0 && b.commissionSnapshot !== null ? b.commissionSnapshot : Math.round(
               ((b.base ?? 0) + (b.extraTime ?? 0)) * (b.commissionPct ?? 20) / 100
-            ))
-          ) + (b.transport ?? 0) + (b.addons ?? 0),
-          status: toPrismaStatus(b.status),
-          isPaid: true,
-          handoverOtp: b.handoverOtp || String(Math.floor(1e3 + Math.random() * 9e3)),
-          handoverOtpVerified: false,
-          freeKmSnapshot: b.freeKmSnapshot || 5,
-          perKmSnapshot: b.perKmSnapshot || 50,
-          extraUnitRateSnapshot: b.extraUnitRateSnapshot || 500,
-          commissionSnapshot: b.commissionSnapshot || 0
-        },
-        include: { driver: true, auditTrails: true }
+            ),
+            gosalaPayable: Math.max(
+              0,
+              (b.base ?? 0) + (b.extraTime ?? 0) - (b.commissionSnapshot !== void 0 && b.commissionSnapshot !== null ? b.commissionSnapshot : Math.round(
+                ((b.base ?? 0) + (b.extraTime ?? 0)) * (b.commissionPct ?? 20) / 100
+              ))
+            ) + (b.transport ?? 0) + (b.addons ?? 0),
+            status: toPrismaStatus(b.status),
+            isPaid: true,
+            paymentProvider: "RAZORPAY",
+            paymentOrderId: payment.orderId,
+            paymentId: payment.paymentId,
+            paymentStatus: "CAPTURED",
+            paymentCapturedAt: /* @__PURE__ */ new Date(),
+            handoverOtp: b.handoverOtp || String(Math.floor(1e3 + Math.random() * 9e3)),
+            handoverOtpVerified: false,
+            freeKmSnapshot: b.freeKmSnapshot || 5,
+            perKmSnapshot: b.perKmSnapshot || 50,
+            extraUnitRateSnapshot: b.extraUnitRateSnapshot || 500,
+            commissionSnapshot: b.commissionSnapshot || 0
+          },
+          include: { driver: true, auditTrails: true }
+        });
+        await tx.temporarySlotHold.update({ where: { id: holdId }, data: { status: "CONSUMED", consumedAt: /* @__PURE__ */ new Date() } });
+        return createdBooking;
       });
-      if (body.holdId) {
-        await prisma.temporarySlotHold.deleteMany({ where: { id: body.holdId } });
-      }
       const formatted = {
         ...formatBooking(created),
         customerEmail: b.customerEmail,
@@ -2393,18 +3781,22 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       return { status: 201, body: { booking: formatted } };
     } catch (err) {
       console.error("Booking creation error in PostgreSQL:", err);
-      if (!b.handoverOtp) {
-        b.handoverOtp = String(Math.floor(1e3 + Math.random() * 9e3));
+      const message = String(err?.message || "");
+      if (message.includes("Hold is expired") || message.includes("Booking hold is required")) {
+        return { status: 409, body: { error: message } };
       }
-      b.handoverOtpVerified = false;
-      db.bookings = [b, ...db.bookings.filter((x) => x.id !== b.id)];
-      return { status: 201, body: { booking: b } };
+      if (message.includes("Unique constraint") || message.includes("Unique constraint failed")) {
+        return { status: 409, body: { error: "Booking request conflicts with an existing record" } };
+      }
+      return { status: 500, body: { error: "Booking could not be persisted; no booking was created" } };
     }
   }
   const mgrDecideMatch = pathname.match(
     /^\/api\/bookings\/([^/]+)\/(manager-decide|manager-confirm)$/
   );
   if (method === "POST" && mgrDecideMatch) {
+    const denied = requireRole("manager", "admin", "super_admin");
+    if (denied) return denied;
     const id = mgrDecideMatch[1];
     const confirm = body.confirm !== void 0 ? Boolean(body.confirm) : body.action === "approve" || body.action === "confirm";
     const remark = body.remark || (confirm ? "Feasibility verified." : "Capacity unavailable.");
@@ -2521,6 +3913,8 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     /^\/api\/bookings\/([^/]+)\/(admin-decide|admin-confirm)$/
   );
   if (method === "POST" && admDecideMatch) {
+    const denied = requireRole("admin", "super_admin");
+    if (denied) return denied;
     const id = admDecideMatch[1];
     const confirm = body.confirm !== void 0 ? Boolean(body.confirm) : body.action !== "reject";
     const remark = body.remark || (confirm ? "Final admin approval granted." : "Rejected by operations admin.");
@@ -2651,6 +4045,8 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     /^\/api\/bookings\/([^/]+)\/assign-driver$/
   );
   if (method === "POST" && assignDriverMatch) {
+    const denied = requireRole("admin", "super_admin");
+    if (denied) return denied;
     const id = assignDriverMatch[1];
     const driverName = body.driver || body.driverName;
     const driverPhone = body.driverPhone;
@@ -2716,6 +4112,8 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     /^\/api\/bookings\/([^/]+)\/advance-stage$/
   );
   if (method === "POST" && advanceStageMatch) {
+    const denied = requireRole("driver", "admin", "super_admin");
+    if (denied) return denied;
     const id = advanceStageMatch[1];
     try {
       const b = await prisma.booking.findUnique({ where: { id } });
@@ -2790,6 +4188,8 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     /^\/api\/bookings\/([^/]+)\/(set-stage|driver-stage)$/
   );
   if (method === "POST" && setStageMatch) {
+    const denied = requireRole("driver", "admin", "super_admin");
+    if (denied) return denied;
     const id = setStageMatch[1];
     const targetStage = typeof body.stage === "number" ? body.stage : 4;
     const b = await prisma.booking.findUnique({ where: { id } });
@@ -2826,6 +4226,8 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   }
   const verifyOtpMatch = pathname.match(/^\/api\/bookings\/([^/]+)\/verify-handover-otp$/);
   if (method === "POST" && verifyOtpMatch) {
+    const denied = requireRole("driver", "admin", "super_admin");
+    if (denied) return denied;
     const id = verifyOtpMatch[1];
     const submittedOtp = String(body.otp || "").trim();
     let booking = null;
@@ -2844,7 +4246,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       return { status: 404, body: { success: false, error: "Booking not found" } };
     }
     const expectedOtp = String(booking.handoverOtp || "4819").trim();
-    if (submittedOtp !== expectedOtp && submittedOtp !== "1234") {
+    if (submittedOtp !== expectedOtp) {
       return {
         status: 400,
         body: {
@@ -2934,6 +4336,8 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   }
   const telemetryMatch = pathname.match(/^\/api\/bookings\/([^/]+)\/telemetry$/);
   if (method === "POST" && telemetryMatch) {
+    const denied = requireRole("driver", "admin", "super_admin");
+    if (denied) return denied;
     const id = telemetryMatch[1];
     const tick = {
       bookingId: id,
@@ -2963,11 +4367,19 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   );
   if (method === "GET" && driverLocMatch) {
     const id = driverLocMatch[1];
+    if (!authUser || !canUseLiveTracking(authUser)) {
+      return { status: 403, body: { error: "Live tracking is not enabled for this role" } };
+    }
+    const accessBooking = await prisma.booking.findUnique({ where: { id } });
+    if (!accessBooking) return { status: 404, body: { error: "Booking not found" } };
+    if (!canAccessBooking(authUser, accessBooking)) {
+      return { status: 403, body: { error: "You are not authorized to track this booking" } };
+    }
     const live = driverLiveLocations.get(id);
     if (live) {
       return { status: 200, body: { ok: true, location: live } };
     }
-    const b = await prisma.booking.findUnique({ where: { id } });
+    const b = accessBooking;
     if (!b) return { status: 404, body: { error: "Booking not found" } };
     const gosalaCoords = {
       "Shri Krishna Gaushala": [18.5074, 73.8077],
@@ -3025,6 +4437,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       b = db.bookings.find((x) => x.id === id);
     }
     if (!b) return { status: 404, body: { error: "Booking not found" } };
+    if (!authUser || !canAccessBooking(authUser, b)) {
+      return { status: 403, body: { error: "You are not authorized to view this customer data" } };
+    }
     let totalBookings = 1;
     try {
       if (b.customerId) {
@@ -3656,14 +5071,15 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           return idMatch || nameMatch || mgrMatch;
         });
       } else if (authUser?.role === "admin") {
-        const adminEmail = (authUser.email || "").toLowerCase();
-        const adminName = (authUser.name || "").toLowerCase();
+        const allowedIds = new Set(authUser.gosalaIds || []);
+        const allowedNames = new Set((authUser.gosalaNames || []).map((name) => name.trim().toLowerCase()));
+        const userEmail = (authUser.email || "").trim().toLowerCase();
         scopedGosalas = formatted.filter((g) => {
-          const emailMatch = g.governingAdminEmail && g.governingAdminEmail.toLowerCase() === adminEmail;
-          const nameMatch = g.governingAdminName && g.governingAdminName.toLowerCase().includes(adminName);
-          const admNameMatch = g.adminName && g.adminName.toLowerCase().includes(adminName);
-          const listMatch = authUser.gosalaNames && authUser.gosalaNames.some((gn) => g.name.toLowerCase() === gn.toLowerCase());
-          return emailMatch || nameMatch || admNameMatch || listMatch || !g.governingAdminEmail && g.governingAdminRole !== "super_admin";
+          const idMatch = allowedIds.has(g.id);
+          const nameMatch = allowedNames.has(String(g.name).trim().toLowerCase());
+          const govEmailMatch = Boolean(userEmail && (g.governingAdminEmail || "").trim().toLowerCase() === userEmail);
+          const adminIdMatch = Boolean(authUser.userId && g.adminId === authUser.userId);
+          return idMatch || nameMatch || govEmailMatch || adminIdMatch;
         });
       } else if (authUser?.role === "super_admin") {
         scopedGosalas = formatted;

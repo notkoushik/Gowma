@@ -223,6 +223,11 @@ model Booking {
   status      BookingStatus @default(PAYMENT_VERIFIED)
   driverStage Int           @default(0)
   isPaid      Boolean       @default(true)
+  paymentProvider String?   @default("RAZORPAY")
+  paymentOrderId String?
+  paymentId     String?
+  paymentStatus String      @default("PENDING")
+  paymentCapturedAt DateTime?
 
   // Anti-Corruption Historical Snapshots (Protection from retroactive master price shifts)
   freeKmSnapshot        Float @default(5.0)
@@ -303,6 +308,9 @@ model TemporarySlotHold {
   durationMin  Int // 60
   customerName String
   customerId   String?
+  status       String   @default("ACTIVE") // ACTIVE | CONSUMED | RELEASED | EXPIRED
+  consumedAt   DateTime?
+  releasedAt   DateTime?
   expiresAt    DateTime // Epoch timestamp for TTL eviction
   createdAt    DateTime @default(now())
 
@@ -311,6 +319,7 @@ model TemporarySlotHold {
   customer User?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   @@index([animalId, date, expiresAt])
+  @@index([customerId, status, expiresAt])
   @@map("temporary_slot_holds")
 }
 
@@ -418,3 +427,26 @@ model SettlementBatch {
   @@index([status])
   @@map("settlement_batches")
 }
+
+// -------------------------------------------------------------
+// Authentication, Password Recovery & Identity Verification
+// -------------------------------------------------------------
+
+model VerificationOtp {
+  id          String    @id @default(uuid())
+  identifier  String    // normalized email or phone (+91...)
+  otpHash     String    // scrypt hash of the OTP
+  channel     String    @default("EMAIL") // "EMAIL" | "PHONE"
+  purpose     String    @default("PASSWORD_RESET") // "PASSWORD_RESET" | "REGISTRATION_VERIFY"
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  expiresAt   DateTime
+  used        Boolean   @default(false)
+  usedAt      DateTime?
+  ipAddress   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([identifier, purpose, used])
+  @@map("verification_otps")
+}
+

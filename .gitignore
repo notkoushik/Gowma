@@ -20,3 +20,6 @@ logs/
 # beside it.
 /.plugins/
 /.opencode-skills/
+.opencode/
+server/data/backups/
+Testing/

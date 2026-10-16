@@ -12,13 +12,18 @@ const dbUrl = process.env.DATABASE_URL || ""
 if (dbUrl && !dbUrl.includes("localhost") && !dbUrl.includes("127.0.0.1")) {
   console.log("[Build] Cloud PostgreSQL detected. Synchronizing Prisma schema to cloud database...")
   try {
-    execSync("npx prisma db push --accept-data-loss", { stdio: "inherit" })
+    try {
+      execSync("npx prisma migrate deploy", { stdio: "inherit" })
+    } catch {
+      console.log("[Build] Applying direct schema sync via db push...")
+      execSync("npx prisma db push --skip-generate", { stdio: "inherit" })
+    }
     console.log("[Build] Cloud database schema synchronized successfully!")
-    console.log("[Build] Seeding baseline accounts to cloud database...")
+    console.log("[Build] Ensuring Super Admin account exists in cloud database...")
     execSync("node scripts/seed-cloud-db.js", { stdio: "inherit" })
-    console.log("[Build] Baseline accounts synchronized successfully!")
+    console.log("[Build] Super Admin account synchronized successfully!")
   } catch (err) {
-    console.warn("[Build] prisma db notice (continuing build):", err.message)
+    console.error("[Deploy] Cloud database sync notice:", err.message)
   }
 } else {
   console.log("[Build] Skipping cloud DB push (local/offline environment).")

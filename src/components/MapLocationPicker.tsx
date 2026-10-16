@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   Copy,
   AlertCircle,
+  Building2,
 } from "lucide-react"
 import {
   INDIAN_REGIONAL_HUBS,
@@ -26,12 +27,19 @@ import {
 } from "../data/regions"
 import { reverseGeocodeCoords } from "../hooks/useDeviceLocation"
 import { createResilientTileLayer } from "../lib/mapTiles"
+import {
+  searchGaushalaLocations,
+  type GaushalaSearchResult,
+} from "../services/gaushalaSearchService"
 
 export interface MapLocationPickerProps {
   initialLat?: number
   initialLng?: number
   initialAddress?: string
   initialRegion?: string
+  gaushalaName?: string
+  localGosalas?: any[]
+  onSelectGaushalaMatch?: (match: GaushalaSearchResult) => void
   onChange: (data: {
     lat: number
     lng: number
@@ -182,6 +190,9 @@ export default function MapLocationPicker({
   initialLng,
   initialAddress = "",
   initialRegion = "",
+  gaushalaName,
+  localGosalas,
+  onSelectGaushalaMatch,
   onChange,
   label = "Gaushala Premise Map Pinpoint & Coordinates *",
   helperText = "Click anywhere on the map or drag the pin to set the exact physical shelter location.",
@@ -205,7 +216,7 @@ export default function MapLocationPicker({
 
   // Search & Geocoding State
   const [searchQuery, setSearchQuery] = useState("")
-  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [searchResults, setSearchResults] = useState<GaushalaSearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [isReverseGeocoding, setIsReverseGeocoding] = useState(false)
   const [isDetectingGps, setIsDetectingGps] = useState(false)
@@ -446,10 +457,10 @@ export default function MapLocationPicker({
     }
   }, [viewMode, triggerSmoothInvalidation])
 
-  // Auto-Debounced Real-Time Search (350ms)
+  // Auto-Debounced Real-Time Search across GOMAA Gaushalas & Indian Sanctuaries (300ms)
   useEffect(() => {
     const q = searchQuery.trim()
-    if (q.length < 3) {
+    if (q.length < 2) {
       setSearchResults([])
       return
     }
@@ -457,81 +468,93 @@ export default function MapLocationPicker({
     const timer = setTimeout(async () => {
       setIsSearching(true)
       try {
-        const queryWithCountry = q.toLowerCase().includes("india") ? q : `${q}, India`
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-            queryWithCountry,
-          )}&countrycodes=in&limit=5&addressdetails=1`,
-          {
-            headers: {
-              "Accept-Language": "en",
-              "User-Agent": "GOMAA-Gaushala-Manager/1.0",
-            },
-          },
-        )
-        if (res.ok) {
-          const data = await res.json()
-          setSearchResults(data)
-        }
+        const results = await searchGaushalaLocations(q, {
+          currentLat,
+          currentLng,
+          localGosalas,
+          limit: 8,
+        })
+        setSearchResults(results)
       } catch (err) {
-        console.warn("Geocoding search failed:", err)
+        console.warn("Gaushala search failed:", err)
       } finally {
         setIsSearching(false)
       }
-    }, 350)
+    }, 300)
 
     return () => clearTimeout(timer)
-  }, [searchQuery])
+  }, [searchQuery, currentLat, currentLng, localGosalas])
 
   // Handle Search Submission (without using <form> to prevent nested form errors)
-  const handleSearchExecute = async () => {
-    const q = searchQuery.trim()
+  const handleSearchExecute = async (overrideQuery?: string) => {
+    const q = (overrideQuery || searchQuery).trim()
     if (!q) return
 
     setIsSearching(true)
     try {
-      const queryWithCountry = q.toLowerCase().includes("india") ? q : `${q}, India`
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-          queryWithCountry,
-        )}&countrycodes=in&limit=5&addressdetails=1`,
-        {
-          headers: {
-            "Accept-Language": "en",
-            "User-Agent": "GOMAA-Gaushala-Manager/1.0",
-          },
-        },
-      )
-      if (res.ok) {
-        const data = await res.json()
-        setSearchResults(data)
-        if (data.length > 0) {
-          const first = data[0]
-          const lat = parseFloat(first.lat)
-          const lng = parseFloat(first.lon)
-          if (isValidCoordinate(lat, lng)) {
-            flyToCoords(lat, lng, 16)
-            setSearchResults([])
-          }
-        }
+      const results = await searchGaushalaLocations(q, {
+        currentLat,
+        currentLng,
+        localGosalas,
+        limit: 8,
+      })
+      setSearchResults(results)
+      if (results.length > 0) {
+        handleSelectSearchResult(results[0])
       }
     } catch (err) {
-      console.warn("Geocoding search failed:", err)
+      console.warn("Gaushala search execute failed:", err)
     } finally {
       setIsSearching(false)
     }
   }
 
-  // Handle Selecting a Search Suggestion
-  const handleSelectSearchResult = (result: any) => {
-    const lat = parseFloat(result.lat)
-    const lng = parseFloat(result.lon)
+  // Handle Selecting a Gaushala or Geocoded Search Result
+  const handleSelectSearchResult = (result: GaushalaSearchResult) => {
+    const lat = result.lat
+    const lng = result.lng
     if (!isValidCoordinate(lat, lng)) return
 
-    const displayName = result.display_name
-    setSearchQuery(displayName.split(",").slice(0, 3).join(", "))
+    setSearchQuery(result.name)
     setSearchResults([])
+    setResolvedAddress(result.address)
+    setResolvedRegion(result.suggestedRegion)
+
     flyToCoords(lat, lng, 16)
+
+    // Update Marker Popup with rich Gaushala details
+    if (markerRef.current) {
+      try {
+        const popupContent = `
+          <div style="font-family: sans-serif; font-size: 12px; text-align: center; padding: 6px; min-width: 180px;">
+            <div style="display: inline-block; padding: 2px 8px; border-radius: 9999px; background: #e07a2a; color: #fff; font-size: 10px; font-weight: bold; margin-bottom: 4px;">
+              ${result.badgeText}
+            </div><br/>
+            <strong style="color: #111; font-size: 13.5px;">${result.name}</strong><br/>
+            <span style="color: #555; font-size: 11px; display: block; margin-top: 2px;">${result.address}</span>
+            <div style="margin-top: 6px; padding-top: 4px; border-top: 1px solid #eee; font-size: 10.5px; color: #059669; font-weight: bold;">
+              ✓ Geodesic Location Connected
+            </div>
+          </div>
+        `
+        markerRef.current.bindPopup(popupContent).openPopup()
+      } catch (e) {
+        console.warn("Error setting marker popup:", e)
+      }
+    }
+
+    onChange({
+      lat,
+      lng,
+      address: result.address,
+      city: result.city,
+      state: result.state,
+      suggestedRegion: result.suggestedRegion,
+    })
+
+    if (onSelectGaushalaMatch) {
+      onSelectGaushalaMatch(result)
+    }
   }
 
   // Use Device Live GPS (with safe coordinate extraction)
@@ -667,6 +690,30 @@ export default function MapLocationPicker({
         </>
       )}
 
+      {/* Dynamic Gaushala Name Quick-Locate Banner */}
+      {gaushalaName && gaushalaName.trim().length >= 2 && (
+        <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-saffron-soft/40 border border-saffron/30 text-ink shrink-0 animate-in fade-in">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Sparkles size={14} className="text-saffron-deep shrink-0" />
+            <span className="text-[12px] truncate text-ink-soft">
+              Form Gaushala: <strong className="text-ink font-semibold">{gaushalaName}</strong>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setSearchQuery(gaushalaName)
+              handleSearchExecute(gaushalaName)
+            }}
+            className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-saffron text-white text-[11px] font-semibold hover:bg-saffron-deep transition cursor-pointer shrink-0 shadow-2xs"
+            title={`Search live location for "${gaushalaName}"`}
+          >
+            <Search size={11} />
+            <span>Find on Live Map</span>
+          </button>
+        </div>
+      )}
+
       {/* Top Map Controls: Search Bar & GPS (Uses <div> instead of <form> to prevent nested form errors) */}
       <div className="flex flex-col sm:flex-row gap-2 shrink-0">
         <div className="relative flex-1 flex items-center">
@@ -684,7 +731,7 @@ export default function MapLocationPicker({
                 handleSearchExecute()
               }
             }}
-            placeholder="Search address, landmark, town in India (e.g. 'Raman Reti Vrindavan', 'Gachibowli')..."
+            placeholder="Search Gaushala name, town, or paste Google Maps link (e.g. 'Govardhan', 'https://maps.app.goo.gl/...')..."
             className="w-full bg-card border border-line rounded pl-8 pr-16 py-1.5 text-[12.5px] text-ink outline-none focus:border-forest transition shadow-2xs"
           />
           {searchQuery && (
@@ -698,13 +745,37 @@ export default function MapLocationPicker({
           )}
           <button
             type="button"
-            onClick={handleSearchExecute}
+            onClick={() => handleSearchExecute()}
             disabled={isSearching || !searchQuery.trim()}
             className="absolute right-1.5 px-2.5 py-0.5 rounded bg-forest text-white text-[11px] font-medium hover:opacity-90 disabled:opacity-40 transition cursor-pointer"
           >
             {isSearching ? "Searching..." : "Locate"}
           </button>
         </div>
+
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              const text = await navigator.clipboard.readText()
+              if (text && text.trim()) {
+                setSearchQuery(text.trim())
+                handleSearchExecute(text.trim())
+              }
+            } catch (e) {
+              const pasted = window.prompt("Paste Google Maps link or coordinates (e.g. https://maps.app.goo.gl/... or 18.5204, 73.8567):")
+              if (pasted && pasted.trim()) {
+                setSearchQuery(pasted.trim())
+                handleSearchExecute(pasted.trim())
+              }
+            }
+          }}
+          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded border border-line bg-card hover:bg-paper-deep text-ink text-[12px] font-medium transition cursor-pointer shrink-0 shadow-2xs"
+          title="Paste any Google Maps link or GPS coordinates"
+        >
+          <Compass size={13} className="text-forest" />
+          <span>Paste Google Maps Link</span>
+        </button>
 
         <button
           type="button"
@@ -731,16 +802,76 @@ export default function MapLocationPicker({
 
       {/* Search Autocomplete Suggestions Dropdown */}
       {searchResults.length > 0 && (
-        <div className="bg-card border border-line rounded shadow-lg max-h-40 overflow-y-auto z-30 text-[12px] divide-y divide-line/60">
-          {searchResults.map((item, idx) => (
+        <div className="bg-card border border-line rounded-lg shadow-xl max-h-56 overflow-y-auto z-30 text-[12px] divide-y divide-line/60">
+          {searchResults.map((item) => (
             <div
-              key={idx}
+              key={item.id}
               onClick={() => handleSelectSearchResult(item)}
-              className="p-2.5 hover:bg-paper cursor-pointer flex items-start gap-2 transition"
+              className="p-3 hover:bg-paper cursor-pointer flex items-start gap-2.5 transition"
             >
-              <MapPin size={13} className="text-saffron shrink-0 mt-0.5" />
-              <div className="line-clamp-1 text-ink leading-tight">
-                {item.display_name}
+              <div
+                className={`h-7 w-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                  item.source === "gomaa_database"
+                    ? "bg-emerald-100 text-emerald-800"
+                    : item.source === "sacred_sanctuary"
+                    ? "bg-amber-100 text-amber-800"
+                    : item.source === "google_maps_link" || item.source === "google_places_api"
+                    ? "bg-purple-100 text-purple-800"
+                    : "bg-blue-100 text-blue-800"
+                }`}
+              >
+                {item.source === "gomaa_database" ? (
+                  <Building2 size={13} />
+                ) : item.source === "sacred_sanctuary" ? (
+                  <Compass size={13} />
+                ) : item.source === "google_maps_link" || item.source === "google_places_api" ? (
+                  <MapPin size={13} className="text-purple-600" />
+                ) : (
+                  <MapPin size={13} />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                  <span className="font-semibold text-ink text-[13px] leading-tight truncate">
+                    {item.name}
+                  </span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                      item.source === "gomaa_database"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : item.source === "sacred_sanctuary"
+                        ? "bg-amber-50 text-amber-700 border border-amber-200"
+                        : item.source === "google_maps_link" || item.source === "google_places_api"
+                        ? "bg-purple-50 text-purple-700 border border-purple-200"
+                        : "bg-blue-50 text-blue-700 border border-blue-200"
+                    }`}
+                  >
+                    {item.badgeText}
+                  </span>
+                  {item.distanceKm != null && (
+                    <span className="font-mono text-[10.5px] text-ink-faint ml-auto shrink-0">
+                      ~{item.distanceKm} km away
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11.5px] text-ink-soft line-clamp-1">
+                  {item.address}
+                </div>
+                <div className="text-[10.5px] text-ink-faint mt-0.5 flex items-center gap-2 flex-wrap">
+                  <span>
+                    {item.city}, {item.state}
+                  </span>
+                  <span>•</span>
+                  <span className="font-medium text-forest">
+                    Hub: {item.hubName}
+                  </span>
+                  {item.capacity && (
+                    <>
+                      <span>•</span>
+                      <span>Capacity: {item.capacity} cows</span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           ))}

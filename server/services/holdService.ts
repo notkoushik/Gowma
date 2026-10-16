@@ -1,7 +1,7 @@
-import { db } from "../db"
-import { checkAvailability } from "./availabilityService"
-import { cacheService } from "./cacheService"
-import type { SlotHold } from "../types"
+import { db } from "../db.ts"
+import { checkAvailability } from "./availabilityService.ts"
+import { cacheService } from "./cacheService.ts"
+import type { SlotHold } from "../types.ts"
 
 export type AcquireHoldResult = { success: true; hold: SlotHold } | {
   success: false

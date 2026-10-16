@@ -21,65 +21,100 @@
       "totalTrips": 1280
     }
   },
-  "ramesh.test@gomaa.in": {
-    "password": "Mgr@Ramesh2026!"
-  },
-  "rammohan@gmail.com": {
-    "password": "Koushik.git"
-  },
-  "ramraj@gmail.com": {
-    "password": "koushik.giit"
-  },
-  "vikramaditya@gomaa.in": {
-    "password": "OpsAdmin@2026!"
-  },
-  "85a30374-064e-46c4-a1cb-48b6442577c3": {
-    "password": "OpsAdmin@2026!"
-  },
-  "rajesh@gomaa.in": {
-    "password": "OpsAdmin2@2026!"
-  },
-  "d3463f3b-bf2a-4219-ad1b-3bb63cbfcae1": {
-    "password": "OpsAdmin2@2026!"
-  },
-  "suryavardhan@gmail.com": {
-    "password": "koushik.git"
-  },
-  "radha@gmail.com": {
-    "password": "koushik.git",
+  "test.devotee.8b3e7559@gomaa.test": {
     "customerData": {
-      "address": "hyderabad",
+      "city": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+      "preferredLanguage": "Telugu / English",
       "memberSince": "Oct 2026",
       "totalBookings": 0
     }
   },
-  "5dd0d743-7a7f-48ef-9430-131a070e60dd": {
-    "password": "koushik.git",
+  "d6da7481-896d-474b-a540-9c4524ecd1c3": {
     "customerData": {
-      "address": "hyderabad",
+      "city": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+      "preferredLanguage": "Telugu / English",
       "memberSince": "Oct 2026",
       "totalBookings": 0
     }
   },
-  "aruna@gmail.com": {
-    "password": "koushik.git"
+  "test.devotee.fdb9ace4@gomaa.test": {
+    "customerData": {
+      "city": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+      "preferredLanguage": "Telugu / English",
+      "memberSince": "Oct 2026",
+      "totalBookings": 0
+    }
   },
-  "d4d0fe1b-49bb-46cb-ad66-84dd9578e555": {
-    "password": "koushik.git"
+  "ddf108bf-feef-48fd-b847-a64552fdb6ce": {
+    "customerData": {
+      "city": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+      "preferredLanguage": "Telugu / English",
+      "memberSince": "Oct 2026",
+      "totalBookings": 0
+    }
   },
-  "hari@gmail.com": {
-    "password": "koushik.git"
+  "test.devotee.b706c09d@gomaa.test": {
+    "customerData": {
+      "city": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+      "preferredLanguage": "Telugu / English",
+      "memberSince": "Oct 2026",
+      "totalBookings": 0
+    }
   },
-  "custom_devotee_1791486062082@gmail.com": {
-    "password": "MySpecialPassword@2026"
+  "16af860a-013a-4d0a-8501-4380d52bde0c": {
+    "customerData": {
+      "city": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+      "preferredLanguage": "Telugu / English",
+      "memberSince": "Oct 2026",
+      "totalBookings": 0
+    }
   },
-  "c6b88930-56ce-43e0-8f25-15d9538f0d2e": {
-    "password": "MySpecialPassword@2026"
+  "test.devotee.77a34dcb@gomaa.test": {
+    "customerData": {
+      "city": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+      "preferredLanguage": "Telugu / English",
+      "memberSince": "Oct 2026",
+      "totalBookings": 0
+    }
   },
-  "custom_devotee_1791488001040@gomaa.in": {
-    "password": "SecretPassword@123"
+  "3b76528e-d840-432c-8627-b43243ab8544": {
+    "customerData": {
+      "city": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+      "preferredLanguage": "Telugu / English",
+      "memberSince": "Oct 2026",
+      "totalBookings": 0
+    }
   },
-  "14395b32-d467-4e1c-9fe0-38dae7f22d62": {
-    "password": "SecretPassword@123"
+  "test.devotee.20fc1e33@gomaa.test": {
+    "customerData": {
+      "city": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+      "preferredLanguage": "Telugu / English",
+      "memberSince": "Oct 2026",
+      "totalBookings": 0
+    }
+  },
+  "f17d9f57-e041-42aa-8c53-4747498482e8": {
+    "customerData": {
+      "city": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+      "preferredLanguage": "Telugu / English",
+      "memberSince": "Oct 2026",
+      "totalBookings": 0
+    }
+  },
+  "test.devotee.4d2bcf8d@gomaa.test": {
+    "customerData": {
+      "city": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+      "preferredLanguage": "Telugu / English",
+      "memberSince": "Oct 2026",
+      "totalBookings": 0
+    }
+  },
+  "facd3bf8-c148-4123-9e0e-7bd274ab0983": {
+    "customerData": {
+      "city": "Telangana - Cyberabad / Gachibowli (HITEC City)",
+      "preferredLanguage": "Telugu / English",
+      "memberSince": "Oct 2026",
+      "totalBookings": 0
+    }
   }
 }

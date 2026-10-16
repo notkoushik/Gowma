@@ -74,6 +74,7 @@ export type BookingSummary = {
   tax: number
   total: number
   holdId?: string
+  quoteToken?: string
   freeKmSnapshot?: number
   perKmSnapshot?: number
   extraUnitRateSnapshot?: number
@@ -170,6 +171,7 @@ export function makeBooking(
     perKmSnapshot: s.perKmSnapshot ?? 50,
     extraUnitRateSnapshot: s.extraUnitRateSnapshot ?? 500,
     commissionSnapshot: commAmount,
+    quoteToken: s.quoteToken,
     createdAt: new Date().toLocaleString("en-IN", {
       day: "numeric",
       month: "short",

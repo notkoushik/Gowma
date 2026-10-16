@@ -2,20 +2,10 @@ import { prisma } from "../prisma.ts"
 import { signJwt, verifyJwt, type JwtPayload } from "./jwt.ts"
 import { getUserMeta, saveUserMeta, deleteUserMeta } from "../userMeta.ts"
 import { getGosalaMeta } from "../gosalaMeta.ts"
+import { hashPassword, isPasswordHash, verifyPassword } from "./password.ts"
+import crypto from "node:crypto"
 
-export const DEFAULT_PASSWORDS: Record<string, string> = {
-  "koushik@gmail.com": "Koushik.git",
-  "rammohan@gmail.com": "Koushik.git",
-  "vikramaditya@gomaa.in": "OpsAdmin@2026!",
-  "rajesh@gomaa.in": "OpsAdmin2@2026!",
-  "sunil.pawar@gomaa.in": "koushik.git",
-  "radha@gmail.com": "koushik.git",
-  "ramesh.test@gomaa.in": "Mgr@Ramesh2026!",
-  "suryavardhan@gmail.com": "koushik.git",
-  "aruna@gmail.com": "koushik.git",
-  "hari@gmail.com": "koushik.git",
-}
-
+ 
 export const inMemoryPasswords = new Map<string, string>()
 
 export interface UserSessionData {
@@ -30,6 +20,8 @@ export interface UserSessionData {
     avatar?: string | null
     gosalas: { id: string; name: string }[]
     assignedGosalaNames: string[]
+    originalRole?: "super_admin" | "admin"
+    isContextSwitched?: boolean
     driverData?: any
     customerData?: any
     adminData?: any
@@ -105,159 +97,25 @@ export async function authenticateOrResolveUser(
   password?: string,
 ): Promise<UserSessionData | null> {
   const query = (emailOrPhone || "").trim().toLowerCase()
-
-  const isSuperAdminTarget =
-    query === "koushik@gmail.com" ||
-    (roleHint === "super_admin" && (query === "" || query === "koushik@gmail.com"))
-
-  let user: any = null
-
-  if (isSuperAdminTarget) {
-    if (!password) {
-      throw new Error("Password is required for Super Admin account")
-    }
-    if (password !== "Koushik.git") {
-      throw new Error("Invalid password for Super Admin account")
-    }
-
-    try {
-      user = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { id: "USER-SA-KOUSHIK" },
-            { email: { equals: "koushik@gmail.com", mode: "insensitive" } },
-          ],
-        },
-        include: {
-          managerAssignments: {
-            include: { gosala: true },
-          },
-        },
-      })
-
-      if (!user) {
-        user = await prisma.user.upsert({
-          where: { email: "koushik@gmail.com" },
-          create: {
-            id: "USER-SA-KOUSHIK",
-            email: "koushik@gmail.com",
-            name: "Koushik",
-            phone: "+91 98000 00000",
-            role: "SUPER_ADMIN",
-            password: "Koushik.git",
-            isActive: true,
-          },
-          update: {
-            role: "SUPER_ADMIN",
-            isActive: true,
-          },
-          include: {
-            managerAssignments: {
-              include: { gosala: true },
-            },
-          },
-        })
-      }
-    } catch {
-      user = {
-        id: "USER-SA-KOUSHIK",
-        email: "koushik@gmail.com",
-        name: "Koushik",
-        phone: "+91 98000 00000",
-        role: "SUPER_ADMIN",
-        managerAssignments: [],
-      }
-    }
+  if (!query) throw new Error("Email, phone, or user ID is required")
+  const user: any = await prisma.user.findFirst({
+    where: { OR: [{ id: query }, { email: { equals: query, mode: "insensitive" } }, { phone: { equals: query, mode: "insensitive" } }] },
+    include: { managerAssignments: { include: { gosala: true } } },
+  })
+  if (!user) throw new Error("Invalid credentials or user not found")
+  if (user.isActive === false) throw new Error("Account is inactive")
+  if (!password) throw new Error("Password is required")
+  if (isPasswordHash(user.password)) {
+    if (!verifyPassword(password, user.password)) throw new Error("Invalid credentials")
   } else {
-    // Standard role lookup (Gosala Manager, Operations Admin, Driver, Devotee Customer)
-    try {
-      user = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { id: query },
-            { email: { equals: query, mode: "insensitive" } },
-            { phone: { equals: query, mode: "insensitive" } },
-          ],
-        },
-        include: {
-          managerAssignments: {
-            include: { gosala: true },
-          },
-        },
-      })
-    } catch {
-      user = null
-    }
-
-    if (!user) {
-      // Auto-provision known baseline accounts if table exists or fallback
-      const meta = getUserMeta(query)
-      const knownExpectedPass =
-        inMemoryPasswords.get(query) ||
-        meta.password ||
-        DEFAULT_PASSWORDS[query]
-
-      if (knownExpectedPass || query.includes("admin") || query === "rammohan@gmail.com" || query === "radha@gmail.com") {
-        const passToRequire = knownExpectedPass || (query === "rammohan@gmail.com" ? "Koushik.git" : "koushik.git")
-        if (!password) {
-          throw new Error("Password is required")
-        }
-        if (password !== passToRequire) {
-          throw new Error("Invalid credentials")
-        }
-
-        const feRole = query.includes("admin") ? "admin" : query.includes("driver") ? "driver" : query === "radha@gmail.com" ? "customer" : "manager"
-        const dbRole = mapFrontendToDbRole(feRole)
-        const name = query === "rammohan@gmail.com" ? "Rammohan" : query === "radha@gmail.com" ? "Radha" : query.split("@")[0]
-
-        try {
-          user = await prisma.user.create({
-            data: {
-              email: query,
-              name: name.charAt(0).toUpperCase() + name.slice(1),
-              phone: "+91 98490 12345",
-              role: dbRole as any,
-              password: passToRequire,
-              isActive: true,
-            },
-            include: { managerAssignments: { include: { gosala: true } } },
-          })
-        } catch {
-          user = {
-            id: `USER-${query.slice(0, 4).toUpperCase()}`,
-            email: query,
-            name: name.charAt(0).toUpperCase() + name.slice(1),
-            phone: "+91 98490 12345",
-            role: dbRole,
-            managerAssignments: [],
-          }
-        }
-      }
-    }
-
-    if (!user) {
-      throw new Error("Invalid credentials or user not found")
-    }
-
-    // Validate password for account
-    const userEmailKey = (user.email || "").toLowerCase()
-    const expectedPass =
-      user.password ||
-      inMemoryPasswords.get(userEmailKey) ||
-      inMemoryPasswords.get(user.id) ||
-      getUserMeta(userEmailKey).password ||
-      DEFAULT_PASSWORDS[userEmailKey] ||
-      (userEmailKey.includes("admin") ? "OpsAdmin@2026!" : "koushik.git")
-
-    if (!password) {
-      throw new Error("Password is required")
-    }
-    if (password !== expectedPass) {
-      throw new Error("Invalid credentials")
-    }
+    const stored = typeof user.password === "string" ? user.password : ""
+    const a = Buffer.from(password)
+    const b = Buffer.from(stored)
+    const valid = a.length === b.length && crypto.timingSafeEqual(a, b)
+    if (!valid) throw new Error("Invalid credentials")
+    try { await prisma.user.update({ where: { id: user.id }, data: { password: hashPassword(password) } }) }
+    catch { throw new Error("Unable to secure account password") }
   }
-
-  if (!user) return null
 
   // Resolve assigned Gaushalas
   const assignedGosalas = (user.managerAssignments || []).map((a: any) => ({
@@ -318,6 +176,8 @@ export async function authenticateOrResolveUser(
         }
       : undefined
 
+  const isSuper = feRole === "super_admin"
+
   const token = signJwt({
     userId: user.id,
     name: user.name,
@@ -328,6 +188,8 @@ export async function authenticateOrResolveUser(
     gosalaIds,
     gosalaNames,
     adminId: feRole === "admin" ? user.id : undefined,
+    originalRole: isSuper ? "super_admin" : undefined,
+    isContextSwitched: false,
     driverData,
     customerData,
   })
@@ -344,6 +206,8 @@ export async function authenticateOrResolveUser(
       avatar: user.avatar,
       gosalas: assignedGosalas,
       assignedGosalaNames: gosalaNames,
+      originalRole: isSuper ? "super_admin" : undefined,
+      isContextSwitched: false,
       driverData,
       customerData,
       adminData: userMeta.adminData,
@@ -377,6 +241,10 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
   }
 
   const dbRole = mapFrontendToDbRole(payload.role)
+  if (!payload.password || payload.password.length < 8) {
+    throw new Error("Password must be at least 8 characters")
+  }
+  const passwordHash = hashPassword(payload.password)
 
   // Create new user in PostgreSQL
   const user = await prisma.user.create({
@@ -385,7 +253,7 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
       email: emailNorm,
       phone: phoneNorm || "+91 98000 00000",
       role: dbRole as any,
-      password: payload.password || undefined,
+      password: passwordHash,
       isActive: true,
     },
   })
@@ -425,11 +293,6 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
 
   // Save role-specific rich metadata to persistent store
   const metaPatch: any = {}
-  if (payload.password) {
-    inMemoryPasswords.set(emailNorm, payload.password)
-    inMemoryPasswords.set(user.id, payload.password)
-    metaPatch.password = payload.password
-  }
   if (payload.role === "customer" && payload.customerData) {
     metaPatch.customerData = {
       ...payload.customerData,
@@ -529,53 +392,11 @@ export async function getDirectoryAccounts() {
         }
       })
     }
+    return []
   } catch (err) {
-    console.warn("[getDirectoryAccounts] DB query failed, using baseline fallback:", err)
+    console.warn("[getDirectoryAccounts] DB query failed:", err)
+    return []
   }
-
-  // Baseline fallback directory for immediate availability
-  return [
-    {
-      id: "USER-SA-KOUSHIK",
-      name: "Koushik",
-      email: "koushik@gmail.com",
-      phone: "+91 98000 00000",
-      role: "super_admin",
-      dbRole: "SUPER_ADMIN",
-      assignedGosalaNames: ["All Network Gaushalas"],
-      primaryGosala: "Platform Governance",
-    },
-    {
-      id: "USER-MGR-RAM",
-      name: "Rammohan",
-      email: "rammohan@gmail.com",
-      phone: "+91 98490 12345",
-      role: "manager",
-      dbRole: "GOSALA_MANAGER",
-      assignedGosalaNames: ["Sri Govardhana Sanctuary"],
-      primaryGosala: "Sri Govardhana Sanctuary",
-    },
-    {
-      id: "USER-OPS-VIKRAM",
-      name: "Vikramaditya",
-      email: "vikramaditya@gomaa.in",
-      phone: "+91 98200 11223",
-      role: "admin",
-      dbRole: "OPERATIONS_ADMIN",
-      assignedGosalaNames: ["South Regional Sanctuaries"],
-      primaryGosala: "South Regional Sanctuaries",
-    },
-    {
-      id: "USER-CUST-RADHA",
-      name: "Radha",
-      email: "radha@gmail.com",
-      phone: "+91 98200 44556",
-      role: "customer",
-      dbRole: "CUSTOMER",
-      assignedGosalaNames: [],
-      primaryGosala: "Devotee",
-    },
-  ]
 }
 
 /**
@@ -610,22 +431,16 @@ export async function getAllUsers() {
           avatar: u.avatar,
           createdAt: u.createdAt,
           assignedGosalaNames: assignedGosalas.map((g: any) => g.name),
-          password:
-            u.password ||
-            inMemoryPasswords.get(u.email.toLowerCase()) ||
-            inMemoryPasswords.get(u.id) ||
-            meta.password ||
-            DEFAULT_PASSWORDS[u.email.toLowerCase()],
           driverData: meta.driverData,
           customerData: meta.customerData,
         }
       })
     }
+    return []
   } catch (err) {
-    console.warn("[getAllUsers] DB query failed, using baseline fallback:", err)
+    console.warn("[getAllUsers] DB query failed:", err)
+    return []
   }
-
-  return await getDirectoryAccounts()
 }
 
 /**
@@ -638,8 +453,7 @@ export async function updateUser(id: string, updates: Partial<RegisterUserPayloa
   if (updates.role) data.role = mapFrontendToDbRole(updates.role) as any
   if (updates.isActive !== undefined) data.isActive = updates.isActive
   if (updates.password) {
-    data.password = updates.password
-    inMemoryPasswords.set(id, updates.password)
+    data.password = hashPassword(updates.password)
   }
 
   const updated = await prisma.user.update({
@@ -648,13 +462,8 @@ export async function updateUser(id: string, updates: Partial<RegisterUserPayloa
     include: { managerAssignments: { include: { gosala: true } } },
   })
 
-  if (updates.password) {
-    inMemoryPasswords.set(updated.email.toLowerCase(), updates.password)
-  }
-
   // Update metadata
   const metaPatch: any = {}
-  if (updates.password) metaPatch.password = updates.password
   if (updates.customerData) metaPatch.customerData = updates.customerData
   if (updates.driverData) metaPatch.driverData = updates.driverData
   if (updates.managerData) metaPatch.managerData = updates.managerData
@@ -663,7 +472,8 @@ export async function updateUser(id: string, updates: Partial<RegisterUserPayloa
     saveUserMeta(updated.id, metaPatch)
   }
 
-  return updated
+  const { password: _password, ...safeUpdated } = updated as any
+  return safeUpdated
 }
 
 /**
@@ -677,3 +487,143 @@ export async function deleteUser(id: string) {
   }
   return prisma.user.delete({ where: { id } })
 }
+
+/**
+ * Cryptographically switch execution context exclusively for Super Admin accounts.
+ * Allows toggling between Sovereign Platform Captain ("super_admin") and Scoped Operations Admin ("admin").
+ * Strictly enforces that only users whose PostgreSQL database role is SUPER_ADMIN can switch contexts.
+ */
+export async function switchUserContext(
+  caller: JwtPayload,
+  targetRole: "super_admin" | "admin"
+): Promise<UserSessionData> {
+  if (!caller || !caller.userId) {
+    const err: any = new Error("Unauthenticated: Valid session token is required to switch context")
+    err.status = 401
+    throw err
+  }
+
+  if (targetRole !== "super_admin" && targetRole !== "admin") {
+    const err: any = new Error("Invalid target role. Context switching is strictly limited to 'super_admin' or 'admin'")
+    err.status = 400
+    throw err
+  }
+
+  // 1. Verify caller in PostgreSQL database - never trust client payload alone
+  const dbUser = await prisma.user.findUnique({
+    where: { id: caller.userId },
+    include: { managerAssignments: { include: { gosala: true } } },
+  })
+
+  if (!dbUser || dbUser.isActive === false) {
+    const err: any = new Error("Account not found or inactive")
+    err.status = 401
+    throw err
+  }
+
+  // 2. Ironclad Security Rule: ONLY genuine Super Admin accounts can switch execution context
+  if (dbUser.role !== "SUPER_ADMIN") {
+    console.warn(`[SECURITY ALERT] Unauthorized context switch attempt by non-super-admin user ${dbUser.email} (DB Role: ${dbUser.role})`)
+    const err: any = new Error("Forbidden: Only genuine Super Admin accounts can switch execution context")
+    err.status = 403
+    throw err
+  }
+
+  const userMeta = getUserMeta(dbUser.email || dbUser.id)
+
+  if (targetRole === "admin") {
+    // Switching down to Operations Admin ("Operations" mode)
+    // Dynamic portfolio discovery: locate only Gaushalas created or governed by this Super Admin
+    const adminEmail = (dbUser.email || "").toLowerCase()
+    const allGosalas = await prisma.gosala.findMany({ where: { isActive: true } })
+    const personalGosalas: { id: string; name: string }[] = []
+
+    allGosalas.forEach((g: any) => {
+      const meta = getGosalaMeta(g.id, g.name)
+      const govEmail = (meta.governingAdminEmail || "").toLowerCase()
+      const adminIdMatch = meta.adminId === dbUser.id
+      if (govEmail === adminEmail || adminIdMatch) {
+        personalGosalas.push({ id: g.id, name: g.name })
+      }
+    })
+
+    const gosalaIds = personalGosalas.map((g) => g.id)
+    const gosalaNames = personalGosalas.map((g) => g.name)
+
+    const token = signJwt({
+      userId: dbUser.id,
+      name: dbUser.name,
+      email: dbUser.email,
+      phone: dbUser.phone,
+      role: "admin",
+      dbRole: "OPERATIONS_ADMIN",
+      gosalaIds,
+      gosalaNames,
+      adminId: dbUser.id,
+      originalRole: "super_admin",
+      isContextSwitched: true,
+      contextSwitchedAt: Math.floor(Date.now() / 1000),
+      driverData: caller.driverData,
+      customerData: caller.customerData,
+    })
+
+    return {
+      token,
+      user: {
+        id: dbUser.id,
+        name: dbUser.name,
+        email: dbUser.email,
+        phone: dbUser.phone,
+        role: "admin",
+        dbRole: "OPERATIONS_ADMIN",
+        avatar: dbUser.avatar,
+        gosalas: personalGosalas,
+        assignedGosalaNames: gosalaNames,
+        originalRole: "super_admin",
+        isContextSwitched: true,
+        driverData: caller.driverData,
+        customerData: caller.customerData,
+        adminData: userMeta.adminData,
+      },
+    }
+  } else {
+    // Returning to Super Admin ("Captain" mode)
+    // Global Platform oversight across all Gaushalas
+    const token = signJwt({
+      userId: dbUser.id,
+      name: dbUser.name,
+      email: dbUser.email,
+      phone: dbUser.phone,
+      role: "super_admin",
+      dbRole: "SUPER_ADMIN",
+      gosalaIds: [],
+      gosalaNames: ["All Network Gaushalas"],
+      originalRole: "super_admin",
+      isContextSwitched: false,
+      contextSwitchedAt: Math.floor(Date.now() / 1000),
+      driverData: caller.driverData,
+      customerData: caller.customerData,
+    })
+
+    return {
+      token,
+      user: {
+        id: dbUser.id,
+        name: dbUser.name,
+        email: dbUser.email,
+        phone: dbUser.phone,
+        role: "super_admin",
+        dbRole: "SUPER_ADMIN",
+        avatar: dbUser.avatar,
+        gosalas: [],
+        assignedGosalaNames: ["All Network Gaushalas"],
+        originalRole: "super_admin",
+        isContextSwitched: false,
+        driverData: caller.driverData,
+        customerData: caller.customerData,
+        adminData: userMeta.adminData,
+      },
+    }
+  }
+}
+

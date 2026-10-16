@@ -238,6 +238,7 @@ export default function App() {
     setCurrentRole,
     profiles,
     pricingConfig,
+    authUser,
     setAuthSession,
     clearAuthSession,
   } = useStore()
@@ -375,35 +376,32 @@ export default function App() {
 
   const handleSwitchRole = async (role: RoleId) => {
     try {
-      let email = ""
-      let password = ""
-      if (role === "super_admin") {
-        email = "koushik@gmail.com"
-        password = "Koushik.git"
-      } else if (role === "admin") {
-        email = "vikramaditya@gomaa.in"
-        password = "OpsAdmin@2026!"
-      } else if (role === "manager") {
-        email = profiles?.manager?.email || "rammohan@gmail.com"
-        password = "Koushik.git"
-      } else if (role === "driver") {
-        email = profiles?.driver?.email || "sunil.pawar@gomaa.in"
-        password = "koushik.git"
-      } else if (role === "customer") {
-        email = profiles?.customer?.email || "radha@gmail.com"
-        password = "koushik.git"
-      }
+      if (role === "super_admin" || role === "admin") {
+        const canSwitch =
+          authUser?.role === "super_admin" ||
+          authUser?.originalRole === "super_admin" ||
+          auth === "super_admin"
 
-      if (email) {
-        const authRes = await api.login(email, role, password)
-        if (authRes.ok && authRes.token) {
-          setAuthSession(authRes.token, authRes.user)
-          handleLoginSuccess(role)
-          notify(`Switched session to ${role.replace("_", " ").toUpperCase()}`, "ok")
-        } else {
-          throw new Error("Invalid credentials or user not found")
+        if (canSwitch) {
+          const res = await api.switchContext(role)
+          if (res?.ok && res.user && res.token) {
+            setAuth(role)
+            setAuthSession(res.token, res.user)
+            try {
+              localStorage.setItem("gomaa_auth_role", role)
+              window.location.hash = `#${role}`
+            } catch (e) {}
+            notify(
+              role === "super_admin"
+                ? "Switched to Super Admin Captain mode · Global Sovereign Authority"
+                : "Switched to Operations Admin mode · Scoped Gaushala Management",
+              "ok"
+            )
+            return
+          }
         }
       }
+      throw new Error("Context switching is strictly reserved for Super Admin accounts.")
     } catch (err: any) {
       console.warn("Authentication failed on role switch:", err)
       notify(err.message || "Authentication failed: Invalid credentials", "err")
@@ -585,12 +583,7 @@ export default function App() {
       icon: Users,
       badge: `${managers.length}`,
     },
-    {
-      id: "tracking",
-      label: "Live Fleet GPS",
-      icon: Navigation,
-      badge: activeTransitsCount > 0 ? `${activeTransitsCount} live` : undefined,
-    },
+    // Live tracking is intentionally excluded from the Super Admin shell.
   ]
 
   // Operations Admin Navigation (Regional Operations & Gosala Manager Governance)
@@ -899,33 +892,35 @@ export default function App() {
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            {/* Quick Switcher Between Super Admin Captain & Operations Admin */}
-            <div className="flex items-center bg-paper-deep border border-line rounded-sm p-0.5 text-[11.5px] font-medium shrink-0">
-              <button
-                onClick={() => handleSetAuth("super_admin")}
-                className={`px-2.5 py-1 rounded-sm transition flex items-center gap-1.5 cursor-pointer ${
-                  isSuperAdmin
-                    ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white font-semibold shadow-2xs"
-                    : "text-ink-soft hover:text-ink hover:bg-card/70"
-                }`}
-                title="Super Admin Captain: Sovereign Platform Authority, Master Pricing & Economics"
-              >
-                <Crown size={12} className={isSuperAdmin ? "stroke-[2.5]" : ""} />
-                <span>Captain</span>
-              </button>
-              <button
-                onClick={() => handleSetAuth("admin")}
-                className={`px-2.5 py-1 rounded-sm transition flex items-center gap-1.5 cursor-pointer ${
-                  !isSuperAdmin
-                    ? "bg-forest text-white font-semibold shadow-2xs"
-                    : "text-ink-soft hover:text-ink hover:bg-card/70"
-                }`}
-                title="Operations Admin: Regional Operations, Manager Governance, Herd Health & Driver Dispatch"
-              >
-                <Users size={12} />
-                <span>Operations</span>
-              </button>
-            </div>
+            {/* Quick Switcher Between Super Admin Captain & Operations Admin - Exclusively for Super Admin */}
+            {(authUser?.role === "super_admin" || authUser?.originalRole === "super_admin" || auth === "super_admin") && (
+              <div className="flex items-center bg-paper-deep border border-line rounded-sm p-0.5 text-[11.5px] font-medium shrink-0">
+                <button
+                  onClick={() => handleSetAuth("super_admin")}
+                  className={`px-2.5 py-1 rounded-sm transition flex items-center gap-1.5 cursor-pointer ${
+                    isSuperAdmin
+                      ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white font-semibold shadow-2xs"
+                      : "text-ink-soft hover:text-ink hover:bg-card/70"
+                  }`}
+                  title="Super Admin Captain: Sovereign Platform Authority, Master Pricing & Economics"
+                >
+                  <Crown size={12} className={isSuperAdmin ? "stroke-[2.5]" : ""} />
+                  <span>Captain</span>
+                </button>
+                <button
+                  onClick={() => handleSetAuth("admin")}
+                  className={`px-2.5 py-1 rounded-sm transition flex items-center gap-1.5 cursor-pointer ${
+                    !isSuperAdmin
+                      ? "bg-forest text-white font-semibold shadow-2xs"
+                      : "text-ink-soft hover:text-ink hover:bg-card/70"
+                  }`}
+                  title="Operations Admin: Regional Operations, Manager Governance, Herd Health & Driver Dispatch"
+                >
+                  <Users size={12} />
+                  <span>Operations</span>
+                </button>
+              </div>
+            )}
             <div className="relative hidden md:block">
               <Search
                 size={15}
@@ -1016,7 +1011,7 @@ export default function App() {
           )}
           {view === "managers" && <GosalaManagers />}
           {view === "bookings" && <Bookings />}
-          {view === "tracking" && <LiveTracking />}
+          {view === "tracking" && !isSuperAdmin && <LiveTracking />}
           {view === "animals" && <Animals />}
           {view === "ledger" && <ManagerLedger />}
           {view === "availability" && <Availability />}

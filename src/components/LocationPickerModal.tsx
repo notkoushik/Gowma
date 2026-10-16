@@ -38,7 +38,7 @@ export default function LocationPickerModal({
   isDetectingGPS,
 }: LocationPickerModalProps) {
   const [search, setSearch] = useState("")
-  const [selectedState, setSelectedState] = useState<IndianState | "ALL">("ALL")
+  const [selectedState, setSelectedState] = useState<string>("ALL")
   const [mode, setMode] = useState<"hubs" | "map">("hubs")
 
   const allStates = useMemo(() => getAllIndianStates(), [])

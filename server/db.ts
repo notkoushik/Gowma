@@ -4,7 +4,7 @@ import type {
   GosalaManager,
   Settlement,
   SlotHold,
-} from "./types"
+} from "./types.ts"
 
 export const defaultPricing: PricingConfig = {
   standardMin: 60,

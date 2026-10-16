@@ -14,6 +14,10 @@ import type {
   Settlement,
 } from "./types.ts"
 import { executeAutomatedSweep, getScheduleStatus } from "./services/payoutEngine.ts"
+import { calculateBookingPrice } from "./services/pricingService.ts"
+import { issueQuote, verifyQuote } from "./services/quoteService.ts"
+import crypto from "node:crypto"
+import { createPaymentOrder, verifyCapturedPayment, verifyWebhookSignature } from "./services/razorpayService.ts"
 import {
   getAuthUserFromHeader,
   authenticateOrResolveUser,
@@ -22,8 +26,24 @@ import {
   getAllUsers,
   updateUser,
   deleteUser,
+  switchUserContext,
   inMemoryPasswords,
 } from "./auth/authService.ts"
+import {
+  requestPasswordResetOtp,
+  verifyOtpAndGenerateResetToken,
+  resetPasswordWithToken,
+} from "./services/otpService.ts"
+import { canUseLiveTracking, canAccessBooking } from "./auth/authorization.ts"
+import {
+  getAllOperationalHubs,
+  createOperationalHub,
+  findNearestOperationalHub,
+} from "./services/hubService.ts"
+import {
+  searchGooglePlacesApi,
+  resolveGoogleMapsLinkOrCoords,
+} from "./services/googlePlacesService.ts"
 
 type HandlerResponse = {
   status: number
@@ -443,6 +463,61 @@ export async function handleApiRequest(
 
   const authUser = getAuthUserFromHeader(headers?.authorization || headers?.Authorization)
 
+  // Every API route is private by default. Keep only the minimum bootstrap
+  // endpoints public; individual mutation groups add stricter role checks below.
+  const isPublicRoute =
+    (method === "POST" && (
+      pathname === "/api/auth/login" ||
+      pathname === "/api/auth/register" ||
+      pathname === "/api/auth/forgot-password" ||
+      pathname === "/api/auth/verify-otp" ||
+      pathname === "/api/auth/reset-password" ||
+      pathname === "/api/payments/webhook" ||
+      pathname === "/api/places/resolve-link"
+    )) ||
+    (method === "GET" && (
+      pathname === "/api/auth/accounts" ||
+      pathname === "/api/health" ||
+      pathname === "/api/hubs" ||
+      pathname === "/api/places/search"
+    ))
+  if (!isPublicRoute && !authUser) {
+    return { status: 401, body: { ok: false, error: "Authentication required" } }
+  }
+
+  const requireRole = (...roles: string[]): HandlerResponse | null =>
+    authUser && roles.includes(authUser.role)
+      ? null
+      : { status: 403, body: { ok: false, error: "Insufficient privileges" } }
+
+  if (
+    (method === "POST" && pathname === "/api/hold") ||
+    (method === "POST" && pathname === "/api/hold/release") ||
+    (method === "POST" && pathname === "/api/bookings")
+  ) {
+    const denied = requireRole("customer")
+    if (denied) return denied
+  }
+
+  if ((method === "GET" || method === "POST") && pathname === "/api/users") {
+    const denied = requireRole("admin", "super_admin")
+    if (denied) return denied
+  }
+
+  if ((method === "PUT" || method === "DELETE") && /^\/api\/users\/[^/]+$/.test(pathname)) {
+    const denied = requireRole("admin", "super_admin")
+    if (denied) return denied
+  }
+
+  if (
+    ((method === "PUT" || method === "PATCH") &&
+      (pathname === "/api/pricing-config" || pathname === "/api/pricing/config")) ||
+    (method === "POST" && pathname.startsWith("/api/settlements/"))
+  ) {
+    const denied = requireRole("super_admin")
+    if (denied) return denied
+  }
+
   let body: any = {}
   if (typeof rawBody === "string" && rawBody.trim()) {
     try {
@@ -499,6 +574,114 @@ export async function handleApiRequest(
       return { status: 201, body: { ok: true, token: session.token, user: session.user } }
     } catch (err: any) {
       return { status: 400, body: { ok: false, error: err.message || "Registration failed" } }
+    }
+  }
+
+  // POST /api/auth/forgot-password (Request 6-Digit Verification OTP via Resend or Phone)
+  if (method === "POST" && pathname === "/api/auth/forgot-password") {
+    try {
+      const emailOrPhone = body?.emailOrPhone || body?.email || body?.phone || ""
+      const channel = body?.channel || (emailOrPhone.includes("@") ? "EMAIL" : "PHONE")
+      const result = await requestPasswordResetOtp(emailOrPhone, channel, (headers?.["x-forwarded-for"] as string) || "")
+      return { status: 200, body: result }
+    } catch (err: any) {
+      return { status: 400, body: { ok: false, error: err.message || "Failed to process verification request" } }
+    }
+  }
+
+  // POST /api/auth/verify-otp (Verify 6-Digit OTP & Issue Scoped Reset Token)
+  if (method === "POST" && pathname === "/api/auth/verify-otp") {
+    try {
+      const emailOrPhone = body?.emailOrPhone || body?.email || body?.phone || ""
+      const otp = body?.otp || body?.code || ""
+      const result = await verifyOtpAndGenerateResetToken(emailOrPhone, otp)
+      return { status: 200, body: result }
+    } catch (err: any) {
+      return { status: 400, body: { ok: false, error: err.message || "Invalid or expired verification code" } }
+    }
+  }
+
+  // POST /api/auth/reset-password (Reset Password with Verified Reset Token)
+  if (method === "POST" && pathname === "/api/auth/reset-password") {
+    try {
+      const emailOrPhone = body?.emailOrPhone || body?.email || body?.phone || ""
+      const resetToken = body?.resetToken || body?.token || ""
+      const newPassword = body?.newPassword || body?.password || ""
+      const result = await resetPasswordWithToken(emailOrPhone, resetToken, newPassword)
+      return { status: 200, body: result }
+    } catch (err: any) {
+      return { status: 400, body: { ok: false, error: err.message || "Failed to reset password" } }
+    }
+  }
+
+  // POST /api/auth/switch-context (Super Admin Context Switching)
+  if (method === "POST" && pathname === "/api/auth/switch-context") {
+    if (!authUser) {
+      return { status: 401, body: { ok: false, error: "Unauthenticated session" } }
+    }
+    const targetRole = body?.targetRole || body?.role
+    if (!targetRole || (targetRole !== "super_admin" && targetRole !== "admin")) {
+      return { status: 400, body: { ok: false, error: "Invalid targetRole. Must be 'super_admin' or 'admin'" } }
+    }
+    try {
+      const session = await switchUserContext(authUser, targetRole)
+      return { status: 200, body: { ok: true, token: session.token, user: session.user } }
+    } catch (err: any) {
+      const status = err.status || (err.message?.includes("Forbidden") ? 403 : 500)
+      return { status, body: { ok: false, error: err.message || "Failed to switch role context" } }
+    }
+  }
+
+  // ----------------- OPERATIONAL HUBS DIRECTORY & REGISTRATION API -----------------
+  // GET /api/hubs (List all active regional and dynamic hubs)
+  if (method === "GET" && pathname === "/api/hubs") {
+    try {
+      const hubs = getAllOperationalHubs()
+      return { status: 200, body: { ok: true, hubs } }
+    } catch (err: any) {
+      return { status: 500, body: { ok: false, error: err.message } }
+    }
+  }
+
+  // POST /api/hubs (Create / Register a new operational hub - Admin / Super Admin)
+  if (method === "POST" && pathname === "/api/hubs") {
+    const denied = requireRole("admin", "super_admin")
+    if (denied) return denied
+
+    try {
+      const newHub = createOperationalHub(body)
+      return { status: 201, body: { ok: true, hub: newHub } }
+    } catch (err: any) {
+      return { status: 400, body: { ok: false, error: err.message || "Could not register operational hub" } }
+    }
+  }
+
+  // ----------------- GOOGLE PLACES & MAPS LINK RESOLUTION API -----------------
+  // GET /api/places/search?q=... (Searches Google Places if GOOGLE_MAPS_API_KEY is configured)
+  if (method === "GET" && pathname === "/api/places/search") {
+    try {
+      const q = String(query?.get("q") || "").trim()
+      const places = await searchGooglePlacesApi(q)
+      return { status: 200, body: { ok: true, places } }
+    } catch (err: any) {
+      return { status: 500, body: { ok: false, error: err.message } }
+    }
+  }
+
+  // POST /api/places/resolve-link (Resolves any Google Maps URL or coordinates into structured Gaushala premise)
+  if (method === "POST" && pathname === "/api/places/resolve-link") {
+    try {
+      const input = String(body?.url || body?.input || "").trim()
+      if (!input) {
+        return { status: 400, body: { ok: false, error: "Missing 'url' or 'input' parameter" } }
+      }
+      const resolved = await resolveGoogleMapsLinkOrCoords(input)
+      if (!resolved) {
+        return { status: 404, body: { ok: false, error: "Could not extract location or coordinates from the provided Google Maps link." } }
+      }
+      return { status: 200, body: { ok: true, place: resolved } }
+    } catch (err: any) {
+      return { status: 500, body: { ok: false, error: err.message } }
     }
   }
 
@@ -672,26 +855,52 @@ export async function handleApiRequest(
     })
     if (!animal) return { status: 404, body: { error: "Animal not found" } }
 
-    const ttl = (Number(body.ttlSeconds) || 300) * 1000
-    const hold = await prisma.temporarySlotHold.create({
-      data: {
-        id: "HOLD-" + Date.now().toString(36).toUpperCase(),
-        animalId: animal.id,
-        date: body.date,
-        startTime: body.start,
-        durationMin: Number(body.durationMin) || 60,
-        customerName: body.customerName || "Customer",
-        expiresAt: new Date(Date.now() + ttl),
-      },
-    })
+    const ttlSeconds = Math.min(600, Math.max(60, Number(body.ttlSeconds) || 300))
+    const ttl = ttlSeconds * 1000
+    let hold: any
+    try {
+      hold = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM animals WHERE id = ${animal.id} FOR UPDATE`
+      const existingHold = await tx.temporarySlotHold.findFirst({
+        where: { animalId: animal.id, date: body.date, status: "ACTIVE", expiresAt: { gt: new Date() } },
+      })
+      if (existingHold) throw new Error("This slot is already held")
+      const holdStart = toMinutes(body.start)
+      const holdEnd = holdStart + (Number(body.durationMin) || 60)
+      const bookings = await tx.booking.findMany({ where: { animalId: animal.id, bookingDate: body.date, status: { notIn: ["REJECTED", "CANCELLED"] } } })
+      if (bookings.some((booking) => holdStart < toMinutes(booking.endTime) && holdEnd > toMinutes(booking.startTime))) {
+        throw new Error("This slot is already booked")
+      }
+      return tx.temporarySlotHold.create({
+        data: {
+          id: "HOLD-" + crypto.randomUUID().replace(/-/g, "").slice(0, 20).toUpperCase(),
+          animalId: animal.id,
+          date: body.date,
+          startTime: body.start,
+          durationMin: Number(body.durationMin) || 60,
+          customerName: authUser?.name || "Customer",
+          customerId: authUser?.userId,
+          status: "ACTIVE",
+          expiresAt: new Date(Date.now() + ttl),
+        },
+      })
+      })
+    } catch (err: any) {
+      const message = err?.message || "Unable to create hold"
+      return { status: message.includes("already") ? 409 : 500, body: { success: false, reason: message } }
+    }
     return { status: 200, body: { success: true, hold } }
   }
 
   // POST /api/hold/release
   if (method === "POST" && pathname === "/api/hold/release") {
-    await prisma.temporarySlotHold.deleteMany({
-      where: { id: body.holdId },
-    })
+    const hold = await prisma.temporarySlotHold.findUnique({ where: { id: body.holdId } })
+    if (!hold) return { status: 404, body: { released: false, error: "Hold not found" } }
+    if (hold.customerId !== authUser?.userId && !["admin", "super_admin"].includes(authUser?.role || "")) {
+      return { status: 403, body: { released: false, error: "Hold belongs to another customer" } }
+    }
+    if (hold.status !== "ACTIVE") return { status: 409, body: { released: false, error: "Hold is no longer active" } }
+    await prisma.temporarySlotHold.update({ where: { id: hold.id }, data: { status: "RELEASED", releasedAt: new Date() } })
     return { status: 200, body: { released: true } }
   }
 
@@ -775,7 +984,7 @@ export async function handleApiRequest(
     const passThrough = transport + addons
     const gosalaPayable = Math.max(0, sevaTotal - commission) + passThrough
 
-    return {
+    const pricingResult = {
       status: 200,
       body: {
         base,
@@ -793,6 +1002,132 @@ export async function handleApiRequest(
         extraUnitRateSnapshot: unitRate,
         chargeableKm,
       },
+    }
+    const quoteToken = authUser ? issueQuote(authUser.userId, {
+      gosalaId: body.gosalaId,
+      gosala: body.gosala,
+      animal: body.animal,
+      durationMin,
+      distanceKm,
+      ...pricingResult.body,
+    }) : undefined
+    return { ...pricingResult, body: { ...pricingResult.body, quoteToken } }
+  }
+
+  if (method === "POST" && pathname === "/api/payments/razorpay/order") {
+    const denied = requireRole("customer")
+    if (denied) return denied
+    try {
+      const quoteToken = String(body.quoteToken || "")
+      const quote = verifyQuote(quoteToken, authUser!.userId).values as any
+      const amountPaise = Number(quote.total) * 100
+      if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) {
+        return { status: 400, body: { error: "Quote has an invalid payment amount" } }
+      }
+      const result = await createPaymentOrder({
+        customerId: authUser!.userId,
+        quoteToken,
+        holdId: String(body.holdId || ""),
+        amountPaise,
+      })
+      return { status: 201, body: { ok: true, ...result, keyId: process.env.RAZORPAY_KEY_ID } }
+    } catch (err: any) {
+      return { status: 503, body: { ok: false, error: err.message || "Payment provider unavailable" } }
+    }
+  }
+
+  // POST /api/payments/webhook
+  if (method === "POST" && pathname === "/api/payments/webhook") {
+    const webhookSignature =
+      headers?.["x-razorpay-signature"] ||
+      headers?.["X-Razorpay-Signature"]
+    if (!webhookSignature || typeof webhookSignature !== "string") {
+      return { status: 400, body: { ok: false, error: "Missing webhook signature" } }
+    }
+
+    try {
+      const isValid = verifyWebhookSignature(rawBody, webhookSignature)
+      if (!isValid) {
+        return { status: 400, body: { ok: false, error: "Invalid webhook signature" } }
+      }
+    } catch (err: any) {
+      return { status: 500, body: { ok: false, error: err?.message || "Webhook verification failed" } }
+    }
+
+    let payload: any = {}
+    try {
+      payload = JSON.parse(rawBody)
+    } catch {
+      return { status: 400, body: { ok: false, error: "Invalid JSON payload" } }
+    }
+
+    const event = payload.event
+    const paymentEntity = payload.payload?.payment?.entity
+    const orderEntity = payload.payload?.order?.entity
+
+    try {
+      if (event === "payment.captured" || event === "order.paid") {
+        const orderId = orderEntity?.id || paymentEntity?.order_id
+        const paymentId = paymentEntity?.id
+
+        if (orderId) {
+          const booking = await prisma.booking.findFirst({
+            where: {
+              OR: [
+                { paymentOrderId: orderId },
+                ...(paymentId ? [{ paymentId }] : []),
+              ],
+            },
+          })
+
+          if (booking) {
+            await prisma.booking.update({
+              where: { id: booking.id },
+              data: {
+                paymentStatus: "CAPTURED",
+                isPaid: true,
+                paymentId: paymentId || booking.paymentId,
+                paymentOrderId: orderId || booking.paymentOrderId,
+                paymentCapturedAt: booking.paymentCapturedAt || new Date(),
+              },
+            })
+          }
+        }
+      } else if (event === "payment.failed") {
+        const orderId = orderEntity?.id || paymentEntity?.order_id
+        const paymentId = paymentEntity?.id
+
+        if (orderId) {
+          const booking = await prisma.booking.findFirst({
+            where: {
+              OR: [
+                { paymentOrderId: orderId },
+                ...(paymentId ? [{ paymentId }] : []),
+              ],
+            },
+          })
+
+          if (booking && booking.paymentStatus !== "CAPTURED") {
+            await prisma.booking.update({
+              where: { id: booking.id },
+              data: {
+                paymentStatus: "FAILED",
+              },
+            })
+          }
+        }
+      }
+
+      return {
+        status: 200,
+        body: { ok: true, received: true, event },
+      }
+    } catch (err: any) {
+      console.error("[Razorpay Webhook Error]:", err)
+      return {
+        status: 500,
+        body: { ok: false, error: "Webhook reconciliation failed" },
+      }
     }
   }
 
@@ -907,32 +1242,81 @@ export async function handleApiRequest(
     if (!b || !b.id)
       return { status: 400, body: { error: "Missing booking payload" } }
 
+    if (authUser?.role !== "customer") {
+      return { status: 403, body: { error: "Only customers may create bookings" } }
+    }
+
+    const quoteToken = body.quoteToken || (b as any).quoteToken
+    if (!quoteToken) return { status: 400, body: { error: "A current server quote is required" } }
+    let quote: any
+    try { quote = verifyQuote(quoteToken, authUser.userId).values }
+    catch (err: any) { return { status: 409, body: { error: err.message } } }
+    if (quote.gosala !== b.gosala || quote.animal !== b.animal || quote.durationMin !== Number(b.durationMin)) {
+      return { status: 409, body: { error: "Booking no longer matches the quoted service" } }
+    }
+
+    // Identity and money are server-owned. The browser may provide display data,
+    // but it cannot create a booking for another account or alter the quote.
+    if (b.customer && b.customer.trim().toLowerCase() !== authUser.name.trim().toLowerCase()) {
+      return { status: 403, body: { error: "Booking customer does not match authenticated account" } }
+    }
+    const calculated = calculateBookingPrice({
+      baseRate: Number(b.base) || 0,
+      durationMin: Number(b.durationMin) || 60,
+      distanceKm: Number(b.distanceKm) || 0,
+      addonsCost: Number(b.addons) || 0,
+      discount: Number(b.discount) || 0,
+      commissionPct: Number(b.commissionPct) || 20,
+      freeKm: Number(b.freeKmSnapshot) || undefined,
+      perKm: Number(b.perKmSnapshot) || undefined,
+      extraUnitRate: Number(b.extraUnitRateSnapshot) || undefined,
+    })
+    const moneyMatches =
+      calculated.total === Number(b.total) &&
+      calculated.tax === Number(b.tax) &&
+      calculated.transport === Number(b.transport) &&
+      calculated.extraTime === Number(b.extraTime) &&
+      calculated.commission === Number(b.commissionSnapshot)
+    if (!moneyMatches) {
+      return { status: 400, body: { error: "Booking quote is stale or was modified. Recalculate before submitting." } }
+    }
+
+    const payment = body.payment || {}
+    if (!payment.paymentId || !payment.orderId || !payment.signature) {
+      return { status: 402, body: { error: "Verified Razorpay payment is required before booking" } }
+    }
+    const expectedPaise = Number(quote.total) * 100
+    if (!Number.isSafeInteger(expectedPaise) || Number(payment.amountPaise) !== expectedPaise) {
+      return { status: 402, body: { error: "Payment amount does not match the server quote" } }
+    }
     try {
+      await verifyCapturedPayment({
+        paymentId: payment.paymentId,
+        orderId: payment.orderId,
+        signature: payment.signature,
+        customerId: authUser.userId,
+        quoteToken,
+        amountPaise: expectedPaise,
+        holdId: String(body.holdId || (b as any).holdId || ""),
+      })
+    } catch (err: any) {
+      return { status: 402, body: { error: err.message || "Payment verification failed" } }
+    }
+
+    try {
+      const existingBooking = await prisma.booking.findUnique({ where: { id: b.id } })
+      if (existingBooking) {
+        if (existingBooking.customerId !== authUser.userId) {
+          return { status: 409, body: { error: "Booking ID is already used by another customer" } }
+        }
+        return { status: 409, body: { error: "Booking request was already processed", booking: formatBooking(existingBooking) } }
+      }
       // Locate related entities or default to customer
       let customer: any = null
       if (authUser?.role === "customer" && authUser.userId) {
         customer = await prisma.user.findUnique({ where: { id: authUser.userId } })
       }
-      if (!customer) {
-        customer = await prisma.user.findFirst({
-          where: {
-            OR: [
-              { name: { equals: b.customer, mode: "insensitive" } },
-              { phone: { equals: b.phone, mode: "insensitive" } },
-            ],
-          },
-        })
-      }
-      if (!customer) {
-        customer = await prisma.user.create({
-          data: {
-            name: b.customer,
-            email: `${b.customer.toLowerCase().replace(/\s+/g, ".")}@example.com`,
-            phone: b.phone || "+91 98000 00000",
-            role: "CUSTOMER",
-          },
-        })
-      }
+      if (!customer) return { status: 401, body: { error: "Authenticated customer account was not found" } }
 
       let gosala = await prisma.gosala.findFirst({
         where: {
@@ -987,7 +1371,14 @@ export async function handleApiRequest(
         })
       }
 
-      const created = await (prisma.booking as any).create({
+      const created = await prisma.$transaction(async (tx) => {
+        const holdId = body.holdId || (b as any).holdId
+        if (!holdId) throw new Error("Booking hold is required")
+        const ownedHold = await tx.temporarySlotHold.findUnique({ where: { id: holdId } })
+        if (!ownedHold || ownedHold.customerId !== authUser.userId || ownedHold.status !== "ACTIVE" || ownedHold.expiresAt <= new Date()) {
+          throw new Error("Hold is expired, consumed, or not owned by this customer")
+        }
+        const createdBooking = await (tx.booking as any).create({
         data: {
           id: b.id,
           customerId: customer.id,
@@ -1038,7 +1429,12 @@ export async function handleApiRequest(
             (b.transport ?? 0) +
             (b.addons ?? 0),
           status: toPrismaStatus(b.status),
-          isPaid: true,
+           isPaid: true,
+           paymentProvider: "RAZORPAY",
+           paymentOrderId: payment.orderId,
+           paymentId: payment.paymentId,
+           paymentStatus: "CAPTURED",
+           paymentCapturedAt: new Date(),
           handoverOtp: b.handoverOtp || String(Math.floor(1000 + Math.random() * 9000)),
           handoverOtpVerified: false,
           freeKmSnapshot: b.freeKmSnapshot || 5.0,
@@ -1049,9 +1445,9 @@ export async function handleApiRequest(
         include: { driver: true, auditTrails: true },
       })
 
-      if (body.holdId) {
-        await prisma.temporarySlotHold.deleteMany({ where: { id: body.holdId } })
-      }
+        await tx.temporarySlotHold.update({ where: { id: holdId }, data: { status: "CONSUMED", consumedAt: new Date() } })
+        return createdBooking
+      })
 
       const formatted = {
         ...formatBooking(created),
@@ -1099,13 +1495,14 @@ export async function handleApiRequest(
       return { status: 201, body: { booking: formatted } }
     } catch (err: any) {
       console.error("Booking creation error in PostgreSQL:", err)
-      // In-Memory Fallback
-      if (!b.handoverOtp) {
-        b.handoverOtp = String(Math.floor(1000 + Math.random() * 9000))
+      const message = String(err?.message || "")
+      if (message.includes("Hold is expired") || message.includes("Booking hold is required")) {
+        return { status: 409, body: { error: message } }
       }
-      b.handoverOtpVerified = false
-      db.bookings = [b, ...db.bookings.filter((x) => x.id !== b.id)]
-      return { status: 201, body: { booking: b } }
+      if (message.includes("Unique constraint") || message.includes("Unique constraint failed")) {
+        return { status: 409, body: { error: "Booking request conflicts with an existing record" } }
+      }
+      return { status: 500, body: { error: "Booking could not be persisted; no booking was created" } }
     }
   }
 
@@ -1114,6 +1511,8 @@ export async function handleApiRequest(
     /^\/api\/bookings\/([^/]+)\/(manager-decide|manager-confirm)$/,
   )
   if (method === "POST" && mgrDecideMatch) {
+    const denied = requireRole("manager", "admin", "super_admin")
+    if (denied) return denied
     const id = mgrDecideMatch[1]
     const confirm =
       body.confirm !== undefined
@@ -1267,6 +1666,8 @@ export async function handleApiRequest(
     /^\/api\/bookings\/([^/]+)\/(admin-decide|admin-confirm)$/,
   )
   if (method === "POST" && admDecideMatch) {
+    const denied = requireRole("admin", "super_admin")
+    if (denied) return denied
     const id = admDecideMatch[1]
     const confirm =
       body.confirm !== undefined
@@ -1427,6 +1828,8 @@ export async function handleApiRequest(
     /^\/api\/bookings\/([^/]+)\/assign-driver$/,
   )
   if (method === "POST" && assignDriverMatch) {
+    const denied = requireRole("admin", "super_admin")
+    if (denied) return denied
     const id = assignDriverMatch[1]
     const driverName = body.driver || body.driverName
     const driverPhone = body.driverPhone
@@ -1500,6 +1903,8 @@ export async function handleApiRequest(
     /^\/api\/bookings\/([^/]+)\/advance-stage$/,
   )
   if (method === "POST" && advanceStageMatch) {
+    const denied = requireRole("driver", "admin", "super_admin")
+    if (denied) return denied
     const id = advanceStageMatch[1]
 
     try {
@@ -1588,6 +1993,8 @@ export async function handleApiRequest(
     /^\/api\/bookings\/([^/]+)\/(set-stage|driver-stage)$/,
   )
   if (method === "POST" && setStageMatch) {
+    const denied = requireRole("driver", "admin", "super_admin")
+    if (denied) return denied
     const id = setStageMatch[1]
     const targetStage = typeof body.stage === "number" ? body.stage : 4
     const b = await prisma.booking.findUnique({ where: { id } })
@@ -1635,6 +2042,8 @@ export async function handleApiRequest(
   // POST /api/bookings/:id/verify-handover-otp
   const verifyOtpMatch = pathname.match(/^\/api\/bookings\/([^/]+)\/verify-handover-otp$/)
   if (method === "POST" && verifyOtpMatch) {
+    const denied = requireRole("driver", "admin", "super_admin")
+    if (denied) return denied
     const id = verifyOtpMatch[1]
     const submittedOtp = String(body.otp || "").trim()
 
@@ -1657,7 +2066,7 @@ export async function handleApiRequest(
     }
 
     const expectedOtp = String(booking.handoverOtp || "4819").trim()
-    if (submittedOtp !== expectedOtp && submittedOtp !== "1234") {
+    if (submittedOtp !== expectedOtp) {
       return {
         status: 400,
         body: {
@@ -1754,6 +2163,8 @@ export async function handleApiRequest(
   // POST /api/bookings/:id/telemetry
   const telemetryMatch = pathname.match(/^\/api\/bookings\/([^/]+)\/telemetry$/)
   if (method === "POST" && telemetryMatch) {
+    const denied = requireRole("driver", "admin", "super_admin")
+    if (denied) return denied
     const id = telemetryMatch[1]
     const tick: GpsTickPayload = {
       bookingId: id,
@@ -1786,13 +2197,21 @@ export async function handleApiRequest(
   )
   if (method === "GET" && driverLocMatch) {
     const id = driverLocMatch[1]
+    if (!authUser || !canUseLiveTracking(authUser)) {
+      return { status: 403, body: { error: "Live tracking is not enabled for this role" } }
+    }
+    const accessBooking = await prisma.booking.findUnique({ where: { id } })
+    if (!accessBooking) return { status: 404, body: { error: "Booking not found" } }
+    if (!canAccessBooking(authUser, accessBooking as any)) {
+      return { status: 403, body: { error: "You are not authorized to track this booking" } }
+    }
     const live = driverLiveLocations.get(id)
     if (live) {
       return { status: 200, body: { ok: true, location: live } }
     }
 
     // Fallback based on database booking
-    const b = await prisma.booking.findUnique({ where: { id } })
+    const b = accessBooking
     if (!b) return { status: 404, body: { error: "Booking not found" } }
 
     const gosalaCoords: Record<string, [number, number]> = {
@@ -1874,6 +2293,9 @@ export async function handleApiRequest(
     }
 
     if (!b) return { status: 404, body: { error: "Booking not found" } }
+    if (!authUser || !canAccessBooking(authUser, b as any)) {
+      return { status: 403, body: { error: "You are not authorized to view this customer data" } }
+    }
 
     let totalBookings = 1
     try {
@@ -2630,15 +3052,16 @@ export async function handleApiRequest(
           return idMatch || nameMatch || mgrMatch
         })
       } else if (authUser?.role === "admin") {
-        const adminEmail = (authUser.email || "").toLowerCase()
-        const adminName = (authUser.name || "").toLowerCase()
-
+        const allowedIds = new Set(authUser.gosalaIds || [])
+        const allowedNames = new Set((authUser.gosalaNames || []).map((name) => name.trim().toLowerCase()))
+        const userEmail = (authUser.email || "").trim().toLowerCase()
+        // Fail closed: only Gaushalas assigned to this Operations Admin or created by them
         scopedGosalas = formatted.filter((g: any) => {
-          const emailMatch = g.governingAdminEmail && g.governingAdminEmail.toLowerCase() === adminEmail
-          const nameMatch = g.governingAdminName && g.governingAdminName.toLowerCase().includes(adminName)
-          const admNameMatch = g.adminName && g.adminName.toLowerCase().includes(adminName)
-          const listMatch = authUser.gosalaNames && authUser.gosalaNames.some((gn: string) => g.name.toLowerCase() === gn.toLowerCase())
-          return emailMatch || nameMatch || admNameMatch || listMatch || (!g.governingAdminEmail && g.governingAdminRole !== "super_admin")
+          const idMatch = allowedIds.has(g.id)
+          const nameMatch = allowedNames.has(String(g.name).trim().toLowerCase())
+          const govEmailMatch = Boolean(userEmail && (g.governingAdminEmail || "").trim().toLowerCase() === userEmail)
+          const adminIdMatch = Boolean(authUser.userId && (g.adminId === authUser.userId))
+          return idMatch || nameMatch || govEmailMatch || adminIdMatch
         })
       } else if (authUser?.role === "super_admin") {
         // Super Admin has global oversight across all Operations Admins and Gaushalas!

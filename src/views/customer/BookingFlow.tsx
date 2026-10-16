@@ -256,6 +256,7 @@ export default function BookingFlow({
     "upi",
   )
   const [payingStep, setPayingStep] = useState<string | null>(null)
+  const [paymentError, setPaymentError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
   const [holdSecs, setHoldSecs] = useState(300) // 5 minutes temporary slot hold
   const [photoInspectorOpen, setPhotoInspectorOpen] = useState(false)
@@ -291,6 +292,7 @@ export default function BookingFlow({
     perKmSnapshot: number
     extraUnitRateSnapshot: number
     chargeableKm: number
+    quoteToken?: string
   } | null>(null)
 
   const [backendSlotChecks, setBackendSlotChecks] = useState<Record<string, {
@@ -381,9 +383,11 @@ export default function BookingFlow({
   // Real-time backend pricing engine call
   useEffect(() => {
     let active = true
+    setBackendPricing(null)
     api
       .calculatePrice({
         baseRate: animal.price,
+        animal: animal.name,
         durationMin: duration,
         distanceKm,
         addonsCost: addonTotal,
@@ -504,6 +508,8 @@ export default function BookingFlow({
     let active = true
     setIsHoldingSlot(true)
     setHoldError(null)
+    setHoldId(null)
+    setPaymentError(null)
 
     api
       .holdSlot({
@@ -527,7 +533,10 @@ export default function BookingFlow({
         }
       })
       .catch((err) => {
-        if (active) console.warn("Slot hold error:", err)
+        if (active) {
+          console.warn("Slot hold error:", err)
+          setHoldError("We could not secure this slot. Please select another available slot and try again.")
+        }
       })
       .finally(() => {
         if (active) setIsHoldingSlot(false)
@@ -586,18 +595,24 @@ export default function BookingFlow({
   }
 
   const pay = () => {
-    if (holdError) return
-    setPayingStep("Connecting to payment gateway…")
-    setTimeout(() => {
-      setPayingStep("Verifying server-side webhook signature…")
-      setTimeout(() => {
-        setPayingStep("Validating concurrency & securing atomic slot hold…")
-        setTimeout(() => {
-          setPayingStep(null)
-          setDone(true)
-        }, 600)
-      }, 700)
-    }, 700)
+    setPaymentError(null)
+    if (holdError) {
+      setPaymentError(holdError)
+      return
+    }
+    if (isHoldingSlot) {
+      setPaymentError("Please wait while this slot hold is secured before continuing.")
+      return
+    }
+    if (!holdId || holdSecs <= 0) {
+      setPaymentError("Your slot hold is missing or expired. Please return to the time step and choose a slot again.")
+      return
+    }
+    if (!backendPricing?.quoteToken) {
+      setPaymentError("A current pricing quote is unavailable. Please wait for pricing to load and try again.")
+      return
+    }
+    setPaymentError("Razorpay checkout is not enabled yet; no payment taken or booking submitted.")
   }
 
   if (done) {
@@ -662,11 +677,12 @@ export default function BookingFlow({
                 extraUnitRateSnapshot:
                   backendPricing?.extraUnitRateSnapshot ??
                   pricingConfig.extraUnitRate,
-                commissionSnapshot: backendPricing?.commission,
-                commissionPct:
+                 commissionSnapshot: backendPricing?.commission,
+                 quoteToken: backendPricing?.quoteToken,
+                 commissionPct:
                   backendPricing?.commissionPct ??
                   (gosala.customCommissionPct !== undefined
-                    ? gosala.customCommissionPct
+                      ? gosala.customCommissionPct
                     : pricingConfig.commissionPct),
               })
             }
@@ -1140,6 +1156,16 @@ export default function BookingFlow({
                   <span className="font-mono text-[13px] text-saffron-deep font-bold tabular">
                     {formatHoldTime(holdSecs)}
                   </span>
+                </div>
+              )}
+
+              {paymentError && (
+                <div className="rounded-sm border border-danger/40 bg-danger-soft/60 p-3.5 flex items-start gap-2.5 text-[12.5px] text-danger">
+                  <AlertCircle size={17} className="shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-[13px]">Payment unavailable</div>
+                    <div className="mt-0.5 text-danger/90">{paymentError}</div>
+                  </div>
                 </div>
               )}
 

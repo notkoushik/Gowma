@@ -86,6 +86,41 @@ export const api = {
     return res
   },
 
+  async forgotPassword(data: { emailOrPhone: string; channel?: "EMAIL" | "PHONE" }) {
+    return request<{ ok: boolean; message: string; channel: string; maskedTarget: string }>(
+      "/api/auth/forgot-password",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    )
+  },
+
+  async verifyOtp(data: { emailOrPhone: string; otp: string }) {
+    return request<{ ok: boolean; resetToken: string; message: string }>("/api/auth/verify-otp", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+  },
+
+  async resetPassword(data: { emailOrPhone: string; resetToken: string; newPassword: string }) {
+    return request<{ ok: boolean; message: string; user?: any }>("/api/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+  },
+
+  async switchContext(targetRole: "super_admin" | "admin") {
+    const res = await request<{ ok: boolean; token: string; user: any }>("/api/auth/switch-context", {
+      method: "POST",
+      body: JSON.stringify({ targetRole }),
+    })
+    if (res.token) {
+      setAuthToken(res.token)
+    }
+    return res
+  },
+
   async getUsers() {
     return request<{ ok: boolean; users: any[] }>("/api/users")
   },
@@ -200,6 +235,7 @@ export const api = {
     perKm?: number
     extraUnitMin?: number
     extraUnitRate?: number
+    animal?: string
   }) {
     return request<any>("/api/pricing/calculate", {
       method: "POST",
@@ -542,5 +578,36 @@ export const api = {
         body: JSON.stringify(config),
       },
     )
+  },
+
+  async getHubs() {
+    return request<{ ok: boolean; hubs: any[] }>("/api/hubs")
+  },
+
+  async createHub(hubData: {
+    state: string
+    city: string
+    name: string
+    zone?: string
+    lat: number
+    lng: number
+    defaultMaxRadiusKm?: number
+    pincodePrefixes?: string[]
+  }) {
+    return request<{ ok: boolean; hub: any }>("/api/hubs", {
+      method: "POST",
+      body: JSON.stringify(hubData),
+    })
+  },
+
+  async searchPlaces(q: string) {
+    return request<{ ok: boolean; places: any[] }>(`/api/places/search?q=${encodeURIComponent(q)}`)
+  },
+
+  async resolveGoogleMapsLink(input: string) {
+    return request<{ ok: boolean; place: any }>("/api/places/resolve-link", {
+      method: "POST",
+      body: JSON.stringify({ input }),
+    })
   },
 }

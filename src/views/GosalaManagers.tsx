@@ -41,6 +41,7 @@ import { useStore, useToast, type Gosala } from "../store/store"
 import { Eyebrow, Panel, PanelHead, Tag } from "../lib/ui"
 import { INDIAN_REGIONAL_HUBS } from "../data/regions"
 import MapLocationPicker from "../components/MapLocationPicker"
+import DynamicHubSelector from "../components/DynamicHubSelector"
 
 export type CredentialShareInfo = {
   name: string
@@ -1789,9 +1790,7 @@ export default function GosalaManagers() {
                                 phone: u.phone,
                                 password:
                                   (u as any).password ||
-                                  (u.email === "koushik@gmail.com"
-                                    ? "Koushik.git"
-                                    : "Gomaa@2026!"),
+                                  "[Confidential / Set at Registration]",
                                 assignedScope: (u as any).assignedGosalaNames?.join(", "),
                               })
                             }}
@@ -1969,9 +1968,7 @@ export default function GosalaManagers() {
                                     phone: u.phone,
                                     password:
                                       (u as any).password ||
-                                      (u.email === "koushik@gmail.com"
-                                        ? "Koushik.git"
-                                        : "Gomaa@2026!"),
+                                      "[Confidential / Set at Registration]",
                                     assignedScope: (u as any).assignedGosalaNames?.join(", "),
                                   })
                                 }}
@@ -2734,19 +2731,19 @@ export default function GosalaManagers() {
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
-                            Operational Hub / City *
-                          </label>
-                          <select
-                            onChange={(e) => handleRegionSelect(e.target.value)}
-                            className="w-full bg-paper border border-line rounded-md px-3 py-2.5 text-[12.5px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition cursor-pointer"
-                          >
-                            {INDIAN_REGIONAL_HUBS.map((hub) => (
-                              <option key={hub.id} value={hub.id}>
-                                {hub.city} — {hub.name}
-                              </option>
-                            ))}
-                          </select>
+                          <DynamicHubSelector
+                            value={gFormRegion}
+                            currentLat={gFormLat}
+                            currentLng={gFormLng}
+                            onSelectHub={(hub) => {
+                              setGFormRegion(`${hub.name} (${hub.city}, ${hub.state})`)
+                              setGFormLat(hub.lat)
+                              setGFormLng(hub.lng)
+                              if (!gFormAddress) {
+                                setGFormAddress(`${hub.name}, ${hub.city}, ${hub.state}`)
+                              }
+                            }}
+                          />
                         </div>
 
                         <div>
@@ -2972,6 +2969,25 @@ export default function GosalaManagers() {
                           initialLng={gFormLng}
                           initialAddress={gFormAddress}
                           initialRegion={gFormRegion}
+                          gaushalaName={gFormName}
+                          localGosalas={gosalas}
+                          onSelectGaushalaMatch={(matched) => {
+                            if (!gFormName && matched.name) {
+                              setGFormName(matched.name)
+                            }
+                            if (matched.address) {
+                              setGFormAddress(matched.address)
+                            }
+                            if (matched.suggestedRegion) {
+                              setGFormRegion(matched.suggestedRegion)
+                            }
+                            if (matched.trustNo && !gFormTrustNo) {
+                              setGFormTrustNo(matched.trustNo)
+                            }
+                            if (matched.capacity && (!gFormCapacity || gFormCapacity === "50")) {
+                              setGFormCapacity(String(matched.capacity))
+                            }
+                          }}
                           onChange={({ lat, lng, address, suggestedRegion }) => {
                             setGFormLat(lat)
                             setGFormLng(lng)
@@ -2983,7 +2999,7 @@ export default function GosalaManagers() {
                             }
                           }}
                           label="Gaushala Premise Map Pinpoint & Coordinates *"
-                          helperText="Pinpoint the exact shelter location on the map, search any landmark/town, or jump to any Indian region."
+                          helperText="Search by your Gaushala name, town/landmark, or pinpoint directly on the live map."
                         />
                       </div>
 

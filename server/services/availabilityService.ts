@@ -1,4 +1,4 @@
-import { db } from "../db"
+import { db } from "../db.ts"
 
 function toMinutes(t: string): number {
   const [h, m] = t.split(":").map(Number)

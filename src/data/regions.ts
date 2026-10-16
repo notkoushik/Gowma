@@ -22,7 +22,7 @@ export type IndianState =
 
 export interface OperationalRegionHub {
   id: string
-  state: IndianState
+  state: IndianState | string
   city: string
   name: string
   zone: "North" | "South" | "East" | "West" | "Central" | "Rural"
@@ -31,6 +31,8 @@ export interface OperationalRegionHub {
   defaultMaxRadiusKm: number
   pincodePrefixes: string[]
   isFeatured?: boolean
+  isCustom?: boolean
+  createdAt?: string
 }
 
 export const INDIAN_REGIONAL_HUBS: OperationalRegionHub[] = [
@@ -545,8 +547,8 @@ export function getIndianLocalityFallback(lat: number, lng: number): string {
 /**
  * Get distinct Indian states with active regional hubs
  */
-export function getAllIndianStates(): IndianState[] {
-  const states = new Set<IndianState>()
+export function getAllIndianStates(): (IndianState | string)[] {
+  const states = new Set<IndianState | string>()
   INDIAN_REGIONAL_HUBS.forEach((h) => states.add(h.state))
   return Array.from(states)
 }
@@ -554,6 +556,65 @@ export function getAllIndianStates(): IndianState[] {
 /**
  * Get all hubs for a given state
  */
-export function getHubsForState(state: IndianState): OperationalRegionHub[] {
+export function getHubsForState(state: IndianState | string): OperationalRegionHub[] {
   return INDIAN_REGIONAL_HUBS.filter((h) => h.state === state)
+}
+
+export const ALL_INDIAN_STATES_AND_UTS: string[] = [
+  "Andhra Pradesh",
+  "Arunachal Pradesh",
+  "Assam",
+  "Bihar",
+  "Chhattisgarh",
+  "Goa",
+  "Gujarat",
+  "Haryana",
+  "Himachal Pradesh",
+  "Jharkhand",
+  "Karnataka",
+  "Kerala",
+  "Madhya Pradesh",
+  "Maharashtra",
+  "Manipur",
+  "Meghalaya",
+  "Mizoram",
+  "Nagaland",
+  "Odisha",
+  "Punjab",
+  "Rajasthan",
+  "Sikkim",
+  "Tamil Nadu",
+  "Telangana",
+  "Tripura",
+  "Uttar Pradesh",
+  "Uttarakhand",
+  "West Bengal",
+  "Delhi NCR",
+  "Jammu & Kashmir",
+  "Ladakh",
+  "Puducherry",
+  "Chandigarh",
+  "Andaman & Nicobar Islands",
+  "Dadra & Nagar Haveli and Daman & Diu",
+  "Lakshadweep",
+]
+
+const dynamicHubsCache: OperationalRegionHub[] = []
+
+export function registerDynamicHub(hub: OperationalRegionHub) {
+  if (!dynamicHubsCache.some((h) => h.id === hub.id)) {
+    dynamicHubsCache.push(hub)
+  }
+}
+
+export function syncDynamicHubs(hubs: OperationalRegionHub[]) {
+  for (const h of hubs) {
+    if (!INDIAN_REGIONAL_HUBS.some((b) => b.id === h.id) && !dynamicHubsCache.some((c) => c.id === h.id)) {
+      dynamicHubsCache.push(h)
+    }
+  }
+}
+
+export function getActiveHubsRegistry(): OperationalRegionHub[] {
+  return [...INDIAN_REGIONAL_HUBS, ...dynamicHubsCache]
 }

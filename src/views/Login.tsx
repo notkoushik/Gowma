@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useRef } from "react"
 import {
   ArrowRight,
   Eye,
@@ -7,14 +7,14 @@ import {
   Mail,
   ShieldCheck,
   Building2,
-  HeartHandshake,
-  Truck,
-  Crown,
   AlertCircle,
   KeyRound,
-  Shield,
-  ShieldAlert,
   Check,
+  Phone,
+  Smartphone,
+  X,
+  UserCheck,
+  Sparkles,
 } from "lucide-react"
 import { type RoleId } from "../data/roles"
 import { initialProfiles } from "../data/profiles"
@@ -28,6 +28,16 @@ const flow = [
   "Admin confirmed",
   "Driver assigned",
   "Settled",
+]
+
+const POPULAR_REGIONS = [
+  "Telangana - Cyberabad / Gachibowli (HITEC City)",
+  "Hyderabad Central (Banjara Hills / Jubilee Hills)",
+  "Andhra Pradesh - Vijayawada & Amaravati Hub",
+  "Maharashtra - Pune & Pimpri-Chinchwad",
+  "Karnataka - Bengaluru Urban & Whitefield",
+  "Gujarat - Ahmedabad & Gandhinagar",
+  "North India - Delhi NCR & Mathura-Vrindavan",
 ]
 
 export default function Login({
@@ -47,13 +57,43 @@ export default function Login({
     notify,
   } = useStore()
 
-  const [emailInput, setEmailInput] = useState<string>("koushik@gmail.com")
-  const [passwordInput, setPasswordInput] = useState<string>("Koushik.git")
+  // Primary Auth Mode: "signIn" vs "register"
+  const [authMode, setAuthMode] = useState<"signIn" | "register">("signIn")
+
+  // Sign In Form States
+  const [emailInput, setEmailInput] = useState<string>("")
+  const [passwordInput, setPasswordInput] = useState<string>("")
   const [showPw, setShowPw] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
 
-  // Robust helper to resolve all assigned Gaushalas for a manager from roster & network
+  // Devotee Registration Form States
+  const [regName, setRegName] = useState("")
+  const [regEmail, setRegEmail] = useState("")
+  const [regPhone, setRegPhone] = useState("")
+  const [regRegion, setRegRegion] = useState(POPULAR_REGIONS[0])
+  const [regPassword, setRegPassword] = useState("")
+  const [regConfirmPassword, setRegConfirmPassword] = useState("")
+  const [showRegPw, setShowRegPw] = useState(false)
+  const [regTermsAccepted, setRegTermsAccepted] = useState(true)
+
+  // Forgot Password Modal States
+  const [showForgotModal, setShowForgotModal] = useState(false)
+  const [forgotStep, setForgotStep] = useState<"request" | "verify" | "success">("request")
+  const [forgotChannel, setForgotChannel] = useState<"EMAIL" | "PHONE">("EMAIL")
+  const [forgotIdentifier, setForgotIdentifier] = useState("")
+  const [forgotOtp, setForgotOtp] = useState("")
+  const [forgotNewPassword, setForgotNewPassword] = useState("")
+  const [forgotConfirmPassword, setForgotConfirmPassword] = useState("")
+  const [showForgotPw, setShowForgotPw] = useState(false)
+  const [forgotResetToken, setForgotResetToken] = useState("")
+  const [forgotMaskedTarget, setForgotMaskedTarget] = useState("")
+  const [forgotError, setForgotError] = useState<string | null>(null)
+  const [isForgotSubmitting, setIsForgotSubmitting] = useState(false)
+
+  const passwordInputRef = useRef<HTMLInputElement>(null)
+
+  // Helper to resolve all assigned Gaushalas for a manager from roster & network
   const resolveManagerGosalas = (m: any): string[] => {
     if (!m) return []
     const directList =
@@ -96,6 +136,9 @@ export default function Login({
     )
   }
 
+  // --------------------------------------------------------------------------
+  // Sign In Submission
+  // --------------------------------------------------------------------------
   const handleSignInSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
@@ -109,16 +152,12 @@ export default function Login({
     }
 
     try {
-      // Authenticate directly against PostgreSQL / JWT service without forcing any role hint
       const authRes = await api.login(cleanEmailOrPhone, undefined, passwordInput)
 
       if (authRes.ok && authRes.token && authRes.user) {
         setAuthSession(authRes.token, authRes.user)
-
-        // Automatically route user to their true system role returned by the server
         const targetRole = (authRes.user.role as RoleId) || "customer"
 
-        // If authenticated as a Gaushala Manager, sync their scoped sanctuary data
         if (targetRole === "manager") {
           const directManager = managers.find(
             (m) =>
@@ -164,7 +203,6 @@ export default function Login({
           }
         }
 
-        // If authenticated as Customer (Devotee)
         if (targetRole === "customer" && authRes.user.customerData) {
           await updateProfile("customer", {
             name: authRes.user.name,
@@ -174,7 +212,6 @@ export default function Login({
           })
         }
 
-        // If authenticated as Operations Admin
         if (targetRole === "admin") {
           await updateProfile("admin", {
             name: authRes.user.name,
@@ -188,8 +225,6 @@ export default function Login({
           : targetRole.toUpperCase()
 
         notify(`Signed in as ${authRes.user.name || cleanEmailOrPhone} [${roleDisplay}]`, "ok")
-
-        // Route dynamically to their true dashboard
         onSignIn(targetRole)
       } else {
         setAuthError("Failed to authenticate session. Please check your credentials.")
@@ -201,54 +236,159 @@ export default function Login({
     }
   }
 
-  // Quick helper accounts with real verified database credentials
-  const quickAccounts = [
-    {
-      label: "Super Admin",
-      name: "Koushik",
-      icon: Crown,
-      email: "koushik@gmail.com",
-      password: "Koushik.git",
-      roleBadge: "Captain",
-      badgeColor: "bg-amber-600 text-white",
-    },
-    {
-      label: "Gaushala Manager",
-      name: "Rammohan",
-      icon: Building2,
-      email: "rammohan@gmail.com",
-      password: "Koushik.git",
-      roleBadge: "Manager",
-      badgeColor: "bg-forest text-white",
-    },
-    {
-      label: "Operations Admin",
-      name: "Vikramaditya",
-      icon: ShieldAlert,
-      email: "vikramaditya@gomaa.in",
-      password: "OpsAdmin@2026!",
-      roleBadge: "Admin",
-      badgeColor: "bg-purple-600 text-white",
-    },
-    {
-      label: "Devotee (Customer)",
-      name: "Radha",
-      icon: HeartHandshake,
-      email: "radha@gmail.com",
-      password: "koushik.git",
-      roleBadge: "Customer",
-      badgeColor: "bg-saffron text-white",
-    },
-    {
-      label: "Transit Pilot",
-      name: "Sunil Pawar",
-      icon: Truck,
-      email: "sunil.pawar@gomaa.in",
-      password: "koushik.git",
-      roleBadge: "Pilot",
-      badgeColor: "bg-blue-600 text-white",
-    },
-  ]
+  // --------------------------------------------------------------------------
+  // Devotee Registration Submission
+  // --------------------------------------------------------------------------
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+    setAuthError(null)
+
+    if (!regName.trim() || !regEmail.trim() || !regPhone.trim()) {
+      setAuthError("Please fill out your full name, email, and phone number.")
+      setIsSubmitting(false)
+      return
+    }
+
+    if (regPassword.length < 8) {
+      setAuthError("Password must be at least 8 characters long.")
+      setIsSubmitting(false)
+      return
+    }
+
+    if (regPassword !== regConfirmPassword) {
+      setAuthError("Passwords do not match. Please verify both fields.")
+      setIsSubmitting(false)
+      return
+    }
+
+    try {
+      const regRes = await api.register({
+        name: regName.trim(),
+        email: regEmail.trim(),
+        phone: regPhone.trim(),
+        role: "customer",
+        password: regPassword,
+        customerData: {
+          city: regRegion,
+          preferredLanguage: "English / Telugu",
+        },
+      })
+
+      if (regRes.ok && regRes.token && regRes.user) {
+        setAuthSession(regRes.token, regRes.user)
+
+        await updateProfile("customer", {
+          name: regRes.user.name,
+          email: regRes.user.email,
+          phone: regRes.user.phone,
+          customerData: regRes.user.customerData,
+        })
+
+        notify(`Devotee registration complete! Welcome to GOMAA, ${regRes.user.name}.`, "ok")
+        onSignIn("customer")
+      } else {
+        setAuthError("Registration failed. Please try again.")
+      }
+    } catch (err: any) {
+      setAuthError(err.message || "Could not complete registration.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Forgot Password: Step 1 (Request OTP)
+  // --------------------------------------------------------------------------
+  const handleRequestOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsForgotSubmitting(true)
+    setForgotError(null)
+
+    const cleanId = forgotIdentifier.trim()
+    if (!cleanId) {
+      setForgotError("Please enter your registered email or phone number.")
+      setIsForgotSubmitting(false)
+      return
+    }
+
+    try {
+      const res = await api.forgotPassword({
+        emailOrPhone: cleanId,
+        channel: forgotChannel,
+      })
+
+      if (res?.ok) {
+        setForgotMaskedTarget(res.maskedTarget || cleanId)
+        setForgotStep("verify")
+        notify(res.message || "Verification code dispatched.", "ok")
+      } else {
+        setForgotError("Could not dispatch verification code. Please try again.")
+      }
+    } catch (err: any) {
+      setForgotError(err.message || "Failed to send verification code.")
+    } finally {
+      setIsForgotSubmitting(false)
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Forgot Password: Step 2 (Verify OTP & Reset Password)
+  // --------------------------------------------------------------------------
+  const handleVerifyAndReset = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsForgotSubmitting(true)
+    setForgotError(null)
+
+    if (!forgotOtp.trim() || forgotOtp.trim().length !== 6) {
+      setForgotError("Please enter the 6-digit verification code.")
+      setIsForgotSubmitting(false)
+      return
+    }
+
+    if (forgotNewPassword.length < 8) {
+      setForgotError("New password must be at least 8 characters long.")
+      setIsForgotSubmitting(false)
+      return
+    }
+
+    if (forgotNewPassword !== forgotConfirmPassword) {
+      setForgotError("Passwords do not match.")
+      setIsForgotSubmitting(false)
+      return
+    }
+
+    try {
+      // 1. Verify OTP and get scoped reset token
+      const verifyRes = await api.verifyOtp({
+        emailOrPhone: forgotIdentifier.trim(),
+        otp: forgotOtp.trim(),
+      })
+
+      if (!verifyRes?.ok || !verifyRes?.resetToken) {
+        throw new Error(verifyRes?.message || "Invalid verification code.")
+      }
+
+      // 2. Reset password using cryptographic token
+      const resetRes = await api.resetPassword({
+        emailOrPhone: forgotIdentifier.trim(),
+        resetToken: verifyRes.resetToken,
+        newPassword: forgotNewPassword,
+      })
+
+      if (resetRes?.ok) {
+        setForgotStep("success")
+        notify("Password updated successfully! Please sign in with your new password.", "ok")
+      } else {
+        setForgotError(resetRes?.message || "Failed to update password.")
+      }
+    } catch (err: any) {
+      setForgotError(err.message || "Verification failed. Please check the code.")
+    } finally {
+      setIsForgotSubmitting(false)
+    }
+  }
+
 
   return (
     <div className="min-h-screen grid lg:grid-cols-[1.05fr_1fr]">
@@ -300,7 +440,7 @@ export default function Login({
           </div>
 
           <div className="font-mono text-[11px] text-paper/60">
-            Protected with RFC 7519 JWT Cryptographic Tokens · PostgreSQL Backend
+            Protected with RFC 7519 JWT Cryptographic Tokens · Vercel + PostgreSQL Backend
           </div>
         </div>
       </div>
@@ -323,11 +463,45 @@ export default function Login({
               <span>Secure Authentication Portal</span>
             </div>
             <h1 className="font-serif text-[28px] text-ink mt-2.5 leading-tight font-semibold">
-              Sign In to GOMAA
+              {authMode === "signIn" ? "Sign In to GOMAA" : "Join as a Devotee"}
             </h1>
             <p className="text-[13px] text-ink-faint mt-1.5 leading-relaxed">
-              Enter your registered email or phone and password to enter your verified workspace.
+              {authMode === "signIn"
+                ? "Enter your registered email or phone and password to enter your verified workspace."
+                : "Create your personal devotee account to book sacred seva, track cattle welfare, and receive altar darshan."}
             </p>
+          </div>
+
+          {/* Segmented Auth Navigation: Sign In vs Register as Devotee */}
+          <div className="mt-5 p-1 bg-stone-100 dark:bg-stone-800 rounded-sm grid grid-cols-2 gap-1 text-[12.5px] font-medium border border-stone-200">
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode("signIn")
+                setAuthError(null)
+              }}
+              className={`py-2 rounded-xs text-center transition cursor-pointer ${
+                authMode === "signIn"
+                  ? "bg-white text-ink shadow-xs font-semibold"
+                  : "text-ink-soft hover:text-ink"
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode("register")
+                setAuthError(null)
+              }}
+              className={`py-2 rounded-xs text-center transition cursor-pointer ${
+                authMode === "register"
+                  ? "bg-white text-ink shadow-xs font-semibold"
+                  : "text-ink-soft hover:text-ink"
+              }`}
+            >
+              Register as Devotee
+            </button>
           </div>
 
           {/* Error Banner */}
@@ -338,154 +512,550 @@ export default function Login({
             </div>
           )}
 
-          {/* Clean Unified Sign-In Form */}
-          <form className="mt-6 space-y-4" onSubmit={handleSignInSubmit}>
-            <div>
-              <label className="block text-[12.5px] text-ink-soft font-medium mb-1">
-                Registered Email or Phone Number
-              </label>
-              <div className="relative">
-                <Mail
-                  size={15}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
-                />
-                <input
-                  type="text"
-                  required
-                  autoFocus
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  placeholder="e.g. rammohan@gmail.com or +91 98..."
-                  className="w-full bg-paper border border-line rounded-sm pl-9 pr-3 py-2.5 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[12.5px] text-ink-soft font-medium">
-                  Account Password
+          {/* ---------------------------------------------------------------- */}
+          {/* TAB 1: SIGN IN FORM */}
+          {/* ---------------------------------------------------------------- */}
+          {authMode === "signIn" && (
+            <form className="mt-6 space-y-4" onSubmit={handleSignInSubmit}>
+              <div>
+                <label className="block text-[12.5px] text-ink-soft font-medium mb-1">
+                  Registered Email or Phone Number
                 </label>
-                <span className="text-[11px] text-ink-faint">
-                  Case sensitive
-                </span>
-              </div>
-              <div className="relative">
-                <Lock
-                  size={15}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
-                />
-                <input
-                  type={showPw ? "text" : "password"}
-                  required
-                  value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="Enter your account password"
-                  className="w-full bg-paper border border-line rounded-sm pl-9 pr-10 py-2.5 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPw((s) => !s)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink cursor-pointer p-1"
-                  aria-label={showPw ? "Hide password" : "Show password"}
-                >
-                  {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full mt-2 inline-flex items-center justify-center gap-2 bg-saffron text-white rounded-sm py-2.5 text-[13.5px] font-semibold hover:bg-saffron-deep transition shadow-xs cursor-pointer disabled:opacity-50"
-            >
-              {isSubmitting ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  <span>Authenticating Session...</span>
+                <div className="relative">
+                  <Mail
+                    size={15}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
+                  />
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    placeholder="e.g. devotee@gmail.com or +91 98..."
+                    className="w-full bg-paper border border-line rounded-sm pl-9 pr-3 py-2.5 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
+                  />
                 </div>
-              ) : (
-                <>
-                  <span>Sign In to GOMAA Portal</span>
-                  <ArrowRight size={15} />
-                </>
-              )}
-            </button>
-          </form>
+              </div>
 
-          {/* Devotee Registration Notice */}
-          <div className="mt-5 p-3 rounded bg-amber-500/10 border border-amber-500/20 text-[12px] text-ink-soft leading-relaxed flex items-start gap-2.5">
-            <HeartHandshake size={15} className="text-saffron-deep shrink-0 mt-0.5" />
-            <div>
-              <strong className="text-ink font-semibold">Devotee &amp; User Provisioning:</strong>
-              {" "}Devotees and Transit Pilots are registered and authorized by their local Gaushala Manager or Operations Officer. Devotees sign in using the credentials shared with them.
-            </div>
-          </div>
-
-          {/* Quick-Fill Test Credentials */}
-          <div className="mt-8 pt-6 border-t border-line">
-            <div className="flex items-baseline justify-between mb-2.5">
-              <span className="font-mono text-[10.5px] uppercase tracking-wider text-ink-faint font-semibold">
-                Quick Fill Test Credentials
-              </span>
-              <span className="text-[10px] text-ink-faint">
-                (Click to populate fields)
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {quickAccounts.map((acc) => {
-                const isSelected =
-                  emailInput.trim().toLowerCase() === acc.email.toLowerCase()
-                return (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[12.5px] text-ink-soft font-medium">
+                    Account Password
+                  </label>
                   <button
-                    key={acc.label}
                     type="button"
                     onClick={() => {
-                      setEmailInput(acc.email)
-                      setPasswordInput(acc.password)
-                      setAuthError(null)
+                      setForgotIdentifier(emailInput.trim())
+                      setForgotError(null)
+                      setForgotStep("request")
+                      setShowForgotModal(true)
                     }}
-                    className={`p-2.5 rounded-sm border text-left transition cursor-pointer flex items-center justify-between gap-1.5 ${
-                      isSelected
-                        ? "border-saffron bg-saffron-soft/40 ring-1 ring-saffron/30"
-                        : "border-line bg-card hover:border-line-strong hover:bg-paper-deep/60"
-                    }`}
+                    className="text-[11.5px] text-saffron hover:text-saffron-deep font-semibold cursor-pointer"
                   >
-                    <div className="min-w-0 flex items-center gap-2">
-                      <acc.icon
-                        size={14}
-                        className={isSelected ? "text-saffron-deep" : "text-ink-soft"}
-                      />
-                      <div className="min-w-0">
-                        <div className="text-[11.5px] font-semibold text-ink truncate leading-tight">
-                          {acc.label}
-                        </div>
-                        <div className="text-[10px] text-ink-faint truncate leading-tight mt-0.5">
-                          {acc.name}
-                        </div>
-                      </div>
-                    </div>
-                    <span
-                      className={`font-mono text-[9px] uppercase px-1.5 py-0.5 rounded font-bold shrink-0 ${acc.badgeColor}`}
-                    >
-                      {acc.roleBadge}
-                    </span>
+                    Forgot Password?
                   </button>
-                )
-              })}
-            </div>
-          </div>
+                </div>
+                <div className="relative">
+                  <Lock
+                    size={15}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
+                  />
+                  <input
+                    ref={passwordInputRef}
+                    type={showPw ? "text" : "password"}
+                    required
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    placeholder="Enter your account password"
+                    className="w-full bg-paper border border-line rounded-sm pl-9 pr-10 py-2.5 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPw((s) => !s)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink cursor-pointer p-1"
+                    aria-label={showPw ? "Hide password" : "Show password"}
+                  >
+                    {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
 
-          {/* Security footnote */}
-          <div className="mt-6 text-center">
-            <div className="inline-flex items-center gap-1.5 text-[11px] text-ink-faint">
-              <Shield size={12} className="text-forest" />
-              <span>GOMAA Multi-Tenant Governance · Cryptographically Secured</span>
-            </div>
-          </div>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full mt-2 inline-flex items-center justify-center gap-2 bg-saffron text-white rounded-sm py-2.5 text-[13.5px] font-semibold hover:bg-saffron-deep transition shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    <span>Authenticating Session...</span>
+                  </div>
+                ) : (
+                  <>
+                    <span>Sign In to GOMAA Portal</span>
+                    <ArrowRight size={15} />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* ---------------------------------------------------------------- */}
+          {/* TAB 2: DEVOTEE REGISTRATION FORM */}
+          {/* ---------------------------------------------------------------- */}
+          {authMode === "register" && (
+            <form className="mt-6 space-y-3.5" onSubmit={handleRegisterSubmit}>
+              <div>
+                <label className="block text-[12px] text-ink-soft font-medium mb-1">
+                  Full Legal / Devotee Name
+                </label>
+                <div className="relative">
+                  <UserCheck
+                    size={15}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
+                  />
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    placeholder="e.g. Radhakrishna Murthy"
+                    className="w-full bg-paper border border-line rounded-sm pl-9 pr-3 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
+                  />
+                </div>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[12px] text-ink-soft font-medium mb-1">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <Mail
+                      size={15}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
+                    />
+                    <input
+                      type="email"
+                      required
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                      placeholder="devotee@gmail.com"
+                      className="w-full bg-paper border border-line rounded-sm pl-9 pr-3 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[12px] text-ink-soft font-medium mb-1">
+                    Mobile Phone (+91)
+                  </label>
+                  <div className="relative">
+                    <Phone
+                      size={15}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
+                    />
+                    <input
+                      type="tel"
+                      required
+                      value={regPhone}
+                      onChange={(e) => setRegPhone(e.target.value)}
+                      placeholder="+91 98765 43210"
+                      className="w-full bg-paper border border-line rounded-sm pl-9 pr-3 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[12px] text-ink-soft font-medium mb-1">
+                  Primary Region / Gaushala Hub
+                </label>
+                <select
+                  value={regRegion}
+                  onChange={(e) => setRegRegion(e.target.value)}
+                  className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition cursor-pointer"
+                >
+                  {POPULAR_REGIONS.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[12px] text-ink-soft font-medium mb-1">
+                    Create Password
+                  </label>
+                  <div className="relative">
+                    <Lock
+                      size={15}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
+                    />
+                    <input
+                      type={showRegPw ? "text" : "password"}
+                      required
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="Min 8 characters"
+                      className="w-full bg-paper border border-line rounded-sm pl-9 pr-8 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegPw((s) => !s)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink cursor-pointer p-1"
+                    >
+                      {showRegPw ? <EyeOff size={13} /> : <Eye size={13} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[12px] text-ink-soft font-medium mb-1">
+                    Confirm Password
+                  </label>
+                  <div className="relative">
+                    <Lock
+                      size={15}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
+                    />
+                    <input
+                      type={showRegPw ? "text" : "password"}
+                      required
+                      value={regConfirmPassword}
+                      onChange={(e) => setRegConfirmPassword(e.target.value)}
+                      placeholder="Repeat password"
+                      className="w-full bg-paper border border-line rounded-sm pl-9 pr-3 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <label className="flex items-start gap-2 pt-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  required
+                  checked={regTermsAccepted}
+                  onChange={(e) => setRegTermsAccepted(e.target.checked)}
+                  className="mt-0.5 rounded border-line text-saffron focus:ring-saffron"
+                />
+                <span className="text-[11.5px] text-ink-faint leading-snug">
+                  I agree to the sacred cow welfare guidelines, ethical altar seva principles, and privacy policy.
+                </span>
+              </label>
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full mt-2 inline-flex items-center justify-center gap-2 bg-saffron text-white rounded-sm py-2.5 text-[13.5px] font-semibold hover:bg-saffron-deep transition shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    <span>Creating Devotee Account...</span>
+                  </div>
+                ) : (
+                  <>
+                    <Sparkles size={15} />
+                    <span>Create Devotee Account</span>
+                    <ArrowRight size={15} />
+                  </>
+                )}
+              </button>
+
+              <div className="mt-3 p-2.5 bg-amber-500/10 border border-amber-500/20 rounded text-[11.5px] text-ink-soft leading-relaxed flex items-start gap-2">
+                <Building2 size={14} className="text-amber-700 shrink-0 mt-0.5" />
+                <div>
+                  <strong>Are you a Gaushala Trust or Caretaker?</strong> Gaushala Managers and Transit Pilots are verified and onboarded by platform operations officers. Contact{" "}
+                  <span className="font-semibold text-ink">trust@gomaa.in</span> to register a sanctuary.
+                </div>
+              </div>
+            </form>
+          )}
+
         </div>
       </div>
+
+      {/* -------------------------------------------------------------------- */}
+      {/* FORGOT PASSWORD & DUAL-CHANNEL OTP RECOVERY MODAL                     */}
+      {/* -------------------------------------------------------------------- */}
+      {showForgotModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-[fadein_.15s_ease]">
+          <div className="relative w-full max-w-md bg-paper border border-line rounded-lg shadow-xl overflow-hidden p-6 sm:p-7">
+            {/* Modal Close Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowForgotModal(false)
+                setForgotError(null)
+              }}
+              className="absolute right-4 top-4 text-ink-faint hover:text-ink p-1 rounded-sm cursor-pointer"
+              aria-label="Close modal"
+            >
+              <X size={18} />
+            </button>
+
+            {/* Modal Header */}
+            <div className="flex items-center gap-2.5 mb-1.5">
+              <div className="w-8 h-8 rounded-sm bg-saffron/15 text-saffron grid place-items-center">
+                <KeyRound size={16} />
+              </div>
+              <h2 className="font-serif text-[20px] font-semibold text-ink">
+                Account Recovery &amp; Reset
+              </h2>
+            </div>
+            <p className="text-[12.5px] text-ink-faint leading-relaxed mb-4">
+              Recover access using out-of-band verification delivered to your registered contact.
+            </p>
+
+            {/* Error Banner in Modal */}
+            {forgotError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-sm text-[12px] text-red-800 flex items-start gap-2">
+                <AlertCircle size={15} className="text-red-600 shrink-0 mt-0.5" />
+                <span className="flex-1">{forgotError}</span>
+              </div>
+            )}
+
+            {/* -------------------------------------------------------------- */}
+            {/* STEP 1: REQUEST VERIFICATION CODE                              */}
+            {/* -------------------------------------------------------------- */}
+            {forgotStep === "request" && (
+              <form onSubmit={handleRequestOtp} className="space-y-4">
+                {/* Channel Selector: Email vs Phone */}
+                <div>
+                  <label className="block text-[11.5px] text-ink-faint font-semibold uppercase tracking-wider mb-1.5">
+                    Select Verification Channel
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 text-[12.5px]">
+                    <button
+                      type="button"
+                      onClick={() => setForgotChannel("EMAIL")}
+                      className={`p-2.5 rounded-sm border flex items-center justify-center gap-2 transition cursor-pointer font-medium ${
+                        forgotChannel === "EMAIL"
+                          ? "border-saffron bg-saffron/10 text-saffron-deep font-semibold"
+                          : "border-line bg-paper-soft text-ink-soft hover:bg-white"
+                      }`}
+                    >
+                      <Mail size={14} />
+                      <span>Email OTP (Resend)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setForgotChannel("PHONE")}
+                      className={`p-2.5 rounded-sm border flex items-center justify-center gap-2 transition cursor-pointer font-medium ${
+                        forgotChannel === "PHONE"
+                          ? "border-saffron bg-saffron/10 text-saffron-deep font-semibold"
+                          : "border-line bg-paper-soft text-ink-soft hover:bg-white"
+                      }`}
+                    >
+                      <Smartphone size={14} />
+                      <span>Mobile OTP (Firebase)</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[12px] text-ink-soft font-medium mb-1">
+                    {forgotChannel === "EMAIL"
+                      ? "Registered Email Address"
+                      : "Registered Mobile Phone Number (+91)"}
+                  </label>
+                  <div className="relative">
+                    {forgotChannel === "EMAIL" ? (
+                      <Mail
+                        size={15}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
+                      />
+                    ) : (
+                      <Phone
+                        size={15}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
+                      />
+                    )}
+                    <input
+                      type={forgotChannel === "EMAIL" ? "email" : "tel"}
+                      required
+                      autoFocus
+                      value={forgotIdentifier}
+                      onChange={(e) => setForgotIdentifier(e.target.value)}
+                      placeholder={
+                        forgotChannel === "EMAIL"
+                          ? "e.g. koushik@gmail.com"
+                          : "e.g. +91 98765 43210"
+                      }
+                      className="w-full bg-paper border border-line rounded-sm pl-9 pr-3 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3 bg-stone-100 rounded text-[11.5px] text-ink-faint leading-relaxed">
+                  <strong>Zero-Leakage Security:</strong> The single-use verification code is delivered out-of-band to your private inbox or phone SMS. It is never exposed in browser logs.
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isForgotSubmitting}
+                  className="w-full inline-flex items-center justify-center gap-2 bg-saffron text-white rounded-sm py-2.5 text-[13px] font-semibold hover:bg-saffron-deep transition shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {isForgotSubmitting ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      <span>Dispatching Code...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <span>Send 6-Digit Verification Code</span>
+                      <ArrowRight size={14} />
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            {/* -------------------------------------------------------------- */}
+            {/* STEP 2: VERIFY OTP & ENTER NEW PASSWORD                        */}
+            {/* -------------------------------------------------------------- */}
+            {forgotStep === "verify" && (
+              <form onSubmit={handleVerifyAndReset} className="space-y-3.5">
+                <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded text-[12px] text-ink-soft">
+                  Verification code dispatched to:{" "}
+                  <strong className="text-ink font-semibold">{forgotMaskedTarget}</strong>.
+                  Code expires in 10 minutes.
+                </div>
+
+                <div>
+                  <label className="block text-[12px] text-ink-soft font-medium mb-1">
+                    Enter 6-Digit Verification Code (OTP)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    maxLength={6}
+                    value={forgotOtp}
+                    onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, ""))}
+                    placeholder="123456"
+                    className="w-full text-center font-mono text-[22px] tracking-[0.3em] font-bold bg-paper border border-line rounded-sm py-2 text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[12px] text-ink-soft font-medium mb-1">
+                    New Account Password
+                  </label>
+                  <div className="relative">
+                    <Lock
+                      size={15}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
+                    />
+                    <input
+                      type={showForgotPw ? "text" : "password"}
+                      required
+                      value={forgotNewPassword}
+                      onChange={(e) => setForgotNewPassword(e.target.value)}
+                      placeholder="Min 8 characters"
+                      className="w-full bg-paper border border-line rounded-sm pl-9 pr-8 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotPw((s) => !s)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink cursor-pointer p-1"
+                    >
+                      {showForgotPw ? <EyeOff size={13} /> : <Eye size={13} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[12px] text-ink-soft font-medium mb-1">
+                    Confirm New Password
+                  </label>
+                  <div className="relative">
+                    <Lock
+                      size={15}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
+                    />
+                    <input
+                      type={showForgotPw ? "text" : "password"}
+                      required
+                      value={forgotConfirmPassword}
+                      onChange={(e) => setForgotConfirmPassword(e.target.value)}
+                      placeholder="Repeat new password"
+                      className="w-full bg-paper border border-line rounded-sm pl-9 pr-3 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotStep("request")
+                      setForgotOtp("")
+                      setForgotError(null)
+                    }}
+                    className="flex-1 py-2 text-[12px] border border-line rounded-sm text-ink-soft hover:bg-stone-50 cursor-pointer font-medium"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isForgotSubmitting}
+                    className="flex-[2] inline-flex items-center justify-center gap-2 bg-saffron text-white rounded-sm py-2 text-[13px] font-semibold hover:bg-saffron-deep transition shadow-xs cursor-pointer disabled:opacity-50"
+                  >
+                    {isForgotSubmitting ? (
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                        <span>Verifying &amp; Updating...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <ShieldCheck size={14} />
+                        <span>Update Password</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* -------------------------------------------------------------- */}
+            {/* STEP 3: SUCCESS CONFIRMATION                                   */}
+            {/* -------------------------------------------------------------- */}
+            {forgotStep === "success" && (
+              <div className="text-center py-4 space-y-3">
+                <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full grid place-items-center mx-auto">
+                  <Check size={24} />
+                </div>
+                <h3 className="font-serif text-[18px] font-semibold text-ink">
+                  Password Reset Successful
+                </h3>
+                <p className="text-[12.5px] text-ink-faint leading-relaxed max-w-xs mx-auto">
+                  Your credentials have been securely updated in the PostgreSQL database. You can now sign in to your workspace.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForgotModal(false)
+                    setEmailInput(forgotIdentifier.trim())
+                    setAuthMode("signIn")
+                    setTimeout(() => passwordInputRef.current?.focus(), 50)
+                  }}
+                  className="w-full inline-flex items-center justify-center gap-2 bg-saffron text-white rounded-sm py-2.5 text-[13px] font-semibold hover:bg-saffron-deep transition cursor-pointer shadow-xs"
+                >
+                  <span>Proceed to Sign In</span>
+                  <ArrowRight size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -50,7 +50,7 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
     }
 
     if (currentRole === "super_admin") {
-      subs.add("channel:super_admin")
+      // Super Admin has governance authority, but no live GPS subscription.
     } else if (currentRole === "admin") {
       subs.add("channel:admin")
     } else if (currentRole === "manager") {
@@ -64,7 +64,11 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
       }
     }
 
-    // Always listen to animals channel for catalog synchronization
+    // Do not open any realtime channel for Super Admin. This prevents map/GPS
+    // fan-out and keeps governance views independent from telemetry load.
+    if (currentRole === "super_admin") return
+
+    // Other roles may listen for catalog synchronization.
     subs.add("channel:animals")
 
     // Connect WebSocket

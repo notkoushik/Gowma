@@ -1,13 +1,16 @@
 import type { WebSocket } from "ws"
 import type { ClientMessage, ServerMessage, ServerEventType } from "./types.ts"
+import type { JwtPayload } from "../auth/jwt.ts"
 
 class WebSocketHub {
   private clients = new Map<WebSocket, Set<string>>()
+  private identities = new Map<WebSocket, JwtPayload>()
   private channels = new Map<string, Set<WebSocket>>()
   private isAliveMap = new WeakMap<WebSocket, boolean>()
 
-  register(ws: WebSocket) {
+  register(ws: WebSocket, identity: JwtPayload) {
     this.clients.set(ws, new Set<string>())
+    this.identities.set(ws, identity)
     this.isAliveMap.set(ws, true)
 
     ws.on("pong", () => {
@@ -47,10 +50,16 @@ class WebSocketHub {
       }
     }
     this.clients.delete(ws)
+    this.identities.delete(ws)
   }
 
   subscribe(ws: WebSocket, channel: string) {
     if (!channel || typeof channel !== "string") return
+    const identity = this.identities.get(ws)
+    if (!identity || !this.canAccessChannel(identity, channel)) {
+      this.send(ws, { event: "ERROR", data: { message: "Unauthorized channel" } })
+      return
+    }
 
     let clientSubs = this.clients.get(ws)
     if (!clientSubs) {
@@ -126,7 +135,7 @@ class WebSocketHub {
         break
 
       case "DRIVER_TELEMETRY":
-        if (msg.channel && msg.payload) {
+        if (msg.channel && msg.payload && this.canPublishTelemetry(ws, msg.channel, msg.payload)) {
           this.broadcastToChannel(msg.channel, "GPS_TICK", msg.payload)
         }
         break
@@ -137,6 +146,27 @@ class WebSocketHub {
           data: { message: `Unknown client action: ${(msg as any).action}` },
         })
     }
+  }
+
+  private canAccessChannel(identity: JwtPayload, channel: string) {
+    // Governance authority does not imply live GPS authority. Super Admin
+    // connections cannot subscribe to realtime channels by default.
+    if (identity.role === "super_admin") return false
+    if (identity.role === "admin") return channel === "channel:admin" || channel.startsWith("channel:booking:")
+    if (identity.role === "manager") {
+      return identity.gosalaNames.some((name) => channel === `channel:gosala:${name}`) || channel.startsWith("channel:booking:")
+    }
+    if (identity.role === "driver") return channel.startsWith("channel:booking:") || channel === `channel:driver:${identity.name}`
+    if (identity.role === "customer") return channel.startsWith("channel:booking:")
+    return false
+  }
+
+  private canPublishTelemetry(ws: WebSocket, channel: string, payload: any) {
+    const identity = this.identities.get(ws)
+    return !!identity && (identity.role === "driver" || identity.role === "admin" || identity.role === "super_admin") &&
+      this.clients.get(ws)?.has(channel) === true &&
+      typeof payload.lat === "number" && typeof payload.lng === "number" &&
+      payload.lat >= -90 && payload.lat <= 90 && payload.lng >= -180 && payload.lng <= 180
   }
 
   private send(ws: WebSocket, msg: ServerMessage) {

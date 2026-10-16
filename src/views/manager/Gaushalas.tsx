@@ -48,6 +48,7 @@ import {
 import { Panel, Tag, StatusPill } from "../../lib/ui"
 import GaushalaProfileView from "./GaushalaProfileView"
 import MapLocationPicker from "../../components/MapLocationPicker"
+import DynamicHubSelector from "../../components/DynamicHubSelector"
 
 // ============================================================================
 // Gaushala Premise Photo Uploader Component
@@ -1590,63 +1591,19 @@ export default function Gaushalas({
                       </div>
 
                       <div>
-                        <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
-                          Operational Hub &amp; State *
-                        </label>
-                        <select
-                          value={isCustomRegionMode ? "__CUSTOM__" : formRegion}
-                          onChange={(e) => {
-                            if (e.target.value === "__CUSTOM__") {
-                              setIsCustomRegionMode(true)
-                              setCustomRegion("")
-                            } else {
-                              setIsCustomRegionMode(false)
-                              setFormRegion(e.target.value)
+                        <DynamicHubSelector
+                          value={formRegion}
+                          currentLat={formLat}
+                          currentLng={formLng}
+                          onSelectHub={(hub) => {
+                            setFormRegion(`${hub.name} (${hub.city}, ${hub.state})`)
+                            setFormLat(hub.lat)
+                            setFormLng(hub.lng)
+                            if (!formAddress) {
+                              setFormAddress(`${hub.name}, ${hub.city}, ${hub.state}`)
                             }
                           }}
-                          className="w-full bg-paper border border-line rounded-md px-3 py-2.5 text-[12.5px] text-ink outline-none focus:border-forest focus:ring-2 focus:ring-forest/20 transition cursor-pointer"
-                        >
-                          {getAllIndianStates().map((st) => (
-                            <optgroup key={st} label={st}>
-                              {getHubsForState(st).map((h) => (
-                                <option key={h.id} value={`${h.state} - ${h.name}`}>
-                                  {h.city} — {h.name}
-                                </option>
-                              ))}
-                            </optgroup>
-                          ))}
-                          <optgroup label="Custom / New Operational Hub">
-                            <option
-                              value="__CUSTOM__"
-                              className="font-semibold text-forest"
-                            >
-                              + Customize / Add New Hub...
-                            </option>
-                          </optgroup>
-                        </select>
-
-                        {isCustomRegionMode && (
-                          <div className="mt-2 flex items-center gap-1.5 animate-fade-in">
-                            <input
-                              type="text"
-                              autoFocus
-                              value={customRegion}
-                              onChange={(e) => setCustomRegion(e.target.value)}
-                              placeholder="Enter custom region / district name..."
-                              className="w-full bg-paper border border-forest/60 focus:border-forest rounded-md px-3 py-2 text-[12.5px] text-ink outline-none shadow-xs"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsCustomRegionMode(false)
-                                setFormRegion(GOSALA_REGION_PRESETS[0])
-                              }}
-                              className="text-[11px] text-ink-faint hover:text-ink px-3 py-2 border border-line rounded-md bg-paper-deep shrink-0 cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        )}
+                        />
                       </div>
 
                       <div className="sm:col-span-2">
@@ -1948,6 +1905,22 @@ export default function Gaushalas({
                       initialLng={formLng}
                       initialAddress={formAddress}
                       initialRegion={formRegion}
+                      gaushalaName={formName}
+                      localGosalas={gosalas}
+                      onSelectGaushalaMatch={(matched) => {
+                        if (!formName && matched.name) {
+                          setFormName(matched.name)
+                        }
+                        if (matched.address) {
+                          setFormAddress(matched.address)
+                        }
+                        if (matched.suggestedRegion && !isCustomRegionMode) {
+                          setFormRegion(matched.suggestedRegion)
+                        }
+                        if (matched.capacity) {
+                          setFormCapacity(String(matched.capacity))
+                        }
+                      }}
                       onChange={({ lat, lng, address, suggestedRegion }) => {
                         setFormLat(lat)
                         setFormLng(lng)
@@ -1959,7 +1932,7 @@ export default function Gaushalas({
                         }
                       }}
                       label="Gaushala Location Pinpoint & Coordinates *"
-                      helperText="Pinpoint the exact shelter location on the map, search any landmark/town, or jump to any Indian region."
+                      helperText="Search by your Gaushala name, town/landmark, or pinpoint directly on the live map."
                     />
 
                     <div className="grid grid-cols-2 gap-3 pt-1">

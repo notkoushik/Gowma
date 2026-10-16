@@ -1,7 +1,7 @@
-import { prisma } from "../prisma"
-import { db } from "../db"
-import { wsHub } from "../ws/hub"
-import type { Settlement } from "../types"
+import { prisma } from "../prisma.ts"
+import { db } from "../db.ts"
+import { wsHub } from "../ws/hub.ts"
+import type { Settlement } from "../types.ts"
 
 export type PayoutSweepSummary = {
   batchId: string
@@ -185,6 +185,17 @@ export async function executeAutomatedSweep(options: {
     )
   })
 
+  if (eligibleBookings.length > 0 && process.env.GOMAA_PAYOUT_PROVIDER_ENABLED !== "true") {
+    return {
+      success: false,
+      disbursedBatches: [],
+      totalDisbursed: 0,
+      totalRetained: 0,
+      cycle,
+      message: "Payout provider is not configured; no settlement was created.",
+    }
+  }
+
   // Also include all unique Gaushalas with volume
   const gosalaGroups = new Map<string, typeof eligibleBookings>()
   eligibleBookings.forEach((b) => {
@@ -195,10 +206,16 @@ export async function executeAutomatedSweep(options: {
     gosalaGroups.get(gName)!.push(b)
   })
 
-  // If no bookings matched, create at least a batch for default Gaushalas
+  // Never manufacture a settlement for an empty or unverified batch.
   if (gosalaGroups.size === 0) {
-    const defaultName = options.targetGosala || "Shri Krishna Gaushala"
-    gosalaGroups.set(defaultName, [])
+    return {
+      success: true,
+      disbursedBatches: [],
+      totalDisbursed: 0,
+      totalRetained: 0,
+      cycle,
+      message: "No eligible bookings are ready for settlement.",
+    }
   }
 
   const disbursedBatches: PayoutSweepSummary[] = []
@@ -248,11 +265,6 @@ export async function executeAutomatedSweep(options: {
         payableAmount += bookingPayable
         commissionAmount += bookingCommission
       }
-    } else {
-      // Nominal cycle fallback for testing/empty batch
-      grossAmount = 45000
-      commissionAmount = Math.round((grossAmount * defaultCommPct) / 100)
-      payableAmount = grossAmount - commissionAmount
     }
 
     // Resolve target bank details
@@ -266,7 +278,7 @@ export async function executeAutomatedSweep(options: {
       batchLabel: batchWeekLabel,
       gosalaName: gName,
       gosalaId: gosalaRecord?.id,
-      sevasCount: bks.length || 6,
+      sevasCount: bks.length,
       grossAmount,
       commissionPct: defaultCommPct,
       commissionAmount,
