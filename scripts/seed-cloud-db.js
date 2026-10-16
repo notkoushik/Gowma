@@ -63,15 +63,15 @@ async function seed() {
           where: { id: existing.id },
           data: {
             role: "SUPER_ADMIN",
-            password: sa.password,
             isActive: true,
+            ...(!existing.password ? { password: sa.password } : {}),
           },
         })
         console.log(`[Seed] Super Admin re-verified: ${sa.email}`)
       }
     }
 
-    // 3. Ensure test devotee account devpulseorg@gmail.com is aligned with Koushik.git password & 7780740223 phone
+    // 3. Ensure test devotee account devpulseorg@gmail.com is aligned with phone
     try {
       const devPulse = await prisma.user.findFirst({
         where: { email: { equals: "devpulseorg@gmail.com", mode: "insensitive" } },
@@ -82,11 +82,11 @@ async function seed() {
           data: {
             name: "test-01",
             phone: "+91 7780740223",
-            password: hashPassword("Koushik.git"),
             isActive: true,
+            ...(!devPulse.password ? { password: hashPassword("Koushik.git") } : {}),
           },
         })
-        console.log("[Seed] devpulseorg@gmail.com synchronized with phone +91 7780740223 and password Koushik.git")
+        console.log("[Seed] devpulseorg@gmail.com verified with phone +91 7780740223")
       }
     } catch {}
 
@@ -114,8 +114,8 @@ async function seed() {
         data: {
           name: "Admin_1",
           role: "OPERATIONS_ADMIN",
-          password: hashPassword("Koushik.git"),
           isActive: true,
+          ...(!admin1User.password ? { password: hashPassword("Koushik.git") } : {}),
         },
       })
       console.log(`[Seed] Synchronized Operations Admin: ${admin1Email}`)

@@ -121,12 +121,40 @@ export async function authenticateOrResolveUser(
   if (user.isActive === false) throw new Error("Account is inactive")
   if (!password) throw new Error("Password is required")
   if (isPasswordHash(user.password)) {
-    if (!verifyPassword(password, user.password)) throw new Error("Invalid credentials")
+    let isValid = verifyPassword(password, user.password)
+    // First-letter case-resilience fallback (e.g. "koushik.git" vs "Koushik.git" on mobile auto-capitalize)
+    if (!isValid && password.length >= 8) {
+      const altFirstChar =
+        password[0] === password[0].toUpperCase()
+          ? password[0].toLowerCase() + password.slice(1)
+          : password[0].toUpperCase() + password.slice(1)
+      if (verifyPassword(altFirstChar, user.password)) {
+        isValid = true
+        // Seamlessly update to the user's active typed preference
+        try {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { password: hashPassword(password) },
+          })
+        } catch {}
+      }
+    }
+    if (!isValid) throw new Error("Invalid credentials")
   } else {
     const stored = typeof user.password === "string" ? user.password : ""
     const a = Buffer.from(password)
     const b = Buffer.from(stored)
-    const valid = a.length === b.length && crypto.timingSafeEqual(a, b)
+    let valid = a.length === b.length && crypto.timingSafeEqual(a, b)
+    if (!valid && password.length >= 8 && stored.length >= 8) {
+      const altFirstChar =
+        password[0] === password[0].toUpperCase()
+          ? password[0].toLowerCase() + password.slice(1)
+          : password[0].toUpperCase() + password.slice(1)
+      const altA = Buffer.from(altFirstChar)
+      if (altA.length === b.length && crypto.timingSafeEqual(altA, b)) {
+        valid = true
+      }
+    }
     if (!valid) throw new Error("Invalid credentials")
     try { await prisma.user.update({ where: { id: user.id }, data: { password: hashPassword(password) } }) }
     catch { throw new Error("Unable to secure account password") }
