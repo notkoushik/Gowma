@@ -1658,7 +1658,7 @@ try {
   dns.setServers(["8.8.8.8", "1.1.1.1"]);
 } catch {
 }
-async function sendOtpEmail({
+async function sendOtpEmail2({
   toEmail,
   userName = "Devotee",
   otp,
@@ -2042,7 +2042,7 @@ async function requestPasswordResetOtp(emailOrPhone, channel = "EMAIL", ipAddres
     }
   }
   if (channel === "EMAIL") {
-    const emailResult = await sendOtpEmail({
+    const emailResult = await sendOtpEmail2({
       toEmail: user.email,
       userName: user.name,
       otp: rawOtp,
@@ -3101,7 +3101,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   const { pathname, query } = parseUrl(rawUrl);
   if (!pathname.startsWith("/api/")) return null;
   const authUser = getAuthUserFromHeader(headers?.authorization || headers?.Authorization);
-  const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/auth/accounts" || pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/places/search" || pathname === "/api/animals" || pathname === "/api/gosalas");
+  const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/auth/accounts" || pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/places/search" || pathname === "/api/animals" || pathname === "/api/gosalas" || pathname === "/api/debug/email-status");
   if (!isPublicRoute && !authUser) {
     return { status: 401, body: { ok: false, error: "Authentication required" } };
   }
@@ -3312,6 +3312,36 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         body: { ok: false, database: "error", error: err.message }
       };
     }
+  }
+  if (method === "GET" && pathname === "/api/debug/email-status") {
+    const gmailUser = (process.env.GMAIL_USER || "").replace(/["']/g, "").trim();
+    const gmailPass = (process.env.GMAIL_APP_PASSWORD || "").replace(/["'\s]/g, "").trim();
+    const resendKey = (process.env.RESEND_API_KEY || "").replace(/["']/g, "").trim();
+    const diagnostics = {
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      nodeVersion: process.version,
+      platform: process.platform,
+      env: {
+        GMAIL_USER_set: !!process.env.GMAIL_USER,
+        GMAIL_USER_val: gmailUser ? `${gmailUser.slice(0, 3)}***@${gmailUser.split("@")[1] || ""}` : null,
+        GMAIL_APP_PASSWORD_set: !!process.env.GMAIL_APP_PASSWORD,
+        GMAIL_APP_PASSWORD_len: gmailPass.length,
+        RESEND_API_KEY_set: !!process.env.RESEND_API_KEY,
+        RESEND_API_KEY_prefix: resendKey ? resendKey.slice(0, 6) + "..." : null
+      }
+    };
+    try {
+      const sendResult = await sendOtpEmail({
+        toEmail: "nanikoushik96@gmail.com",
+        userName: "Diagnostic Check",
+        otp: "123456",
+        expiryMinutes: 10
+      });
+      diagnostics.dispatchResult = sendResult;
+    } catch (err) {
+      diagnostics.dispatchError = err.message || String(err);
+    }
+    return { status: 200, body: diagnostics };
   }
   if (method === "GET" && pathname === "/api/availability") {
     const animal = query.get("animal") || "";

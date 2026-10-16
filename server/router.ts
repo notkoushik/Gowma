@@ -481,7 +481,8 @@ export async function handleApiRequest(
       pathname === "/api/hubs" ||
       pathname === "/api/places/search" ||
       pathname === "/api/animals" ||
-      pathname === "/api/gosalas"
+      pathname === "/api/gosalas" ||
+      pathname === "/api/debug/email-status"
     ))
   if (!isPublicRoute && !authUser) {
     return { status: 401, body: { ok: false, error: "Authentication required" } }
@@ -749,6 +750,41 @@ export async function handleApiRequest(
         body: { ok: false, database: "error", error: err.message },
       }
     }
+  }
+
+  // GET /api/debug/email-status
+  if (method === "GET" && pathname === "/api/debug/email-status") {
+    const gmailUser = (process.env.GMAIL_USER || "").replace(/["']/g, "").trim()
+    const gmailPass = (process.env.GMAIL_APP_PASSWORD || "").replace(/["'\s]/g, "").trim()
+    const resendKey = (process.env.RESEND_API_KEY || "").replace(/["']/g, "").trim()
+
+    const diagnostics: any = {
+      timestamp: new Date().toISOString(),
+      nodeVersion: process.version,
+      platform: process.platform,
+      env: {
+        GMAIL_USER_set: !!process.env.GMAIL_USER,
+        GMAIL_USER_val: gmailUser ? `${gmailUser.slice(0, 3)}***@${gmailUser.split("@")[1] || ""}` : null,
+        GMAIL_APP_PASSWORD_set: !!process.env.GMAIL_APP_PASSWORD,
+        GMAIL_APP_PASSWORD_len: gmailPass.length,
+        RESEND_API_KEY_set: !!process.env.RESEND_API_KEY,
+        RESEND_API_KEY_prefix: resendKey ? resendKey.slice(0, 6) + "..." : null,
+      },
+    }
+
+    try {
+      const sendResult = await sendOtpEmail({
+        toEmail: "nanikoushik96@gmail.com",
+        userName: "Diagnostic Check",
+        otp: "123456",
+        expiryMinutes: 10,
+      })
+      diagnostics.dispatchResult = sendResult
+    } catch (err: any) {
+      diagnostics.dispatchError = err.message || String(err)
+    }
+
+    return { status: 200, body: diagnostics }
   }
 
   // GET /api/availability
