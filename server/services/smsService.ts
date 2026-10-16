@@ -6,6 +6,8 @@
  * 3. Out-of-band console simulation for local development & staging
  */
 
+import nodemailer from "nodemailer"
+
 interface SendSmsOptions {
   toPhone: string
   otp: string
@@ -120,13 +122,48 @@ export async function sendOtpSms({
     }
   }
 
-  // 4. Fallback: Out-of-band console simulation for testing & dev
+  // 4. Fallback: Out-of-band delivery + Gmail notification
   console.log(`\n========================================================================`)
   console.log(`[MOBILE SMS OTP DISPATCH] Out-of-band delivery to: ${toPhone}`)
   console.log(`[VERIFICATION CODE] ${otp}`)
   console.log(`[EXPIRY] Valid for ${expiryMinutes} minutes.`)
   console.log(`[LIVE DISPATCH NOTE] Configure MSG91_AUTH_KEY, FAST2SMS_API_KEY, or TWILIO credentials in Vercel to dispatch live SMS to carrier handsets.`)
   console.log(`========================================================================\n`)
+
+  const gmailUser = (process.env.GMAIL_USER || "").trim()
+  const gmailPass = (process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g, "")
+
+  if (gmailUser && gmailPass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: { user: gmailUser, pass: gmailPass },
+      })
+      await transporter.sendMail({
+        from: `"GOMAA Operations" <${gmailUser}>`,
+        to: gmailUser,
+        subject: `[GOMAA Mobile SMS OTP for ${toPhone}]: ${otp}`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; background: #ffffff; border: 1px solid #e6e0d4; border-radius: 8px; padding: 28px;">
+            <div style="font-size: 18px; font-weight: bold; color: #d97706; margin-bottom: 8px;">GOMAA Mobile SMS Verification</div>
+            <p style="font-size: 13.5px; color: #444; line-height: 1.5;">
+              A mobile verification code was requested for phone number: <strong>${toPhone}</strong>.
+            </p>
+            <div style="background: #fffbeb; border: 2px dashed #f59e0b; border-radius: 6px; padding: 16px; text-align: center; margin: 20px 0;">
+              <div style="font-family: monospace; font-size: 32px; font-weight: bold; letter-spacing: 0.25em; color: #b45309;">${otp}</div>
+              <div style="font-size: 11.5px; color: #78716c; margin-top: 6px;">Expires in ${expiryMinutes} minutes</div>
+            </div>
+            <p style="font-size: 12px; color: #666; background: #f5f5f4; border-radius: 4px; padding: 10px;">
+              <strong>Developer Notice:</strong> Delivered to your verified developer email (${gmailUser}) via Gmail SMTP for instant zero-cost testing.
+            </p>
+          </div>
+        `,
+      })
+      console.log(`[SMS Gmail Backup Success]: Delivered OTP for ${toPhone} to ${gmailUser} via Gmail SMTP`)
+    } catch (e: any) {
+      console.warn("[SMS Gmail Backup Notice]:", e.message)
+    }
+  }
 
   return { success: true, provider: "simulated", simulated: true }
 }
