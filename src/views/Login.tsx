@@ -81,6 +81,8 @@ export default function Login({
   const [showForgotModal, setShowForgotModal] = useState(false)
   const [forgotStep, setForgotStep] = useState<"request" | "verify" | "success">("request")
   const [forgotChannel, setForgotChannel] = useState<"EMAIL" | "PHONE">("EMAIL")
+  const [forgotEmail, setForgotEmail] = useState("")
+  const [forgotPhone, setForgotPhone] = useState("")
   const [forgotIdentifier, setForgotIdentifier] = useState("")
   const [forgotOtp, setForgotOtp] = useState("")
   const [forgotNewPassword, setForgotNewPassword] = useState("")
@@ -313,12 +315,36 @@ export default function Login({
     setIsForgotSubmitting(true)
     setForgotError(null)
 
-    const cleanId = forgotIdentifier.trim()
-    if (!cleanId) {
-      setForgotError("Please enter your registered email or phone number.")
-      setIsForgotSubmitting(false)
-      return
+    let cleanId = ""
+    if (forgotChannel === "EMAIL") {
+      const email = forgotEmail.trim().toLowerCase()
+      if (!email) {
+        setForgotError("Please enter your registered email address.")
+        setIsForgotSubmitting(false)
+        return
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setForgotError("Please enter a valid email address (e.g. name@domain.com).")
+        setIsForgotSubmitting(false)
+        return
+      }
+      cleanId = email
+    } else {
+      const digits = forgotPhone.replace(/\D/g, "")
+      if (!digits) {
+        setForgotError("Please enter your registered 10-digit mobile number.")
+        setIsForgotSubmitting(false)
+        return
+      }
+      if (digits.length !== 10) {
+        setForgotError("Mobile number must be exactly 10 digits (e.g. 98490 12345).")
+        setIsForgotSubmitting(false)
+        return
+      }
+      cleanId = `+91 ${digits}`
     }
+
+    setForgotIdentifier(cleanId)
 
     try {
       const res = await api.forgotPassword({
@@ -349,7 +375,12 @@ export default function Login({
     setIsForgotSubmitting(true)
     setForgotError(null)
 
-    const cleanId = forgotIdentifier.trim()
+    const cleanId =
+      forgotIdentifier.trim() ||
+      (forgotChannel === "EMAIL"
+        ? forgotEmail.trim().toLowerCase()
+        : `+91 ${forgotPhone.replace(/\D/g, "")}`)
+
     try {
       const res = await api.forgotPassword({
         emailOrPhone: cleanId,
@@ -896,39 +927,68 @@ export default function Login({
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-[12px] text-ink-soft font-medium mb-1">
-                    {forgotChannel === "EMAIL"
-                      ? "Registered Email Address"
-                      : "Registered Mobile Phone Number (+91)"}
-                  </label>
-                  <div className="relative">
-                    {forgotChannel === "EMAIL" ? (
+                {forgotChannel === "EMAIL" ? (
+                  <div>
+                    <label className="block text-[12px] text-ink-soft font-medium mb-1">
+                      Registered Email Address
+                    </label>
+                    <div className="relative">
                       <Mail
                         size={15}
                         className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
                       />
-                    ) : (
-                      <Phone
-                        size={15}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
+                      <input
+                        type="email"
+                        inputMode="email"
+                        autoComplete="email"
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        required
+                        autoFocus
+                        value={forgotEmail}
+                        onChange={(e) => {
+                          setForgotEmail(e.target.value.trim())
+                          setForgotError(null)
+                        }}
+                        placeholder="e.g. nanikoushik96@gmail.com"
+                        className="w-full bg-paper border border-line rounded-sm pl-9 pr-3 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
                       />
-                    )}
-                    <input
-                      type={forgotChannel === "EMAIL" ? "email" : "tel"}
-                      required
-                      autoFocus
-                      value={forgotIdentifier}
-                      onChange={(e) => setForgotIdentifier(e.target.value)}
-                      placeholder={
-                        forgotChannel === "EMAIL"
-                          ? "e.g. koushik@gmail.com"
-                          : "e.g. +91 98765 43210"
-                      }
-                      className="w-full bg-paper border border-line rounded-sm pl-9 pr-3 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
-                    />
+                    </div>
+                    <p className="text-[11px] text-ink-faint mt-1">
+                      We will deliver a 6-digit verification code to this inbox.
+                    </p>
                   </div>
-                </div>
+                ) : (
+                  <div>
+                    <label className="block text-[12px] text-ink-soft font-medium mb-1">
+                      Registered Mobile Phone Number
+                    </label>
+                    <div className="flex rounded-sm border border-line focus-within:border-saffron focus-within:ring-2 focus-within:ring-saffron/20 transition overflow-hidden bg-paper">
+                      <div className="flex items-center gap-1.5 px-3 py-2 bg-stone-100 border-r border-line text-[12.5px] font-semibold text-ink-soft select-none shrink-0">
+                        <span>🇮🇳 +91</span>
+                      </div>
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        maxLength={10}
+                        required
+                        autoFocus
+                        value={forgotPhone}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, "").slice(0, 10)
+                          setForgotPhone(digits)
+                          setForgotError(null)
+                        }}
+                        placeholder="98765 43210"
+                        className="w-full bg-transparent px-3 py-2 text-[13px] text-ink outline-none tracking-wider font-medium"
+                      />
+                    </div>
+                    <p className="text-[11px] text-ink-faint mt-1">
+                      Enter your 10-digit Indian mobile number without +91 or leading 0.
+                    </p>
+                  </div>
+                )}
 
                 <div className="p-3 bg-stone-100 rounded text-[11.5px] text-ink-faint leading-relaxed">
                   <strong>Zero-Leakage Security:</strong> The single-use verification code is delivered out-of-band to your private inbox or phone SMS. It is never exposed in browser logs.
@@ -981,11 +1041,14 @@ export default function Login({
                   </div>
                   <input
                     type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pattern="[0-9]*"
                     required
                     autoFocus
                     maxLength={6}
                     value={forgotOtp}
-                    onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, ""))}
+                    onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     placeholder="123456"
                     className="w-full text-center font-mono text-[22px] tracking-[0.3em] font-bold bg-paper border border-line rounded-sm py-2 text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
                   />
@@ -1014,6 +1077,8 @@ export default function Login({
                     <input
                       type={showForgotPw ? "text" : "password"}
                       required
+                      minLength={8}
+                      autoComplete="new-password"
                       value={forgotNewPassword}
                       onChange={(e) => setForgotNewPassword(e.target.value)}
                       placeholder="Enter new password (min. 8 characters)"
@@ -1041,6 +1106,8 @@ export default function Login({
                     <input
                       type={showForgotPw ? "text" : "password"}
                       required
+                      minLength={8}
+                      autoComplete="new-password"
                       value={forgotConfirmPassword}
                       onChange={(e) => setForgotConfirmPassword(e.target.value)}
                       placeholder="Confirm new password"
