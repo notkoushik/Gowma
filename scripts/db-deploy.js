@@ -8,7 +8,16 @@ try {
   process.exit(1)
 }
 
-const dbUrl = process.env.DATABASE_URL || ""
+const dbUrl =
+  process.env.DATABASE_URL ||
+  process.env.POSTGRES_PRISMA_URL ||
+  process.env.POSTGRES_URL ||
+  process.env.STORAGE_POSTGRES_PRISMA_URL ||
+  ""
+if (dbUrl) {
+  process.env.DATABASE_URL = dbUrl
+}
+
 if (dbUrl && !dbUrl.includes("localhost") && !dbUrl.includes("127.0.0.1")) {
   console.log("[Build] Cloud PostgreSQL detected. Synchronizing Prisma schema to cloud database...")
   try {

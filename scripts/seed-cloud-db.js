@@ -13,9 +13,18 @@ async function seed() {
   try {
     const superAdmins = [
       {
-        id: "USER-SA-NANIKOUSHIK",
+        id: "USER-SA-NANIKOUSHIK-96",
         name: "Koushik",
         email: "nanikoushik96@gmail.com",
+        phone: "+91 98000 00000",
+        role: "SUPER_ADMIN",
+        password: hashPassword("Koushik.git"),
+        isActive: true,
+      },
+      {
+        id: "USER-SA-NANIKOUSHIK",
+        name: "Koushik",
+        email: "nanikoushik@gmail.com",
         phone: "+91 98000 00000",
         role: "SUPER_ADMIN",
         password: hashPassword("Koushik.git"),

@@ -107,6 +107,8 @@ export async function requestPasswordResetOtp(
     throw new Error("Registered email or phone number is required")
   }
 
+  const rawDigits = emailOrPhone.replace(/\D/g, "").slice(-10)
+
   // Ensure table exists in database
   await ensureOtpTable()
 
@@ -116,22 +118,21 @@ export async function requestPasswordResetOtp(
       OR: [
         { email: { equals: norm, mode: "insensitive" } },
         { phone: { equals: norm, mode: "insensitive" } },
+        ...(rawDigits.length === 10 ? [{ phone: { contains: rawDigits } }] : []),
       ],
       isActive: true,
     },
   })
 
-  // To prevent user enumeration in public API, if user doesn't exist, we return success without dispatching
   if (!user) {
-    return {
-      ok: true,
-      message: "If your account is registered, a 6-digit verification code has been dispatched.",
-      channel,
-      maskedTarget: maskIdentifier(norm, channel),
+    if (channel === "PHONE") {
+      throw new Error(`No registered account found with mobile number "${emailOrPhone}". Please verify your 10-digit number or use your registered email address.`)
+    } else {
+      throw new Error(`No registered account found with email "${norm}". Please check for typos or sign in with your registered account.`)
     }
   }
 
-  // 2. Rate Limiting: Max 3 OTP requests per 15 minutes per identifier
+  // 2. Rate Limiting: Max 5 OTP requests per 15 minutes per identifier
   const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000)
   const recentCountRows: any[] = await prisma.$queryRawUnsafe(
     `SELECT COUNT(*)::int as count FROM "verification_otps" 
@@ -140,7 +141,7 @@ export async function requestPasswordResetOtp(
     fifteenMinutesAgo
   )
   const recentCount = recentCountRows[0]?.count || 0
-  if (recentCount >= 3) {
+  if (recentCount >= 5) {
     throw new Error("Too many verification requests. Please wait 15 minutes before requesting another code.")
   }
 
@@ -150,18 +151,37 @@ export async function requestPasswordResetOtp(
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes TTL
   const otpId = crypto.randomUUID()
 
-  // 4. Save to PostgreSQL database
+  // 4. Save to PostgreSQL database under user email and raw phone digits (if phone)
+  const primaryId = channel === "PHONE" && rawDigits.length === 10 ? rawDigits : user.email.toLowerCase()
+
   await prisma.$executeRawUnsafe(
     `INSERT INTO "verification_otps" 
      ("id", "identifier", "otpHash", "channel", "purpose", "attempts", "maxAttempts", "expiresAt", "used", "ipAddress", "createdAt") 
      VALUES ($1, $2, $3, $4, 'PASSWORD_RESET', 0, 5, $5, false, $6, NOW())`,
     otpId,
-    user.email.toLowerCase(),
+    primaryId,
     otpHash,
     channel,
     expiresAt,
     ipAddress || null
   )
+
+  // Also record with user.email if primary was phone digits, ensuring cross-search
+  if (primaryId !== user.email.toLowerCase()) {
+    try {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "verification_otps" 
+         ("id", "identifier", "otpHash", "channel", "purpose", "attempts", "maxAttempts", "expiresAt", "used", "ipAddress", "createdAt") 
+         VALUES ($1, $2, $3, $4, 'PASSWORD_RESET', 0, 5, $5, false, $6, NOW())`,
+        crypto.randomUUID(),
+        user.email.toLowerCase(),
+        otpHash,
+        channel,
+        expiresAt,
+        ipAddress || null
+      )
+    } catch {}
+  }
 
   // 5. Out-of-band delivery
   if (channel === "EMAIL") {
@@ -174,13 +194,13 @@ export async function requestPasswordResetOtp(
   } else {
     // Phone channel (for SMS delivery via Fast2SMS / Twilio)
     await sendOtpSms({
-      toPhone: user.phone,
+      toPhone: user.phone || emailOrPhone,
       otp: rawOtp,
       expiryMinutes: 10,
     })
   }
 
-  const targetIdentifier = channel === "PHONE" ? user.phone : user.email
+  const targetIdentifier = channel === "PHONE" ? (user.phone || emailOrPhone) : user.email
 
   return {
     ok: true,
@@ -204,23 +224,48 @@ export async function verifyOtpAndGenerateResetToken(
     throw new Error("Email/phone and 6-digit verification code are required")
   }
 
+  const rawDigits = emailOrPhone.replace(/\D/g, "").slice(-10)
+
   await ensureOtpTable()
 
-  // Find latest active, unused OTP for identifier
+  // Find user to gather all possible identifiers (email, phone, rawDigits)
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: { equals: norm, mode: "insensitive" } },
+        { phone: { equals: norm, mode: "insensitive" } },
+        ...(rawDigits.length === 10 ? [{ phone: { contains: rawDigits } }] : []),
+      ],
+    },
+  })
+
+  const lookupIds: string[] = [norm]
+  if (rawDigits.length === 10) lookupIds.push(rawDigits)
+  if (user) {
+    if (user.email) lookupIds.push(user.email.toLowerCase())
+    if (user.phone) {
+      lookupIds.push(user.phone.toLowerCase())
+      const userDigits = user.phone.replace(/\D/g, "").slice(-10)
+      if (userDigits.length === 10) lookupIds.push(userDigits)
+    }
+  }
+  const uniqueIds = Array.from(new Set(lookupIds))
+
+  // Find latest active, unused OTP for any of these identifiers
   const rows: any[] = await prisma.$queryRawUnsafe(
     `SELECT * FROM "verification_otps" 
-     WHERE "identifier" = $1 AND "purpose" = 'PASSWORD_RESET' AND "used" = false AND "expiresAt" > NOW() 
+     WHERE "identifier" = ANY($1::text[]) AND "purpose" = 'PASSWORD_RESET' AND "used" = false AND "expiresAt" > NOW() 
      ORDER BY "createdAt" DESC LIMIT 1`,
-    norm
+    uniqueIds
   )
 
   const record = rows[0]
   if (!record) {
-    throw new Error("Verification code has expired or was not found. Please request a new code.")
+    throw new Error("No active verification code found for this account. Please click 'Resend Code' to receive a new 6-digit OTP.")
   }
 
   if (record.attempts >= record.maxAttempts) {
-    throw new Error("Maximum incorrect attempts exceeded. This code has been invalidated for security. Please request a new code.")
+    throw new Error("Maximum incorrect attempts exceeded. This code has been invalidated for security. Please click 'Resend Code'.")
   }
 
   // Verify scrypt hash
@@ -232,13 +277,13 @@ export async function verifyOtpAndGenerateResetToken(
       record.id
     )
     const remaining = record.maxAttempts - (record.attempts + 1)
-    throw new Error(`Invalid verification code. ${remaining > 0 ? `${remaining} attempts remaining.` : "Code locked."}`)
+    throw new Error(`Invalid verification code. ${remaining > 0 ? `${remaining} attempts remaining.` : "Code locked. Please click 'Resend Code'."}`)
   }
 
   // Issue scoped JWT reset token valid for 10 minutes
   const resetToken = signResetToken({
     purpose: "PASSWORD_RESET",
-    identifier: norm,
+    identifier: user ? user.email.toLowerCase() : norm,
     otpId: record.id,
   }, 600)
 
@@ -272,7 +317,37 @@ export async function resetPasswordWithToken(
     throw new Error("Invalid or expired reset token. Please restart the verification process.")
   }
 
-  if (verified.payload.identifier.toLowerCase() !== norm) {
+  const rawDigits = emailOrPhone.replace(/\D/g, "").slice(-10)
+
+  // Find user
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: { equals: norm, mode: "insensitive" } },
+        { phone: { equals: norm, mode: "insensitive" } },
+        ...(rawDigits.length === 10 ? [{ phone: { contains: rawDigits } }] : []),
+      ],
+      isActive: true,
+    },
+  })
+
+  if (!user) {
+    throw new Error("Account not found")
+  }
+
+  const tokenIdent = (verified.payload.identifier || "").toLowerCase()
+  const userEmail = (user.email || "").toLowerCase()
+  const userPhone = (user.phone || "").toLowerCase()
+  const userPhoneDigits = user.phone ? user.phone.replace(/\D/g, "").slice(-10) : ""
+
+  const matches =
+    tokenIdent === norm ||
+    tokenIdent === userEmail ||
+    tokenIdent === userPhone ||
+    (rawDigits.length === 10 && tokenIdent === rawDigits) ||
+    (userPhoneDigits && tokenIdent === userPhoneDigits)
+
+  if (!matches) {
     throw new Error("Reset token does not match the requested account identity.")
   }
 
@@ -288,16 +363,7 @@ export async function resetPasswordWithToken(
     }
   }
 
-  // Find user
-  const user = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { email: { equals: norm, mode: "insensitive" } },
-        { phone: { equals: norm, mode: "insensitive" } },
-      ],
-      isActive: true,
-    },
-  })
+
 
   if (!user) {
     throw new Error("Account not found")

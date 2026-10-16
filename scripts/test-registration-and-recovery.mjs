@@ -114,9 +114,9 @@ async function runRegistrationAndRecoveryTestSuite() {
     harness.assert(new Date(activeOtpRecord.expiresAt) > new Date(), "Stored expiresAt is in the future (10 min TTL)")
 
     // --------------------------------------------------------------------------------
-    // SCENARIO 3: Non-Existent User Anti-Enumeration Protection
+    // SCENARIO 3: Non-Existent User Helpful Feedback
     // --------------------------------------------------------------------------------
-    console.log("\n[TEST 3] Testing Anti-Enumeration Protection for Non-Existent Accounts...")
+    console.log("\n[TEST 3] Testing Clear Diagnostic Feedback for Non-Existent Accounts...")
 
     const ghostRes = await handleApiRequest(
       "POST",
@@ -126,8 +126,8 @@ async function runRegistrationAndRecoveryTestSuite() {
         channel: "EMAIL",
       })
     )
-    harness.assert(ghostRes?.status === 200, "Non-existent user request returns 200 OK to prevent email enumeration")
-    harness.assert(ghostRes?.body?.ok === true, "Body ok is true")
+    harness.assert(ghostRes?.status === 400, "Non-existent user request returns 400 Bad Request with clear feedback")
+    harness.assert(ghostRes?.body?.error?.includes("No registered account found"), "Helpful account-not-found error message returned")
 
     // --------------------------------------------------------------------------------
     // SCENARIO 4: Incorrect OTP Verification & Brute-Force Lockout
