@@ -527,7 +527,7 @@ export default function Gaushalas({
 
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("ALL")
-  const [portfolioScope, setPortfolioScope] = useState<"my_portfolio" | "all_network">("my_portfolio")
+  const [portfolioScope, setPortfolioScope] = useState<"my_portfolio" | "all_network">("all_network")
 
   // Selected Gaushala for Professional Profile View
   const [selectedGosalaId, setSelectedGosalaId] = useState<string | null>(null)

@@ -270,7 +270,7 @@ export default function GosalaManagers() {
     setFormPassword(generateRandomPassword("Mgr"))
     setShowFormPassword(false)
     setFormRegion(gosalas[0]?.region || "Cyberabad / Gachibowli Zone")
-    setFormSelectedGosalas(gosalas.length > 0 ? [gosalas[0].name] : [])
+    setFormSelectedGosalas([])
     setGosalaSearchFilter("")
     setShowAddModal(true)
   }
@@ -1825,7 +1825,9 @@ export default function GosalaManagers() {
                         ? u.customerData?.address || "Devotee Altar"
                         : isSa
                           ? "Central Treasury & Sovereign Governance"
-                          : "Regional Sanctuary Cluster"
+                          : u.assignedGosalaNames && u.assignedGosalaNames.length > 0
+                            ? u.assignedGosalaNames.join(", ")
+                            : "Regional Sanctuary Cluster"
 
                   return (
                     <div key={u.id} className="p-3.5 space-y-2.5 hover:bg-paper/50 transition">
@@ -1995,7 +1997,9 @@ export default function GosalaManagers() {
                             ? u.customerData?.address || "Devotee Altar"
                             : isSa
                               ? "Central Treasury & Sovereign Governance"
-                              : "Regional Sanctuary Cluster"
+                              : u.assignedGosalaNames && u.assignedGosalaNames.length > 0
+                                ? u.assignedGosalaNames.join(", ")
+                                : "Regional Sanctuary Cluster"
 
                       return (
                         <tr key={u.id} className="hover:bg-card/40 transition">

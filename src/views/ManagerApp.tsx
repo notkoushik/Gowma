@@ -282,6 +282,7 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
   }, [matchedManager, gosalas, managerProfile])
 
   // Selected Gaushala state (backed by localStorage and store)
+  // Selected Gaushala state (backed by localStorage and store)
   const [selectedGosala, setSelectedGosalaState] = useState<string>(() => {
     try {
       const saved = localStorage.getItem("gomaa_active_manager_gosala")
@@ -290,11 +291,26 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
     return activeManagerGosala || ""
   })
 
+  // Sync selectedGosala with activeManagerGosala if activeManagerGosala updates
+  useEffect(() => {
+    if (activeManagerGosala && activeManagerGosala !== selectedGosala) {
+      if (
+        assignedGosalaNames.length === 0 ||
+        assignedGosalaNames.some((gn) => gn.toLowerCase() === activeManagerGosala.toLowerCase())
+      ) {
+        setSelectedGosalaState(activeManagerGosala)
+      }
+    }
+  }, [activeManagerGosala, assignedGosalaNames, selectedGosala])
+
   // If user has exactly 1 Gaushala assigned, auto-select it immediately
   useEffect(() => {
     if (assignedGosalaNames.length === 1 && !selectedGosala) {
       setSelectedGosalaState(assignedGosalaNames[0])
       setActiveManagerGosala(assignedGosalaNames[0])
+      try {
+        localStorage.setItem("gomaa_active_manager_gosala", assignedGosalaNames[0])
+      } catch {}
     }
   }, [assignedGosalaNames, selectedGosala, setActiveManagerGosala])
 
@@ -330,6 +346,9 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
     setSelectedGosalaState(gName)
     setActiveManagerGosala(gName)
     setActiveGosalaFilter(gName)
+    try {
+      localStorage.setItem("gomaa_active_manager_gosala", gName)
+    } catch {}
     const baseManagerData =
       managerProfile.managerData || initialProfiles.manager.managerData!
     updateProfile("manager", {
@@ -344,10 +363,10 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
 
   // Strict Gaushala Isolation Lock: Ensure store activeGosalaFilter is strictly pinned to the active Gaushala
   useEffect(() => {
-    if (currentGosala) {
+    if (currentGosala && activeGosalaFilter !== currentGosala) {
       setActiveGosalaFilter(currentGosala)
     }
-  }, [currentGosala, setActiveGosalaFilter])
+  }, [currentGosala, activeGosalaFilter, setActiveGosalaFilter])
 
   const handleSetView = (newView: MView) => {
     setView(newView)

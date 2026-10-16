@@ -3199,6 +3199,12 @@ export async function handleApiRequest(
             },
           })
           if (resolvedMgrUser) {
+            await prisma.gosalaManagerAssignment.deleteMany({
+              where: {
+                gosalaId: created.id,
+                NOT: { userId: resolvedMgrUser.id },
+              },
+            })
             await prisma.gosalaManagerAssignment.upsert({
               where: {
                 userId_gosalaId: {
@@ -3382,11 +3388,17 @@ export async function handleApiRequest(
                 },
               })
             }
+            await prisma.gosalaManagerAssignment.deleteMany({
+              where: {
+                gosalaId: updated.id,
+                NOT: { userId: mgrUser.id },
+              },
+            })
             await prisma.gosalaManagerAssignment.upsert({
               where: {
                 userId_gosalaId: {
                   userId: mgrUser.id,
-                  gosalaId: updated.id,
+                  gosalaId: updated.id
                 },
               },
               create: {

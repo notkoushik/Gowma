@@ -300,59 +300,6 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
   })
 
   if (existing) {
-    // If appointing an existing user as manager, link them gracefully without crashing
-    if (payload.role === "manager") {
-      let targetGosalaId = payload.gosalaId
-      let gRec: any = null
-      if (targetGosalaId) {
-        gRec = await prisma.gosala.findUnique({ where: { id: targetGosalaId } })
-      } else if (payload.gosalaName) {
-        gRec = await prisma.gosala.findFirst({
-          where: { name: { contains: payload.gosalaName, mode: "insensitive" } },
-        })
-        if (gRec) targetGosalaId = gRec.id
-      }
-
-      if (targetGosalaId && gRec) {
-        await prisma.gosalaManagerAssignment.upsert({
-          where: {
-            userId_gosalaId: {
-              userId: existing.id,
-              gosalaId: targetGosalaId,
-            },
-          },
-          create: {
-            userId: existing.id,
-            gosalaId: targetGosalaId,
-            region: gRec.region || "Cyberabad / Gachibowli Zone",
-            status: "Active",
-          },
-          update: {
-            status: "Active",
-          },
-        })
-      }
-
-      if (existing.role === "CUSTOMER") {
-        await prisma.user.update({
-          where: { id: existing.id },
-          data: { role: "GOSALA_MANAGER" },
-        })
-      }
-
-      const updatedUser = await prisma.user.findUnique({
-        where: { id: existing.id },
-        include: {
-          managerAssignments: {
-            include: { gosala: true },
-          },
-        },
-      })
-      if (updatedUser) {
-        return buildUserSession(updatedUser)
-      }
-    }
-
     const isEmailMatch = existing.email.toLowerCase() === emailNorm
     const exDigits = (existing.phone || "").replace(/\D/g, "").slice(-10)
     const isPhoneMatch = hasValidPhone && exDigits === rawDigits
@@ -360,9 +307,9 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
     if (isEmailMatch && isPhoneMatch) {
       throw new Error(`An account with email "${emailNorm}" is already registered. Please sign in or use "Forgot Password".`)
     } else if (isEmailMatch) {
-      throw new Error(`An account with email "${emailNorm}" is already registered. Please sign in instead, or use "Forgot Password" to reset your password.`)
+      throw new Error(`An account with email "${emailNorm}" is already registered. If you wish to reassign a Gaushala to this manager, please select them from the Custodians Matrix instead of registering a new account.`)
     } else if (isPhoneMatch) {
-      throw new Error(`The mobile number "${payload.phone.trim()}" is already registered with another account. Please sign in with your registered email or use a different phone number.`)
+      throw new Error(`The mobile number "${payload.phone.trim()}" is already registered with another account. Please use a different phone number or sign in with your registered email.`)
     } else {
       throw new Error(`An account with matching credentials is already registered. Please sign in instead.`)
     }
@@ -532,21 +479,37 @@ export async function getDirectoryAccounts() {
  */
 export async function getAllUsers() {
   try {
-    const users = await prisma.user.findMany({
-      include: {
-        managerAssignments: {
-          include: { gosala: true },
+    const [users, allGosalas] = await Promise.all([
+      prisma.user.findMany({
+        include: {
+          managerAssignments: {
+            include: { gosala: true },
+          },
         },
-      },
-      orderBy: { createdAt: "desc" },
-    })
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.gosala.findMany({ where: { isActive: true } }).catch(() => []),
+    ])
 
     if (users && users.length > 0) {
       return users.map((u: any) => {
-        const assignedGosalas = (u.managerAssignments || []).map((a: any) => ({
+        let assignedGosalas = (u.managerAssignments || []).map((a: any) => ({
           id: a.gosala.id,
           name: a.gosala.name,
         }))
+        if (u.role === "OPERATIONS_ADMIN" || u.role === "SUPER_ADMIN") {
+          const userEmail = (u.email || "").toLowerCase()
+          const userName = (u.name || "").toLowerCase()
+          allGosalas.forEach((g: any) => {
+            const meta = getGosalaMeta(g.id, g.name)
+            const govEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase()
+            const govName = (g.adminName || meta.governingAdminName || meta.adminName || "").toLowerCase()
+            const isMatch = g.adminId === u.id || (userEmail && govEmail === userEmail) || (userName && govName.includes(userName))
+            if (isMatch && !assignedGosalas.some((x: any) => x.id === g.id)) {
+              assignedGosalas.push({ id: g.id, name: g.name })
+            }
+          })
+        }
         const meta = getUserMeta(u.email || u.id)
         return {
           id: u.id,
