@@ -182,6 +182,97 @@ async function seed() {
         console.log(`[Seed] Sanctuary ${existingG.name} governance preserved (${existingG.adminName || existingG.adminEmail})`)
       }
     }
+
+    // 6. Ensure standard Managers exist for Gaushala_01 and Gaushala_03
+    const defaultManagers = [
+      {
+        id: "USER-MGR-01",
+        name: "Manager 1",
+        email: "manager1@gomaa.in",
+        phone: "+91 98111 22233",
+        role: "GOSALA_MANAGER",
+        password: hashPassword("Koushik.git"),
+        isActive: true,
+        targetGosalaName: "Gaushala_01",
+      },
+      {
+        id: "USER-MGR-02",
+        name: "Manager 2",
+        email: "manager2@gomaa.in",
+        phone: "+91 98444 55566",
+        role: "GOSALA_MANAGER",
+        password: hashPassword("Koushik.git"),
+        isActive: true,
+        targetGosalaName: "Gaushala_03",
+      },
+    ]
+
+    for (const mDef of defaultManagers) {
+      let mgr = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: { equals: mDef.email, mode: "insensitive" } },
+            { id: mDef.id },
+          ],
+        },
+      })
+      if (!mgr) {
+        mgr = await prisma.user.create({
+          data: {
+            id: mDef.id,
+            name: mDef.name,
+            email: mDef.email,
+            phone: mDef.phone,
+            role: "GOSALA_MANAGER",
+            password: mDef.password,
+            isActive: true,
+          },
+        })
+        console.log(`[Seed] Created Manager: ${mDef.name} (${mDef.email})`)
+      } else {
+        await prisma.user.update({
+          where: { id: mgr.id },
+          data: {
+            name: mDef.name,
+            role: "GOSALA_MANAGER",
+            isActive: true,
+            ...(!mgr.password ? { password: mDef.password } : {}),
+          },
+        })
+        console.log(`[Seed] Synchronized Manager: ${mDef.name} (${mDef.email})`)
+      }
+
+      // Link to target Gaushala
+      const targetG = await prisma.gosala.findFirst({
+        where: { name: { equals: mDef.targetGosalaName, mode: "insensitive" } },
+      })
+      if (targetG) {
+        // Enforce 1:1 single-custodian invariant
+        await prisma.gosalaManagerAssignment.deleteMany({
+          where: {
+            gosalaId: targetG.id,
+            NOT: { userId: mgr.id },
+          },
+        })
+        await prisma.gosalaManagerAssignment.upsert({
+          where: {
+            userId_gosalaId: {
+              userId: mgr.id,
+              gosalaId: targetG.id,
+            },
+          },
+          create: {
+            userId: mgr.id,
+            gosalaId: targetG.id,
+            region: targetG.region,
+            status: "Active",
+          },
+          update: {
+            status: "Active",
+          },
+        })
+      }
+    }
   } catch (err) {
     console.warn("[Seed] Notice:", err.message)
   } finally {
