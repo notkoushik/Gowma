@@ -167,7 +167,8 @@ async function seed() {
           },
         })
         console.log(`[Seed] Created sanctuary ${gDef.name} governed by ${admin1User.name}`)
-      } else {
+      } else if (!existingG.adminId && !existingG.adminEmail) {
+        // Only assign default admin if the Gaushala has no governing admin set
         await prisma.gosala.update({
           where: { id: existingG.id },
           data: {
@@ -176,7 +177,9 @@ async function seed() {
             adminName: admin1User.name,
           },
         })
-        console.log(`[Seed] Re-assigned sanctuary ${existingG.name} to ${admin1User.name}`)
+        console.log(`[Seed] Assigned unassigned sanctuary ${existingG.name} to ${admin1User.name}`)
+      } else {
+        console.log(`[Seed] Sanctuary ${existingG.name} governance preserved (${existingG.adminName || existingG.adminEmail})`)
       }
     }
   } catch (err) {
