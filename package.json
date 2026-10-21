@@ -12,6 +12,7 @@
     "test": "node --test scripts/test-authorization-policy.mjs scripts/test-hold-booking-contracts.mjs scripts/test-p1-contracts.mjs scripts/test-password-security.mjs scripts/test-razorpay-security.mjs scripts/test-role-isolation-contracts.mjs",
     "test:integration": "node scripts/test-superadmin-context-switch.mjs && node scripts/verify-entire-system.mjs && node scripts/test-registration-and-recovery.mjs && node scripts/test-dynamic-hubs.mjs && node scripts/test-gaushala-map-search.mjs",
     "test:all": "npm test && npm run test:integration",
+    "docs:screenshots": "node scripts/capture-docs-screenshots.mjs",
     "db:reset-superadmin": "node scripts/reset-to-superadmin-only.mjs"
   },
   "dependencies": {
@@ -37,6 +38,7 @@
     "@vitejs/plugin-react": "^6.0.0",
     "oxfmt": "^0.2.0",
     "prisma": "6.4.1",
+    "puppeteer-core": "^25.15.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0",
     "vite": "^8.0.5"
