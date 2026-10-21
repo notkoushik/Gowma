@@ -13,6 +13,7 @@
     "test:integration": "node scripts/test-superadmin-context-switch.mjs && node scripts/verify-entire-system.mjs && node scripts/test-registration-and-recovery.mjs && node scripts/test-dynamic-hubs.mjs && node scripts/test-gaushala-map-search.mjs",
     "test:all": "npm test && npm run test:integration",
     "docs:screenshots": "node scripts/capture-docs-screenshots.mjs",
+    "docs:generate": "node scripts/generate-doc.mjs && node scripts/generate-html-doc.mjs",
     "db:reset-superadmin": "node scripts/reset-to-superadmin-only.mjs"
   },
   "dependencies": {
@@ -36,6 +37,7 @@
     "@types/react-dom": "^19.0.4",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.0.0",
+    "docx": "^9.13.0",
     "oxfmt": "^0.2.0",
     "prisma": "6.4.1",
     "puppeteer-core": "^25.15.0",
