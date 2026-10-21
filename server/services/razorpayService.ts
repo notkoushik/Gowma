@@ -13,7 +13,7 @@ type Provider = { id?: unknown; order_id?: unknown; amount?: unknown; currency?:
 function config(overrides: RazorpayConfig = {}) {
   const keyId = overrides.keyId ?? process.env.RAZORPAY_KEY_ID
   const keySecret = overrides.keySecret ?? process.env.RAZORPAY_KEY_SECRET
-  if (!keyId || !keySecret || !keyId.startsWith("rzp_test_")) throw new Error("Razorpay is not configured for test mode")
+  if (!keyId || !keySecret || (!keyId.startsWith("rzp_test_") && !keyId.startsWith("rzp_live_"))) throw new Error("Razorpay is not configured with valid API keys")
   return { keyId, keySecret, timeoutMs: overrides.timeoutMs ?? 8000, fetch: overrides.fetch ?? fetch }
 }
 function text(v: unknown, name: string) { if (typeof v !== "string" || !v || v.length > 512) throw new Error(`Invalid ${name}`); return v }

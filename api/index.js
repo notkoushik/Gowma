@@ -1074,7 +1074,7 @@ var HEX = /^[0-9a-f]+$/i;
 function config(overrides = {}) {
   const keyId = overrides.keyId ?? process.env.RAZORPAY_KEY_ID;
   const keySecret = overrides.keySecret ?? process.env.RAZORPAY_KEY_SECRET;
-  if (!keyId || !keySecret || !keyId.startsWith("rzp_test_")) throw new Error("Razorpay is not configured for test mode");
+  if (!keyId || !keySecret || !keyId.startsWith("rzp_test_") && !keyId.startsWith("rzp_live_")) throw new Error("Razorpay is not configured with valid API keys");
   return { keyId, keySecret, timeoutMs: overrides.timeoutMs ?? 8e3, fetch: overrides.fetch ?? fetch };
 }
 function text(v, name) {
