@@ -33,6 +33,7 @@ import LiveTracking from "./views/manager/LiveTracking"
 import Gaushalas from "./views/manager/Gaushalas"
 import Animals from "./views/manager/Animals"
 import ManagerLedger from "./views/manager/ManagerLedger"
+import AdminWallet from "./views/admin/AdminWallet"
 import Login from "./views/Login"
 import ManagerApp from "./views/ManagerApp"
 import DriverApp from "./views/DriverApp"
@@ -54,11 +55,16 @@ type View =
   | "availability"
   | "pricing"
   | "settlements"
+  | "wallet"
 
 const titles: Record<View, { title: string; desc: string }> = {
   overview: {
     title: "Regional Operations & Treasury",
     desc: "Real-time booking pipeline, revenue metrics and network health across regional sanctuaries",
+  },
+  wallet: {
+    title: "Regional Treasury & Manager Wallets",
+    desc: "Regional fund distribution, Gaushala wallets, and Manager revenue share split policy",
   },
   gosalas: {
     title: "Gaushalas Network",
@@ -107,6 +113,7 @@ const VALID_ROLES: RoleId[] = [
 ]
 const VALID_ADMIN_VIEWS: View[] = [
   "overview",
+  "wallet",
   "gosalas",
   "managers",
   "bookings",
@@ -553,6 +560,7 @@ export default function App() {
     badge?: string
   }[] = [
     { id: "overview", label: "Financial Overview", icon: LayoutDashboard },
+    { id: "wallet", label: "Treasury & Wallets", icon: Wallet },
     { id: "pricing", label: "Pricing Rules", icon: SlidersHorizontal },
     {
       id: "settlements",
@@ -594,6 +602,7 @@ export default function App() {
     badge?: string
   }[] = [
     { id: "overview", label: "Operations Overview", icon: LayoutDashboard },
+    { id: "wallet", label: "Treasury & Wallets", icon: Wallet },
     {
       id: "gosalas",
       label: dynamicRegion !== "Regional" ? `${dynamicRegion} Gaushalas` : "Gaushalas Network",
@@ -1006,6 +1015,12 @@ export default function App() {
 
         <main className="flex-1 min-w-0 max-w-full overflow-x-hidden p-3 sm:p-5 lg:p-8">
           {view === "overview" && <Overview />}
+          {view === "wallet" && (
+            <AdminWallet
+              onNavigateToManagers={() => handleSetAdminView("managers")}
+              onOpenProfileShareSplit={() => setEditAdminProfileOpen(true)}
+            />
+          )}
           {view === "gosalas" && (
             <Gaushalas onNavigateToHerd={() => handleSetAdminView("animals")} />
           )}

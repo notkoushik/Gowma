@@ -35,7 +35,15 @@ import {
   MapPin,
   ExternalLink,
   Printer,
+  Percent,
+  Sliders,
 } from "lucide-react"
+import {
+  getAllManagerSharePolicies,
+  saveManagerSharePolicy,
+  simulatePujaSplit,
+  type ManagerSharePolicy,
+} from "../services/walletService"
 import type { RoleId } from "../data/roles"
 import {
   initialProfiles,
@@ -67,7 +75,14 @@ export default function EditProfileModal({
   // View vs Edit Mode
   const [isEditing, setIsEditing] = useState(false)
   const [isAddingBank, setIsAddingBank] = useState(false)
-  const [activeTab, setActiveTab] = useState<"credentials" | "banking" | "metrics" | "compliance">("credentials")
+  const [activeTab, setActiveTab] = useState<"credentials" | "banking" | "metrics" | "compliance" | "sharesplit">("credentials")
+
+  // Operations Admin - Manager Share Split State
+  const [sharePolicies, setSharePolicies] = useState<ManagerSharePolicy[]>(() => getAllManagerSharePolicies())
+  const [selectedShareManagerEmail, setSelectedShareManagerEmail] = useState<string>("manager1@gomaa.in")
+  const [modalSharePct, setModalSharePct] = useState<number>(25)
+  const [modalBonusPerPuja, setModalBonusPerPuja] = useState<number>(100)
+  const [savingSharePolicy, setSavingSharePolicy] = useState(false)
 
   // Form State - Personal / Official Credentials
   const [name, setName] = useState("")
@@ -204,6 +219,57 @@ export default function EditProfileModal({
       }
     }
   }, [profile, selectedRole, isOpen])
+
+  // Active Manager Policy for Operations Admin Governance
+  const activePolicy = useMemo(() => {
+    const found = sharePolicies.find((p) => p.managerEmail.toLowerCase() === selectedShareManagerEmail.toLowerCase())
+    if (found) return found
+    return sharePolicies[0] || {
+      managerId: "GMA-MGR-0101",
+      managerEmail: "manager1@gomaa.in",
+      managerName: "Shyam Sundar Sharma",
+      gosalaName: "Nandini Goseva Sadan",
+      managerSharePct: 25,
+      gosalaCorpusPct: 75,
+      bonusPerPuja: 100,
+      lastUpdated: new Date().toISOString(),
+      updatedBy: "Operations Admin",
+    }
+  }, [sharePolicies, selectedShareManagerEmail])
+
+  useEffect(() => {
+    if (activePolicy) {
+      setModalSharePct(activePolicy.managerSharePct)
+      setModalBonusPerPuja(activePolicy.bonusPerPuja || 0)
+    }
+  }, [activePolicy])
+
+  const modalSimulation = useMemo(() => {
+    return simulatePujaSplit(4000, pricingConfig?.commissionPct || 20, modalSharePct, modalBonusPerPuja)
+  }, [pricingConfig, modalSharePct, modalBonusPerPuja])
+
+  const handleSaveSharePolicyModal = () => {
+    setSavingSharePolicy(true)
+    setTimeout(() => {
+      try {
+        const updated: ManagerSharePolicy = {
+          ...activePolicy,
+          managerSharePct: modalSharePct,
+          gosalaCorpusPct: 100 - modalSharePct,
+          bonusPerPuja: modalBonusPerPuja,
+          lastUpdated: new Date().toISOString(),
+          updatedBy: `${name || "Operations Admin"} (${(profile as any)?.uniqueId || "GMA-OPS-0101"})`,
+        }
+        saveManagerSharePolicy(updated)
+        setSharePolicies(getAllManagerSharePolicies())
+        notify(`Updated share split for ${activePolicy.managerName} to ${modalSharePct}% Manager / ${100 - modalSharePct}% Sanctuary Corpus!`, "ok")
+      } catch (err: any) {
+        notify(`Failed to save policy: ${err?.message}`, "danger")
+      } finally {
+        setSavingSharePolicy(false)
+      }
+    }, 400)
+  }
 
   const handleCopy = (text: string, label: string) => {
     if (navigator?.clipboard) {
@@ -645,6 +711,9 @@ export default function EditProfileModal({
           {[
             { id: "credentials" as const, label: "Identity & Operational Scope", icon: User },
             { id: "banking" as const, label: "Bank Account & Settlement Dossier", icon: Landmark },
+            ...(selectedRole === "admin" || selectedRole === "super_admin"
+              ? [{ id: "sharesplit" as const, label: "Manager Share Split", icon: Percent }]
+              : []),
             { id: "metrics" as const, label: "Role Ledger & Welfare Matrix", icon: TrendingUp },
             { id: "compliance" as const, label: "Security & Privacy Protocol", icon: ShieldCheck },
           ].map(({ id, label, icon: TabIcon }) => (
@@ -1435,6 +1504,206 @@ export default function EditProfileModal({
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB: MANAGER SHARE SPLIT GOVERNANCE (OPERATIONS ADMIN ONLY)               */}
+        {/* ========================================================================= */}
+        {activeTab === "sharesplit" && (selectedRole === "admin" || selectedRole === "super_admin") && (
+          <div className="space-y-6">
+            <div className="bg-card border border-line rounded-xl p-6 sm:p-8 shadow-xs space-y-6">
+              {/* Header */}
+              <div className="border-b border-line pb-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-serif text-[19px] font-bold text-ink flex items-center gap-2">
+                    <Percent size={20} className="text-forest" />
+                    <span>Manager Share Split Governance</span>
+                  </h3>
+                  <p className="text-[12.5px] text-ink-soft mt-0.5">
+                    As Operations Admin, set the custodian percentage split and puja bonus for Gaushala managers under your regional jurisdiction.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[11px] bg-sky-100 text-sky-900 border border-sky-300 px-3 py-1 rounded-full font-bold">
+                    Operations Admin Authority
+                  </span>
+                </div>
+              </div>
+
+              {/* Manager Selector */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-paper rounded-xl border border-line">
+                <div className="space-y-0.5">
+                  <label className="text-[12px] font-semibold text-ink uppercase tracking-wider font-mono">
+                    Select Governed Manager:
+                  </label>
+                  <div className="text-[12px] text-ink-soft">
+                    Choose which Gaushala shed custodian's policy to view or adjust
+                  </div>
+                </div>
+                <select
+                  value={selectedShareManagerEmail}
+                  onChange={(e) => setSelectedShareManagerEmail(e.target.value)}
+                  className="px-4 py-2.5 rounded-lg bg-card border border-line text-[13.5px] font-bold text-ink focus:outline-none focus:ring-2 focus:ring-forest cursor-pointer"
+                >
+                  {sharePolicies.map((p) => (
+                    <option key={p.managerEmail} value={p.managerEmail}>
+                      {p.managerName} · {p.gosalaName} ({p.managerId})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Active Manager Dossier & Adjuster */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Left 7 cols: Controls */}
+                <div className="lg:col-span-7 space-y-5">
+                  <div className="p-4 rounded-xl bg-forest-soft border border-forest/20 flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold text-ink text-[15px]">
+                        {activePolicy.managerName}
+                      </div>
+                      <div className="text-[12px] text-forest font-mono">
+                        {activePolicy.gosalaName} • Unique ID: #{activePolicy.managerId}
+                      </div>
+                    </div>
+                    <span className="font-mono text-[11px] bg-forest text-white px-2.5 py-0.5 rounded font-bold">
+                      Active Custodian
+                    </span>
+                  </div>
+
+                  {/* Share Slider */}
+                  <div className="space-y-2 p-4 bg-paper rounded-xl border border-line">
+                    <div className="flex items-center justify-between text-[13px]">
+                      <span className="font-semibold text-ink">
+                        Manager Custodian Cut: <strong className="text-forest text-[16px]">{modalSharePct}%</strong>
+                      </span>
+                      <span className="font-mono text-[12px] text-ink-faint">
+                        Sanctuary Fodder Corpus: <strong className="text-emerald-800">{100 - modalSharePct}%</strong>
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="10"
+                      max="50"
+                      step="1"
+                      value={modalSharePct}
+                      onChange={(e) => setModalSharePct(Number(e.target.value))}
+                      className="w-full accent-forest cursor-pointer h-2 bg-card rounded-lg"
+                    />
+                    <div className="flex justify-between text-[11px] font-mono text-ink-faint">
+                      <span>10% (Floor)</span>
+                      <span>25% (Recommended Baseline)</span>
+                      <span>50% (Max Ceiling)</span>
+                    </div>
+                  </div>
+
+                  {/* Bonus Per Puja */}
+                  <div className="space-y-2 p-4 bg-paper rounded-xl border border-line">
+                    <div className="flex items-center justify-between text-[13px]">
+                      <span className="font-semibold text-ink">
+                        Bonus Per Verified Puja (₹)
+                      </span>
+                      <span className="font-mono text-forest font-bold text-[15px]">
+                        +₹{modalBonusPerPuja} / Seva
+                      </span>
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      max="1000"
+                      step="50"
+                      value={modalBonusPerPuja}
+                      onChange={(e) => setModalBonusPerPuja(Math.max(0, Number(e.target.value)))}
+                      className="w-full px-4 py-2 bg-card border border-line rounded-lg text-[14px] font-mono font-bold text-ink focus:outline-none focus:ring-2 focus:ring-forest"
+                    />
+                    <p className="text-[11.5px] text-ink-faint">
+                      Incentive credited directly into the manager's wallet for every successfully executed Darshan.
+                    </p>
+                  </div>
+
+                  {/* Save Button */}
+                  <div className="pt-2 flex items-center justify-between">
+                    <span className="text-[11.5px] text-ink-soft font-mono">
+                      Last Updated: {new Date(activePolicy.lastUpdated).toLocaleDateString("en-IN")}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleSaveSharePolicyModal}
+                      disabled={savingSharePolicy}
+                      className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-forest text-white text-[13.5px] font-bold hover:bg-forest-deep transition cursor-pointer shadow-md"
+                    >
+                      {savingSharePolicy ? (
+                        <>
+                          <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <span>Updating Policy...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save size={16} />
+                          <span>Save Policy Changes</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right 5 cols: Live Calculation Preview */}
+                <div className="lg:col-span-5 bg-paper rounded-xl p-5 border border-line space-y-4">
+                  <div className="flex items-center justify-between border-b border-line pb-3">
+                    <span className="text-[12px] font-mono text-forest uppercase font-bold tracking-wider">
+                      Live Seva Calculation Preview
+                    </span>
+                    <span className="font-mono text-[11px] bg-forest/10 text-forest px-2 py-0.5 rounded font-semibold">
+                      ₹4,000 Seva
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5 text-[12.5px] font-mono">
+                    <div className="flex justify-between py-1 border-b border-line/60">
+                      <span className="text-ink-soft">Gross Devotee Seva:</span>
+                      <span className="font-bold text-ink">₹{modalSimulation.grossDakshina.toLocaleString("en-IN")}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-line/60 text-ink-soft">
+                      <span>Platform Commission ({modalSimulation.platformCommissionPct}%):</span>
+                      <span>-₹{modalSimulation.platformFee.toLocaleString("en-IN")}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-line/60 font-semibold text-emerald-800">
+                      <span>Gaushala Net Seva (80%):</span>
+                      <span>₹{modalSimulation.gaushalaNet.toLocaleString("en-IN")}</span>
+                    </div>
+                    <div className="flex justify-between py-1.5 border-b border-line text-purple-900 bg-purple-50 px-2.5 rounded">
+                      <span>Manager Wallet Credit ({modalSimulation.managerSharePct}%):</span>
+                      <span className="font-bold text-forest">
+                        +₹{modalSimulation.managerBaseCut.toLocaleString("en-IN")}
+                        {modalSimulation.bonusPerPuja > 0 && ` (+₹${modalSimulation.bonusPerPuja} bonus)`}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-1.5 font-bold text-emerald-900 bg-emerald-50 px-2.5 rounded">
+                      <span>Sanctuary Fodder Corpus ({modalSimulation.shelterCorpusPct}%):</span>
+                      <span>₹{modalSimulation.shelterCorpusNet.toLocaleString("en-IN")}</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-card border border-line text-[11.5px] text-ink-soft leading-snug">
+                    ✓ With this configuration, <strong>{activePolicy.managerName}</strong> will earn <strong>₹{modalSimulation.managerTotalEarning.toLocaleString("en-IN")}</strong> in their personal wallet on each completed seva, and the Gaushala will retain <strong>₹{modalSimulation.shelterCorpusNet.toLocaleString("en-IN")}</strong> for fodder and infrastructure.
+                  </div>
+                </div>
+              </div>
+
+              {/* Legal / Authority Sign-off */}
+              <div className="p-4 rounded-xl bg-paper-deep border border-line flex items-center justify-between text-[12px] text-ink-soft">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={16} className="text-forest" />
+                  <span>
+                    Enforced by Operations Admin ({name}) under Regional Sanctuary Jurisdiction.
+                  </span>
+                </div>
+                <span className="font-mono text-[10.5px] text-ink-faint">
+                  Protocol: GOMAA-SPLIT-RBAC-v2
+                </span>
+              </div>
+            </div>
           </div>
         )}
 

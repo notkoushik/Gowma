@@ -14,6 +14,8 @@ import {
   PawPrint,
   Search,
   Wallet,
+  Landmark,
+  CreditCard,
   CheckCircle2,
   AlertTriangle,
   AlertCircle,
@@ -36,6 +38,7 @@ import Schedule from "./manager/Schedule"
 import Animals from "./manager/Animals"
 import Availability from "./Availability"
 import ManagerLedger from "./manager/ManagerLedger"
+import ManagerWallet from "./manager/ManagerWallet"
 import GaushalaProfileView from "./manager/GaushalaProfileView"
 import ManagerDevotees from "./manager/ManagerDevotees"
 import EditProfileModal from "../components/EditProfileModal"
@@ -51,6 +54,7 @@ type MView =
   | "gosalas"
   | "ledger"
   | "devotees"
+  | "wallet"
 
 const VALID_MANAGER_VIEWS: MView[] = [
   "queue",
@@ -61,6 +65,7 @@ const VALID_MANAGER_VIEWS: MView[] = [
   "gosalas",
   "ledger",
   "devotees",
+  "wallet",
 ]
 
 function getInitialManagerView(): MView {
@@ -114,6 +119,10 @@ const titles: Record<MView, { title: string; desc: string }> = {
   devotees: {
     title: "Devotees & Transit Fleet Registry",
     desc: "Authorize devotees and transit pilots for your Gaushala with instant credential sharing",
+  },
+  wallet: {
+    title: "Shed Custodian Wallet & Bank Payouts",
+    desc: "Personal manager earnings from conducted sacred pujas, direct IMPS bank payout gateway & share breakdown",
   },
 }
 
@@ -504,7 +513,8 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
       label: "Devotees & Drivers",
       icon: HeartHandshake,
     },
-    { id: "ledger", label: "My Gaushala Payouts", icon: Wallet },
+    { id: "wallet", label: "My Wallet & Payouts", icon: Wallet },
+    { id: "ledger", label: "Gaushala 80/20 Ledger", icon: Landmark },
     {
       id: "live_tracking",
       label: "Live Cow Transit",
@@ -1016,6 +1026,7 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
             </div>
           )}
           {view === "ledger" && <ManagerLedger />}
+          {view === "wallet" && <ManagerWallet />}
           {view === "devotees" && (
             <ManagerDevotees
               currentGosalaName={
@@ -1220,6 +1231,36 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
                     </div>
                     <div className="text-[11px] text-ink-faint">
                       Authorize devotees &amp; transit pilots with credentials
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => {
+                    handleSetView("wallet")
+                    setMobileMoreOpen(false)
+                  }}
+                  className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition ${
+                    view === "wallet"
+                      ? "bg-forest-soft text-forest font-semibold"
+                      : "hover:bg-paper-deep text-ink"
+                  }`}
+                >
+                  <Wallet
+                    size={18}
+                    className={
+                      view === "wallet" ? "text-forest" : "text-ink-faint"
+                    }
+                  />
+                  <div>
+                    <div className="text-[13px] flex items-center gap-1.5 font-medium">
+                      <span>My Wallet &amp; Payouts</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-semibold">
+                        Instant IMPS
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-ink-faint">
+                      Withdraw manager earnings via IMPS to bank
                     </div>
                   </div>
                 </button>
