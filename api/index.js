@@ -1505,21 +1505,37 @@ async function registerUser(payload) {
 }
 async function getDirectoryAccounts() {
   try {
-    const users = await prisma.user.findMany({
-      where: { isActive: true },
-      include: {
-        managerAssignments: {
-          include: { gosala: true }
-        }
-      },
-      orderBy: { createdAt: "asc" }
-    });
+    const [users, allGosalas] = await Promise.all([
+      prisma.user.findMany({
+        where: { isActive: true },
+        include: {
+          managerAssignments: {
+            include: { gosala: true }
+          }
+        },
+        orderBy: { createdAt: "asc" }
+      }),
+      prisma.gosala.findMany({ where: { isActive: true } }).catch(() => [])
+    ]);
     if (users && users.length > 0) {
       return users.map((u) => {
         let assignedGosalas = (u.managerAssignments || []).map((a) => ({
           id: a.gosala.id,
           name: a.gosala.name
         }));
+        if (u.role === "OPERATIONS_ADMIN" || u.role === "SUPER_ADMIN") {
+          const userEmail = (u.email || "").toLowerCase();
+          const userName = (u.name || "").toLowerCase();
+          allGosalas.forEach((g) => {
+            const meta2 = getGosalaMeta(g.id, g.name);
+            const govEmail = (g.adminEmail || meta2.governingAdminEmail || meta2.adminEmail || "").toLowerCase();
+            const govName = (g.adminName || meta2.governingAdminName || meta2.adminName || "").toLowerCase();
+            const isMatch = g.adminId === u.id || userEmail && govEmail === userEmail || userName && govName.includes(userName);
+            if (isMatch && !assignedGosalas.some((x) => x.id === g.id)) {
+              assignedGosalas.push({ id: g.id, name: g.name });
+            }
+          });
+        }
         const meta = getUserMeta(u.email || u.id);
         const isSuper = u.role === "SUPER_ADMIN";
         return {
@@ -3165,6 +3181,7 @@ function formatBooking(b) {
   };
 }
 function formatManagerUser(user) {
+  const formattedMgrId = user.id.startsWith("MGR-") ? user.id : user.id.startsWith("USER-MGR-") ? `MGR-${user.id.replace("USER-MGR-", "")}` : user.id.startsWith("USER-") ? `MGR-${user.id.replace("USER-", "")}` : `MGR-${user.id.slice(0, 8)}`;
   const rawAssignments = user.managerAssignments || [];
   const assignments = rawAssignments.filter((a) => {
     if (!a.gosala) return false;
@@ -3176,7 +3193,7 @@ function formatManagerUser(user) {
     const uName = (user.name || "").toLowerCase();
     if (gMgrId || gMgrName && !gMgrName.includes("none")) {
       const idMatch = Boolean(
-        gMgrId && (gMgrId === user.id || gMgrId === `MGR-${uCleanId.slice(0, 4)}` || gMgrId === uCleanId || user.id.includes(gMgrId) || gMgrId.includes(uCleanId))
+        gMgrId && (gMgrId === user.id || gMgrId === formattedMgrId || gMgrId === uCleanId || user.id.includes(gMgrId) || gMgrId.includes(user.id))
       );
       const nameMatch = Boolean(
         gMgrName && uName && (gMgrName === uName || gMgrName.includes(uName) || uName.includes(gMgrName))
@@ -3198,7 +3215,7 @@ function formatManagerUser(user) {
   const firstAssignedAt = assignments[0]?.assignedAt || user.createdAt;
   const meta = getUserMeta(user.email || user.id);
   return {
-    id: user.id.startsWith("MGR-") ? user.id : `MGR-${user.id.slice(0, 4)}`,
+    id: formattedMgrId,
     name: user.name,
     email: user.email,
     phone: user.phone,
@@ -4860,12 +4877,16 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       } else if (authUser?.role === "admin") {
         const adminEmail = (authUser.email || "").toLowerCase();
         const adminName = (authUser.name || "").toLowerCase();
+        const adminId = authUser.userId || "";
         const allGosalas = await prisma.gosala.findMany({ where: { isActive: true } });
         const myGosalaIds = allGosalas.filter((g) => {
           const meta = getGosalaMeta(g.id, g.name);
-          const gEmail = (meta.governingAdminEmail || "").toLowerCase();
-          const gName = (meta.governingAdminName || meta.adminName || "").toLowerCase();
-          return gEmail && gEmail === adminEmail || gName && gName.includes(adminName);
+          const gEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase();
+          const gName = (g.adminName || meta.governingAdminName || meta.adminName || "").toLowerCase();
+          const idMatch = Boolean(adminId && (g.adminId === adminId || meta.adminId === adminId));
+          const emailMatch = Boolean(adminEmail && (gEmail === adminEmail || gEmail.includes(adminEmail)));
+          const nameMatch = Boolean(adminName && (gName === adminName || gName.includes(adminName)));
+          return idMatch || emailMatch || nameMatch;
         }).map((g) => g.id);
         managerUsers = managerUsers.filter((u) => {
           if (!u.managerAssignments || u.managerAssignments.length === 0) return true;
@@ -4879,9 +4900,10 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
             if (!u.managerAssignments || u.managerAssignments.length === 0) return true;
             return u.managerAssignments.some((ma) => {
               const meta = getGosalaMeta(ma.gosalaId || "", ma.gosala?.name || "");
-              const govName = (meta.governingAdminName || meta.adminName || "").toLowerCase();
-              const govEmail = (meta.governingAdminEmail || "").toLowerCase();
-              return govName.includes(filterLower) || govEmail.includes(filterLower);
+              const govName = (ma.gosala?.adminName || meta.governingAdminName || meta.adminName || "").toLowerCase();
+              const govEmail = (ma.gosala?.adminEmail || meta.governingAdminEmail || "").toLowerCase();
+              const govId = ma.gosala?.adminId || meta.adminId || "";
+              return govName.includes(filterLower) || govEmail.includes(filterLower) || govId === portfolioFilter;
             });
           });
         }
@@ -5017,7 +5039,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         name: body.name || user.name,
         email: body.email || user.email,
         phone: body.phone || user.phone,
-        isActive: body.status !== void 0 ? body.status === "Active" : user.isActive
+        isActive: body.isActive !== void 0 ? Boolean(body.isActive) : user.isActive
       }
     });
     if (body.password) {
@@ -5437,6 +5459,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           ...meta,
           id: g.id,
           name: g.name,
+          status: meta.status || (g.isActive ? "Active" : "Maintenance"),
           region: g.region,
           address: g.address,
           contactPhone: g.contactPhone,

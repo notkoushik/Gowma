@@ -461,15 +461,18 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
  */
 export async function getDirectoryAccounts() {
   try {
-    const users = await prisma.user.findMany({
-      where: { isActive: true },
-      include: {
-        managerAssignments: {
-          include: { gosala: true },
+    const [users, allGosalas] = await Promise.all([
+      prisma.user.findMany({
+        where: { isActive: true },
+        include: {
+          managerAssignments: {
+            include: { gosala: true },
+          },
         },
-      },
-      orderBy: { createdAt: "asc" },
-    })
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.gosala.findMany({ where: { isActive: true } }).catch(() => []),
+    ])
 
     if (users && users.length > 0) {
       return users.map((u: any) => {
@@ -477,6 +480,20 @@ export async function getDirectoryAccounts() {
           id: a.gosala.id,
           name: a.gosala.name,
         }))
+
+        if (u.role === "OPERATIONS_ADMIN" || u.role === "SUPER_ADMIN") {
+          const userEmail = (u.email || "").toLowerCase()
+          const userName = (u.name || "").toLowerCase()
+          allGosalas.forEach((g: any) => {
+            const meta = getGosalaMeta(g.id, g.name)
+            const govEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase()
+            const govName = (g.adminName || meta.governingAdminName || meta.adminName || "").toLowerCase()
+            const isMatch = g.adminId === u.id || (userEmail && govEmail === userEmail) || (userName && govName.includes(userName))
+            if (isMatch && !assignedGosalas.some((x: any) => x.id === g.id)) {
+              assignedGosalas.push({ id: g.id, name: g.name })
+            }
+          })
+        }
 
         const meta = getUserMeta(u.email || u.id)
         const isSuper = u.role === "SUPER_ADMIN"

@@ -90,35 +90,69 @@ async function seed() {
       }
     } catch {}
 
-    // 4. Ensure Operations Admin Admin_1 (alt.yq-fs88dj2@yopmail.com) exists with password Koushik.git
-    const admin1Email = "alt.yq-fs88dj2@yopmail.com"
-    let admin1User = await prisma.user.findFirst({
-      where: { email: { equals: admin1Email, mode: "insensitive" } },
-    })
+    // 4. Ensure Operations Admins exist with verified passwords
+    const operationsAdmins = [
+      {
+        email: "alt.yq-fs88dj2@yopmail.com",
+        name: "Admin_1",
+        phone: "+91 98222 33344",
+        password: hashPassword("Koushik.git"),
+      },
+      {
+        email: "admin@gomaa.in",
+        name: "Operations Admin",
+        phone: "+91 98222 33345",
+        password: hashPassword("Koushik.git"),
+      },
+      {
+        email: "operations@gomaa.in",
+        name: "Operations Admin",
+        phone: "+91 98222 33346",
+        password: hashPassword("Koushik.git"),
+      },
+      {
+        email: "gomaa052026@gmail.com",
+        name: "GOMAA Operations",
+        phone: "+91 98222 33347",
+        password: hashPassword("gomaa@123456"),
+      },
+    ]
 
-    if (!admin1User) {
-      admin1User = await prisma.user.create({
-        data: {
-          name: "Admin_1",
-          email: admin1Email,
-          phone: "+91 98222 33344",
-          role: "OPERATIONS_ADMIN",
-          password: hashPassword("Koushik.git"),
-          isActive: true,
-        },
+    let admin1User = null
+
+    for (const adm of operationsAdmins) {
+      let existingAdm = await prisma.user.findFirst({
+        where: { email: { equals: adm.email, mode: "insensitive" } },
       })
-      console.log(`[Seed] Created Operations Admin: ${admin1Email}`)
-    } else {
-      admin1User = await prisma.user.update({
-        where: { id: admin1User.id },
-        data: {
-          name: "Admin_1",
-          role: "OPERATIONS_ADMIN",
-          isActive: true,
-          ...(!admin1User.password ? { password: hashPassword("Koushik.git") } : {}),
-        },
-      })
-      console.log(`[Seed] Synchronized Operations Admin: ${admin1Email}`)
+
+      if (!existingAdm) {
+        existingAdm = await prisma.user.create({
+          data: {
+            name: adm.name,
+            email: adm.email,
+            phone: adm.phone,
+            role: "OPERATIONS_ADMIN",
+            password: adm.password,
+            isActive: true,
+          },
+        })
+        console.log(`[Seed] Created Operations Admin: ${adm.email}`)
+      } else {
+        existingAdm = await prisma.user.update({
+          where: { id: existingAdm.id },
+          data: {
+            name: adm.name,
+            role: "OPERATIONS_ADMIN",
+            isActive: true,
+            password: adm.password,
+          },
+        })
+        console.log(`[Seed] Synchronized Operations Admin: ${adm.email}`)
+      }
+
+      if (adm.email === "alt.yq-fs88dj2@yopmail.com") {
+        admin1User = existingAdm
+      }
     }
 
     // 5. Ensure Gaushalas (Gaushala_01, Gaushala_02, Gaushala_03) exist and are governed by Admin_1

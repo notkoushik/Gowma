@@ -430,7 +430,7 @@ export default function GosalaManagers() {
                 updateManager(otherMgr.id, {
                   gosalas: nextOtherList,
                   gosala: nextOtherList[0] || "Unassigned",
-                  status: nextOtherList.length === 0 ? "Inactive" : otherMgr.status,
+                  status: otherMgr.status || "Active",
                 })
               }
             }
@@ -482,7 +482,7 @@ export default function GosalaManagers() {
               updateManager(otherMgr.id, {
                 gosalas: nextOtherList,
                 gosala: nextOtherList[0] || "Unassigned",
-                status: nextOtherList.length === 0 ? "Inactive" : otherMgr.status,
+                status: otherMgr.status || "Active",
               })
             }
           })
@@ -582,7 +582,7 @@ export default function GosalaManagers() {
       updateManager(mgr.id, {
         gosalas: nextList,
         gosala: nextList[0] || "Unassigned",
-        status: nextList.length === 0 ? "Inactive" : mgr.status,
+        status: mgr.status || "Active",
       })
     }
     updateGosala(g.id, {
@@ -654,7 +654,7 @@ export default function GosalaManagers() {
         updateManager(mgr.id, {
           gosalas: nextList,
           gosala: nextList[0] || "Unassigned",
-          status: nextList.length === 0 ? "Inactive" : mgr.status,
+          status: mgr.status || "Active",
         })
       }
       updateGosala(reassigningGosala.id, {
@@ -691,7 +691,7 @@ export default function GosalaManagers() {
           updateManager(prevMgr.id, {
             gosalas: newPrevList,
             gosala: newPrevList[0] || "Unassigned",
-            status: newPrevList.length === 0 ? "Inactive" : prevMgr.status,
+            status: prevMgr.status || "Active",
           })
         }
 
