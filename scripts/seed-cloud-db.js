@@ -14,6 +14,7 @@ async function seed() {
     const superAdmins = [
       {
         id: "USER-SA-NANIKOUSHIK-96",
+        uniqueId: "GMA-SA-0001",
         name: "Koushik",
         email: "nanikoushik96@gmail.com",
         phone: "+91 98000 00000",
@@ -23,6 +24,7 @@ async function seed() {
       },
       {
         id: "USER-SA-NANIKOUSHIK",
+        uniqueId: "GMA-SA-0002",
         name: "Koushik",
         email: "nanikoushik@gmail.com",
         phone: "+91 98000 00000",
@@ -32,6 +34,7 @@ async function seed() {
       },
       {
         id: "USER-SA-KOUSHIK",
+        uniqueId: "GMA-SA-0003",
         name: "Koushik",
         email: "koushik@gmail.com",
         phone: "+91 98000 00000",
@@ -62,6 +65,7 @@ async function seed() {
         await prisma.user.update({
           where: { id: existing.id },
           data: {
+            uniqueId: sa.uniqueId,
             role: "SUPER_ADMIN",
             isActive: true,
             ...(!existing.password ? { password: sa.password } : {}),
@@ -74,8 +78,8 @@ async function seed() {
     // 3. Ensure test devotee accounts devpulseorg@gmail.com and devpusleorg@gmail.com exist
     try {
       const devoteesToSeed = [
-        { email: "devpulseorg@gmail.com", phone: "+91 7780740223", name: "Devotee (devpulseorg)" },
-        { email: "devpusleorg@gmail.com", phone: "+91 7780740224", name: "Devotee (devpusleorg)" },
+        { email: "devpulseorg@gmail.com", phone: "+91 7780740223", name: "Devotee (devpulseorg)", uniqueId: "GMA-DEV-0223" },
+        { email: "devpusleorg@gmail.com", phone: "+91 7780740224", name: "Devotee (devpusleorg)", uniqueId: "GMA-DEV-0224" },
       ]
       for (const d of devoteesToSeed) {
         const existing = await prisma.user.findFirst({
@@ -85,6 +89,7 @@ async function seed() {
           await prisma.user.update({
             where: { id: existing.id },
             data: {
+              uniqueId: d.uniqueId,
               name: d.name,
               phone: d.phone,
               role: "CUSTOMER",
@@ -92,10 +97,11 @@ async function seed() {
               password: hashPassword("Koushik.git"),
             },
           })
-          console.log(`[Seed] Devotee ${d.email} re-verified with phone ${d.phone}`)
+          console.log(`[Seed] Devotee ${d.email} re-verified with unique ID ${d.uniqueId}`)
         } else {
           await prisma.user.create({
             data: {
+              uniqueId: d.uniqueId,
               name: d.name,
               email: d.email,
               phone: d.phone,
@@ -104,7 +110,7 @@ async function seed() {
               password: hashPassword("Koushik.git"),
             },
           })
-          console.log(`[Seed] Devotee ${d.email} created with password Koushik.git`)
+          console.log(`[Seed] Devotee ${d.email} created with unique ID ${d.uniqueId}`)
         }
       }
     } catch (e) {
@@ -115,24 +121,28 @@ async function seed() {
     const operationsAdmins = [
       {
         email: "alt.yq-fs88dj2@yopmail.com",
+        uniqueId: "GMA-OPS-0101",
         name: "Admin_1",
         phone: "+91 98222 33344",
         password: hashPassword("Koushik.git"),
       },
       {
         email: "admin@gomaa.in",
+        uniqueId: "GMA-OPS-0102",
         name: "Operations Admin",
         phone: "+91 98222 33345",
         password: hashPassword("Koushik.git"),
       },
       {
         email: "operations@gomaa.in",
+        uniqueId: "GMA-OPS-0103",
         name: "Operations Admin",
         phone: "+91 98222 33346",
         password: hashPassword("Koushik.git"),
       },
       {
         email: "gomaa052026@gmail.com",
+        uniqueId: "GMA-OPS-0104",
         name: "GOMAA Operations",
         phone: "+91 98222 33347",
         password: hashPassword("gomaa@123456"),
@@ -149,6 +159,7 @@ async function seed() {
       if (!existingAdm) {
         existingAdm = await prisma.user.create({
           data: {
+            uniqueId: adm.uniqueId,
             name: adm.name,
             email: adm.email,
             phone: adm.phone,
@@ -162,6 +173,7 @@ async function seed() {
         existingAdm = await prisma.user.update({
           where: { id: existingAdm.id },
           data: {
+            uniqueId: adm.uniqueId,
             name: adm.name,
             role: "OPERATIONS_ADMIN",
             isActive: true,
@@ -242,6 +254,7 @@ async function seed() {
     const defaultManagers = [
       {
         id: "USER-MGR-01",
+        uniqueId: "GMA-MGR-0101",
         name: "Manager 1",
         email: "manager1@gomaa.in",
         phone: "+91 98111 22233",
@@ -252,6 +265,7 @@ async function seed() {
       },
       {
         id: "USER-MGR-02",
+        uniqueId: "GMA-MGR-0201",
         name: "Manager 2",
         email: "manager2@gomaa.in",
         phone: "+91 98444 55566",
@@ -275,6 +289,7 @@ async function seed() {
         mgr = await prisma.user.create({
           data: {
             id: mDef.id,
+            uniqueId: mDef.uniqueId,
             name: mDef.name,
             email: mDef.email,
             phone: mDef.phone,
@@ -283,18 +298,19 @@ async function seed() {
             isActive: true,
           },
         })
-        console.log(`[Seed] Created Manager: ${mDef.name} (${mDef.email})`)
+        console.log(`[Seed] Created Manager: ${mDef.name} (${mDef.email}) with ${mDef.uniqueId}`)
       } else {
         await prisma.user.update({
           where: { id: mgr.id },
           data: {
+            uniqueId: mDef.uniqueId,
             name: mDef.name,
             role: "GOSALA_MANAGER",
             isActive: true,
             ...(!mgr.password ? { password: mDef.password } : {}),
           },
         })
-        console.log(`[Seed] Synchronized Manager: ${mDef.name} (${mDef.email})`)
+        console.log(`[Seed] Synchronized Manager: ${mDef.name} (${mDef.email}) with ${mDef.uniqueId}`)
       }
 
       // Link to target Gaushala

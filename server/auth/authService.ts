@@ -12,6 +12,7 @@ export interface UserSessionData {
   token: string
   user: {
     id: string
+    uniqueId?: string
     name: string
     email: string
     phone: string
@@ -25,6 +26,31 @@ export interface UserSessionData {
     driverData?: any
     customerData?: any
     adminData?: any
+  }
+}
+
+export function generateUniqueId(role: string, phone?: string): string {
+  const cleanDigits = (phone || "").replace(/\D/g, "")
+  const suffix = cleanDigits.length >= 4 ? cleanDigits.slice(-4) : Math.floor(1000 + Math.random() * 9000).toString()
+  const randomPin = Math.floor(1000 + Math.random() * 9000).toString()
+
+  switch (role) {
+    case "SUPER_ADMIN":
+    case "super_admin":
+      return `GMA-SA-${randomPin}`
+    case "OPERATIONS_ADMIN":
+    case "admin":
+      return `GMA-OPS-${suffix}`
+    case "GOSALA_MANAGER":
+    case "manager":
+      return `GMA-MGR-${suffix}`
+    case "DRIVER":
+    case "driver":
+      return `GMA-DRV-${suffix}`
+    case "CUSTOMER":
+    case "customer":
+    default:
+      return `GMA-DEV-${suffix}`
   }
 }
 
@@ -104,6 +130,7 @@ export async function authenticateOrResolveUser(
     where: {
       OR: [
         { id: query },
+        { uniqueId: { equals: query, mode: "insensitive" } },
         { email: { equals: query, mode: "insensitive" } },
         { phone: { equals: query, mode: "insensitive" } },
         ...(rawDigits.length === 10
@@ -119,6 +146,18 @@ export async function authenticateOrResolveUser(
   })
   if (!user) throw new Error("Invalid credentials or user not found")
   if (user.isActive === false) throw new Error("Account is inactive")
+
+  // Ensure user has their unique identity code populated
+  if (!user.uniqueId) {
+    const autoId = generateUniqueId(user.role, user.phone)
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { uniqueId: autoId },
+      })
+      user.uniqueId = autoId
+    } catch {}
+  }
   if (!password) throw new Error("Password is required")
   if (isPasswordHash(user.password)) {
     let isValid = verifyPassword(password, user.password)
@@ -256,6 +295,7 @@ export async function authenticateOrResolveUser(
 
   const token = signJwt({
     userId: user.id,
+    uniqueId: user.uniqueId,
     name: user.name,
     email: user.email,
     phone: user.phone,
@@ -274,6 +314,7 @@ export async function authenticateOrResolveUser(
     token,
     user: {
       id: user.id,
+      uniqueId: user.uniqueId,
       name: user.name,
       email: user.email,
       phone: user.phone,
@@ -354,9 +395,12 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
   }
   const passwordHash = hashPassword(payload.password)
 
+  const uniqueId = generateUniqueId(payload.role, phoneFormatted)
+
   // Create new user in PostgreSQL
   const user = await prisma.user.create({
     data: {
+      uniqueId,
       name: payload.name.trim(),
       email: emailNorm,
       phone: phoneFormatted,
@@ -431,6 +475,7 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
 
   const token = signJwt({
     userId: user.id,
+    uniqueId: user.uniqueId || uniqueId,
     name: user.name,
     email: user.email,
     phone: user.phone,
@@ -446,6 +491,7 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
     token,
     user: {
       id: user.id,
+      uniqueId: user.uniqueId || uniqueId,
       name: user.name,
       email: user.email,
       phone: user.phone,
@@ -503,6 +549,7 @@ export async function getDirectoryAccounts() {
         const isSuper = u.role === "SUPER_ADMIN"
         return {
           id: u.id,
+          uniqueId: u.uniqueId,
           name: u.name,
           email: u.email,
           phone: u.phone,
@@ -563,6 +610,7 @@ export async function getAllUsers() {
         const meta = getUserMeta(u.email || u.id)
         return {
           id: u.id,
+          uniqueId: u.uniqueId,
           name: u.name,
           email: u.email,
           phone: u.phone,

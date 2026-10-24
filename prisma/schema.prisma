@@ -76,6 +76,7 @@ enum AuditAction {
 
 model User {
   id        String   @id @default(uuid())
+  uniqueId  String?  @unique
   email     String   @unique
   name      String
   phone     String
@@ -95,6 +96,7 @@ model User {
   createdHolds       TemporarySlotHold[]
 
   @@index([email])
+  @@index([uniqueId])
   @@index([role])
   @@map("users")
 }

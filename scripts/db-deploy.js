@@ -25,7 +25,7 @@ if (dbUrl && !dbUrl.includes("localhost") && !dbUrl.includes("127.0.0.1")) {
       execSync("npx prisma migrate deploy", { stdio: "inherit" })
     } catch {
       console.log("[Build] Applying direct schema sync via db push...")
-      execSync("npx prisma db push --skip-generate", { stdio: "inherit" })
+      execSync("npx prisma db push --skip-generate --accept-data-loss", { stdio: "inherit" })
     }
     console.log("[Build] Cloud database schema synchronized successfully!")
     console.log("[Build] Ensuring Super Admin account exists in cloud database...")

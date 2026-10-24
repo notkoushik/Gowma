@@ -205,7 +205,7 @@ export default function Login({
 
     const cleanEmailOrPhone = emailInput.trim()
     if (!cleanEmailOrPhone) {
-      setAuthError("Please enter your registered email address or phone number.")
+      setAuthError("Please enter your registered email, phone number, or Unique ID.")
       setIsSubmitting(false)
       return
     }
@@ -648,7 +648,7 @@ export default function Login({
             <form className="mt-6 space-y-4" onSubmit={handleSignInSubmit}>
               <div>
                 <label className="block text-[12.5px] text-ink-soft font-medium mb-1">
-                  Registered Email or Phone Number
+                  Email, Phone Number, or Unique ID
                 </label>
                 <div className="relative">
                   <Mail
@@ -661,7 +661,7 @@ export default function Login({
                     autoFocus
                     value={emailInput}
                     onChange={(e) => setEmailInput(e.target.value)}
-                    placeholder="e.g. devotee@gmail.com or +91 98..."
+                    placeholder="e.g. devotee@gmail.com, +91..., or GMA-DEV-0223"
                     className="w-full bg-paper border border-line rounded-sm pl-9 pr-3 py-2.5 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
                   />
                 </div>

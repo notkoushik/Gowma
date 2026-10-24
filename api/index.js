@@ -1165,6 +1165,29 @@ function verifyPassword(password, stored) {
 // server/auth/authService.ts
 import crypto5 from "node:crypto";
 var inMemoryPasswords = /* @__PURE__ */ new Map();
+function generateUniqueId(role, phone) {
+  const cleanDigits = (phone || "").replace(/\D/g, "");
+  const suffix = cleanDigits.length >= 4 ? cleanDigits.slice(-4) : Math.floor(1e3 + Math.random() * 9e3).toString();
+  const randomPin = Math.floor(1e3 + Math.random() * 9e3).toString();
+  switch (role) {
+    case "SUPER_ADMIN":
+    case "super_admin":
+      return `GMA-SA-${randomPin}`;
+    case "OPERATIONS_ADMIN":
+    case "admin":
+      return `GMA-OPS-${suffix}`;
+    case "GOSALA_MANAGER":
+    case "manager":
+      return `GMA-MGR-${suffix}`;
+    case "DRIVER":
+    case "driver":
+      return `GMA-DRV-${suffix}`;
+    case "CUSTOMER":
+    case "customer":
+    default:
+      return `GMA-DEV-${suffix}`;
+  }
+}
 function mapDbRoleToFrontend(role) {
   switch (role) {
     case "SUPER_ADMIN":
@@ -1211,6 +1234,7 @@ async function authenticateOrResolveUser(emailOrPhone, roleHint, password) {
     where: {
       OR: [
         { id: query },
+        { uniqueId: { equals: query, mode: "insensitive" } },
         { email: { equals: query, mode: "insensitive" } },
         { phone: { equals: query, mode: "insensitive" } },
         ...rawDigits.length === 10 ? [
@@ -1224,6 +1248,17 @@ async function authenticateOrResolveUser(emailOrPhone, roleHint, password) {
   });
   if (!user) throw new Error("Invalid credentials or user not found");
   if (user.isActive === false) throw new Error("Account is inactive");
+  if (!user.uniqueId) {
+    const autoId = generateUniqueId(user.role, user.phone);
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { uniqueId: autoId }
+      });
+      user.uniqueId = autoId;
+    } catch {
+    }
+  }
   if (!password) throw new Error("Password is required");
   if (isPasswordHash(user.password)) {
     let isValid = verifyPassword(password, user.password);
@@ -1329,6 +1364,7 @@ async function authenticateOrResolveUser(emailOrPhone, roleHint, password) {
   const isSuper = feRole === "super_admin";
   const token = signJwt({
     userId: user.id,
+    uniqueId: user.uniqueId,
     name: user.name,
     email: user.email,
     phone: user.phone,
@@ -1346,6 +1382,7 @@ async function authenticateOrResolveUser(emailOrPhone, roleHint, password) {
     token,
     user: {
       id: user.id,
+      uniqueId: user.uniqueId,
       name: user.name,
       email: user.email,
       phone: user.phone,
@@ -1411,8 +1448,10 @@ async function registerUser(payload) {
     throw new Error("Password must be at least 8 characters");
   }
   const passwordHash = hashPassword(payload.password);
+  const uniqueId = generateUniqueId(payload.role, phoneFormatted);
   const user = await prisma.user.create({
     data: {
+      uniqueId,
       name: payload.name.trim(),
       email: emailNorm,
       phone: phoneFormatted,
@@ -1480,6 +1519,7 @@ async function registerUser(payload) {
   const gosalaNames = assignedGosalas.map((g) => g.name);
   const token = signJwt({
     userId: user.id,
+    uniqueId: user.uniqueId || uniqueId,
     name: user.name,
     email: user.email,
     phone: user.phone,
@@ -1494,6 +1534,7 @@ async function registerUser(payload) {
     token,
     user: {
       id: user.id,
+      uniqueId: user.uniqueId || uniqueId,
       name: user.name,
       email: user.email,
       phone: user.phone,
@@ -1544,6 +1585,7 @@ async function getDirectoryAccounts() {
         const isSuper = u.role === "SUPER_ADMIN";
         return {
           id: u.id,
+          uniqueId: u.uniqueId,
           name: u.name,
           email: u.email,
           phone: u.phone,
@@ -1597,6 +1639,7 @@ async function getAllUsers() {
         const meta = getUserMeta(u.email || u.id);
         return {
           id: u.id,
+          uniqueId: u.uniqueId,
           name: u.name,
           email: u.email,
           phone: u.phone,

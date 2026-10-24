@@ -311,13 +311,19 @@ export default function DesktopCustomer({
               <Bell size={16} />
               <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-saffron" />
             </button>
-            <button
-              onClick={() => setTab("profile")}
-              className="h-9 w-9 rounded-full bg-forest text-white grid place-items-center text-[12px] font-medium hover:ring-2 hover:ring-forest/40 transition-all cursor-pointer"
-              title="View Devotee Profile"
-            >
-              {devoteeName.slice(0, 1)}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setTab("profile")}
+                className="h-9 w-9 rounded-full bg-forest text-white grid place-items-center text-[12px] font-medium hover:ring-2 hover:ring-forest/40 transition-all cursor-pointer"
+                title="View Devotee Profile"
+              >
+                {devoteeName.slice(0, 1)}
+              </button>
+              <div className="text-left hidden lg:block">
+                <div className="text-[12px] font-medium text-ink leading-tight truncate max-w-[120px]">{devoteeName}</div>
+                <div className="text-[10px] font-mono text-saffron font-medium">{authUser?.uniqueId || "GMA-DEV-0223"}</div>
+              </div>
+            </div>
             <button
               onClick={onSignOut}
               className="text-ink-faint hover:text-ink p-1.5 rounded-sm hover:bg-paper-deep transition-colors"
@@ -1061,10 +1067,15 @@ function ProfileView({ onOpenEditProfile }: { onOpenEditProfile: () => void }) {
             {devoteeName.slice(0, 1)}
           </div>
           <div>
-            <div className="font-serif text-[24px] text-ink">{devoteeName}</div>
+            <div className="font-serif text-[24px] text-ink flex items-center gap-2">
+              {devoteeName}
+              <span className="inline-flex items-center gap-1 font-mono text-[11px] px-2 py-0.5 rounded bg-saffron-soft text-saffron-deep border border-saffron/30 font-medium">
+                <ShieldCheck size={12} /> {authUser?.uniqueId || "GMA-DEV-0223"}
+              </span>
+            </div>
             <div className="text-[13px] text-ink-faint">
-              {customerProfile?.phone || "+91 98204 11827"} ·{" "}
-              {customerProfile?.email || "ananya@gomaa.in"}
+              {authUser?.phone || customerProfile?.phone || "+91 98204 11827"} ·{" "}
+              {authUser?.email || customerProfile?.email || "ananya@gomaa.in"}
             </div>
           </div>
         </div>

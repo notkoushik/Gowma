@@ -34,6 +34,7 @@ function base64UrlDecode(str: string): string {
 
 export interface JwtPayload {
   userId: string
+  uniqueId?: string
   name: string
   email: string
   phone?: string

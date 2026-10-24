@@ -618,14 +618,14 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
               {managerProfile?.name?.slice(0, 2).toUpperCase() || "GC"}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[12.5px] text-ink truncate font-medium flex items-center gap-1">
-                <span>{managerProfile?.name || "Gaushala Custodian"}</span>
-                <span className="text-[10px] text-saffron-deep opacity-0 group-hover:opacity-100 transition-opacity">
-                  ✎
+              <div className="text-[12.5px] text-ink truncate font-medium flex items-center justify-between">
+                <span className="truncate">{managerProfile?.name || "Gaushala Custodian"}</span>
+                <span className="font-mono text-[10px] text-saffron bg-saffron/10 px-1.5 py-0.2 rounded font-medium shrink-0 ml-1">
+                  {authUser?.uniqueId || "GMA-MGR-0101"}
                 </span>
               </div>
               <div className="text-[11px] text-ink-faint truncate">
-                {managerProfile?.managerData?.gosala || "Shri Krishna Gaushala"}
+                {currentGosala || managerProfile?.managerData?.gosala || "Shri Krishna Gaushala"}
               </div>
             </div>
             <button
