@@ -52,6 +52,7 @@ import {
   TEMPERAMENT_PRESETS,
 } from "../../data/animals"
 import { inr, type Booking } from "../../data/mock"
+import { type Gosala } from "../../data/gosalas"
 import { useStore, useToast } from "../../store/store"
 import { Panel, Tag, Eyebrow, StatusPill } from "../../lib/ui"
 
@@ -748,11 +749,13 @@ function AnimalCard({
   onOpenDossier,
   onEditCow,
   recentTripsCount,
+  shelter,
 }: {
   a: Animal
   onOpenDossier: (animal: Animal) => void
   onEditCow?: (animal: Animal) => void
   recentTripsCount: number
+  shelter?: Gosala
 }) {
   const isCooldown = a.status === "Resting Buffer"
   const isVet = a.status === "Vet Care"
@@ -852,6 +855,37 @@ function AnimalCard({
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Gaushala Shelter & Custodian Overview */}
+          <div className="mt-2.5 p-2 rounded bg-paper-deep/70 border border-line/60 space-y-1 text-[11px]">
+            <div className="flex items-center justify-between gap-1">
+              <div className="flex items-center gap-1.5 font-medium text-ink min-w-0">
+                <Building2 size={13} className="text-forest shrink-0" />
+                <span className="truncate">{shelter?.name || a.gosala}</span>
+              </div>
+              {shelter?.region && (
+                <span className="font-mono text-[9.5px] bg-forest-soft text-forest px-1.5 py-0.5 rounded shrink-0">
+                  {shelter.region}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center justify-between text-ink-faint text-[10.5px]">
+              <span className="truncate">
+                {shelter?.managerName ? `Manager: ${shelter.managerName}` : `Caretaker: ${a.assignedHandler || "Gaushala Sevak"}`}
+              </span>
+              {shelter?.contactPhone && (
+                <a
+                  href={`tel:${shelter.contactPhone}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-forest hover:underline font-mono inline-flex items-center gap-0.5 shrink-0 ml-1"
+                  title={`Call Gaushala Desk: ${shelter.contactPhone}`}
+                >
+                  <Phone size={10} />
+                  <span>{shelter.contactPhone}</span>
+                </a>
+              )}
+            </div>
           </div>
 
           {/* Welfare & Handler Bar */}
@@ -1646,10 +1680,18 @@ export default function Animals() {
   // Filtered Empanelled Doctors (Strict Multi-tenant Isolation)
   const filteredVets = useMemo(() => {
     return vets.filter((v) => {
+      const assigned = v.assignedGosalas || []
       if (currentRole === "manager") {
-        const isAssigned = v.assignedGosalas.some(
+        const isAssigned = assigned.some(
           (g) =>
             g.toLowerCase() === assignedGosala.toLowerCase() ||
+            g.toLowerCase() === "all gaushalas",
+        )
+        if (!isAssigned) return false
+      } else if (activeGosalaFilter && activeGosalaFilter !== "ALL") {
+        const isAssigned = assigned.some(
+          (g) =>
+            g.toLowerCase() === activeGosalaFilter.toLowerCase() ||
             g.toLowerCase() === "all gaushalas",
         )
         if (!isAssigned) return false
@@ -1657,13 +1699,14 @@ export default function Animals() {
       if (!searchQuery.trim()) return true
       const q = searchQuery.toLowerCase()
       return (
-        v.name.toLowerCase().includes(q) ||
-        v.regNo.toLowerCase().includes(q) ||
-        v.clinic.toLowerCase().includes(q) ||
-        v.specialization.toLowerCase().includes(q)
+        v.name?.toLowerCase().includes(q) ||
+        v.regNo?.toLowerCase().includes(q) ||
+        v.clinic?.toLowerCase().includes(q) ||
+        v.specialization?.toLowerCase().includes(q) ||
+        assigned.some((g) => g.toLowerCase().includes(q))
       )
     })
-  }, [vets, currentRole, assignedGosala, searchQuery])
+  }, [vets, currentRole, assignedGosala, activeGosalaFilter, searchQuery])
 
   // Summary Metrics scoped dynamically to active shelter filter
   const totalCattle = filteredAnimals.length
@@ -1838,80 +1881,90 @@ export default function Animals() {
         </div>
       </div>
 
-      {/* 3A. Sacred Herd Grid View */}
-      {mainTab === "herd" && (
-        <div className="space-y-4">
-          {/* Gaushala Filter Pills Strip */}
-          {currentRole === "manager" ? (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-forest-soft border border-forest/20 rounded-md text-[12.5px] text-forest">
-              <div className="flex items-center gap-2">
-                <Building2 size={16} className="shrink-0 text-forest" />
-                <div>
-                  <span className="font-semibold text-ink">
-                    {assignedGosala} Shed
-                  </span>
-                  <span className="text-ink-faint text-[11.5px] ml-2">
-                    · Exclusively managing on-site cattle (
-                    {filteredAnimals.length} sacred cows in shed custody)
-                  </span>
-                </div>
-              </div>
-              <span className="font-mono text-[10.5px] bg-forest text-white px-2 py-0.5 rounded font-semibold self-start sm:self-auto">
-                1:1 Custodian Lock Active
+      {/* Gaushala Filter Pills Strip (Universal for Herd & Vets) */}
+      {currentRole === "manager" ? (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-forest-soft border border-forest/20 rounded-md text-[12.5px] text-forest">
+          <div className="flex items-center gap-2">
+            <Building2 size={16} className="shrink-0 text-forest" />
+            <div>
+              <span className="font-semibold text-ink">
+                {assignedGosala} Shed
+              </span>
+              <span className="text-ink-faint text-[11.5px] ml-2">
+                · Exclusively managing on-site custody (
+                {filteredAnimals.length} sacred cows · {filteredVets.length} empanelled doctors)
               </span>
             </div>
-          ) : (
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none text-[12px]">
-              <div className="flex items-center gap-1.5 shrink-0 text-ink-faint font-medium">
-                <Building2 size={13} className="text-forest" />
-                <span>Shelter:</span>
-              </div>
+          </div>
+          <span className="font-mono text-[10.5px] bg-forest text-white px-2 py-0.5 rounded font-semibold self-start sm:self-auto">
+            1:1 Custodian Lock Active
+          </span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none text-[12px]">
+          <div className="flex items-center gap-1.5 shrink-0 text-ink-faint font-medium">
+            <Building2 size={13} className="text-forest" />
+            <span>Shelter:</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveGosalaFilter("ALL")}
+            className={`px-2.5 py-1 rounded-full font-medium transition cursor-pointer whitespace-nowrap ${
+              activeGosalaFilter === "ALL"
+                ? "bg-forest text-white shadow-xs font-semibold"
+                : "bg-card border border-line text-ink-soft hover:text-ink"
+            }`}
+          >
+            All Shelters ({mainTab === "herd" ? animals.length : vets.length})
+          </button>
+          {gosalas.map((g) => {
+            const count =
+              mainTab === "herd"
+                ? animals.filter(
+                    (a) => a.gosala.toLowerCase() === g.name.toLowerCase(),
+                  ).length
+                : vets.filter((v) =>
+                    (v.assignedGosalas || []).some(
+                      (x) =>
+                        x.toLowerCase() === g.name.toLowerCase() ||
+                        x.toLowerCase() === "all gaushalas",
+                    ),
+                  ).length
+            const isSelected =
+              activeGosalaFilter.toLowerCase() === g.name.toLowerCase()
+            return (
               <button
+                key={g.id}
                 type="button"
-                onClick={() => setActiveGosalaFilter("ALL")}
-                className={`px-2.5 py-1 rounded-full font-medium transition cursor-pointer whitespace-nowrap ${
-                  activeGosalaFilter === "ALL"
-                    ? "bg-forest text-white shadow-xs font-semibold"
+                onClick={() =>
+                  setActiveGosalaFilter(isSelected ? "ALL" : g.name)
+                }
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium transition cursor-pointer whitespace-nowrap ${
+                  isSelected
+                    ? "bg-saffron text-white shadow-xs font-semibold"
                     : "bg-card border border-line text-ink-soft hover:text-ink"
                 }`}
               >
-                All Shelters ({animals.length})
+                <span>{g.name}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                    isSelected
+                      ? "bg-white/25 text-white"
+                      : "bg-paper-deep text-ink-faint"
+                  }`}
+                >
+                  {count}
+                </span>
+                {isSelected && <X size={12} className="ml-0.5" />}
               </button>
-              {gosalas.map((g) => {
-                const count = animals.filter(
-                  (a) => a.gosala.toLowerCase() === g.name.toLowerCase(),
-                ).length
-                const isSelected =
-                  activeGosalaFilter.toLowerCase() === g.name.toLowerCase()
-                return (
-                  <button
-                    key={g.id}
-                    type="button"
-                    onClick={() =>
-                      setActiveGosalaFilter(isSelected ? "ALL" : g.name)
-                    }
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium transition cursor-pointer whitespace-nowrap ${
-                      isSelected
-                        ? "bg-saffron text-white shadow-xs font-semibold"
-                        : "bg-card border border-line text-ink-soft hover:text-ink"
-                    }`}
-                  >
-                    <span>{g.name}</span>
-                    <span
-                      className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                        isSelected
-                          ? "bg-white/25 text-white"
-                          : "bg-paper-deep text-ink-faint"
-                      }`}
-                    >
-                      {count}
-                    </span>
-                    {isSelected && <X size={12} className="ml-0.5" />}
-                  </button>
-                )
-              })}
-            </div>
-          )}
+            )
+          })}
+        </div>
+      )}
+
+      {/* 3A. Sacred Herd Grid View */}
+      {mainTab === "herd" && (
+        <div className="space-y-4">
 
           {filteredAnimals.length === 0 ? (
             <Panel className="p-8 text-center bg-card">
@@ -1970,6 +2023,11 @@ export default function Animals() {
                     b.animal.toLowerCase() === a.name.toLowerCase() &&
                     b.status !== "Rejected",
                 ).length
+                const shelter = gosalas.find(
+                  (g) =>
+                    g.name.toLowerCase() === a.gosala.toLowerCase() ||
+                    g.id === a.gosalaId,
+                )
                 return (
                   <AnimalCard
                     key={a.name}
@@ -1977,6 +2035,7 @@ export default function Animals() {
                     onOpenDossier={openDossier}
                     onEditCow={handleOpenEditCow}
                     recentTripsCount={tripCount}
+                    shelter={shelter}
                   />
                 )
               })}
@@ -2069,6 +2128,72 @@ export default function Animals() {
                         <span className="truncate font-medium text-ink">
                           {v.specialization}
                         </span>
+                      </div>
+                    </div>
+
+                    {/* Empanelled Gaushala Shelters & Trust Facilities */}
+                    <div className="space-y-1.5 pt-2 border-t border-line/50 text-[11px]">
+                      <div className="flex items-center justify-between text-ink-faint">
+                        <span className="font-semibold text-ink text-[11px] flex items-center gap-1">
+                          <Building2 size={12} className="text-forest" />
+                          Empanelled Facilities:
+                        </span>
+                        <span className="text-[10px] font-mono text-forest">
+                          {(v.assignedGosalas || []).length} Shelters
+                        </span>
+                      </div>
+
+                      <div className="space-y-1">
+                        {(v.assignedGosalas || []).map((gName) => {
+                          const isAll = gName.toLowerCase() === "all gaushalas"
+                          const gMatch = gosalas.find(
+                            (g) =>
+                              g.name.toLowerCase() === gName.toLowerCase() ||
+                              g.id.toLowerCase() === gName.toLowerCase(),
+                          )
+                          const shedCattleCount = animals.filter(
+                            (a) =>
+                              isAll ||
+                              a.gosala.toLowerCase() === gName.toLowerCase() ||
+                              (gMatch && a.gosala.toLowerCase() === gMatch.name.toLowerCase()),
+                          ).length
+                          return (
+                            <div
+                              key={gName}
+                              className="bg-paper/70 border border-line/60 rounded p-1.5 text-[10.5px] flex items-center justify-between gap-1.5"
+                            >
+                              <div className="min-w-0">
+                                <div className="font-medium text-ink truncate">
+                                  {isAll ? "All Regional Gaushalas (Pan-India)" : gMatch?.name || gName}
+                                </div>
+                                {gMatch?.region && !isAll && (
+                                  <div className="text-[9.5px] text-ink-faint truncate">
+                                    {gMatch.region} {gMatch.managerName ? `· Mgr: ${gMatch.managerName}` : ""}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="shrink-0 flex items-center gap-1 font-mono text-[9.5px]">
+                                {gMatch?.contactPhone && !isAll && (
+                                  <a
+                                    href={`tel:${gMatch.contactPhone}`}
+                                    className="text-forest hover:underline"
+                                    title={`Call Shelter Desk: ${gMatch.contactPhone}`}
+                                  >
+                                    {gMatch.contactPhone}
+                                  </a>
+                                )}
+                                <span className="bg-forest-soft text-forest px-1.5 py-0.5 rounded font-semibold">
+                                  {shedCattleCount} Cattle
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        {(!v.assignedGosalas || v.assignedGosalas.length === 0) && (
+                          <div className="text-ink-faint text-[10.5px] italic bg-paper p-1.5 rounded">
+                            General Regional Panel (All Shelters)
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -2278,7 +2403,87 @@ export default function Animals() {
                     </div>
                   )}
               </div>
-              {/* TAB 1: 7-DAY SEVA & REST LOG */}
+
+              {/* Gaushala Shelter & Custodian Registry */}
+              {(() => {
+                const shelter = gosalas.find(
+                  (g) =>
+                    g.name.toLowerCase() === selectedAnimal.gosala.toLowerCase() ||
+                    g.id === selectedAnimal.gosalaId,
+                )
+                return (
+                  <div className="p-3.5 rounded bg-gradient-to-r from-forest-soft/40 via-card to-card border border-forest/20 space-y-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-line/60">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 rounded-full bg-forest text-white">
+                          <Building2 size={16} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-serif text-[15px] font-bold text-ink leading-tight">
+                              {shelter?.name || selectedAnimal.gosala}
+                            </h4>
+                            <span className="text-[10px] font-mono bg-forest-soft text-forest font-semibold px-2 py-0.5 rounded border border-forest/20">
+                              {shelter?.region || "Operational Hub"}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-ink-faint">
+                            AWBI Trust Reg: {shelter?.trustRegistrationNo || "AWBI/2026/GOMAA-CERT"} · Est. {shelter?.establishedYear || "2018"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {shelter?.contactPhone && (
+                        <a
+                          href={`tel:${shelter.contactPhone}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium bg-card border border-forest/30 rounded text-forest hover:bg-forest hover:text-white transition-colors shadow-2xs self-start sm:self-auto"
+                        >
+                          <Phone size={12} />
+                          <span>Call Gaushala Desk</span>
+                        </a>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11.5px] text-ink-soft">
+                      <div className="flex items-start gap-1.5">
+                        <MapPin size={13} className="text-saffron-deep shrink-0 mt-0.5" />
+                        <div>
+                          <span className="text-ink-faint text-[10px] uppercase font-mono block">Shelter Address</span>
+                          <span className="text-ink leading-tight">{shelter?.address || "Gaushala Campus, Regional Hub"}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-1.5">
+                        <UserCheck size={13} className="text-forest shrink-0 mt-0.5" />
+                        <div>
+                          <span className="text-ink-faint text-[10px] uppercase font-mono block">Gaushala Manager</span>
+                          <span className="text-ink font-medium leading-tight">
+                            {shelter?.managerName || "Designated Manager"}
+                          </span>
+                          {shelter?.contactPhone && (
+                            <span className="text-ink-faint text-[10.5px] block font-mono">
+                              {shelter.contactPhone}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-1.5">
+                        <ShieldCheck size={13} className="text-forest shrink-0 mt-0.5" />
+                        <div>
+                          <span className="text-ink-faint text-[10px] uppercase font-mono block">On-Site Caretaker & Land</span>
+                          <span className="text-ink font-medium leading-tight">
+                            {shelter?.caretaker || selectedAnimal.assignedHandler || "Chief Gosevak"}
+                          </span>
+                          <span className="text-ink-faint text-[10.5px] block">
+                            {shelter?.capacity || 80} Cattle Capacity · {shelter?.landAcres || 12} Acres
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
               {activeTab === "history" && (
                 <div className="space-y-4">
                   {/* Last 7 Days Workload & Rest Metrics */}

@@ -1395,7 +1395,11 @@ async function registerUser(payload) {
     if (isEmailMatch && isPhoneMatch) {
       throw new Error(`An account with email "${emailNorm}" is already registered. Please sign in or use "Forgot Password".`);
     } else if (isEmailMatch) {
-      throw new Error(`An account with email "${emailNorm}" is already registered. If you wish to reassign a Gaushala to this manager, please select them from the Custodians Matrix instead of registering a new account.`);
+      if (payload.role === "manager") {
+        throw new Error(`An account with email "${emailNorm}" is already registered. If you wish to reassign a Gaushala to this manager, please select them from the Custodians Matrix instead of registering a new account.`);
+      } else {
+        throw new Error(`An account with email "${emailNorm}" is already registered. Please sign in with your password or use "Forgot Password" to reset it.`);
+      }
     } else if (isPhoneMatch) {
       throw new Error(`The mobile number "${payload.phone.trim()}" is already registered with another account. Please use a different phone number or sign in with your registered email.`);
     } else {
@@ -2912,7 +2916,45 @@ async function searchGooglePlacesApi(query, apiKey) {
 // server/router.ts
 var driverLiveLocations = /* @__PURE__ */ new Map();
 var serverAnimals = /* @__PURE__ */ new Map();
-var serverVets = /* @__PURE__ */ new Map();
+var defaultEmpanelledVets = [
+  {
+    id: "VET-001",
+    name: "Dr. Anand Kulkarni",
+    qualification: "B.V.Sc & A.H., M.V.Sc (Bovine Surgery)",
+    regNo: "TS-VET-4821",
+    clinic: "Govt. Veterinary Polyclinic & Cattle Hospital",
+    phone: "+91 98220 54321",
+    address: "Road No. 10, Banjara Hills, Hyderabad, Telangana 500034",
+    specialization: "Bovine Health, Vaccination & Ultrasound",
+    emergency24x7: true,
+    assignedGosalas: ["Gaushala_01", "Gaushala_02", "All Gaushalas"]
+  },
+  {
+    id: "VET-002",
+    name: "Dr. Lakshmi Narayana",
+    qualification: "B.V.Sc & A.H. (Gold Medalist)",
+    regNo: "TS-VET-5190",
+    clinic: "Sri Krishna Bovine Welfare Clinic",
+    phone: "+91 98490 11223",
+    address: "Trimulgherry, Secunderabad, Telangana 500015",
+    specialization: "Indigenous Cattle Gynaecology & Lactation Care",
+    emergency24x7: true,
+    assignedGosalas: ["Gaushala_03", "All Gaushalas"]
+  },
+  {
+    id: "VET-003",
+    name: "Dr. Rajeshwar Rao",
+    qualification: "B.V.Sc, Ph.D (Animal Nutrition)",
+    regNo: "TS-VET-6204",
+    clinic: "Deccan Veterinary Emergency Care Center",
+    phone: "+91 98330 99887",
+    address: "Gachibowli Financial District, Hyderabad 500032",
+    specialization: "Emergency Trauma, Hoof Care & Pasture Toxicology",
+    emergency24x7: true,
+    assignedGosalas: ["Gaushala_02", "Gaushala_01", "All Gaushalas"]
+  }
+];
+var serverVets = new Map(defaultEmpanelledVets.map((v) => [v.id, v]));
 var serverProfiles = {
   customer: {
     id: "USER-CUST-NEW",
@@ -3254,7 +3296,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   const { pathname, query } = parseUrl(rawUrl);
   if (!pathname.startsWith("/api/")) return null;
   const authUser = getAuthUserFromHeader(headers?.authorization || headers?.Authorization);
-  const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/auth/accounts" || pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/places/search" || pathname === "/api/animals" || pathname === "/api/gosalas" || pathname === "/api/debug/email-status");
+  const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/auth/accounts" || pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/places/search" || pathname === "/api/animals" || pathname === "/api/gosalas" || pathname === "/api/vets" || pathname === "/api/debug/email-status");
   if (!isPublicRoute && !authUser) {
     return { status: 401, body: { ok: false, error: "Authentication required" } };
   }
@@ -5913,35 +5955,34 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       let finalAnimals = mapped;
       if (authUser?.role === "manager") {
         const allowedGosalas = (authUser.gosalaNames || []).map((s) => s.toLowerCase().trim());
-        finalAnimals = finalAnimals.filter((a) => {
-          const gName = (a.gosala || "").toLowerCase().trim();
-          return allowedGosalas.includes(gName);
-        });
-      } else if (authUser?.role === "admin") {
-        if (authUser.gosalaNames && authUser.gosalaNames.length > 0) {
-          const allowedGosalas = authUser.gosalaNames.map((s) => s.toLowerCase().trim());
+        if (allowedGosalas.length > 0) {
           finalAnimals = finalAnimals.filter((a) => {
             const gName = (a.gosala || "").toLowerCase().trim();
             return allowedGosalas.includes(gName);
           });
-        } else if (authUser.name) {
-          const adminNameLower = authUser.name.toLowerCase();
+        }
+      } else if (authUser?.role === "admin") {
+        const adminEmail = (authUser.email || "").toLowerCase();
+        const adminName = (authUser.name || "").toLowerCase();
+        const adminId = authUser.userId || "";
+        const myGosalaNames = authUser.gosalaNames && authUser.gosalaNames.length > 0 ? authUser.gosalaNames.map((s) => s.toLowerCase().trim()) : (await prisma.gosala.findMany({ where: { isActive: true } })).filter((g) => {
+          const meta = getGosalaMeta(g.id, g.name);
+          const gEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase();
+          const gName = (g.adminName || meta.governingAdminName || meta.adminName || "").toLowerCase();
+          return g.adminId === adminId || gEmail && gEmail === adminEmail || gName && gName.includes(adminName);
+        }).map((g) => g.name.toLowerCase().trim());
+        if (myGosalaNames.length > 0) {
           finalAnimals = finalAnimals.filter((a) => {
-            const meta = getGosalaMeta(a.gosalaId || "", a.gosala || "");
-            const gov = meta.governingAdminName || meta.adminName;
-            if (gov && gov.toLowerCase().includes(adminNameLower)) return true;
-            return meta.governingAdminRole === "admin";
+            const gName = (a.gosala || "").toLowerCase().trim();
+            return myGosalaNames.includes(gName);
           });
         }
       } else if (authUser?.role === "super_admin") {
-        if (query.get("scope") !== "all" && query.get("all") !== "true") {
-          const saNameLower = (authUser.name || "Koushik").toLowerCase();
-          finalAnimals = finalAnimals.filter((a) => {
-            const meta = getGosalaMeta(a.gosalaId || "", a.gosala || "");
-            const gov = meta.governingAdminName || meta.adminName;
-            if (gov && gov.toLowerCase().includes(saNameLower)) return true;
-            return meta.governingAdminRole === "super_admin";
-          });
+        const filterGosala = query.get("gosala") || query.get("shelter");
+        if (filterGosala && filterGosala !== "All" && filterGosala !== "ALL") {
+          finalAnimals = finalAnimals.filter(
+            (a) => (a.gosala || "").toLowerCase() === filterGosala.toLowerCase()
+          );
         }
       }
       return { status: 200, body: { ok: true, animals: finalAnimals } };

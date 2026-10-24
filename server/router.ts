@@ -53,7 +53,45 @@ type HandlerResponse = {
 
 const driverLiveLocations = new Map<string, any>()
 const serverAnimals = new Map<string, any>()
-const serverVets = new Map<string, any>()
+const defaultEmpanelledVets = [
+  {
+    id: "VET-001",
+    name: "Dr. Anand Kulkarni",
+    qualification: "B.V.Sc & A.H., M.V.Sc (Bovine Surgery)",
+    regNo: "TS-VET-4821",
+    clinic: "Govt. Veterinary Polyclinic & Cattle Hospital",
+    phone: "+91 98220 54321",
+    address: "Road No. 10, Banjara Hills, Hyderabad, Telangana 500034",
+    specialization: "Bovine Health, Vaccination & Ultrasound",
+    emergency24x7: true,
+    assignedGosalas: ["Gaushala_01", "Gaushala_02", "All Gaushalas"],
+  },
+  {
+    id: "VET-002",
+    name: "Dr. Lakshmi Narayana",
+    qualification: "B.V.Sc & A.H. (Gold Medalist)",
+    regNo: "TS-VET-5190",
+    clinic: "Sri Krishna Bovine Welfare Clinic",
+    phone: "+91 98490 11223",
+    address: "Trimulgherry, Secunderabad, Telangana 500015",
+    specialization: "Indigenous Cattle Gynaecology & Lactation Care",
+    emergency24x7: true,
+    assignedGosalas: ["Gaushala_03", "All Gaushalas"],
+  },
+  {
+    id: "VET-003",
+    name: "Dr. Rajeshwar Rao",
+    qualification: "B.V.Sc, Ph.D (Animal Nutrition)",
+    regNo: "TS-VET-6204",
+    clinic: "Deccan Veterinary Emergency Care Center",
+    phone: "+91 98330 99887",
+    address: "Gachibowli Financial District, Hyderabad 500032",
+    specialization: "Emergency Trauma, Hoof Care & Pasture Toxicology",
+    emergency24x7: true,
+    assignedGosalas: ["Gaushala_02", "Gaushala_01", "All Gaushalas"],
+  },
+]
+const serverVets = new Map<string, any>(defaultEmpanelledVets.map(v => [v.id, v]))
 
 const serverProfiles: Record<string, any> = {
   customer: {
@@ -517,6 +555,7 @@ export async function handleApiRequest(
       pathname === "/api/places/search" ||
       pathname === "/api/animals" ||
       pathname === "/api/gosalas" ||
+      pathname === "/api/vets" ||
       pathname === "/api/debug/email-status"
     ))
   if (!isPublicRoute && !authUser) {
@@ -3687,36 +3726,40 @@ export async function handleApiRequest(
       let finalAnimals = mapped
       if (authUser?.role === "manager") {
         const allowedGosalas = (authUser.gosalaNames || []).map((s: string) => s.toLowerCase().trim())
-        finalAnimals = finalAnimals.filter((a: any) => {
-          const gName = (a.gosala || "").toLowerCase().trim()
-          return allowedGosalas.includes(gName)
-        })
-      } else if (authUser?.role === "admin") {
-        if (authUser.gosalaNames && authUser.gosalaNames.length > 0) {
-          const allowedGosalas = authUser.gosalaNames.map((s: string) => s.toLowerCase().trim())
+        if (allowedGosalas.length > 0) {
           finalAnimals = finalAnimals.filter((a: any) => {
             const gName = (a.gosala || "").toLowerCase().trim()
             return allowedGosalas.includes(gName)
           })
-        } else if (authUser.name) {
-          const adminNameLower = authUser.name.toLowerCase()
-          // Only include animals belonging to Gaushalas governed by this admin
+        }
+      } else if (authUser?.role === "admin") {
+        const adminEmail = (authUser.email || "").toLowerCase()
+        const adminName = (authUser.name || "").toLowerCase()
+        const adminId = authUser.userId || ""
+
+        const myGosalaNames = (authUser.gosalaNames && authUser.gosalaNames.length > 0)
+          ? authUser.gosalaNames.map((s: string) => s.toLowerCase().trim())
+          : (await prisma.gosala.findMany({ where: { isActive: true } }))
+              .filter((g: any) => {
+                const meta = getGosalaMeta(g.id, g.name)
+                const gEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase()
+                const gName = (g.adminName || meta.governingAdminName || meta.adminName || "").toLowerCase()
+                return (g.adminId === adminId) || (gEmail && gEmail === adminEmail) || (gName && gName.includes(adminName))
+              })
+              .map((g: any) => g.name.toLowerCase().trim())
+
+        if (myGosalaNames.length > 0) {
           finalAnimals = finalAnimals.filter((a: any) => {
-            const meta = getGosalaMeta(a.gosalaId || "", a.gosala || "")
-            const gov = meta.governingAdminName || meta.adminName
-            if (gov && gov.toLowerCase().includes(adminNameLower)) return true
-            return meta.governingAdminRole === "admin"
+            const gName = (a.gosala || "").toLowerCase().trim()
+            return myGosalaNames.includes(gName)
           })
         }
       } else if (authUser?.role === "super_admin") {
-        if (query.get("scope") !== "all" && query.get("all") !== "true") {
-          const saNameLower = (authUser.name || "Koushik").toLowerCase()
-          finalAnimals = finalAnimals.filter((a: any) => {
-            const meta = getGosalaMeta(a.gosalaId || "", a.gosala || "")
-            const gov = meta.governingAdminName || meta.adminName
-            if (gov && gov.toLowerCase().includes(saNameLower)) return true
-            return meta.governingAdminRole === "super_admin"
-          })
+        const filterGosala = query.get("gosala") || query.get("shelter")
+        if (filterGosala && filterGosala !== "All" && filterGosala !== "ALL") {
+          finalAnimals = finalAnimals.filter((a: any) =>
+            (a.gosala || "").toLowerCase() === filterGosala.toLowerCase()
+          )
         }
       }
 

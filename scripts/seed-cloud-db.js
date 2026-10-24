@@ -71,24 +71,45 @@ async function seed() {
       }
     }
 
-    // 3. Ensure test devotee account devpulseorg@gmail.com is aligned with phone
+    // 3. Ensure test devotee accounts devpulseorg@gmail.com and devpusleorg@gmail.com exist
     try {
-      const devPulse = await prisma.user.findFirst({
-        where: { email: { equals: "devpulseorg@gmail.com", mode: "insensitive" } },
-      })
-      if (devPulse) {
-        await prisma.user.update({
-          where: { id: devPulse.id },
-          data: {
-            name: "test-01",
-            phone: "+91 7780740223",
-            isActive: true,
-            ...(!devPulse.password ? { password: hashPassword("Koushik.git") } : {}),
-          },
+      const devoteesToSeed = [
+        { email: "devpulseorg@gmail.com", phone: "+91 7780740223", name: "Devotee (devpulseorg)" },
+        { email: "devpusleorg@gmail.com", phone: "+91 7780740224", name: "Devotee (devpusleorg)" },
+      ]
+      for (const d of devoteesToSeed) {
+        const existing = await prisma.user.findFirst({
+          where: { email: { equals: d.email, mode: "insensitive" } },
         })
-        console.log("[Seed] devpulseorg@gmail.com verified with phone +91 7780740223")
+        if (existing) {
+          await prisma.user.update({
+            where: { id: existing.id },
+            data: {
+              name: d.name,
+              phone: d.phone,
+              role: "CUSTOMER",
+              isActive: true,
+              password: hashPassword("Koushik.git"),
+            },
+          })
+          console.log(`[Seed] Devotee ${d.email} re-verified with phone ${d.phone}`)
+        } else {
+          await prisma.user.create({
+            data: {
+              name: d.name,
+              email: d.email,
+              phone: d.phone,
+              role: "CUSTOMER",
+              isActive: true,
+              password: hashPassword("Koushik.git"),
+            },
+          })
+          console.log(`[Seed] Devotee ${d.email} created with password Koushik.git`)
+        }
       }
-    } catch {}
+    } catch (e) {
+      console.warn("[Seed] Devotee error:", e.message)
+    }
 
     // 4. Ensure Operations Admins exist with verified passwords
     const operationsAdmins = [
@@ -305,6 +326,144 @@ async function seed() {
             status: "Active",
           },
         })
+      }
+    }
+
+    // 7. Seed Sacred Cattle Herd across Gaushalas
+    const sacredHerdData = [
+      {
+        gosalaName: "Gaushala_01",
+        name: "Surabhi",
+        type: "COW",
+        breed: "Indigenous Gir Cow",
+        ageYears: 4,
+        healthStatus: "HEALTHY",
+        price: 3500,
+      },
+      {
+        gosalaName: "Gaushala_01",
+        name: "Nandini",
+        type: "COW",
+        breed: "Sahiwal Sacred Cow",
+        ageYears: 5,
+        healthStatus: "HEALTHY",
+        price: 3500,
+      },
+      {
+        gosalaName: "Gaushala_01",
+        name: "Gauri & Ganga",
+        type: "COW_AND_CALF",
+        breed: "Gir Mother Cow & Calf Pair",
+        ageYears: 4,
+        healthStatus: "HEALTHY",
+        price: 4800,
+      },
+      {
+        gosalaName: "Gaushala_01",
+        name: "Balarama",
+        type: "BULL",
+        breed: "Hallikar Nandi Bull",
+        ageYears: 6,
+        healthStatus: "HEALTHY",
+        price: 4000,
+      },
+      {
+        gosalaName: "Gaushala_01",
+        name: "Gopala",
+        type: "CALF",
+        breed: "Young Gir Calf",
+        ageYears: 1,
+        healthStatus: "HEALTHY",
+        price: 2500,
+      },
+      {
+        gosalaName: "Gaushala_02",
+        name: "Kapila",
+        type: "COW",
+        breed: "Indigenous Tharparkar",
+        ageYears: 5,
+        healthStatus: "HEALTHY",
+        price: 3500,
+      },
+      {
+        gosalaName: "Gaushala_02",
+        name: "Shyama",
+        type: "BUFFALO",
+        breed: "Murrah Sacred Buffalo",
+        ageYears: 5,
+        healthStatus: "HEALTHY",
+        price: 3800,
+      },
+      {
+        gosalaName: "Gaushala_02",
+        name: "Dharma",
+        type: "BULL",
+        breed: "Deoni Nandi Bull",
+        ageYears: 4,
+        healthStatus: "HEALTHY",
+        price: 4000,
+      },
+      {
+        gosalaName: "Gaushala_03",
+        name: "Kalyani",
+        type: "COW",
+        breed: "Purebred Kankrej Cow",
+        ageYears: 6,
+        healthStatus: "HEALTHY",
+        price: 3500,
+      },
+      {
+        gosalaName: "Gaushala_03",
+        name: "Radha & Kanha",
+        type: "COW_AND_CALF",
+        breed: "Sahiwal Mother & Calf Pair",
+        ageYears: 5,
+        healthStatus: "HEALTHY",
+        price: 4800,
+      },
+      {
+        gosalaName: "Gaushala_03",
+        name: "Keshav",
+        type: "CALF",
+        breed: "Punganur Dwarf Calf",
+        ageYears: 1,
+        healthStatus: "HEALTHY",
+        price: 2500,
+      },
+    ]
+
+    for (const aDef of sacredHerdData) {
+      const g = await prisma.gosala.findFirst({
+        where: { name: { equals: aDef.gosalaName, mode: "insensitive" } },
+      })
+      if (g) {
+        await prisma.animal.upsert({
+          where: {
+            gosalaId_name: {
+              gosalaId: g.id,
+              name: aDef.name,
+            },
+          },
+          create: {
+            gosalaId: g.id,
+            name: aDef.name,
+            type: aDef.type,
+            breed: aDef.breed,
+            ageYears: aDef.ageYears,
+            healthStatus: aDef.healthStatus,
+            price: aDef.price,
+            isActive: true,
+          },
+          update: {
+            type: aDef.type,
+            breed: aDef.breed,
+            ageYears: aDef.ageYears,
+            healthStatus: aDef.healthStatus,
+            price: aDef.price,
+            isActive: true,
+          },
+        })
+        console.log(`[Seed] Synchronized Sacred Cattle: ${aDef.name} (${aDef.breed}) at ${aDef.gosalaName}`)
       }
     }
   } catch (err) {
