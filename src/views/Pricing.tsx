@@ -18,6 +18,7 @@ import {
   Edit2,
   Edit3,
   Save,
+  Lock,
   Trash2,
   Store,
   PawPrint,
@@ -112,6 +113,8 @@ export default function Pricing({
     profiles,
   } = useStore()
   const isSuperAdmin = currentRole === "super_admin"
+  // Gaushala offerings and add-ons are strictly managed by the Gaushala-specified Manager and Operations Admin
+  const canManageOfferings = !isSuperAdmin && (currentRole === "admin" || currentRole === "manager")
 
   // Active sector: "global" (Master Pricing) vs "gosalas" (Individual Gaushala Offerings) vs "commissions" (Gaushala Commission & Economics Settlement Module)
   const [sector, setSector] = useState<"global" | "gosalas" | "commissions">(
@@ -567,7 +570,12 @@ export default function Pricing({
   }
 
   const handleSaveItem = () => {
-    if (!isSuperAdmin || !activeGosala) return
+    if (!canManageOfferings || !activeGosala) {
+      if (isSuperAdmin) {
+        notify("Gaushala offerings & add-ons are managed by the assigned Gaushala Manager and Operations Admin", "info")
+      }
+      return
+    }
     if (!itemName.trim()) {
       notify("Please provide a name for the offering item", "warn")
       return
@@ -612,7 +620,12 @@ export default function Pricing({
   }
 
   const handleToggleStock = (it: GosalaOfferingItem) => {
-    if (!isSuperAdmin || !activeGosala) return
+    if (!canManageOfferings || !activeGosala) {
+      if (isSuperAdmin) {
+        notify("Offering restock rights are reserved for the assigned Gaushala Manager and Operations Admin", "info")
+      }
+      return
+    }
     const currentList = activeGosala.items && activeGosala.items.length > 0
       ? activeGosala.items
       : DEFAULT_GOSALA_OFFERINGS
@@ -632,13 +645,18 @@ export default function Pricing({
   const [itemToDelete, setItemToDelete] = useState<GosalaOfferingItem | null>(null)
 
   const handleDeleteItem = (it: GosalaOfferingItem) => {
-    if (!isSuperAdmin || !activeGosala) return
+    if (!canManageOfferings || !activeGosala) {
+      if (isSuperAdmin) {
+        notify("Offering deletion rights are reserved for the assigned Gaushala Manager and Operations Admin", "info")
+      }
+      return
+    }
     setItemToDelete(it)
     setDeleteItemModalOpen(true)
   }
 
   const handleConfirmDeleteItem = () => {
-    if (!isSuperAdmin || !activeGosala || !itemToDelete) return
+    if (!canManageOfferings || !activeGosala || !itemToDelete) return
 
     const currentList = activeGosala.items && activeGosala.items.length > 0
       ? activeGosala.items
@@ -2146,14 +2164,18 @@ export default function Pricing({
                   title={`Devotional Store Offerings & Items · ${activeGosala.name}`}
                   desc="Pooja malas, green fodder grass baskets, A2 Gir cow ghee and sacred seva items sold at this shelter"
                   right={
-                    isSuperAdmin ? (
+                    canManageOfferings ? (
                       <button
                         onClick={handleOpenAddItem}
-                        className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-600 to-amber-700 text-white rounded-sm px-3.5 py-1.5 text-[12px] font-medium hover:opacity-90 transition shadow-2xs cursor-pointer"
+                        className="inline-flex items-center gap-1.5 bg-forest text-white rounded-sm px-3.5 py-1.5 text-[12px] font-medium hover:bg-forest-deep transition shadow-2xs cursor-pointer"
                       >
                         <Plus size={13} /> Add New Offering / Item
                       </button>
-                    ) : null
+                    ) : (
+                      <span className="font-mono text-[11px] text-amber-900 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded flex items-center gap-1.5 font-medium">
+                        <Lock size={12} className="text-amber-700" /> Managed by Gaushala Manager &amp; Operations Admin (Read-Only)
+                      </span>
+                    )
                   }
                 />
 
@@ -2206,11 +2228,11 @@ export default function Pricing({
                               </span>
                             </div>
 
-                            {isSuperAdmin ? (
+                            {canManageOfferings ? (
                               <div className="flex items-center gap-1.5">
                                 <button
                                   onClick={() => handleToggleStock(item)}
-                                  title={item.inStock ? "Mark as Out of Stock" : "Mark as In Stock"}
+                                  title={item.inStock ? "Mark as Out of Stock" : "Restock Item (Mark In Stock)"}
                                   className={`p-1.5 rounded transition cursor-pointer text-[11px] ${
                                     item.inStock
                                       ? "text-emerald-700 hover:bg-emerald-50"
@@ -2236,7 +2258,7 @@ export default function Pricing({
                               </div>
                             ) : (
                               <span className="text-[11px] text-ink-faint italic font-mono">
-                                Read Only
+                                Custodian Store Item · Read Only
                               </span>
                             )}
                           </div>

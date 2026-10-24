@@ -424,6 +424,12 @@ export default function App() {
   }
 
   const handleSetAdminView = (v: View, targetSector?: "global" | "gosalas" | "commissions") => {
+    if (auth === "super_admin" && v === "tracking") {
+      notify("Live fleet GPS tracking is restricted to Operations Admin to conserve network bandwidth.", "warn")
+      setView("overview")
+      window.location.hash = "#super_admin/overview"
+      return
+    }
     setView(v)
     if (v === "pricing" && targetSector) {
       setPricingSector(targetSector)
@@ -484,6 +490,11 @@ export default function App() {
             window.location.hash = `#${auth}`
           }
         }
+        if (auth === "super_admin" && view === "tracking") {
+          setView("overview")
+          localStorage.setItem("gomaa_admin_view", "overview")
+          window.location.hash = "#super_admin/overview"
+        }
       } else {
         localStorage.setItem("gomaa_auth_role", "login")
         window.location.hash = "#login"
@@ -521,6 +532,12 @@ export default function App() {
           subview &&
           VALID_ADMIN_VIEWS.includes(subview as View)
         ) {
+          if (role === "super_admin" && subview === "tracking") {
+            setView("overview")
+            localStorage.setItem("gomaa_admin_view", "overview")
+            window.location.hash = "#super_admin/overview"
+            return
+          }
           setView(subview as View)
           localStorage.setItem("gomaa_admin_view", subview)
           if (subview === "pricing") {

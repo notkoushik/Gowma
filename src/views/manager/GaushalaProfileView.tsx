@@ -35,11 +35,18 @@ import {
   UserPlus,
   Tag,
   Wrench,
+  PackageCheck,
+  Store,
+  Lock,
 } from "lucide-react"
+import { inr } from "../../data/mock"
 import {
   type Gosala,
   type GosalaStaff,
   type GosalaCustomDetail,
+  type GosalaOfferingItem,
+  type GosalaOfferingCategory,
+  DEFAULT_GOSALA_OFFERINGS,
   GOSALA_FACILITY_OPTIONS,
   GOSALA_CUSTOM_DETAIL_SUGGESTIONS,
   GOSALA_PHOTO_PRESETS,
@@ -56,7 +63,37 @@ interface GaushalaProfileViewProps {
   onViewAnimalWelfare?: (animalName: string) => void
 }
 
-type ProfileTab = "overview" | "herd" | "gallery" | "team" | "bookings"
+type ProfileTab = "overview" | "offerings" | "herd" | "gallery" | "team" | "bookings"
+
+const OFFERING_CATEGORY_THEMES: Record<
+  GosalaOfferingCategory,
+  { label: string; bg: string; border: string; text: string }
+> = {
+  puja: {
+    label: "Puja Samagri",
+    bg: "bg-amber-50",
+    border: "border-amber-200",
+    text: "text-amber-800",
+  },
+  feed: {
+    label: "Cattle Fodder & Feed",
+    bg: "bg-emerald-50",
+    border: "border-emerald-200",
+    text: "text-emerald-800",
+  },
+  prasadam: {
+    label: "A2 Ghee & Prasadam",
+    bg: "bg-purple-50",
+    border: "border-purple-200",
+    text: "text-purple-800",
+  },
+  decoration: {
+    label: "Vedic Vastra & Decor",
+    bg: "bg-sky-50",
+    border: "border-sky-200",
+    text: "text-sky-800",
+  },
+}
 
 const BREED_PRESETS = [
   "Gir Cow",
@@ -94,7 +131,7 @@ export default function GaushalaProfileView({
   onRegisterCow,
   onViewAnimalWelfare,
 }: GaushalaProfileViewProps) {
-  const { animals, vets, bookings, updateGosala, addAnimal, updateVet } = useStore()
+  const { authUser, currentRole, animals, vets, bookings, updateGosala, addAnimal, updateVet } = useStore()
   const { notify } = useToast()
 
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview")
@@ -102,6 +139,155 @@ export default function GaushalaProfileView({
   const [isLightboxOpen, setIsLightboxOpen] = useState(false)
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const [herdSearchQuery, setHerdSearchQuery] = useState("")
+
+  // Offerings computed list
+  const gosalaOfferings: GosalaOfferingItem[] = useMemo(() => {
+    if (gosala.items && gosala.items.length > 0) {
+      return gosala.items
+    }
+    return DEFAULT_GOSALA_OFFERINGS
+  }, [gosala.items])
+
+  // Permissions: Gaushala-Specified Manager OR Operations Admin can manage offerings.
+  // Super Admin is strictly Read-Only.
+  const isSuperAdmin = currentRole === "super_admin" || authUser?.role === "super_admin"
+  const isOperationsAdmin = currentRole === "admin" || authUser?.role === "admin" || (authUser as any)?.dbRole === "OPERATIONS_ADMIN"
+  const isAssignedManager = 
+    currentRole === "manager" ||
+    authUser?.role === "manager" ||
+    (authUser as any)?.dbRole === "GOSALA_MANAGER" ||
+    gosala.managerId === authUser?.id ||
+    gosala.managerName?.toLowerCase() === authUser?.name?.toLowerCase() ||
+    Boolean(gosala.assignedManagers?.some((m) => m.id === authUser?.id || m.email === authUser?.email))
+
+  const canManageOfferings = !isSuperAdmin && (isAssignedManager || isOperationsAdmin)
+
+  // --- Modal States for Offerings & Add-ons (Manager & Ops Admin Governance) ---
+  const [showOfferingModal, setShowOfferingModal] = useState(false)
+  const [editingOfferingId, setEditingOfferingId] = useState<string | null>(null)
+  const [offeringName, setOfferingName] = useState("")
+  const [offeringCategory, setOfferingCategory] = useState<GosalaOfferingCategory>("puja")
+  const [offeringPrice, setOfferingPrice] = useState<number>(150)
+  const [offeringDesc, setOfferingDesc] = useState("")
+  const [offeringMaxQty, setOfferingMaxQty] = useState<number>(5)
+  const [offeringInStock, setOfferingInStock] = useState<boolean>(true)
+
+  const [showDeleteOfferingModal, setShowDeleteOfferingModal] = useState(false)
+  const [offeringToDelete, setOfferingToDelete] = useState<GosalaOfferingItem | null>(null)
+
+  const handleOpenAddOffering = () => {
+    if (!canManageOfferings) {
+      notify("Offerings can only be added by the assigned Gaushala Manager or Operations Admin", "warn")
+      return
+    }
+    setEditingOfferingId(null)
+    setOfferingName("")
+    setOfferingCategory("puja")
+    setOfferingPrice(150)
+    setOfferingDesc("")
+    setOfferingMaxQty(5)
+    setOfferingInStock(true)
+    setShowOfferingModal(true)
+  }
+
+  const handleOpenEditOffering = (it: GosalaOfferingItem) => {
+    if (!canManageOfferings) {
+      notify("Offerings can only be edited by the assigned Gaushala Manager or Operations Admin", "warn")
+      return
+    }
+    setEditingOfferingId(it.id)
+    setOfferingName(it.name)
+    setOfferingCategory(it.category)
+    setOfferingPrice(it.price)
+    setOfferingDesc(it.desc)
+    setOfferingMaxQty(it.maxQty || 5)
+    setOfferingInStock(it.inStock)
+    setShowOfferingModal(true)
+  }
+
+  const handleSaveOffering = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!canManageOfferings) return
+    if (!offeringName.trim()) {
+      notify("Offering item name is required", "warn")
+      return
+    }
+
+    const currentList = gosala.items && gosala.items.length > 0
+      ? gosala.items
+      : DEFAULT_GOSALA_OFFERINGS
+
+    let updatedList: GosalaOfferingItem[] = []
+    if (editingOfferingId) {
+      updatedList = currentList.map((it) =>
+        it.id === editingOfferingId
+          ? {
+              ...it,
+              name: offeringName.trim(),
+              category: offeringCategory,
+              price: Number(offeringPrice) || 0,
+              desc: offeringDesc.trim() || "Devotional offering item",
+              maxQty: Number(offeringMaxQty) || 5,
+              inStock: offeringInStock,
+            }
+          : it,
+      )
+      notify(`Updated offering "${offeringName.trim()}" for ${gosala.name}`, "ok")
+    } else {
+      const newItem: GosalaOfferingItem = {
+        id: `item-${Date.now()}`,
+        name: offeringName.trim(),
+        category: offeringCategory,
+        price: Number(offeringPrice) || 0,
+        desc: offeringDesc.trim() || "Devotional offering item",
+        maxQty: Number(offeringMaxQty) || 5,
+        inStock: offeringInStock,
+      }
+      updatedList = [newItem, ...currentList]
+      notify(`Added offering "${offeringName.trim()}" to ${gosala.name}`, "ok")
+    }
+
+    updateGosala(gosala.id, { items: updatedList })
+    setShowOfferingModal(false)
+  }
+
+  const handleToggleOfferingStock = (it: GosalaOfferingItem) => {
+    if (!canManageOfferings) {
+      notify("Stock restock rights are reserved for the Gaushala Manager & Operations Admin", "warn")
+      return
+    }
+    const currentList = gosala.items && gosala.items.length > 0
+      ? gosala.items
+      : DEFAULT_GOSALA_OFFERINGS
+
+    const updatedList = currentList.map((item) =>
+      item.id === it.id ? { ...item, inStock: !item.inStock } : item,
+    )
+    updateGosala(gosala.id, { items: updatedList })
+    notify(
+      `${it.name} is now ${!it.inStock ? "IN STOCK" : "OUT OF STOCK"} at ${gosala.name}`,
+      "ok",
+    )
+  }
+
+  const handleDeleteOffering = (it: GosalaOfferingItem) => {
+    if (!canManageOfferings) return
+    setOfferingToDelete(it)
+    setShowDeleteOfferingModal(true)
+  }
+
+  const handleConfirmDeleteOffering = () => {
+    if (!canManageOfferings || !offeringToDelete) return
+    const currentList = gosala.items && gosala.items.length > 0
+      ? gosala.items
+      : DEFAULT_GOSALA_OFFERINGS
+
+    const updatedList = currentList.filter((item) => item.id !== offeringToDelete.id)
+    updateGosala(gosala.id, { items: updatedList })
+    notify(`Removed "${offeringToDelete.name}" from ${gosala.name}`, "ok")
+    setShowDeleteOfferingModal(false)
+    setOfferingToDelete(null)
+  }
 
   // --- Modal States for Adding / Editing Details ---
   const [showAddCustomDetailModal, setShowAddCustomDetailModal] = useState(false)
@@ -877,6 +1063,11 @@ export default function GaushalaProfileView({
         {[
           { id: "overview", label: "Overview & Facilities", icon: Building2 },
           {
+            id: "offerings",
+            label: `Sacred Offerings & Store (${gosalaOfferings.length})`,
+            icon: Tag,
+          },
+          {
             id: "herd",
             label: `Resident Cattle (${residentCount})`,
             icon: PawPrint,
@@ -1191,6 +1382,231 @@ export default function GaushalaProfileView({
                 </div>
               </div>
             </div>
+
+            {/* Quick Offerings & Store Preview Banner */}
+            <div className="bg-gradient-to-r from-amber-500/10 via-saffron-soft/30 to-forest-soft/20 border border-amber-500/20 rounded-lg p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                    <Tag size={15} />
+                  </span>
+                  <h4 className="font-serif text-[15px] font-semibold text-ink">
+                    Sacred Offerings & Seva Store ({gosalaOfferings.length} Add-ons)
+                  </h4>
+                </div>
+                <p className="text-[12px] text-ink-soft">
+                  {gosalaOfferings.filter((o) => o.inStock).length} of {gosalaOfferings.length} items currently in stock. Devotees select these add-ons when booking cattle pujas.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab("offerings")}
+                className="px-3.5 py-2 rounded-lg bg-card border border-line hover:border-forest text-ink text-[12px] font-medium transition inline-flex items-center gap-1.5 shadow-xs cursor-pointer hover:text-forest shrink-0"
+              >
+                <Store size={13} className="text-forest" />
+                <span>Manage & Restock Offerings</span>
+                <ChevronRight size={13} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: SACRED OFFERINGS & DEVOTIONAL ADD-ONS */}
+        {activeTab === "offerings" && (
+          <div className="space-y-5 animate-fade-in">
+            {/* Header Strip */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-line">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-serif text-[17px] text-ink font-semibold flex items-center gap-2">
+                    <Tag size={18} className="text-forest" />
+                    <span>Sacred Offerings & Devotional Add-ons ({gosalaOfferings.length})</span>
+                  </h3>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-forest-soft text-forest font-semibold uppercase">
+                    Gaushala Store
+                  </span>
+                </div>
+                <p className="text-[11.5px] text-ink-faint mt-1">
+                  Manage puja samagri, cattle fodder, A2 ghee, and sacred vastra that devotees can add to their bookings for {gosala.name}.
+                </p>
+              </div>
+
+              <div>
+                {canManageOfferings ? (
+                  <button
+                    type="button"
+                    onClick={handleOpenAddOffering}
+                    className="px-3.5 py-2 rounded-lg bg-forest hover:bg-forest-deep text-white text-[12px] font-medium transition inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <Plus size={14} />
+                    <span>+ Add New Offering / Add-on</span>
+                  </button>
+                ) : (
+                  <span className="px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11.5px] font-medium border border-amber-500/20 inline-flex items-center gap-1.5 shadow-xs">
+                    <Lock size={13} />
+                    <span>Managed by Gaushala Manager & Operations Admin (Read-Only)</span>
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Quick Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-paper border border-line rounded-lg p-3">
+                <span className="text-[11px] font-mono text-ink-faint uppercase">Total Add-ons</span>
+                <div className="font-serif text-[18px] font-bold text-ink mt-0.5">
+                  {gosalaOfferings.length}
+                </div>
+                <div className="text-[10.5px] text-ink-soft">Configured catalog</div>
+              </div>
+              <div className="bg-paper border border-line rounded-lg p-3">
+                <span className="text-[11px] font-mono text-ink-faint uppercase">In Stock (Active)</span>
+                <div className="font-serif text-[18px] font-bold text-ok mt-0.5">
+                  {gosalaOfferings.filter((o) => o.inStock).length}
+                </div>
+                <div className="text-[10.5px] text-ok font-medium">Ready for bookings</div>
+              </div>
+              <div className="bg-paper border border-line rounded-lg p-3">
+                <span className="text-[11px] font-mono text-ink-faint uppercase">Out of Stock</span>
+                <div className="font-serif text-[18px] font-bold text-ink-faint mt-0.5">
+                  {gosalaOfferings.filter((o) => !o.inStock).length}
+                </div>
+                <div className="text-[10.5px] text-ink-faint">Needs restock toggle</div>
+              </div>
+              <div className="bg-paper border border-line rounded-lg p-3">
+                <span className="text-[11px] font-mono text-ink-faint uppercase">Sanctuary Steward</span>
+                <div className="font-serif text-[14px] font-bold text-forest truncate mt-0.5">
+                  {gosala.managerName || "Assigned Manager"}
+                </div>
+                <div className="text-[10.5px] text-ink-faint truncate">Inventory Rights Assigned</div>
+              </div>
+            </div>
+
+            {/* Offerings Grid */}
+            {gosalaOfferings.length === 0 ? (
+              <div className="p-8 rounded-lg border border-dashed border-line text-center bg-paper/20">
+                <Tag size={28} className="text-ink-faint mx-auto mb-2" />
+                <h4 className="font-serif text-[15px] font-semibold text-ink">No Offerings Added Yet</h4>
+                <p className="text-[12px] text-ink-faint mt-1 max-w-md mx-auto">
+                  Add sacred puja samagri, green fodder bundles, or pure A2 ghee jars for devotees booking visits to this gaushala.
+                </p>
+                {canManageOfferings && (
+                  <button
+                    type="button"
+                    onClick={handleOpenAddOffering}
+                    className="mt-3 px-3.5 py-1.5 rounded-lg bg-forest text-white text-[12px] font-medium hover:bg-forest-deep transition inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Plus size={13} />
+                    <span>Add First Sacred Offering</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {gosalaOfferings.map((it) => {
+                  const theme = OFFERING_CATEGORY_THEMES[it.category] || OFFERING_CATEGORY_THEMES.puja
+                  return (
+                    <div
+                      key={it.id}
+                      className={`border rounded-xl p-4 transition flex flex-col justify-between ${
+                        it.inStock
+                          ? "bg-card border-line hover:border-forest/40 shadow-xs"
+                          : "bg-paper/40 border-dashed border-line opacity-80"
+                      }`}
+                    >
+                      <div>
+                        {/* Badges Row */}
+                        <div className="flex items-center justify-between gap-2 mb-2.5">
+                          <span
+                            className={`text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full font-semibold border ${theme.bg} ${theme.border} ${theme.text}`}
+                          >
+                            {theme.label}
+                          </span>
+                          <span
+                            className={`text-[10.5px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                              it.inStock
+                                ? "bg-ok/10 text-ok border border-ok/20"
+                                : "bg-danger/10 text-danger border border-danger/20"
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                it.inStock ? "bg-ok" : "bg-danger"
+                              }`}
+                            />
+                            {it.inStock ? "In Stock" : "Out of Stock"}
+                          </span>
+                        </div>
+
+                        {/* Title & Desc */}
+                        <h4 className="font-serif text-[15px] font-bold text-ink leading-tight">
+                          {it.name}
+                        </h4>
+                        <p className="text-[12px] text-ink-soft mt-1 leading-snug line-clamp-2">
+                          {it.desc || "Devotional offering item for cattle seva"}
+                        </p>
+                      </div>
+
+                      {/* Pricing & Controls */}
+                      <div className="mt-4 pt-3 border-t border-line/60">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <span className="text-[10.5px] text-ink-faint block uppercase font-mono">Devotee Price</span>
+                            <span className="font-serif text-[17px] font-bold text-ink font-mono">
+                              {inr(it.price)}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10.5px] text-ink-faint block font-mono">Order Limit</span>
+                            <span className="text-[11.5px] font-medium text-ink font-mono">
+                              Max {it.maxQty || 5} per booking
+                            </span>
+                          </div>
+                        </div>
+
+                        {canManageOfferings ? (
+                          <div className="flex items-center justify-between gap-1.5 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleOfferingStock(it)}
+                              className={`flex-1 px-2.5 py-1.5 rounded text-[11px] font-medium transition inline-flex items-center justify-center gap-1 cursor-pointer border ${
+                                it.inStock
+                                  ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 hover:bg-amber-500/20"
+                                  : "bg-forest-soft text-forest border-forest/30 hover:bg-forest/20 font-semibold"
+                              }`}
+                            >
+                              <PackageCheck size={12} />
+                              <span>{it.inStock ? "Mark Out of Stock" : "Restock (Mark In-Stock)"}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditOffering(it)}
+                              className="px-2.5 py-1.5 rounded border border-line bg-card hover:bg-paper text-ink text-[11px] font-medium transition inline-flex items-center gap-1 cursor-pointer"
+                              title="Edit item details"
+                            >
+                              <Edit3 size={11} />
+                              <span>Edit</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteOffering(it)}
+                              className="p-1.5 rounded border border-line bg-card hover:bg-danger/10 hover:text-danger text-ink-faint transition cursor-pointer"
+                              title="Delete offering"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="text-[10.5px] text-ink-faint italic text-center py-1 bg-paper/50 rounded border border-line/40">
+                            🔒 Restocking & edits reserved for Gaushala Manager & Ops Admin
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -2374,6 +2790,179 @@ export default function GaushalaProfileView({
               <span>{gosala.name}</span>
               <span>•</span>
               <span>Photo {activePhotoIdx + 1} of {photos.length}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 9. Modal: Add / Edit Sacred Offering (Manager & Ops Admin) */}
+      {showOfferingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-paper border border-line rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-slide-up">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-line bg-card">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded bg-forest-soft text-forest">
+                  <Tag size={16} />
+                </div>
+                <h3 className="font-serif text-[16px] text-ink font-bold">
+                  {editingOfferingId ? "Edit Sacred Offering" : "Add Sacred Offering / Add-on"}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowOfferingModal(false)}
+                className="p-1 rounded text-ink-faint hover:text-ink cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveOffering} className="p-5 space-y-4">
+              <div>
+                <label className="block text-[11.5px] font-medium text-ink mb-1">
+                  Offering Item Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Navagraha Samidha Bundle, Pure A2 Desi Cow Ghee (500ml)"
+                  value={offeringName}
+                  onChange={(e) => setOfferingName(e.target.value)}
+                  className="w-full bg-paper border border-line focus:border-forest rounded px-3 py-2 text-[13px] text-ink outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11.5px] font-medium text-ink mb-1">
+                    Category *
+                  </label>
+                  <select
+                    value={offeringCategory}
+                    onChange={(e) => setOfferingCategory(e.target.value as GosalaOfferingCategory)}
+                    className="w-full bg-paper border border-line focus:border-forest rounded px-2.5 py-2 text-[12px] text-ink outline-none"
+                  >
+                    <option value="puja">Puja Samagri & Rituals</option>
+                    <option value="fodder">Cattle Fodder & Grass</option>
+                    <option value="ghee">A2 Ghee & Prasadam</option>
+                    <option value="vastra">Vedic Vastra & Decor</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11.5px] font-medium text-ink mb-1">
+                    Price (INR ₹) *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="10"
+                    required
+                    value={offeringPrice}
+                    onChange={(e) => setOfferingPrice(Number(e.target.value))}
+                    className="w-full bg-paper border border-line focus:border-forest rounded px-3 py-2 text-[13px] text-ink font-mono font-semibold outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11.5px] font-medium text-ink mb-1">
+                    Max Allowed Qty / Booking
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    required
+                    value={offeringMaxQty}
+                    onChange={(e) => setOfferingMaxQty(Number(e.target.value))}
+                    className="w-full bg-paper border border-line focus:border-forest rounded px-3 py-2 text-[13px] text-ink font-mono outline-none"
+                  />
+                </div>
+
+                <div className="flex flex-col justify-end">
+                  <label className="flex items-center gap-2 p-2 rounded border border-line bg-card cursor-pointer hover:bg-paper transition">
+                    <input
+                      type="checkbox"
+                      checked={offeringInStock}
+                      onChange={(e) => setOfferingInStock(e.target.checked)}
+                      className="rounded text-forest focus:ring-forest cursor-pointer"
+                    />
+                    <span className="text-[12px] font-medium text-ink">
+                      Item is In-Stock
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11.5px] font-medium text-ink mb-1">
+                  Description / Significance
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Sacred samagri handpicked for Abhishekham and Cow Aarti..."
+                  value={offeringDesc}
+                  onChange={(e) => setOfferingDesc(e.target.value)}
+                  className="w-full bg-paper border border-line focus:border-forest rounded px-3 py-2 text-[12px] text-ink outline-none resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-line">
+                <button
+                  type="button"
+                  onClick={() => setShowOfferingModal(false)}
+                  className="px-3.5 py-1.5 rounded border border-line bg-card text-ink-soft hover:bg-paper text-[12px] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded bg-forest text-white hover:bg-forest-deep text-[12px] font-medium cursor-pointer shadow-xs inline-flex items-center gap-1.5"
+                >
+                  <CheckCircle2 size={13} />
+                  <span>{editingOfferingId ? "Save Changes" : "Create Offering"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 10. Modal: Delete Sacred Offering Confirmation */}
+      {showDeleteOfferingModal && offeringToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-paper border border-line rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-slide-up">
+            <div className="p-5 space-y-3">
+              <div className="flex items-center gap-3 text-danger">
+                <div className="p-2 rounded-full bg-danger/10">
+                  <AlertTriangle size={20} />
+                </div>
+                <h3 className="font-serif text-[16px] text-ink font-bold">
+                  Delete Offering?
+                </h3>
+              </div>
+              <p className="text-[12.5px] text-ink-soft">
+                Are you sure you want to remove <strong className="text-ink">"{offeringToDelete.name}"</strong> from <strong className="text-ink">{gosala.name}</strong>? Devotees will no longer be able to select this add-on.
+              </p>
+              <div className="flex justify-end gap-2 pt-2 border-t border-line">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteOfferingModal(false)}
+                  className="px-3 py-1.5 rounded border border-line bg-card text-ink-soft hover:bg-paper text-[12px] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteOffering}
+                  className="px-3.5 py-1.5 rounded bg-danger text-white hover:bg-danger-deep text-[12px] font-medium cursor-pointer shadow-xs inline-flex items-center gap-1"
+                >
+                  <Trash2 size={12} />
+                  <span>Delete Offering</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
