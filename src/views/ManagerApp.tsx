@@ -195,6 +195,7 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
     setActiveManagerGosala,
     updateProfile,
     pricingConfig,
+    authUser,
   } = useStore()
   const defaultCommPct = pricingConfig?.commissionPct ?? 20
   const defaultGaushalaPct = 100 - defaultCommPct
@@ -206,18 +207,35 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
     return managers.find(
       (m) =>
         m.id === managerProfile.id ||
+        m.id === authUser?.id ||
         (m.email &&
           managerProfile.email &&
           m.email.toLowerCase() === managerProfile.email.toLowerCase()) ||
+        (m.email &&
+          authUser?.email &&
+          m.email.toLowerCase() === authUser.email.toLowerCase()) ||
         (m.name &&
           managerProfile.name &&
-          m.name.toLowerCase() === managerProfile.name.toLowerCase()),
+          m.name.toLowerCase() === managerProfile.name.toLowerCase()) ||
+        (m.name &&
+          authUser?.name &&
+          m.name.toLowerCase() === authUser.name.toLowerCase()),
     )
-  }, [managers, managerProfile])
+  }, [managers, managerProfile, authUser])
 
   // Extract all assigned Gaushalas for this manager
   const assignedGosalaNames = useMemo(() => {
     const list: string[] = []
+
+    // 1. Check verified backend JWT payload session
+    if (authUser?.gosalaNames && Array.isArray(authUser.gosalaNames)) {
+      list.push(...authUser.gosalaNames)
+    }
+    if ((authUser as any)?.assignedGosalaNames && Array.isArray((authUser as any).assignedGosalaNames)) {
+      list.push(...(authUser as any).assignedGosalaNames)
+    }
+
+    // 2. Check matched manager roster record
     if (matchedManager) {
       if (matchedManager.gosalas && matchedManager.gosalas.length > 0) {
         list.push(...matchedManager.gosalas)
@@ -228,11 +246,18 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
         list.push(matchedManager.gosala)
       }
     }
-    // Also check all Gaushalas in network for direct manager link
+
+    // 3. Check activeManagerGosala from store / localStorage
+    if (activeManagerGosala && activeManagerGosala !== "Unassigned") {
+      list.push(activeManagerGosala)
+    }
+
+    // 4. Also check all Gaushalas in network for direct manager link
     for (const g of gosalas) {
       const isDirectManager =
         (g.managerId &&
           (g.managerId === managerProfile.id ||
+            g.managerId === authUser?.id ||
             g.managerId === matchedManager?.id ||
             Boolean((matchedManager as any)?.rawUserId && g.managerId === (matchedManager as any).rawUserId))) ||
         (g.managerName &&
@@ -253,9 +278,11 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
         g.assignedManagers?.some(
           (am) =>
             am.id === managerProfile.id ||
+            am.id === authUser?.id ||
             am.id === matchedManager?.id ||
-            am.name?.toLowerCase() === managerProfile.name.toLowerCase() ||
-            am.email === managerProfile.email,
+            (am.name && managerProfile.name && am.name.toLowerCase() === managerProfile.name.toLowerCase()) ||
+            (am.email && managerProfile.email && am.email.toLowerCase() === managerProfile.email.toLowerCase()) ||
+            (am.email && authUser?.email && am.email.toLowerCase() === authUser.email.toLowerCase()),
         )
       if (
         isDirectManager &&
@@ -278,8 +305,8 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
         list.push(managerProfile.managerData.gosala)
       }
     }
-    return Array.from(new Set(list))
-  }, [matchedManager, gosalas, managerProfile])
+    return Array.from(new Set(list.filter(Boolean)))
+  }, [matchedManager, gosalas, managerProfile, authUser, activeManagerGosala])
 
   // Selected Gaushala state (backed by localStorage and store)
   // Selected Gaushala state (backed by localStorage and store)
