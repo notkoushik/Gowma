@@ -233,13 +233,21 @@ export default function Login({
             status: "Active",
           }
 
+          const serverGosalaNames: string[] =
+            authRes.user.assignedGosalaNames ||
+            authRes.user.gosalaNames ||
+            (Array.isArray(authRes.user.gosalas)
+              ? authRes.user.gosalas.map((g: any) => (typeof g === "string" ? g : g.name))
+              : []) ||
+            []
+
           const gList = resolveManagerGosalas(directManager)
+          const combinedList = Array.from(new Set([...serverGosalaNames, ...gList])).filter(Boolean)
           const targetGosala =
-            authRes.user.assignedGosalaNames?.[0] ||
-            gList[0] ||
+            combinedList[0] ||
             directManager.gosala ||
             gosalas[0]?.name ||
-            ""
+            "Gaushala_01"
 
           const baseManagerData =
             profiles.manager?.managerData || initialProfiles.manager.managerData!
@@ -252,7 +260,7 @@ export default function Login({
               ...baseManagerData,
               managerId: directManager.id || authRes.user.id,
               gosala: targetGosala,
-              assignedGosalas: gList.length > 0 ? gList : [targetGosala],
+              assignedGosalas: combinedList.length > 0 ? combinedList : [targetGosala],
             },
           })
 
