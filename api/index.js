@@ -3302,7 +3302,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   }
   const requireRole = (...roles) => authUser && roles.includes(authUser.role) ? null : { status: 403, body: { ok: false, error: "Insufficient privileges" } };
   if (method === "POST" && pathname === "/api/hold" || method === "POST" && pathname === "/api/hold/release" || method === "POST" && pathname === "/api/bookings") {
-    const denied = requireRole("customer");
+    const denied = requireRole("customer", "admin", "super_admin");
     if (denied) return denied;
   }
   if ((method === "GET" || method === "POST") && pathname === "/api/users") {
@@ -3632,13 +3632,36 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     try {
       hold = await prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM animals WHERE id = ${animal.id} FOR UPDATE`;
-        const existingHold = await tx.temporarySlotHold.findFirst({
-          where: { animalId: animal.id, date: body.date, status: "ACTIVE", expiresAt: { gt: /* @__PURE__ */ new Date() } }
-        });
-        if (existingHold) throw new Error("This slot is already held");
+        if (authUser?.userId) {
+          await tx.temporarySlotHold.updateMany({
+            where: { animalId: animal.id, customerId: authUser.userId, status: "ACTIVE" },
+            data: { status: "RELEASED", releasedAt: /* @__PURE__ */ new Date() }
+          });
+        }
         const holdStart = toMinutes(body.start);
         const holdEnd = holdStart + (Number(body.durationMin) || 60);
-        const bookings = await tx.booking.findMany({ where: { animalId: animal.id, bookingDate: body.date, status: { notIn: ["REJECTED", "CANCELLED"] } } });
+        const otherHolds = await tx.temporarySlotHold.findMany({
+          where: {
+            animalId: animal.id,
+            date: body.date,
+            status: "ACTIVE",
+            expiresAt: { gt: /* @__PURE__ */ new Date() },
+            ...authUser?.userId ? { customerId: { not: authUser.userId } } : {}
+          }
+        });
+        const isSlotHeld = otherHolds.some((h) => {
+          const s = toMinutes(h.startTime);
+          const e = s + (h.durationMin || 60);
+          return holdStart < e && holdEnd > s;
+        });
+        if (isSlotHeld) throw new Error("This slot is temporarily held by another devotee");
+        const bookings = await tx.booking.findMany({
+          where: {
+            animalId: animal.id,
+            bookingDate: body.date,
+            status: { notIn: ["REJECTED", "CANCELLED"] }
+          }
+        });
         if (bookings.some((booking) => holdStart < toMinutes(booking.endTime) && holdEnd > toMinutes(booking.startTime))) {
           throw new Error("This slot is already booked");
         }
@@ -3967,7 +3990,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     const b = body.booking;
     if (!b || !b.id)
       return { status: 400, body: { error: "Missing booking payload" } };
-    if (authUser?.role !== "customer") {
+    if (authUser?.role !== "customer" && !["admin", "super_admin"].includes(authUser?.role || "")) {
       return { status: 403, body: { error: "Only customers may create bookings" } };
     }
     const quoteToken = body.quoteToken || b.quoteToken;
@@ -3981,7 +4004,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     if (quote.gosala !== b.gosala || quote.animal !== b.animal || quote.durationMin !== Number(b.durationMin)) {
       return { status: 409, body: { error: "Booking no longer matches the quoted service" } };
     }
-    if (b.customer && b.customer.trim().toLowerCase() !== authUser.name.trim().toLowerCase()) {
+    if (authUser.role === "customer" && b.customer && b.customer.trim().toLowerCase() !== authUser.name.trim().toLowerCase()) {
       return { status: 403, body: { error: "Booking customer does not match authenticated account" } };
     }
     const calculated = calculateBookingPrice({
