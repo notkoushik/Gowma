@@ -324,7 +324,7 @@ export default function EditProfileModal({
         metric1: { label: "Regional Gaushalas Supervised", value: gosalas.length, sub: "Regional Operational Hub" },
         metric2: { label: "Booking Lifecycles Audited", value: bookings.length, sub: "100% SLA Adherence" },
         metric3: { label: "Regional Sacred Cattle Index", value: animals.length, sub: "Empanelled herd" },
-        metric4: { label: "Authority Clearance", value: "OPERATIONS_ADMIN", sub: "Disbursement Officer" },
+        metric4: { label: "Authority Clearance", value: "Operations Admin", sub: "Disbursement Officer" },
       }
     } else if (selectedRole === "super_admin") {
       const grossVolume = settlements.reduce((sum, s) => sum + s.gross, 0)
@@ -332,7 +332,7 @@ export default function EditProfileModal({
         metric1: { label: "Total Platform Volume", value: `₹${grossVolume.toLocaleString("en-IN")}`, sub: "Pan-India Gross Treasury" },
         metric2: { label: "Governed Gaushalas", value: gosalas.length, sub: "AWBI Compliant Network" },
         metric3: { label: "Platform Commission Base", value: `${pricingConfig?.commissionPct || 20}%`, sub: `${100 - (pricingConfig?.commissionPct || 20)}/${pricingConfig?.commissionPct || 20} Trust Split Protocol` },
-        metric4: { label: "Treasury Authority", value: "Level-3 Master Authority", sub: "ICICI Nodal Custody" },
+        metric4: { label: "Treasury Authority", value: "Master Authority", sub: "ICICI Nodal Custody" },
       }
     } else if (selectedRole === "driver") {
       return {
@@ -681,29 +681,46 @@ export default function EditProfileModal({
 
         {/* Live Operational Metrics Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-4 sm:p-5 rounded-xl border border-line bg-card shadow-xs space-y-1">
-            <div className="text-[11.5px] font-mono text-ink-faint uppercase tracking-wider">{roleMetrics.metric1.label}</div>
-            <div className="text-[22px] sm:text-[26px] font-serif font-bold text-ink">{roleMetrics.metric1.value}</div>
-            <div className="text-[11.5px] text-forest font-medium">{roleMetrics.metric1.sub}</div>
-          </div>
-
-          <div className="p-4 sm:p-5 rounded-xl border border-line bg-card shadow-xs space-y-1">
-            <div className="text-[11.5px] font-mono text-ink-faint uppercase tracking-wider">{roleMetrics.metric2.label}</div>
-            <div className="text-[22px] sm:text-[26px] font-serif font-bold text-ink">{roleMetrics.metric2.value}</div>
-            <div className="text-[11.5px] text-ink-soft">{roleMetrics.metric2.sub}</div>
-          </div>
-
-          <div className="p-4 sm:p-5 rounded-xl border border-line bg-card shadow-xs space-y-1">
-            <div className="text-[11.5px] font-mono text-ink-faint uppercase tracking-wider">{roleMetrics.metric3.label}</div>
-            <div className="text-[22px] sm:text-[26px] font-serif font-bold text-ink">{roleMetrics.metric3.value}</div>
-            <div className="text-[11.5px] text-forest font-medium">{roleMetrics.metric3.sub}</div>
-          </div>
-
-          <div className="p-4 sm:p-5 rounded-xl border border-line bg-card shadow-xs space-y-1">
-            <div className="text-[11.5px] font-mono text-ink-faint uppercase tracking-wider">{roleMetrics.metric4.label}</div>
-            <div className="text-[22px] sm:text-[26px] font-serif font-bold text-ink">{roleMetrics.metric4.value}</div>
-            <div className="text-[11.5px] text-ink-soft">{roleMetrics.metric4.sub}</div>
-          </div>
+          {[roleMetrics.metric1, roleMetrics.metric2, roleMetrics.metric3, roleMetrics.metric4].map((m, idx) => {
+            const valStr = String(m.value)
+            const isLong = valStr.length > 14
+            const isMedium = valStr.length > 9
+            return (
+              <div
+                key={idx}
+                className="p-4 sm:p-5 rounded-xl border border-line bg-card shadow-xs space-y-1 min-w-0 overflow-hidden flex flex-col justify-between"
+              >
+                <div>
+                  <div
+                    className="text-[11px] font-mono text-ink-faint uppercase tracking-wider truncate"
+                    title={m.label}
+                  >
+                    {m.label}
+                  </div>
+                  <div
+                    className={`font-serif font-bold text-ink mt-1 break-words ${
+                      isLong
+                        ? "text-[16px] sm:text-[18px] leading-snug"
+                        : isMedium
+                        ? "text-[18px] sm:text-[21px] leading-tight"
+                        : "text-[22px] sm:text-[26px] leading-tight"
+                    }`}
+                    title={valStr}
+                  >
+                    {m.value}
+                  </div>
+                </div>
+                <div
+                  className={`text-[11.5px] truncate pt-1 ${
+                    idx % 2 === 0 ? "text-forest font-medium" : "text-ink-soft"
+                  }`}
+                  title={m.sub}
+                >
+                  {m.sub}
+                </div>
+              </div>
+            )
+          })}
         </div>
 
         {/* Tabbed Navigation Bar */}
