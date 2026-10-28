@@ -773,12 +773,19 @@ export async function switchUserContext(
 
     allGosalas.forEach((g: any) => {
       const meta = getGosalaMeta(g.id, g.name)
-      const govEmail = (meta.governingAdminEmail || "").toLowerCase()
-      const adminIdMatch = meta.adminId === dbUser.id
+      const govEmail = (g.adminEmail || meta.governingAdminEmail || "").toLowerCase()
+      const adminIdMatch = meta.adminId === dbUser.id || g.adminId === dbUser.id
       if (govEmail === adminEmail || adminIdMatch) {
         personalGosalas.push({ id: g.id, name: g.name })
       }
     })
+
+    // If Super Admin has not assigned a private sub-portfolio, grant regional operations governance
+    if (personalGosalas.length === 0 && allGosalas.length > 0) {
+      allGosalas.forEach((g: any) => {
+        personalGosalas.push({ id: g.id, name: g.name })
+      })
+    }
 
     const gosalaIds = personalGosalas.map((g) => g.id)
     const gosalaNames = personalGosalas.map((g) => g.name)

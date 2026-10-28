@@ -125,11 +125,12 @@ async function seed() {
         uniqueId: "GMA-OPS-0104",
         name: "GOMAA Operations",
         phone: "+91 98222 33347",
-        password: hashPassword("gomaa@123456"),
+        password: hashPassword("GomaaAdmin@2026!"),
       },
     ]
 
     let admin1User = null
+    let gomaaUser = null
 
     for (const adm of operationsAdmins) {
       let existingAdm = await prisma.user.findFirst({
@@ -166,9 +167,12 @@ async function seed() {
       if (adm.email === "alt.yq-fs88dj2@yopmail.com") {
         admin1User = existingAdm
       }
+      if (adm.email === "gomaa052026@gmail.com") {
+        gomaaUser = existingAdm
+      }
     }
 
-    // 5. Ensure Gaushalas (Gaushala_01, Gaushala_02, Gaushala_03) exist and are governed by Admin_1
+    // 5. Ensure Gaushalas (Gaushala_01, Gaushala_02, Gaushala_03) exist and are governed properly
     const defaultGosalas = [
       {
         name: "Gaushala_01",
@@ -178,6 +182,7 @@ async function seed() {
         contactEmail: "gaushala1@gomaa.in",
         latitude: 17.4156,
         longitude: 78.4357,
+        governingAdmin: gomaaUser || admin1User,
       },
       {
         name: "Gaushala_02",
@@ -187,6 +192,7 @@ async function seed() {
         contactEmail: "gaushala2@gomaa.in",
         latitude: 17.4401,
         longitude: 78.3489,
+        governingAdmin: gomaaUser || admin1User,
       },
       {
         name: "Gaushala_03",
@@ -196,37 +202,42 @@ async function seed() {
         contactEmail: "gaushala3@gomaa.in",
         latitude: 17.4721,
         longitude: 78.5028,
+        governingAdmin: admin1User,
       },
     ]
 
     for (const gDef of defaultGosalas) {
+      const govAdmin = gDef.governingAdmin || admin1User
       const existingG = await prisma.gosala.findFirst({
         where: { name: { equals: gDef.name, mode: "insensitive" } },
       })
       if (!existingG) {
         await prisma.gosala.create({
           data: {
-            ...gDef,
+            name: gDef.name,
+            region: gDef.region,
+            address: gDef.address,
+            contactPhone: gDef.contactPhone,
+            contactEmail: gDef.contactEmail,
+            latitude: gDef.latitude,
+            longitude: gDef.longitude,
             isActive: true,
-            adminId: admin1User.id,
-            adminEmail: admin1User.email,
-            adminName: admin1User.name,
+            adminId: govAdmin.id,
+            adminEmail: govAdmin.email,
+            adminName: govAdmin.name,
           },
         })
-        console.log(`[Seed] Created sanctuary ${gDef.name} governed by ${admin1User.name}`)
-      } else if (!existingG.adminId && !existingG.adminEmail) {
-        // Only assign default admin if the Gaushala has no governing admin set
+        console.log(`[Seed] Created sanctuary ${gDef.name} governed by ${govAdmin.name}`)
+      } else {
         await prisma.gosala.update({
           where: { id: existingG.id },
           data: {
-            adminId: admin1User.id,
-            adminEmail: admin1User.email,
-            adminName: admin1User.name,
+            adminId: govAdmin.id,
+            adminEmail: govAdmin.email,
+            adminName: govAdmin.name,
           },
         })
-        console.log(`[Seed] Assigned unassigned sanctuary ${existingG.name} to ${admin1User.name}`)
-      } else {
-        console.log(`[Seed] Sanctuary ${existingG.name} governance preserved (${existingG.adminName || existingG.adminEmail})`)
+        console.log(`[Seed] Sanctuary ${existingG.name} synchronized with governance (${govAdmin.name} - ${govAdmin.email})`)
       }
     }
 
@@ -460,6 +471,115 @@ async function seed() {
           },
         })
         console.log(`[Seed] Synchronized Sacred Cattle: ${aDef.name} (${aDef.breed}) at ${aDef.gosalaName}`)
+      }
+    }
+
+    // 8. Seed the 2 Active Operational Bookings (Payment Verified, awaiting review / triage)
+    const devotee = await prisma.user.findFirst({
+      where: { email: { equals: "devpulseorg@gmail.com", mode: "insensitive" } },
+    })
+    const g1 = await prisma.gosala.findFirst({
+      where: { name: { equals: "Gaushala_01", mode: "insensitive" } },
+    })
+    const cowSurabhi = await prisma.animal.findFirst({
+      where: { name: { equals: "Surabhi", mode: "insensitive" } },
+    })
+    const cowNandini = await prisma.animal.findFirst({
+      where: { name: { equals: "Nandini", mode: "insensitive" } },
+    })
+
+    if (devotee && g1 && cowSurabhi) {
+      const activeBookings = [
+        {
+          id: "GMA-25057",
+          customerId: devotee.id,
+          gosalaId: g1.id,
+          animalId: cowSurabhi.id,
+          customerName: devotee.name,
+          customerPhone: devotee.phone || "+91 7780740223",
+          animalName: cowSurabhi.name,
+          animalType: cowSurabhi.type,
+          gosalaName: g1.name,
+          bookingDate: "28 Oct 2026",
+          startTime: "08:00",
+          endTime: "09:00",
+          durationMin: 60,
+          address: "Flat/House: Flat 402, Block B, 12th Main Road, Indiranagar, Landmark: Near Ganesha Temple, Ground Floor Courtyard",
+          distanceKm: 13.3,
+          baseRate: 3500,
+          extraTimeFee: 0,
+          transportFee: 290,
+          addonsFee: 0,
+          taxFee: 455,
+          discountFee: 0,
+          totalAmount: 4245,
+          commissionPct: 25,
+          commissionAmount: 875,
+          gosalaPayable: 2915,
+          status: "PAYMENT_VERIFIED",
+          driverStage: 0,
+          isPaid: true,
+          paymentProvider: "RAZORPAY",
+          paymentOrderId: "order_test_1793204968301",
+          paymentId: "pay_test_1793204968301",
+          paymentStatus: "CAPTURED",
+          handoverOtp: "8229",
+          handoverOtpVerified: false,
+        },
+        {
+          id: "GMA-28492",
+          customerId: devotee.id,
+          gosalaId: g1.id,
+          animalId: (cowNandini || cowSurabhi).id,
+          customerName: devotee.name,
+          customerPhone: devotee.phone || "+91 7780740223",
+          animalName: (cowNandini || cowSurabhi).name,
+          animalType: (cowNandini || cowSurabhi).type,
+          gosalaName: g1.name,
+          bookingDate: "29 Oct 2026",
+          startTime: "09:30",
+          endTime: "10:30",
+          durationMin: 60,
+          address: "Plot 88, Road 12, Jubilee Hills, Hyderabad",
+          distanceKm: 12.5,
+          baseRate: 3500,
+          extraTimeFee: 0,
+          transportFee: 350,
+          addonsFee: 0,
+          taxFee: 455,
+          discountFee: 0,
+          totalAmount: 4305,
+          commissionPct: 25,
+          commissionAmount: 875,
+          gosalaPayable: 2975,
+          status: "PAYMENT_VERIFIED",
+          driverStage: 0,
+          isPaid: true,
+          paymentProvider: "RAZORPAY",
+          paymentOrderId: "order_test_1793204968302",
+          paymentId: "pay_test_1793204968302",
+          paymentStatus: "CAPTURED",
+          handoverOtp: "5147",
+          handoverOtpVerified: false,
+        },
+      ]
+
+      for (const b of activeBookings) {
+        const existing = await prisma.booking.findUnique({ where: { id: b.id } })
+        if (!existing) {
+          await prisma.booking.create({ data: b })
+          console.log(`[Seed] Created active order ${b.id} (${b.animalName}) in ${b.status} status`)
+        } else {
+          await prisma.booking.update({
+            where: { id: b.id },
+            data: {
+              status: b.status,
+              gosalaName: b.gosalaName,
+              gosalaId: b.gosalaId,
+            },
+          })
+          console.log(`[Seed] Synchronized active order ${b.id} (${b.status})`)
+        }
       }
     }
   } catch (err) {

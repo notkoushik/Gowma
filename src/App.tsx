@@ -323,7 +323,10 @@ export default function App() {
 
   const adminBookingsCount = bookings.length
   const adminReviewPending = bookings.filter(
-    (b) => b.status === "Admin Review",
+    (b) =>
+      b.status === "Admin Review" ||
+      b.status === "Payment Verified" ||
+      b.status === "Manager Review",
   ).length
   const activeTransitsCount = bookings.filter(
     (b) =>

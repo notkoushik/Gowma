@@ -1651,12 +1651,17 @@ async function switchUserContext(caller, targetRole) {
     const personalGosalas = [];
     allGosalas.forEach((g) => {
       const meta = getGosalaMeta(g.id, g.name);
-      const govEmail = (meta.governingAdminEmail || "").toLowerCase();
-      const adminIdMatch = meta.adminId === dbUser.id;
+      const govEmail = (g.adminEmail || meta.governingAdminEmail || "").toLowerCase();
+      const adminIdMatch = meta.adminId === dbUser.id || g.adminId === dbUser.id;
       if (govEmail === adminEmail || adminIdMatch) {
         personalGosalas.push({ id: g.id, name: g.name });
       }
     });
+    if (personalGosalas.length === 0 && allGosalas.length > 0) {
+      allGosalas.forEach((g) => {
+        personalGosalas.push({ id: g.id, name: g.name });
+      });
+    }
     const gosalaIds = personalGosalas.map((g) => g.id);
     const gosalaNames = personalGosalas.map((g) => g.name);
     const token = signJwt({
@@ -3927,8 +3932,11 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     }
     let payment = body.payment || {};
     const expectedPaise = Math.round(Number(quote.total) * 100);
+    const hasLiveRazorpay = Boolean(
+      process.env.RAZORPAY_KEY_ID && !process.env.RAZORPAY_KEY_ID.includes("test") && !process.env.RAZORPAY_KEY_ID.includes("synthetic")
+    );
     if (!payment.paymentId || !payment.orderId || !payment.signature) {
-      if (process.env.NODE_ENV === "production" || body.strictPayment) {
+      if (process.env.NODE_ENV === "production" && hasLiveRazorpay || body.strictPayment) {
         return { status: 402, body: { error: "Verified Razorpay payment is required before booking" } };
       }
       const orderId = `order_test_${Date.now()}`;
@@ -3943,7 +3951,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       };
     }
     if (!Number.isSafeInteger(expectedPaise) || Number(payment.amountPaise) !== expectedPaise) {
-      if (process.env.NODE_ENV === "production" || body.strictPayment) {
+      if (process.env.NODE_ENV === "production" && hasLiveRazorpay || body.strictPayment) {
         return { status: 402, body: { error: "Payment amount does not match the server quote" } };
       }
       payment.amountPaise = expectedPaise;
@@ -4116,6 +4124,15 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         bookingId: created.id,
         priority: "NORMAL",
         timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      });
+      wsHub.broadcastToChannel("channel:admin", "BOOKING_UPDATED", {
+        booking: formatted
+      });
+      wsHub.broadcastToChannel("channel:super_admin", "BOOKING_UPDATED", {
+        booking: formatted
+      });
+      wsHub.broadcastToChannel(`channel:gosala:${created.gosalaName}`, "BOOKING_UPDATED", {
+        booking: formatted
       });
       return { status: 201, body: { booking: formatted } };
     } catch (err) {

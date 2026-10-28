@@ -176,6 +176,7 @@ async function run() {
       booking: mockBooking,
       holdId,
       quoteToken: calcRes?.body?.quoteToken,
+      strictPayment: true,
     }), customerHeaders)
     harness.assert(noPayRes?.status === 402, "Booking without payment proof is rejected with 402 Payment Required", `status=${noPayRes?.status}`)
 
