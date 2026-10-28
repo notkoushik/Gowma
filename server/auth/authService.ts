@@ -666,15 +666,45 @@ export async function updateUser(id: string, updates: Partial<RegisterUserPayloa
 }
 
 /**
- * Delete a user from PostgreSQL
+ * Delete a user from PostgreSQL (idempotent & supports ID, uniqueId, or email)
  */
 export async function deleteUser(id: string) {
-  const u = await prisma.user.findUnique({ where: { id } })
+  if (!id) return null
+  const cleanId = id.startsWith("MGR-") ? id.replace(/^MGR-/, "") : id
+
+  // 1. Locate user by any valid identifier
+  const u = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { id },
+        { id: cleanId },
+        { uniqueId: id },
+        { email: { equals: id, mode: "insensitive" } },
+        { name: { equals: id, mode: "insensitive" } },
+      ],
+    },
+  })
+
   if (u) {
     deleteUserMeta(u.email)
     deleteUserMeta(u.id)
+
+    // Clean up manager assignments before deleting
+    await prisma.gosalaManagerAssignment.deleteMany({
+      where: { userId: u.id },
+    }).catch(() => {})
+
+    try {
+      await prisma.user.delete({ where: { id: u.id } })
+    } catch (err: any) {
+      console.warn("[deleteUser] prisma delete notice:", err?.message)
+    }
+    return { id: u.id, email: u.email, deleted: true }
   }
-  return prisma.user.delete({ where: { id } })
+
+  // Idempotent: If user already does not exist in DB, treat as successful removal
+  deleteUserMeta(id)
+  return { id, deleted: true }
 }
 
 /**

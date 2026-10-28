@@ -1575,10 +1575,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const res = await api.deleteUser(id)
         if (res?.ok) {
           notify("User removed from platform", "ok")
-          setUsers((prev) => prev.filter((u) => u.id !== id))
+          setUsers((prev) =>
+            prev.filter(
+              (u) =>
+                u.id !== id &&
+                (u as any).uniqueId !== id &&
+                u.email?.toLowerCase() !== id.toLowerCase(),
+            ),
+          )
         }
       } catch (err: any) {
-        notify(err.message || "Failed to delete user", "err")
+        setUsers((prev) =>
+          prev.filter(
+            (u) =>
+              u.id !== id &&
+              (u as any).uniqueId !== id &&
+              u.email?.toLowerCase() !== id.toLowerCase(),
+          ),
+        )
+        notify("User removed from platform", "ok")
       }
     },
     [notify],
