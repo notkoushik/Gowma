@@ -794,7 +794,7 @@ function AnimalDetail({
   }
 
   return (
-    <div className="pb-24">
+    <div className="pb-36">
       {/* Dynamic Multi-Photo Gallery for Sacred Cow & Shelter Premises */}
       <div className="p-2 sm:p-4 bg-paper/60">
         <CattleAndShelterGallery
@@ -901,19 +901,19 @@ function AnimalDetail({
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[440px] border-t border-line bg-card p-4 flex items-center gap-3">
+      <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-full max-w-[440px] z-30 border-t border-line bg-card/95 backdrop-blur-md p-3.5 flex items-center gap-3 shadow-md">
         <div>
           <div className="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
             From
           </div>
-          <div className="font-mono text-[16px] text-ink tabular">
+          <div className="font-mono text-[16px] text-ink tabular font-semibold">
             {inr(animal.price)}
           </div>
         </div>
         <button
           onClick={() => onBook(effectiveGosala)}
           disabled={animal.status !== "Available"}
-          className="ml-auto bg-saffron text-white rounded-sm px-8 py-3 text-[14px] font-medium hover:bg-saffron-deep disabled:opacity-40 transition-colors"
+          className="ml-auto bg-saffron text-white rounded-md px-7 py-2.5 text-[14px] font-semibold hover:bg-saffron-deep disabled:opacity-40 transition-colors cursor-pointer shadow-xs"
         >
           {animal.status !== "Available" ? "Unavailable" : "Book now"}
         </button>
@@ -1217,7 +1217,7 @@ function MobileCustomer({
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto pb-16">
+        <div className="flex-1 overflow-y-auto pb-24">
           {detail ? (
             <AnimalDetail
               animal={detail}
@@ -1521,30 +1521,37 @@ function MobileCustomer({
           )}
         </div>
 
-        {/* Bottom tab bar */}
-        {!detail && !gosalaProfileId && (
-          <nav className="absolute bottom-0 left-0 right-0 h-16 border-t border-line bg-card flex">
-            {tabs.map((t) => {
-              const active = tab === t.id
-              const Icon = t.icon
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  className={`flex-1 flex flex-col items-center justify-center gap-1 text-[10.5px] transition-colors ${
-                    active ? "text-saffron-deep" : "text-ink-faint"
-                  }`}
-                >
-                  <Icon size={19} className={active ? "text-saffron" : ""} />
-                  {t.label}
-                  {t.id === "track" && activeTrip && (
-                    <span className="absolute translate-x-4 -translate-y-4 h-1.5 w-1.5 rounded-full bg-saffron" />
-                  )}
-                </button>
-              )
-            })}
-          </nav>
-        )}
+        {/* Bottom tab bar - Always visible across every screen in mobile view */}
+        <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[440px] z-40 h-16 border-t border-line bg-card/95 backdrop-blur-md flex shadow-lg pb-[env(safe-area-inset-bottom)]">
+          {tabs.map((t) => {
+            const active = tab === t.id
+            const Icon = t.icon
+            return (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setTab(t.id)
+                  if (detail) setDetail(null)
+                  if (gosalaProfileId) {
+                    setGosalaProfileId(null)
+                    setGosalaProfileDist(undefined)
+                  }
+                }}
+                className={`flex-1 flex flex-col items-center justify-center gap-1 text-[10.5px] transition-colors cursor-pointer relative ${
+                  active
+                    ? "text-saffron-deep font-medium"
+                    : "text-ink-faint hover:text-ink"
+                }`}
+              >
+                <Icon size={19} className={active ? "text-saffron" : ""} />
+                <span>{t.label}</span>
+                {t.id === "track" && activeTrip && (
+                  <span className="absolute top-2 right-1/2 translate-x-3 h-1.5 w-1.5 rounded-full bg-saffron" />
+                )}
+              </button>
+            )
+          })}
+        </nav>
 
         {flow && (
           <BookingFlow
