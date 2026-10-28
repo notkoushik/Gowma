@@ -1,0 +1,52 @@
+name: GOMAA Full-Application Crawler & Production Guardrail
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  production-readiness-gate:
+    name: Autonomous End-to-End Crawler Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Database Client & Build Project
+        run: npm run build
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/gomaa_db?schema=public&connection_limit=2&pool_timeout=15"
+
+      - name: Run Contract & Security Test Gates
+        run: npm test
+
+      - name: Launch Vite Headless Preview Server
+        run: npx vite preview --port 4173 --host 127.0.0.1 &
+        env:
+          PORT: 4173
+
+      - name: Wait for Local Preview Server Readiness
+        run: npx wait-on http://127.0.0.1:4173 --timeout 30000
+
+      - name: Execute Full Application Autonomous Crawler
+        run: node scripts/test-full-application-crawler.mjs http://127.0.0.1:4173
+        env:
+          PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
+          TEST_TARGET_URL: "http://127.0.0.1:4173"
+
+      - name: Verification Confirmation
+        if: success()
+        run: echo "✅ ALL APPLICATION PAGES CRAWLED CLEANLY WITH 0 ERRORS AND 0 CRASHES! SAFE FOR PRODUCTION DEPLOYMENT."
