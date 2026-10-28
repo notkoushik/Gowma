@@ -25,3 +25,6 @@ server/data/backups/
 __pycache__/
 *.pyc
 
+
+.vercel
+.env*
