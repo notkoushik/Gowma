@@ -511,7 +511,7 @@ export default function Bookings() {
     profiles,
     authUser,
     currentRole,
-    users,
+    users = [],
     isLoading,
   } = useStore()
   const { notify } = useToast()
@@ -526,7 +526,7 @@ export default function Bookings() {
 
   const registeredOpsAdmins = useMemo(
     () =>
-      users.filter(
+      (users || []).filter(
         (u) => u.role === "admin" || (u as any).dbRole === "OPERATIONS_ADMIN",
       ),
     [users],

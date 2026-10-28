@@ -133,6 +133,7 @@ export default function Pricing({
     managers,
     profiles,
     authUser,
+    users = [],
     isLoading,
   } = useStore()
   const isSuperAdmin = currentRole === "super_admin"
@@ -448,7 +449,7 @@ export default function Pricing({
     const adminName = (activeGosala?.governingAdminName || activeGosala?.adminName || "").trim()
     const adminId = activeGosala?.adminId || (activeGosala as any)?.governingAdminId
 
-    const matchedUser = users.find((u) => {
+    const matchedUser = (users || []).find((u) => {
       if (adminId && u.id === adminId) return true
       if (adminEmail && u.email?.trim().toLowerCase() === adminEmail) return true
       if (adminName && u.name?.trim().toLowerCase() === adminName.toLowerCase()) return true

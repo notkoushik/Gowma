@@ -79,7 +79,7 @@ export default function GosalaManagers() {
     currentRole,
     profiles,
     authUser,
-    users,
+    users = [],
     addUser,
     updateUser,
     deleteUser,
@@ -93,7 +93,7 @@ export default function GosalaManagers() {
     authUser?.name || profiles?.super_admin?.name || ""
 
   const registeredOperationsAdmins = useMemo(() => {
-    return users.filter(
+    return (users || []).filter(
       (u) => u.role === "admin" || (u as any).dbRole === "OPERATIONS_ADMIN",
     )
   }, [users])
@@ -916,7 +916,7 @@ export default function GosalaManagers() {
     })
 
     // 2. From users directory who have manager role
-    users.forEach((u) => {
+    ;(users || []).forEach((u) => {
       if (u.role === "manager" || (u as any).dbRole === "GOSALA_MANAGER") {
         const key = (u.email || u.id || u.name).toLowerCase()
         if (!seen.has(key)) {

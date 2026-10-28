@@ -73,7 +73,7 @@ function ChartTip({ active, payload, label }: any) {
 }
 
 export default function Overview() {
-  const { bookings, gosalas, currentRole, users } = useStore()
+  const { bookings, gosalas, currentRole, users = [] } = useStore()
 
   const validBookings = bookings.filter((b) => b.status !== "Rejected")
   const totalGross = validBookings.reduce((sum, b) => sum + b.total, 0)
@@ -92,7 +92,7 @@ export default function Overview() {
   // Group Gaushalas, Bookings & Revenue by Operations Admin for Super Admin
   const adminPortfolios = useMemo(() => {
     // Dynamically derive registered Operations Admins strictly from the database users directory
-    const registeredOpsAdmins = users.filter(
+    const registeredOpsAdmins = (users || []).filter(
       (u) => u.role === "admin" || (u as any).dbRole === "OPERATIONS_ADMIN",
     )
 
