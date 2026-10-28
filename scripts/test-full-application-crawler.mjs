@@ -21,9 +21,13 @@ async function runApplicationCrawler() {
   console.log(`   Target URL: ${TARGET_URL}`)
   console.log("================================================================================\n")
 
+  const isHeaded = process.argv.includes("--headed") || process.env.HEADED === "true"
+  console.log(`   Mode: ${isHeaded ? "👀 Headed (Watch Mode on Screen)" : "⚡ Headless (Fast Automated Mode)"}`)
+
   const browser = await puppeteer.launch({
     executablePath: CHROME_PATH,
-    headless: "new",
+    headless: isHeaded ? false : "new",
+    slowMo: isHeaded ? 100 : 0,
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--ignore-certificate-errors"],
   })
 
