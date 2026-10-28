@@ -1436,8 +1436,8 @@ export async function handleApiRequest(
         data: {
           id: b.id,
           customerId: customer.id,
-          customerName: b.customer,
-          customerPhone: b.phone,
+          customerName: b.customer || customer.name || "Devotee",
+          customerPhone: b.phone || customer.phone || "+91 98000 00000",
           gosalaId: gosala.id,
           gosalaName: b.gosala,
           animalId: animal.id,
@@ -1449,11 +1449,11 @@ export async function handleApiRequest(
                 ? "BULL"
                 : "CALF",
           bookingDate: normalizeDateStr(b.date),
-          startTime: b.start,
-          endTime: b.end,
-          durationMin: b.durationMin,
-          address: b.address,
-          distanceKm: b.distanceKm,
+          startTime: b.start || "10:00",
+          endTime: b.end || "11:00",
+          durationMin: Number(b.durationMin) || 60,
+          address: b.address || "Devotee Residence Altar, Hyderabad",
+          distanceKm: Number(b.distanceKm) || 0,
           baseRate: b.base ?? 0,
           extraTimeFee: b.extraTime ?? 0,
           transportFee: b.transport ?? 0,
@@ -1482,7 +1482,7 @@ export async function handleApiRequest(
             ) +
             (b.transport ?? 0) +
             (b.addons ?? 0),
-          status: toPrismaStatus(b.status),
+          status: toPrismaStatus(b.status) || "PAYMENT_VERIFIED",
            isPaid: true,
            paymentProvider: "RAZORPAY",
            paymentOrderId: payment.orderId,

@@ -20,6 +20,7 @@
     "test:watch:customer": "python Testing/watch_all_roles.py --role customer",
     "test:watch:driver": "python Testing/watch_all_roles.py --role driver",
     "test:all": "npm test && npm run test:integration",
+    "test:rage": "python Testing/test_full_rage_financial_lifecycle.py",
     "docs:screenshots": "node scripts/capture-docs-screenshots.mjs",
     "docs:generate": "node scripts/generate-doc.mjs && node scripts/generate-html-doc.mjs",
     "db:reset-superadmin": "node scripts/reset-to-superadmin-only.mjs"

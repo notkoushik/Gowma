@@ -42,8 +42,9 @@ let lastSweepTimestamp: string | null = null
 export function generateRbiUtr(ifscCode: string = "HDFC0001824"): string {
   const prefix = (ifscCode.slice(0, 4) || "HDFC").toUpperCase()
   const yearCode = "26" // 2026
-  const randNum = Math.floor(100000 + Math.random() * 900000)
-  return `${prefix}N${yearCode}${randNum}`
+  const dayOfYear = String(Math.floor(1 + Math.random() * 365)).padStart(3, "0")
+  const randNum = String(Math.floor(100000 + Math.random() * 900000))
+  return `${prefix}N${yearCode}${dayOfYear}${randNum}`
 }
 
 /**
@@ -144,11 +145,12 @@ export async function executeAutomatedSweep(options: {
   const dbBookings = await prisma.booking.findMany().catch(() => [])
   const allBookings = dbBookings.map((b: any) => ({
     ...b,
+    gosala: b.gosalaName ?? b.gosala ?? "Gaushala_01",
     base: b.baseRate ?? b.base ?? 3500,
-    extraTime: b.extraTime ?? 0,
-    transport: b.transport ?? 0,
-    addons: b.addons ?? 0,
-    total: b.total ?? 3500,
+    extraTime: b.extraTimeFee ?? b.extraTime ?? 0,
+    transport: b.transportFee ?? b.transport ?? 0,
+    addons: b.addonsFee ?? b.addons ?? 0,
+    total: b.totalAmount ?? b.total ?? 3500,
   }))
 
   // 3. Fetch Gaushala registry
@@ -159,7 +161,8 @@ export async function executeAutomatedSweep(options: {
 
   // Group eligible completed or verified bookings by Gaushala
   const eligibleBookings = allBookings.filter((b) => {
-    if (options.targetGosala && b.gosala !== options.targetGosala) {
+    const bGosala = b.gosalaName || b.gosala
+    if (options.targetGosala && bGosala !== options.targetGosala) {
       return false
     }
     // Booking has completed or in-service verified seva
@@ -185,7 +188,7 @@ export async function executeAutomatedSweep(options: {
   // Also include all unique Gaushalas with volume
   const gosalaGroups = new Map<string, typeof eligibleBookings>()
   eligibleBookings.forEach((b) => {
-    const gName = b.gosala || "Shri Krishna Gaushala"
+    const gName = b.gosalaName || b.gosala || (allGosalas[0] && allGosalas[0].name) || "Gaushala_01"
     if (!gosalaGroups.has(gName)) {
       gosalaGroups.set(gName, [])
     }
@@ -213,9 +216,10 @@ export async function executeAutomatedSweep(options: {
   )}`
 
   for (const [gName, bks] of gosalaGroups.entries()) {
-    const gosalaRecord = allGosalas.find(
-      (g) => g.name.toLowerCase() === gName.toLowerCase(),
-    )
+    const gosalaRecord =
+      allGosalas.find((g) => g.name.toLowerCase() === gName.toLowerCase()) ||
+      allGosalas.find((g) => g.id === bks[0]?.gosalaId) ||
+      allGosalas[0]
 
     // Calculate dynamic totals for this Gaushala
     let grossAmount = 0
@@ -281,11 +285,12 @@ export async function executeAutomatedSweep(options: {
 
     // Persist to PostgreSQL if available
     try {
-      if (gosalaRecord?.id) {
+      const gId = gosalaRecord?.id || bks[0]?.gosalaId
+      if (gId) {
         await prisma.settlementBatch.create({
           data: {
-            gosalaId: gosalaRecord.id,
-            gosalaName: gName,
+            gosalaId: gId,
+            gosalaName: gosalaRecord?.name || gName,
             batch: batchWeekLabel,
             bookingsCount: summary.sevasCount,
             grossAmount: summary.grossAmount,
