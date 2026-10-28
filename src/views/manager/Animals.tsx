@@ -1662,22 +1662,26 @@ export default function Animals() {
     let list = animals
     if (currentRole === "manager") {
       list = list.filter(
-        (a) => a.gosala.toLowerCase() === assignedGosala.toLowerCase(),
+        (a) =>
+          String(a.gosala || "").toLowerCase() ===
+          String(assignedGosala || "").toLowerCase(),
       )
     } else if (activeGosalaFilter && activeGosalaFilter !== "ALL") {
       list = list.filter(
-        (a) => a.gosala.toLowerCase() === activeGosalaFilter.toLowerCase(),
+        (a) =>
+          String(a.gosala || "").toLowerCase() ===
+          String(activeGosalaFilter || "").toLowerCase(),
       )
     }
-    const q = searchQuery.toLowerCase().trim()
+    const q = String(searchQuery || "").toLowerCase().trim()
     if (!q) return list
     return list.filter(
       (a) =>
-        a.name.toLowerCase().includes(q) ||
-        a.gosala.toLowerCase().includes(q) ||
-        a.type.toLowerCase().includes(q) ||
-        (a.breed && a.breed.toLowerCase().includes(q)) ||
-        (a.assignedHandler && a.assignedHandler.toLowerCase().includes(q)),
+        String(a.name || "").toLowerCase().includes(q) ||
+        String(a.gosala || "").toLowerCase().includes(q) ||
+        String(a.type || "").toLowerCase().includes(q) ||
+        (a.breed && String(a.breed).toLowerCase().includes(q)) ||
+        (a.assignedHandler && String(a.assignedHandler).toLowerCase().includes(q)),
     )
   }, [animals, searchQuery, activeGosalaFilter, currentRole, assignedGosala])
 
@@ -1688,26 +1692,26 @@ export default function Animals() {
       if (currentRole === "manager") {
         const isAssigned = assigned.some(
           (g) =>
-            g.toLowerCase() === assignedGosala.toLowerCase() ||
-            g.toLowerCase() === "all gaushalas",
+            String(g || "").toLowerCase() === String(assignedGosala || "").toLowerCase() ||
+            String(g || "").toLowerCase() === "all gaushalas",
         )
         if (!isAssigned) return false
       } else if (activeGosalaFilter && activeGosalaFilter !== "ALL") {
         const isAssigned = assigned.some(
           (g) =>
-            g.toLowerCase() === activeGosalaFilter.toLowerCase() ||
-            g.toLowerCase() === "all gaushalas",
+            String(g || "").toLowerCase() === String(activeGosalaFilter || "").toLowerCase() ||
+            String(g || "").toLowerCase() === "all gaushalas",
         )
         if (!isAssigned) return false
       }
-      if (!searchQuery.trim()) return true
-      const q = searchQuery.toLowerCase()
+      const q = String(searchQuery || "").trim().toLowerCase()
+      if (!q) return true
       return (
-        v.name?.toLowerCase().includes(q) ||
-        v.regNo?.toLowerCase().includes(q) ||
-        v.clinic?.toLowerCase().includes(q) ||
-        v.specialization?.toLowerCase().includes(q) ||
-        assigned.some((g) => g.toLowerCase().includes(q))
+        String(v.name || "").toLowerCase().includes(q) ||
+        String(v.regNo || "").toLowerCase().includes(q) ||
+        String(v.clinic || "").toLowerCase().includes(q) ||
+        String(v.specialization || "").toLowerCase().includes(q) ||
+        assigned.some((g) => String(g || "").toLowerCase().includes(q))
       )
     })
   }, [vets, currentRole, assignedGosala, activeGosalaFilter, searchQuery])
@@ -1927,17 +1931,21 @@ export default function Animals() {
             const count =
               mainTab === "herd"
                 ? animals.filter(
-                    (a) => a.gosala.toLowerCase() === g.name.toLowerCase(),
+                    (a) =>
+                      String(a.gosala || "").toLowerCase() ===
+                      String(g.name || "").toLowerCase(),
                   ).length
                 : vets.filter((v) =>
                     (v.assignedGosalas || []).some(
                       (x) =>
-                        x.toLowerCase() === g.name.toLowerCase() ||
-                        x.toLowerCase() === "all gaushalas",
+                        String(x || "").toLowerCase() ===
+                          String(g.name || "").toLowerCase() ||
+                        String(x || "").toLowerCase() === "all gaushalas",
                     ),
                   ).length
             const isSelected =
-              activeGosalaFilter.toLowerCase() === g.name.toLowerCase()
+              String(activeGosalaFilter || "").toLowerCase() ===
+              String(g.name || "").toLowerCase()
             return (
               <button
                 key={g.id}

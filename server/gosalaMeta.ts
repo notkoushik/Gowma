@@ -67,11 +67,11 @@ export function getGosalaMeta(id: string, name?: string): GosalaRichMeta {
   return {}
 }
 
-export function saveGosalaMeta(
+export async function saveGosalaMetaAsync(
   id: string,
   name: string,
   meta: Partial<GosalaRichMeta>,
-) {
+): Promise<GosalaRichMeta> {
   const existing = { ...(metaStore[id] || (name ? metaStore[name.trim().toLowerCase()] : {}) || {}) }
   const updated: GosalaRichMeta = {
     ...existing,
@@ -88,15 +88,15 @@ export function saveGosalaMeta(
   if (id) metaStore[id] = updated
   if (name) metaStore[name.trim().toLowerCase()] = updated
 
-  // Persist to PostgreSQL asynchronously
-  prisma.gosala.findFirst({
-    where: {
-      OR: [
-        ...(id ? [{ id }] : []),
-        ...(name ? [{ name: { equals: name, mode: "insensitive" as const } }] : [])
-      ]
-    }
-  }).then(async (gosala) => {
+  try {
+    const gosala = await prisma.gosala.findFirst({
+      where: {
+        OR: [
+          ...(id ? [{ id }] : []),
+          ...(name ? [{ name: { equals: name, mode: "insensitive" as const } }] : [])
+        ]
+      }
+    })
     if (gosala) {
       metaStore[gosala.id] = updated
       metaStore[gosala.name.trim().toLowerCase()] = updated
@@ -105,9 +105,18 @@ export function saveGosalaMeta(
         data: { metadata: updated as any }
       })
     }
-  }).catch((err) => {
+  } catch (err: any) {
     console.error(`[gosalaMeta] Failed to persist metadata to DB for ${name || id}:`, err.message)
-  })
+  }
+  return updated
+}
+
+export function saveGosalaMeta(
+  id: string,
+  name: string,
+  meta: Partial<GosalaRichMeta>,
+) {
+  saveGosalaMetaAsync(id, name, meta).catch(() => {})
 }
 
 export function deleteGosalaMeta(id: string, name?: string) {

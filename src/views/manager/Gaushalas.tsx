@@ -587,24 +587,29 @@ export default function Gaushalas({
   //   Super Admin can also switch to "all_network" for sovereign audit.
   const scopedGosalas = useMemo(() => {
     if (currentRole === "admin") {
+      const myEmail = (authUser?.email || "").toLowerCase().trim()
+      const myId = authUser?.userId || (authUser as any)?.id
+      const myAllowedIds = new Set(authUser?.gosalaIds || [])
+      const myAllowedNames = new Set((authUser?.gosalaNames || []).map((n) => n.toLowerCase().trim()))
+
       return gosalas.filter((g) => {
-        const role = (g as any).governingAdminRole
-        const name = (g as any).governingAdminName
-        const adminName = (g as any).adminName
-        return (
-          role === "admin" ||
-          !role ||
-          name === activeAdminName ||
-          adminName === activeAdminName ||
-          (authUser?.gosalaNames && authUser.gosalaNames.includes(g.name))
-        )
+        const gEmail = String((g as any).adminEmail || (g as any).governingAdminEmail || "").toLowerCase().trim()
+        const gId = (g as any).adminId || (g as any).governingAdminId
+        if (myEmail && gEmail === myEmail) return true
+        if (myId && gId === myId) return true
+        if (myAllowedIds.has(g.id)) return true
+        if (myAllowedNames.has(String(g.name || "").toLowerCase().trim())) return true
+        return false
       })
     }
     if (currentRole === "super_admin") {
       if (portfolioScope === "my_portfolio") {
-        return gosalas.filter(
-          (g) => (g as any).governingAdminRole === "super_admin",
-        )
+        const saEmail = (authUser?.email || "superadmin@gomaa.in").toLowerCase().trim()
+        return gosalas.filter((g) => {
+          const gEmail = String((g as any).adminEmail || (g as any).governingAdminEmail || "").toLowerCase().trim()
+          const gRole = (g as any).governingAdminRole
+          return gRole === "super_admin" || gEmail === saEmail || (g as any).adminId === "USER-SA-SUPERADMIN"
+        })
       }
       return gosalas
     }
@@ -669,14 +674,15 @@ export default function Gaushalas({
   // Filtered Gaushalas
   const filteredGosalas = useMemo(() => {
     return scopedGosalas.filter((g) => {
-      const q = searchQuery.toLowerCase().trim()
+      const q = String(searchQuery || "").toLowerCase().trim()
       const matchesSearch =
         !q ||
-        g.name.toLowerCase().includes(q) ||
-        g.region.toLowerCase().includes(q) ||
-        g.address.toLowerCase().includes(q) ||
-        g.caretaker.toLowerCase().includes(q) ||
-        g.trustRegistrationNo.toLowerCase().includes(q)
+        String(g.name || "").toLowerCase().includes(q) ||
+        String(g.region || "").toLowerCase().includes(q) ||
+        String(g.address || "").toLowerCase().includes(q) ||
+        String(g.caretaker || "").toLowerCase().includes(q) ||
+        String(g.trustRegistrationNo || "").toLowerCase().includes(q) ||
+        String(g.email || (g as any).contactEmail || "").toLowerCase().includes(q)
 
       const matchesStatus = statusFilter === "ALL" || g.status === statusFilter
 
@@ -691,7 +697,7 @@ export default function Gaushalas({
     0,
   )
   const scopedHousedCows = animals.filter((a) =>
-    scopedGosalas.some((g) => g.name.toLowerCase() === a.gosala.toLowerCase()),
+    scopedGosalas.some((g) => String(g.name || "").toLowerCase() === String(a.gosala || "").toLowerCase()),
   )
   const totalResidentCows = scopedHousedCows.length
   const utilizationPct =
@@ -740,42 +746,43 @@ export default function Gaushalas({
 
   const handleOpenEdit = (g: Gosala) => {
     setEditingGosala(g)
-    setFormName(g.name)
-    setFormRegNo(g.trustRegistrationNo)
-    if (GOSALA_REGION_PRESETS.includes(g.region)) {
-      setFormRegion(g.region)
+    setFormName(g.name || "")
+    setFormRegNo(g.trustRegistrationNo || "")
+    const reg = g.region || ""
+    if (GOSALA_REGION_PRESETS.includes(reg)) {
+      setFormRegion(reg)
       setIsCustomRegionMode(false)
     } else {
-      setFormRegion("__CUSTOM__")
+      setFormRegion(reg || GOSALA_REGION_PRESETS[0])
       setIsCustomRegionMode(true)
-      setCustomRegion(g.region)
+      setCustomRegion(reg)
     }
-    setFormAddress(g.address)
-    setFormLat(g.lat || 18.5074)
-    setFormLng(g.lng || 73.8077)
-    setFormPhone(g.contactPhone)
-    setFormEmail(g.email || "")
-    setFormCaretaker(g.caretaker)
-    setFormCapacity(String(g.capacity))
-    setFormYear(g.establishedYear)
+    setFormAddress(g.address || "")
+    setFormLat(g.lat || (g as any).latitude || 18.5074)
+    setFormLng(g.lng || (g as any).longitude || 73.8077)
+    setFormPhone(g.contactPhone || "")
+    setFormEmail(g.email || (g as any).contactEmail || "")
+    setFormCaretaker(g.caretaker || g.managerName || "")
+    setFormCapacity(String(g.capacity || 40))
+    setFormYear(g.establishedYear || "2018")
     setFormLandAcres(g.landAcres != null ? String(g.landAcres) : "5.5")
     setFormVisitingHours(g.visitingHours || "6:00 AM – 7:30 PM (All 7 Days)")
-    setFormStatus(g.status)
-    setFormPhoto(g.photo || GOSALA_PHOTO_PRESETS[0].url)
+    setFormStatus(g.status || "Active")
+    setFormPhoto(g.photo || (g.photos && g.photos[0]) || GOSALA_PHOTO_PRESETS[0].url)
     setFormPhotos(
       g.photos && g.photos.length > 0
         ? g.photos
         : [g.photo || GOSALA_PHOTO_PRESETS[0].url],
     )
-    setFormFacilities(g.facilities || [])
+    setFormFacilities(g.facilities && g.facilities.length > 0 ? g.facilities : [GOSALA_FACILITY_OPTIONS[0]])
     setFormNotes(g.notes || "")
-    setFormPartnershipTier(g.partnershipTier as any || "STANDARD")
-    setFormCommissionType(g.commissionType as any || "percentage")
+    setFormPartnershipTier((g.partnershipTier as any) || "STANDARD")
+    setFormCommissionType((g.commissionType as any) || "percentage")
     setFormCommissionValue(
       g.customCommissionPct ||
         (g.customCommissionFlat ? g.customCommissionFlat : 10),
     )
-    setFormTaxTreatment(g.taxTreatment as any || "standard_gst")
+    setFormTaxTreatment((g.taxTreatment as any) || "standard_gst")
     setFormBufferMinutes(g.bufferMinutes || 30)
     setFormPartnershipNotes(g.partnershipNotes || "")
     setShowAddModal(true)
@@ -858,6 +865,9 @@ export default function Gaushalas({
         bufferMinutes: formBufferMinutes,
         partnershipNotes: formPartnershipNotes.trim(),
       })
+      if (selectedGosalaId === editingGosala.id || selectedGosalaId === editingGosala.name) {
+        setSelectedGosalaId(editingGosala.id)
+      }
     } else {
       addGosala({
         name: formName.trim(),
@@ -905,6 +915,9 @@ export default function Gaushalas({
         bufferMinutes: formBufferMinutes,
         partnershipNotes: formPartnershipNotes.trim(),
       })
+      if (selectedGosalaId === editingGosala.id || selectedGosalaId === editingGosala.name) {
+        setSelectedGosalaId(editingGosala.id)
+      }
     }
 
     setShowAddModal(false)

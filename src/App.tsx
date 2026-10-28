@@ -345,7 +345,7 @@ export default function App() {
   // Dynamically compute the active/registered operational region from registered Gaushalas
   const dynamicRegion = useMemo(() => {
     let raw = ""
-    if (activeGosalaFilter !== "ALL") {
+    if (activeGosalaFilter && activeGosalaFilter !== "ALL") {
       const g = gosalas.find(
         (x) => x.id === activeGosalaFilter || x.name === activeGosalaFilter,
       )
@@ -360,26 +360,18 @@ export default function App() {
     if (raw.includes(",")) {
       const parts = raw
         .split(",")
-        .map((s) => s.trim())
+        .map((s) => String(s || "").trim())
         .filter(Boolean)
       const last = parts[parts.length - 1]
       if (last && isNaN(Number(last))) return last
     }
     if (raw.includes(" - ")) {
-      const after = raw.split(" - ")[1].trim()
-      return after.split("(")[0].trim()
+      const parts = raw.split(" - ")
+      const after = String(parts[1] || parts[0] || "").trim()
+      return String(after.split("(")[0] || after).trim()
     }
-    return raw.split("(")[0].trim()
+    return String(raw.split("(")[0] || raw).trim()
   }, [gosalas, activeGosalaFilter])
-
-  // Ensure Operations Admin and Super Admin have regional scope across all registered Gaushalas
-  useEffect(() => {
-    if (auth === "admin" || auth === "super_admin") {
-      if (activeGosalaFilter !== "ALL") {
-        setActiveGosalaFilter("ALL")
-      }
-    }
-  }, [auth, activeGosalaFilter, setActiveGosalaFilter])
 
   const handleLoginSuccess = (role: RoleId) => {
     setAuth(role)

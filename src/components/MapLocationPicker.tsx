@@ -476,7 +476,7 @@ export default function MapLocationPicker({
 
   // Auto-Debounced Real-Time Search across GOMAA Gaushalas & Indian Sanctuaries (300ms)
   useEffect(() => {
-    const q = searchQuery.trim()
+    const q = String(searchQuery || "").trim()
     if (q.length < 2) {
       setSearchResults([])
       return
@@ -504,7 +504,7 @@ export default function MapLocationPicker({
 
   // Handle Search Submission (without using <form> to prevent nested form errors)
   const handleSearchExecute = async (overrideQuery?: string) => {
-    const q = (overrideQuery || searchQuery).trim()
+    const q = String(overrideQuery || searchQuery || "").trim()
     if (!q) return
 
     setIsSearching(true)
@@ -717,7 +717,7 @@ export default function MapLocationPicker({
       )}
 
       {/* Dynamic Gaushala Name Quick-Locate Banner */}
-      {gaushalaName && gaushalaName.trim().length >= 2 && (
+      {gaushalaName && String(gaushalaName).trim().length >= 2 && (
         <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-saffron-soft/40 border border-saffron/30 text-ink shrink-0 animate-in fade-in">
           <div className="flex items-center gap-1.5 min-w-0">
             <Sparkles size={14} className="text-saffron-deep shrink-0" />
@@ -773,7 +773,7 @@ export default function MapLocationPicker({
           <button
             type="button"
             onClick={() => handleSearchExecute()}
-            disabled={isSearching || !searchQuery.trim()}
+            disabled={isSearching || !String(searchQuery || "").trim()}
             className="absolute right-1.5 px-2.5 py-0.5 rounded bg-forest text-white text-[11px] font-medium hover:opacity-90 disabled:opacity-40 transition cursor-pointer"
           >
             {isSearching ? "Searching..." : "Locate"}

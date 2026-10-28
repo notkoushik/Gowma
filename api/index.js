@@ -1,9 +1,18 @@
 // server/prisma.ts
 import { PrismaClient } from "@prisma/client";
-var dbUrl = process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL || process.env.POSTGRES_URL || process.env.STORAGE_POSTGRES_PRISMA_URL || "";
-if (dbUrl && !dbUrl.includes("connection_limit=")) {
-  const separator = dbUrl.includes("?") ? "&" : "?";
-  dbUrl = `${dbUrl}${separator}connection_limit=2&pool_timeout=15`;
+var dbUrl = process.env.POSTGRES_PRISMA_URL || process.env.STORAGE_POSTGRES_PRISMA_URL || process.env.DATABASE_PRISMA_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
+var isServerless = Boolean(
+  process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY || process.env.NODE_ENV === "production"
+);
+if (dbUrl) {
+  const targetLimit = isServerless ? "1" : "5";
+  const timeout = isServerless ? "10" : "15";
+  if (dbUrl.includes("connection_limit=")) {
+    dbUrl = dbUrl.replace(/connection_limit=\d+/, `connection_limit=${targetLimit}`);
+  } else {
+    const separator = dbUrl.includes("?") ? "&" : "?";
+    dbUrl = `${dbUrl}${separator}connection_limit=${targetLimit}&pool_timeout=${timeout}`;
+  }
 }
 process.env.DATABASE_URL = dbUrl;
 var globalForPrisma = globalThis;
@@ -225,7 +234,7 @@ function getGosalaMeta(id, name) {
   }
   return {};
 }
-function saveGosalaMeta(id, name, meta) {
+async function saveGosalaMetaAsync(id, name, meta) {
   const existing = { ...metaStore[id] || (name ? metaStore[name.trim().toLowerCase()] : {}) || {} };
   const updated = {
     ...existing,
@@ -238,14 +247,15 @@ function saveGosalaMeta(id, name, meta) {
   });
   if (id) metaStore[id] = updated;
   if (name) metaStore[name.trim().toLowerCase()] = updated;
-  prisma.gosala.findFirst({
-    where: {
-      OR: [
-        ...id ? [{ id }] : [],
-        ...name ? [{ name: { equals: name, mode: "insensitive" } }] : []
-      ]
-    }
-  }).then(async (gosala) => {
+  try {
+    const gosala = await prisma.gosala.findFirst({
+      where: {
+        OR: [
+          ...id ? [{ id }] : [],
+          ...name ? [{ name: { equals: name, mode: "insensitive" } }] : []
+        ]
+      }
+    });
     if (gosala) {
       metaStore[gosala.id] = updated;
       metaStore[gosala.name.trim().toLowerCase()] = updated;
@@ -254,8 +264,13 @@ function saveGosalaMeta(id, name, meta) {
         data: { metadata: updated }
       });
     }
-  }).catch((err) => {
+  } catch (err) {
     console.error(`[gosalaMeta] Failed to persist metadata to DB for ${name || id}:`, err.message);
+  }
+  return updated;
+}
+function saveGosalaMeta(id, name, meta) {
+  saveGosalaMetaAsync(id, name, meta).catch(() => {
   });
 }
 function deleteGosalaMeta(id, name) {
@@ -1471,13 +1486,11 @@ async function getDirectoryAccounts() {
           name: a.gosala.name
         }));
         if (u.role === "OPERATIONS_ADMIN" || u.role === "SUPER_ADMIN") {
-          const userEmail = (u.email || "").toLowerCase();
-          const userName = (u.name || "").toLowerCase();
+          const userEmail = (u.email || "").toLowerCase().trim();
           allGosalas.forEach((g) => {
-            const meta2 = getGosalaMeta(g.id, g.name);
-            const govEmail = (g.adminEmail || meta2.governingAdminEmail || meta2.adminEmail || "").toLowerCase();
-            const govName = (g.adminName || meta2.governingAdminName || meta2.adminName || "").toLowerCase();
-            const isMatch = g.adminId === u.id || userEmail && govEmail === userEmail || userName && govName.includes(userName);
+            const meta2 = g.metadata && typeof g.metadata === "object" ? g.metadata : getGosalaMeta(g.id, g.name);
+            const govEmail = (g.adminEmail || meta2.governingAdminEmail || meta2.adminEmail || "").toLowerCase().trim();
+            const isMatch = g.adminId && g.adminId === u.id || userEmail && govEmail === userEmail;
             if (isMatch && !assignedGosalas.some((x) => x.id === g.id)) {
               assignedGosalas.push({ id: g.id, name: g.name });
             }
@@ -1526,13 +1539,11 @@ async function getAllUsers() {
           name: a.gosala.name
         }));
         if (u.role === "OPERATIONS_ADMIN" || u.role === "SUPER_ADMIN") {
-          const userEmail = (u.email || "").toLowerCase();
-          const userName = (u.name || "").toLowerCase();
+          const userEmail = (u.email || "").toLowerCase().trim();
           allGosalas.forEach((g) => {
-            const meta2 = getGosalaMeta(g.id, g.name);
-            const govEmail = (g.adminEmail || meta2.governingAdminEmail || meta2.adminEmail || "").toLowerCase();
-            const govName = (g.adminName || meta2.governingAdminName || meta2.adminName || "").toLowerCase();
-            const isMatch = g.adminId === u.id || userEmail && govEmail === userEmail || userName && govName.includes(userName);
+            const meta2 = g.metadata && typeof g.metadata === "object" ? g.metadata : getGosalaMeta(g.id, g.name);
+            const govEmail = (g.adminEmail || meta2.governingAdminEmail || meta2.adminEmail || "").toLowerCase().trim();
+            const isMatch = g.adminId && g.adminId === u.id || userEmail && govEmail === userEmail;
             if (isMatch && !assignedGosalas.some((x) => x.id === g.id)) {
               assignedGosalas.push({ id: g.id, name: g.name });
             }
@@ -1646,26 +1657,23 @@ async function switchUserContext(caller, targetRole) {
   }
   const userMeta = getUserMeta(dbUser.email || dbUser.id);
   if (targetRole === "admin") {
-    const adminEmail = (dbUser.email || "").toLowerCase();
+    const adminEmail = (dbUser.email || "").toLowerCase().trim();
     const allGosalas = await prisma.gosala.findMany({ where: { isActive: true } });
     const personalGosalas = [];
     allGosalas.forEach((g) => {
-      const meta = getGosalaMeta(g.id, g.name);
-      const govEmail = (g.adminEmail || meta.governingAdminEmail || "").toLowerCase();
-      const adminIdMatch = meta.adminId === dbUser.id || g.adminId === dbUser.id;
-      if (govEmail === adminEmail || adminIdMatch) {
+      const meta = g.metadata && typeof g.metadata === "object" ? g.metadata : getGosalaMeta(g.id, g.name);
+      const govEmail = (g.adminEmail || meta.governingAdminEmail || "").toLowerCase().trim();
+      const adminIdMatch = Boolean(meta.adminId && meta.adminId === dbUser.id || g.adminId && g.adminId === dbUser.id);
+      if (govEmail && govEmail === adminEmail || adminIdMatch) {
         personalGosalas.push({ id: g.id, name: g.name });
       }
     });
-    if (personalGosalas.length === 0 && allGosalas.length > 0) {
-      allGosalas.forEach((g) => {
-        personalGosalas.push({ id: g.id, name: g.name });
-      });
-    }
     const gosalaIds = personalGosalas.map((g) => g.id);
     const gosalaNames = personalGosalas.map((g) => g.name);
+    const uniqueId = dbUser.uniqueId || generateUniqueId(dbUser.role, dbUser.phone);
     const token = signJwt({
       userId: dbUser.id,
+      uniqueId,
       name: dbUser.name,
       email: dbUser.email,
       phone: dbUser.phone,
@@ -1684,6 +1692,7 @@ async function switchUserContext(caller, targetRole) {
       token,
       user: {
         id: dbUser.id,
+        uniqueId,
         name: dbUser.name,
         email: dbUser.email,
         phone: dbUser.phone,
@@ -1700,8 +1709,10 @@ async function switchUserContext(caller, targetRole) {
       }
     };
   } else {
+    const uniqueId = dbUser.uniqueId || generateUniqueId(dbUser.role, dbUser.phone);
     const token = signJwt({
       userId: dbUser.id,
+      uniqueId,
       name: dbUser.name,
       email: dbUser.email,
       phone: dbUser.phone,
@@ -1719,6 +1730,7 @@ async function switchUserContext(caller, targetRole) {
       token,
       user: {
         id: dbUser.id,
+        uniqueId,
         name: dbUser.name,
         email: dbUser.email,
         phone: dbUser.phone,
@@ -2907,6 +2919,7 @@ async function resolveRoleProfilesFromDB() {
       const meta = user?.metadata || {};
       profiles[roleKey] = {
         id: user?.id || `USER-${roleKey.toUpperCase()}`,
+        uniqueId: user?.uniqueId || void 0,
         role: roleKey,
         name: user?.name || (roleKey === "super_admin" ? "Super Admin" : roleKey === "admin" ? "Operations Admin" : roleKey === "manager" ? "Gaushala Manager" : roleKey === "driver" ? "Transit Pilot" : "Devotee"),
         phone: user?.phone || "+91 98000 00000",
@@ -5379,7 +5392,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         orderBy: { createdAt: "asc" }
       });
       const formatted = dbGosalas.map((g) => {
-        const meta = getGosalaMeta(g.id, g.name);
+        const meta = g.metadata && typeof g.metadata === "object" ? { ...g.metadata } : getGosalaMeta(g.id, g.name);
         const lat = g.latitude !== null && g.latitude !== void 0 ? Number(g.latitude) : meta.lat !== void 0 ? Number(meta.lat) : g.lat !== void 0 ? Number(g.lat) : void 0;
         const lng = g.longitude !== null && g.longitude !== void 0 ? Number(g.longitude) : meta.lng !== void 0 ? Number(meta.lng) : g.lng !== void 0 ? Number(g.lng) : void 0;
         const assignedMgrs = (g.managers || []).map((m) => ({
@@ -5443,15 +5456,15 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         const allowedIds = new Set(authUser.gosalaIds || []);
         const allowedNames = new Set((authUser.gosalaNames || []).map((name) => name.trim().toLowerCase()));
         const userEmail = (authUser.email || "").trim().toLowerCase();
-        const userName = (authUser.name || "").trim().toLowerCase();
+        const userId = (authUser.userId || "").trim().toLowerCase();
         scopedGosalas = formatted.filter((g) => {
           const idMatch = allowedIds.has(g.id);
           const nameMatch = allowedNames.has(String(g.name).trim().toLowerCase());
           const gGovEmail = String(g.governingAdminEmail || g.adminEmail || "").trim().toLowerCase();
           const govEmailMatch = Boolean(userEmail && gGovEmail === userEmail);
-          const adminIdMatch = Boolean(authUser.userId && g.adminId === authUser.userId);
-          const adminNameMatch = Boolean(userName && String(g.governingAdminName || g.adminName || "").toLowerCase().includes(userName));
-          return idMatch || nameMatch || govEmailMatch || adminIdMatch || adminNameMatch;
+          const gAdminId = String(g.adminId || "").trim().toLowerCase();
+          const adminIdMatch = Boolean(userId && gAdminId === userId);
+          return idMatch || nameMatch || govEmailMatch || adminIdMatch;
         });
       } else if (authUser?.role === "super_admin") {
         scopedGosalas = formatted;
@@ -5463,6 +5476,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     }
   }
   if (method === "POST" && pathname === "/api/gosalas") {
+    if (!authUser || authUser.role !== "super_admin" && authUser.role !== "admin") {
+      return { status: 403, body: { ok: false, error: "Only platform administrators can register new Gaushalas" } };
+    }
     try {
       const {
         name,
@@ -5606,14 +5622,54 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   }
   const putGosalaMatch = pathname.match(/^\/api\/gosalas\/([^/]+)$/);
   if (method === "PUT" && putGosalaMatch) {
-    const id = putGosalaMatch[1];
+    const rawId = putGosalaMatch[1];
+    const decodedId = decodeURIComponent(rawId);
     try {
+      const existing = await prisma.gosala.findFirst({
+        where: {
+          OR: [
+            { id: rawId },
+            { id: decodedId },
+            { name: decodedId },
+            { name: { equals: decodedId, mode: "insensitive" } }
+          ]
+        }
+      });
+      if (!existing) {
+        return { status: 404, body: { error: "Gaushala not found" } };
+      }
+      if (!authUser || authUser.role !== "super_admin" && authUser.role !== "admin" && authUser.role !== "manager") {
+        return { status: 403, body: { ok: false, error: "Insufficient privileges to modify sanctuary records" } };
+      }
+      if (authUser.role === "admin") {
+        const allowedIds = new Set(authUser.gosalaIds || []);
+        const allowedNames = new Set((authUser.gosalaNames || []).map((n) => n.trim().toLowerCase()));
+        const userEmail = (authUser.email || "").trim().toLowerCase();
+        const userId = (authUser.userId || "").trim().toLowerCase();
+        const existingName = (existing.name || "").trim().toLowerCase();
+        const existingAdminEmail = (existing.adminEmail || "").trim().toLowerCase();
+        const existingAdminId = (existing.adminId || "").trim().toLowerCase();
+        const isOwner = allowedIds.has(existing.id) || allowedNames.has(existingName) || Boolean(userEmail) && existingAdminEmail === userEmail || Boolean(userId) && existingAdminId === userId;
+        if (!isOwner) {
+          return { status: 403, body: { ok: false, error: "Cross-tenant violation: Gaushala outside your operational portfolio" } };
+        }
+      }
+      if (authUser.role === "manager") {
+        const allowedIds = new Set(authUser.gosalaIds || []);
+        const allowedNames = new Set((authUser.gosalaNames || []).map((n) => n.trim().toLowerCase()));
+        const existingName = (existing.name || "").trim().toLowerCase();
+        const isAssigned = allowedIds.has(existing.id) || allowedNames.has(existingName);
+        if (!isAssigned) {
+          return { status: 403, body: { ok: false, error: "Gaushala outside your custodian assignment" } };
+        }
+      }
       const {
         name,
         region,
         address,
         contactPhone,
         email,
+        contactEmail,
         latitude,
         longitude,
         lat,
@@ -5625,27 +5681,14 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       const callerAdminName = restMeta.governingAdminName || restMeta.adminName || body.governingAdminName || body.adminName;
       const callerAdminEmail = restMeta.governingAdminEmail || restMeta.adminEmail || body.governingAdminEmail || body.adminEmail;
       const callerAdminId = restMeta.adminId || body.adminId;
-      const updated = await prisma.gosala.update({
-        where: { id },
-        data: {
-          name: name ? name.trim() : void 0,
-          region: region ? region.trim() : void 0,
-          address: address ? address.trim() : void 0,
-          contactPhone: contactPhone || void 0,
-          contactEmail: email || void 0,
-          latitude: finalLat,
-          longitude: finalLng,
-          ...callerAdminId ? { adminId: callerAdminId } : {},
-          ...callerAdminEmail ? { adminEmail: callerAdminEmail } : {},
-          ...callerAdminName ? { adminName: callerAdminName } : {}
-        }
-      });
       const isActing = body.actAsManagerMyself !== void 0 ? Boolean(body.actAsManagerMyself) : restMeta.isActingManager !== void 0 ? Boolean(restMeta.isActingManager) : void 0;
       const effectiveAdminName = callerAdminName || authUser?.name || "Operations Admin";
       const effectiveAdminEmail = callerAdminEmail || authUser?.email || "admin@gomaa.in";
       const effectiveAdminRole = restMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin");
       const effectiveAdminId = callerAdminId || authUser?.userId || "USER-ADM-101";
+      const currentMeta = existing.metadata && typeof existing.metadata === "object" ? { ...existing.metadata } : getGosalaMeta(existing.id, existing.name);
       const metaPatch = {
+        ...currentMeta,
         ...restMeta,
         ...finalLat !== void 0 ? { lat: finalLat } : {},
         ...finalLng !== void 0 ? { lng: finalLng } : {},
@@ -5662,7 +5705,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         metaPatch.managerId = callerAdminId;
         metaPatch.caretaker = `${callerAdminName} (Acting Custodian)`;
         try {
-          await prisma.gosalaManagerAssignment.deleteMany({ where: { gosalaId: updated.id } });
+          await prisma.gosalaManagerAssignment.deleteMany({ where: { gosalaId: existing.id } });
         } catch {
         }
       } else if (isActing === false && restMeta.managerName) {
@@ -5693,13 +5736,13 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
               await prisma.gosalaManagerAssignment.deleteMany({
                 where: {
                   userId: mgrUser.id,
-                  NOT: { gosalaId: updated.id }
+                  NOT: { gosalaId: existing.id }
                 }
               });
             }
             await prisma.gosalaManagerAssignment.deleteMany({
               where: {
-                gosalaId: updated.id,
+                gosalaId: existing.id,
                 NOT: { userId: mgrUser.id }
               }
             });
@@ -5707,13 +5750,13 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
               where: {
                 userId_gosalaId: {
                   userId: mgrUser.id,
-                  gosalaId: updated.id
+                  gosalaId: existing.id
                 }
               },
               create: {
                 userId: mgrUser.id,
-                gosalaId: updated.id,
-                region: updated.region,
+                gosalaId: existing.id,
+                region: region ? region.trim() : existing.region,
                 status: "Active"
               },
               update: {
@@ -5725,19 +5768,60 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           console.warn("Could not sync manager assignment in PUT gosalas:", e);
         }
       }
+      const updated = await prisma.gosala.update({
+        where: { id: existing.id },
+        data: {
+          name: name ? name.trim() : void 0,
+          region: region ? region.trim() : void 0,
+          address: address ? address.trim() : void 0,
+          contactPhone: contactPhone || void 0,
+          contactEmail: email || contactEmail || void 0,
+          latitude: finalLat,
+          longitude: finalLng,
+          metadata: metaPatch,
+          // ATOMICALLY PERSIST TO POSTGRESQL!
+          ...callerAdminId ? { adminId: callerAdminId } : {},
+          ...callerAdminEmail ? { adminEmail: callerAdminEmail } : {},
+          ...callerAdminName ? { adminName: callerAdminName } : {}
+        }
+      });
+      if (name && name.trim() !== existing.name) {
+        const newName = name.trim();
+        try {
+          await prisma.animal.updateMany({
+            where: { gosalaId: existing.id },
+            data: { gosala: newName }
+          });
+        } catch {
+        }
+        try {
+          await prisma.booking.updateMany({
+            where: {
+              OR: [
+                { gosalaId: existing.id },
+                { gosala: existing.name }
+              ]
+            },
+            data: {
+              gosala: newName,
+              gosalaName: newName
+            }
+          });
+        } catch {
+        }
+      }
       saveGosalaMeta(updated.id, updated.name, metaPatch);
-      const fullMeta = getGosalaMeta(updated.id, updated.name);
       const mergedUpdated = {
         ...updated,
-        ...fullMeta,
+        ...metaPatch,
         id: updated.id,
         name: updated.name,
         region: updated.region,
         address: updated.address,
         contactPhone: updated.contactPhone,
         contactEmail: updated.contactEmail,
-        lat: updated.latitude !== null && updated.latitude !== void 0 ? Number(updated.latitude) : fullMeta.lat,
-        lng: updated.longitude !== null && updated.longitude !== void 0 ? Number(updated.longitude) : fullMeta.lng,
+        lat: updated.latitude !== null && updated.latitude !== void 0 ? Number(updated.latitude) : metaPatch.lat,
+        lng: updated.longitude !== null && updated.longitude !== void 0 ? Number(updated.longitude) : metaPatch.lng,
         latitude: updated.latitude,
         longitude: updated.longitude
       };
@@ -5754,6 +5838,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       });
       if (!existing) {
         return { status: 404, body: { error: "Gaushala not found" } };
+      }
+      if (!authUser || authUser.role !== "super_admin") {
+        return { status: 403, body: { ok: false, error: "Only Super Admin Captain can decommission a Gaushala sanctuary" } };
       }
       try {
         await prisma.gosalaManagerAssignment.deleteMany({

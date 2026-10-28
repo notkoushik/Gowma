@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest"
 import request from "supertest"
 import { createTestServer } from "./app.ts"
 import { signJwt } from "../server/auth/jwt.ts"
+import { generateUniqueId } from "../server/auth/authService.ts"
 import type { Server } from "node:http"
 
 describe("GOMAA Sovereign RBAC & 80/20 Platform Economics Suite", () => {
@@ -13,14 +14,17 @@ describe("GOMAA Sovereign RBAC & 80/20 Platform Economics Suite", () => {
   let opsAdminToken2: string
   let managerToken: string
   let customerToken: string
+  let driverToken: string
+  let steppedDownSuperAdminToken: string
 
   beforeAll(() => {
     server = createTestServer()
 
     // 1. Super Admin Captain
     superAdminToken = signJwt({
-      userId: "test-superadmin-uuid",
-      name: "Master Super Admin",
+      userId: "USER-SA-SUPERADMIN",
+      uniqueId: "GMA-SA-0001",
+      name: "Super Admin",
       email: "superadmin@gomaa.in",
       role: "super_admin",
       dbRole: "SUPER_ADMIN",
@@ -31,53 +35,85 @@ describe("GOMAA Sovereign RBAC & 80/20 Platform Economics Suite", () => {
 
     // 2. Regional Operations Admin 1 (Assigned to Gaushala_01 & Gaushala_02)
     opsAdminToken1 = signJwt({
-      userId: "test-ops-admin-1-uuid",
-      name: "GOMAA Operations Hub 1",
+      userId: "df236242-0fb5-485c-988c-52336db502be",
+      uniqueId: "GMA-OPS-0104",
+      name: "GOMAA Operations",
       email: "gomaa052026@gmail.com",
       role: "admin",
       dbRole: "OPERATIONS_ADMIN",
-      adminId: "test-ops-admin-1-uuid",
-      gosalaIds: ["gaushala_01_id", "gaushala_02_id"],
+      adminId: "df236242-0fb5-485c-988c-52336db502be",
+      gosalaIds: ["6e187fdc-aab8-42e4-9370-8f607a7830f9", "d25c8f21-b5c5-4119-81b0-a0f7f7273911"],
       gosalaNames: ["Gaushala_01", "Gaushala_02"],
     })
 
     // 3. Regional Operations Admin 2 (Assigned to Gaushala_03 only)
     opsAdminToken2 = signJwt({
-      userId: "test-ops-admin-2-uuid",
-      name: "GOMAA Operations Hub 2",
-      email: "alt.ops@gomaa.in",
+      userId: "c1076b48-1898-4cda-852a-73d108a5c30b",
+      uniqueId: "GMA-OPS-0101",
+      name: "Admin_1",
+      email: "alt.yq-fs88dj2@yopmail.com",
       role: "admin",
       dbRole: "OPERATIONS_ADMIN",
-      adminId: "test-ops-admin-2-uuid",
-      gosalaIds: ["gaushala_03_id"],
+      adminId: "c1076b48-1898-4cda-852a-73d108a5c30b",
+      gosalaIds: ["c2b8b8de-0eef-43a8-b8c5-f98c8e1e9e09"],
       gosalaNames: ["Gaushala_03"],
     })
 
     // 4. Custodian Manager (Assigned to Gaushala_01)
     managerToken = signJwt({
-      userId: "test-manager-uuid",
-      name: "Gaushala Custodian Manager",
-      email: "mgr.surya@gomaa.in",
+      userId: "USER-MGR-01",
+      uniqueId: "GMA-MGR-0101",
+      name: "Manager 1",
+      email: "manager1@gomaa.in",
       role: "manager",
       dbRole: "GOSALA_MANAGER",
-      gosalaIds: ["gaushala_01_id"],
+      gosalaIds: ["6e187fdc-aab8-42e4-9370-8f607a7830f9"],
       gosalaNames: ["Gaushala_01"],
     })
 
     // 5. Devotee Customer
     customerToken = signJwt({
-      userId: "test-customer-uuid",
-      name: "Devotee Ramesh",
-      email: "ramesh.devotee@gomaa.test",
+      userId: "f83d42a8-4dd7-42ff-bbc2-1381f39c8064",
+      uniqueId: "GMA-DEV-0223",
+      name: "Devotee (devpulseorg)",
+      email: "devpulseorg@gmail.com",
       role: "customer",
       dbRole: "CUSTOMER",
+      gosalaIds: [],
+      gosalaNames: [],
+    })
+
+    // 6. Transit Driver
+    driverToken = signJwt({
+      userId: "ccc0e044-0b2d-4ee4-b13a-9bf7894d8ae3",
+      uniqueId: "GMA-DRV-3001",
+      name: "Sunil Pawar (Transit Pilot)",
+      email: "driver@gomaa.in",
+      role: "driver",
+      dbRole: "DRIVER",
+      gosalaIds: [],
+      gosalaNames: [],
+    })
+
+    // 7. Super Admin stepped down into Operations context
+    steppedDownSuperAdminToken = signJwt({
+      userId: "USER-SA-SUPERADMIN",
+      uniqueId: "GMA-SA-0001",
+      name: "Super Admin",
+      email: "superadmin@gomaa.in",
+      role: "admin",
+      dbRole: "OPERATIONS_ADMIN",
+      originalRole: "super_admin",
+      isContextSwitched: true,
+      contextSwitchedAt: Date.now(),
+      adminId: "USER-SA-SUPERADMIN",
       gosalaIds: [],
       gosalaNames: [],
     })
   })
 
   // ===========================================================================
-  // SECTION 1: AUTHENTICATION & SESSION INTEGRITY
+  // SECTION 1: AUTHENTICATION, CRYPTOGRAPHIC UNIQUE ID & SESSION INTEGRITY
   // ===========================================================================
   describe("1. Authentication & Session Gatekeeping", () => {
     it("rejects unauthenticated requests to protected endpoints with 401", async () => {
@@ -101,7 +137,7 @@ describe("GOMAA Sovereign RBAC & 80/20 Platform Economics Suite", () => {
       expect(res.body.ok).toBe(true)
     })
 
-    it("identifies Super Admin correctly on /api/auth/me", async () => {
+    it("identifies Super Admin correctly on /api/auth/me with GMA-SA-* uniqueId", async () => {
       const res = await request(server)
         .get("/api/auth/me")
         .set("Authorization", `Bearer ${superAdminToken}`)
@@ -109,9 +145,11 @@ describe("GOMAA Sovereign RBAC & 80/20 Platform Economics Suite", () => {
       expect(res.body.ok).toBe(true)
       expect(res.body.user.role).toBe("super_admin")
       expect(res.body.user.email).toBe("superadmin@gomaa.in")
+      expect(res.body.user.uniqueId).toBe("GMA-SA-0001")
+      expect(res.body.user.uniqueId).toMatch(/^GMA-SA-/)
     })
 
-    it("identifies Operations Admin correctly on /api/auth/me", async () => {
+    it("identifies Operations Admin correctly on /api/auth/me with GMA-OPS-* uniqueId", async () => {
       const res = await request(server)
         .get("/api/auth/me")
         .set("Authorization", `Bearer ${opsAdminToken1}`)
@@ -119,6 +157,59 @@ describe("GOMAA Sovereign RBAC & 80/20 Platform Economics Suite", () => {
       expect(res.body.ok).toBe(true)
       expect(res.body.user.role).toBe("admin")
       expect(res.body.user.email).toBe("gomaa052026@gmail.com")
+      expect(res.body.user.uniqueId).toBe("GMA-OPS-0104")
+      expect(res.body.user.uniqueId).toMatch(/^GMA-OPS-/)
+    })
+
+    it("identifies Gaushala Manager correctly on /api/auth/me with GMA-MGR-* uniqueId", async () => {
+      const res = await request(server)
+        .get("/api/auth/me")
+        .set("Authorization", `Bearer ${managerToken}`)
+      expect(res.status).toBe(200)
+      expect(res.body.ok).toBe(true)
+      expect(res.body.user.role).toBe("manager")
+      expect(res.body.user.email).toBe("manager1@gomaa.in")
+      expect(res.body.user.uniqueId).toBe("GMA-MGR-0101")
+      expect(res.body.user.uniqueId).toMatch(/^GMA-MGR-/)
+    })
+
+    it("identifies Customer Devotee correctly on /api/auth/me with GMA-DEV-* uniqueId", async () => {
+      const res = await request(server)
+        .get("/api/auth/me")
+        .set("Authorization", `Bearer ${customerToken}`)
+      expect(res.status).toBe(200)
+      expect(res.body.ok).toBe(true)
+      expect(res.body.user.role).toBe("customer")
+      expect(res.body.user.uniqueId).toBe("GMA-DEV-0223")
+      expect(res.body.user.uniqueId).toMatch(/^GMA-DEV-/)
+    })
+
+    it("identifies Transit Driver correctly on /api/auth/me with GMA-DRV-* uniqueId", async () => {
+      const res = await request(server)
+        .get("/api/auth/me")
+        .set("Authorization", `Bearer ${driverToken}`)
+      expect(res.status).toBe(200)
+      expect(res.body.ok).toBe(true)
+      expect(res.body.user.role).toBe("driver")
+      expect(res.body.user.uniqueId).toBe("GMA-DRV-3001")
+      expect(res.body.user.uniqueId).toMatch(/^GMA-DRV-/)
+    })
+
+    it("verifies generateUniqueId produces cryptographic prefixes for each role hierarchy", () => {
+      const saId = generateUniqueId("super_admin")
+      expect(saId).toMatch(/^GMA-SA-\d{4}$/)
+
+      const opsId = generateUniqueId("admin", "+91 98765 43210")
+      expect(opsId).toBe("GMA-OPS-3210")
+
+      const mgrId = generateUniqueId("manager", "+91 91234 56789")
+      expect(mgrId).toBe("GMA-MGR-6789")
+
+      const drvId = generateUniqueId("driver", "+91 99887 76655")
+      expect(drvId).toBe("GMA-DRV-6655")
+
+      const devId = generateUniqueId("customer", "+91 95544 33221")
+      expect(devId).toBe("GMA-DEV-3221")
     })
 
     it("validates login endpoint error responses when fields are missing", async () => {
@@ -141,6 +232,7 @@ describe("GOMAA Sovereign RBAC & 80/20 Platform Economics Suite", () => {
       expect(res.status).toBe(200)
       expect(res.body.ok).toBe(true)
       expect(Array.isArray(res.body.users)).toBe(true)
+      expect(res.body.users.length).toBeGreaterThan(0)
     })
 
     it("strictly blocks Operations Admin from reading the global user directory (HTTP 403)", async () => {
@@ -164,6 +256,14 @@ describe("GOMAA Sovereign RBAC & 80/20 Platform Economics Suite", () => {
       const res = await request(server)
         .get("/api/users")
         .set("Authorization", `Bearer ${customerToken}`)
+      expect(res.status).toBe(403)
+      expect(res.body.ok).toBe(false)
+    })
+
+    it("strictly blocks Transit Driver from reading the user directory (HTTP 403)", async () => {
+      const res = await request(server)
+        .get("/api/users")
+        .set("Authorization", `Bearer ${driverToken}`)
       expect(res.status).toBe(403)
       expect(res.body.ok).toBe(false)
     })
@@ -238,7 +338,7 @@ describe("GOMAA Sovereign RBAC & 80/20 Platform Economics Suite", () => {
   })
 
   // ===========================================================================
-  // SECTION 4: MULTI-TENANT OPERATIONS ADMIN PORTFOLIO BOUNDARIES
+  // SECTION 4: MULTI-TENANT GAUSHALA ISOLATION & ROLE TREE BOUNDARIES
   // ===========================================================================
   describe("4. Multi-Tenant Operations Admin Portfolio Boundaries", () => {
     it("prevents Operations Admin from assigning managers to Gaushalas outside their operational portfolio", async () => {
@@ -271,6 +371,146 @@ describe("GOMAA Sovereign RBAC & 80/20 Platform Economics Suite", () => {
           expect(["Gaushala_01", "Gaushala_02"]).toContain(gName)
         }
       }
+    })
+
+    it("GET /api/gosalas strictly isolates Gaushala_01 and Gaushala_02 to Operations Admin 1 (gomaa052026@gmail.com)", async () => {
+      const res = await request(server)
+        .get("/api/gosalas")
+        .set("Authorization", `Bearer ${opsAdminToken1}`)
+      expect(res.status).toBe(200)
+      expect(res.body.ok).toBe(true)
+      const names = res.body.gosalas.map((g: any) => g.name)
+      expect(names).toContain("Gaushala_01")
+      expect(names).toContain("Gaushala_02")
+      expect(names).not.toContain("Gaushala_03")
+    })
+
+    it("GET /api/gosalas strictly isolates Gaushala_03 to Operations Admin 2 (alt.yq-fs88dj2@yopmail.com)", async () => {
+      const res = await request(server)
+        .get("/api/gosalas")
+        .set("Authorization", `Bearer ${opsAdminToken2}`)
+      expect(res.status).toBe(200)
+      expect(res.body.ok).toBe(true)
+      const names = res.body.gosalas.map((g: any) => g.name)
+      expect(names).toContain("Gaushala_03")
+      expect(names).not.toContain("Gaushala_01")
+      expect(names).not.toContain("Gaushala_02")
+    })
+
+    it("Super Admin in stepped-down Operations context has zero foreign Gaushala leakage", async () => {
+      const res = await request(server)
+        .get("/api/gosalas")
+        .set("Authorization", `Bearer ${steppedDownSuperAdminToken}`)
+      expect(res.status).toBe(200)
+      expect(res.body.ok).toBe(true)
+      const names = res.body.gosalas.map((g: any) => g.name)
+      expect(names).not.toContain("Gaushala_01")
+      expect(names).not.toContain("Gaushala_02")
+      expect(names).not.toContain("Gaushala_03")
+    })
+
+    it("Super Admin in Captain mode has sovereign global visibility across ALL Gaushalas", async () => {
+      const res = await request(server)
+        .get("/api/gosalas")
+        .set("Authorization", `Bearer ${superAdminToken}`)
+      expect(res.status).toBe(200)
+      expect(res.body.ok).toBe(true)
+      const names = res.body.gosalas.map((g: any) => g.name)
+      expect(names).toContain("Gaushala_01")
+      expect(names).toContain("Gaushala_02")
+      expect(names).toContain("Gaushala_03")
+    })
+
+    it("strictly denies cross-tenant Gaushala modification (Operations Admin 2 trying to update Gaushala_01)", async () => {
+      const res = await request(server)
+        .put("/api/gosalas/Gaushala_01")
+        .set("Authorization", `Bearer ${opsAdminToken2}`)
+        .send({ capacity: 999 })
+      expect(res.status).toBe(403)
+      expect(res.body.ok).toBe(false)
+      expect(res.body.error).toMatch(/operational portfolio/i)
+    })
+
+    it("strictly blocks unauthorized roles (Customer & Driver) from modifying Gaushala (HTTP 403)", async () => {
+      const resCust = await request(server)
+        .put("/api/gosalas/Gaushala_01")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ capacity: 500 })
+      expect(resCust.status).toBe(403)
+
+      const resDrv = await request(server)
+        .put("/api/gosalas/Gaushala_01")
+        .set("Authorization", `Bearer ${driverToken}`)
+        .send({ capacity: 500 })
+      expect(resDrv.status).toBe(403)
+    })
+
+    it("allows Operations Admin 1 to update Gaushala_01 with metadata persisting directly into PostgreSQL", async () => {
+      const testCapacity = 450
+      const testTrustNo = "TRUST-MH-VET-2026-QA"
+      const testVisitingHours = "06:30 AM - 07:30 PM"
+
+      const res = await request(server)
+        .put("/api/gosalas/Gaushala_01")
+        .set("Authorization", `Bearer ${opsAdminToken1}`)
+        .send({
+          capacity: testCapacity,
+          trustRegistrationNo: testTrustNo,
+          visitingHours: testVisitingHours,
+          contactEmail: "gomaa052026@gmail.com",
+        })
+      expect(res.status).toBe(200)
+      expect(res.body.ok).toBe(true)
+      expect(res.body.gosala.capacity).toBe(testCapacity)
+      expect(res.body.gosala.trustRegistrationNo).toBe(testTrustNo)
+      expect(res.body.gosala.visitingHours).toBe(testVisitingHours)
+
+      // Query GET /api/gosalas to verify atomic DB persistence
+      const fetchRes = await request(server)
+        .get("/api/gosalas")
+        .set("Authorization", `Bearer ${opsAdminToken1}`)
+      expect(fetchRes.status).toBe(200)
+      const g1 = fetchRes.body.gosalas.find((g: any) => g.name === "Gaushala_01")
+      expect(g1).toBeDefined()
+      expect(g1.capacity).toBe(testCapacity)
+      expect(g1.trustRegistrationNo).toBe(testTrustNo)
+      expect(g1.visitingHours).toBe(testVisitingHours)
+    })
+
+    it("strictly blocks non-super-admins from deleting Gaushalas via DELETE /api/gosalas/:id (HTTP 403)", async () => {
+      const resAdmin = await request(server)
+        .delete("/api/gosalas/Gaushala_01")
+        .set("Authorization", `Bearer ${opsAdminToken1}`)
+      expect(resAdmin.status).toBe(403)
+      expect(resAdmin.body.error).toMatch(/Only Super Admin Captain can decommission/i)
+
+      const resCust = await request(server)
+        .delete("/api/gosalas/Gaushala_01")
+        .set("Authorization", `Bearer ${customerToken}`)
+      expect(resCust.status).toBe(403)
+    })
+
+    it("strictly blocks Customers and Drivers from registering Gaushalas via POST /api/gosalas (HTTP 403)", async () => {
+      const resCust = await request(server)
+        .post("/api/gosalas")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({
+          name: "Rogue Unauthorized Sanctuary",
+          region: "Mumbai Western Suburbs (Borivali / Andheri)",
+          address: "Unauthorized Path 123",
+        })
+      expect(resCust.status).toBe(403)
+      expect(resCust.body.error).toMatch(/Only platform administrators/i)
+
+      const resDrv = await request(server)
+        .post("/api/gosalas")
+        .set("Authorization", `Bearer ${driverToken}`)
+        .send({
+          name: "Rogue Driver Sanctuary",
+          region: "Pune Metropolitan (Shivajinagar / Kothrud)",
+          address: "Driver Depot 456",
+        })
+      expect(resDrv.status).toBe(403)
     })
   })
 
@@ -400,6 +640,29 @@ describe("GOMAA Sovereign RBAC & 80/20 Platform Economics Suite", () => {
       expect(data.commission).toBe(1000)
       expect(data.gosalaPayable).toBe(4000)
       expect(data.commission + data.gosalaPayable).toBe(5000)
+    })
+
+    it("guarantees mathematical precision and zero fractional penny leakage across high-volume seva amounts", async () => {
+      // Test 10 distinct amounts and verify commission + gosalaPayable always strictly equals gross - transport
+      const testAmounts = [1500, 2750, 3333, 4999, 7500, 10000, 25000, 50000, 75555, 100000]
+
+      for (const amount of testAmounts) {
+        const res = await request(server)
+          .post("/api/pricing/calculate")
+          .set("Authorization", `Bearer ${customerToken}`)
+          .send({
+            baseRate: amount,
+            durationMin: 60,
+            distanceKm: 5,
+            commissionPct: 20,
+            taxPct: 18,
+          })
+
+        expect(res.status).toBe(200)
+        const d = res.body
+        expect(d.commission + d.gosalaPayable).toBe(amount)
+        expect(d.total).toBe(Math.round(amount * 1.18))
+      }
     })
   })
 })

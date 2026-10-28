@@ -546,13 +546,11 @@ export async function getDirectoryAccounts() {
         }))
 
         if (u.role === "OPERATIONS_ADMIN" || u.role === "SUPER_ADMIN") {
-          const userEmail = (u.email || "").toLowerCase()
-          const userName = (u.name || "").toLowerCase()
+          const userEmail = (u.email || "").toLowerCase().trim()
           allGosalas.forEach((g: any) => {
-            const meta = getGosalaMeta(g.id, g.name)
-            const govEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase()
-            const govName = (g.adminName || meta.governingAdminName || meta.adminName || "").toLowerCase()
-            const isMatch = g.adminId === u.id || (userEmail && govEmail === userEmail) || (userName && govName.includes(userName))
+            const meta = (g.metadata && typeof g.metadata === "object") ? (g.metadata as any) : getGosalaMeta(g.id, g.name)
+            const govEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase().trim()
+            const isMatch = (g.adminId && g.adminId === u.id) || (userEmail && govEmail === userEmail)
             if (isMatch && !assignedGosalas.some((x: any) => x.id === g.id)) {
               assignedGosalas.push({ id: g.id, name: g.name })
             }
@@ -609,13 +607,11 @@ export async function getAllUsers() {
           name: a.gosala.name,
         }))
         if (u.role === "OPERATIONS_ADMIN" || u.role === "SUPER_ADMIN") {
-          const userEmail = (u.email || "").toLowerCase()
-          const userName = (u.name || "").toLowerCase()
+          const userEmail = (u.email || "").toLowerCase().trim()
           allGosalas.forEach((g: any) => {
-            const meta = getGosalaMeta(g.id, g.name)
-            const govEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase()
-            const govName = (g.adminName || meta.governingAdminName || meta.adminName || "").toLowerCase()
-            const isMatch = g.adminId === u.id || (userEmail && govEmail === userEmail) || (userName && govName.includes(userName))
+            const meta = (g.metadata && typeof g.metadata === "object") ? (g.metadata as any) : getGosalaMeta(g.id, g.name)
+            const govEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase().trim()
+            const isMatch = (g.adminId && g.adminId === u.id) || (userEmail && govEmail === userEmail)
             if (isMatch && !assignedGosalas.some((x: any) => x.id === g.id)) {
               assignedGosalas.push({ id: g.id, name: g.name })
             }
@@ -766,32 +762,29 @@ export async function switchUserContext(
 
   if (targetRole === "admin") {
     // Switching down to Operations Admin ("Operations" mode)
-    // Dynamic portfolio discovery: locate only Gaushalas created or governed by this Super Admin
-    const adminEmail = (dbUser.email || "").toLowerCase()
+    // Dynamic portfolio discovery: locate strictly Gaushalas created or governed by this Super Admin
+    const adminEmail = (dbUser.email || "").toLowerCase().trim()
     const allGosalas = await prisma.gosala.findMany({ where: { isActive: true } })
     const personalGosalas: { id: string; name: string }[] = []
 
     allGosalas.forEach((g: any) => {
-      const meta = getGosalaMeta(g.id, g.name)
-      const govEmail = (g.adminEmail || meta.governingAdminEmail || "").toLowerCase()
-      const adminIdMatch = meta.adminId === dbUser.id || g.adminId === dbUser.id
-      if (govEmail === adminEmail || adminIdMatch) {
+      const meta = (g.metadata && typeof g.metadata === "object") ? (g.metadata as any) : getGosalaMeta(g.id, g.name)
+      const govEmail = (g.adminEmail || meta.governingAdminEmail || "").toLowerCase().trim()
+      const adminIdMatch = Boolean((meta.adminId && meta.adminId === dbUser.id) || (g.adminId && g.adminId === dbUser.id))
+      if ((govEmail && govEmail === adminEmail) || adminIdMatch) {
         personalGosalas.push({ id: g.id, name: g.name })
       }
     })
 
-    // If Super Admin has not assigned a private sub-portfolio, grant regional operations governance
-    if (personalGosalas.length === 0 && allGosalas.length > 0) {
-      allGosalas.forEach((g: any) => {
-        personalGosalas.push({ id: g.id, name: g.name })
-      })
-    }
-
+    // Strict multi-tenant isolation: Super Admin in stepped-down Operations mode only sees their own assigned Gaushalas.
+    // Under NO circumstances do other Operations Admins' Gaushalas leak into this portfolio.
     const gosalaIds = personalGosalas.map((g) => g.id)
     const gosalaNames = personalGosalas.map((g) => g.name)
+    const uniqueId = dbUser.uniqueId || generateUniqueId(dbUser.role, dbUser.phone)
 
     const token = signJwt({
       userId: dbUser.id,
+      uniqueId,
       name: dbUser.name,
       email: dbUser.email,
       phone: dbUser.phone,
@@ -811,6 +804,7 @@ export async function switchUserContext(
       token,
       user: {
         id: dbUser.id,
+        uniqueId,
         name: dbUser.name,
         email: dbUser.email,
         phone: dbUser.phone,
@@ -829,8 +823,10 @@ export async function switchUserContext(
   } else {
     // Returning to Super Admin ("Captain" mode)
     // Global Platform oversight across all Gaushalas
+    const uniqueId = dbUser.uniqueId || generateUniqueId(dbUser.role, dbUser.phone)
     const token = signJwt({
       userId: dbUser.id,
+      uniqueId,
       name: dbUser.name,
       email: dbUser.email,
       phone: dbUser.phone,
@@ -849,6 +845,7 @@ export async function switchUserContext(
       token,
       user: {
         id: dbUser.id,
+        uniqueId,
         name: dbUser.name,
         email: dbUser.email,
         phone: dbUser.phone,

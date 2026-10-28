@@ -401,24 +401,25 @@ export default function Pricing({
   }, [gosalas, selectedGosalaId])
 
   const filteredGosalas = useMemo(() => {
-    if (!gosalaSearch.trim()) return gosalas
-    const q = gosalaSearch.toLowerCase()
+    const q = String(gosalaSearch || "").trim().toLowerCase()
+    if (!q) return gosalas
     return gosalas.filter(
       (g) =>
-        g.name.toLowerCase().includes(q) ||
-        g.region.toLowerCase().includes(q) ||
-        g.address.toLowerCase().includes(q),
+        String(g.name || "").toLowerCase().includes(q) ||
+        String(g.region || "").toLowerCase().includes(q) ||
+        String(g.address || "").toLowerCase().includes(q),
     )
   }, [gosalas, gosalaSearch])
 
   const activeGosala = useMemo(() => {
-    return gosalas.find((g) => g.id === selectedGosalaId) || gosalas[0]
+    if (!selectedGosalaId) return gosalas[0] || null
+    return gosalas.find((g) => g.id === selectedGosalaId || g.name === selectedGosalaId) || gosalas[0] || null
   }, [gosalas, selectedGosalaId])
 
   // Animals at this Gaushala
   const gosalaAnimals = useMemo(() => {
     if (!activeGosala) return []
-    return animals.filter((a) => a.gosala === activeGosala.name)
+    return animals.filter((a) => String(a.gosala || "").toLowerCase() === String(activeGosala.name || "").toLowerCase())
   }, [animals, activeGosala])
 
   // Offerings / items at this Gaushala
@@ -436,8 +437,8 @@ export default function Pricing({
     return (
       managers.find(
         (m) =>
-          m.gosala === activeGosala.name ||
-          (m.gosalas && m.gosalas.includes(activeGosala.name)) ||
+          String(m.gosala || "").toLowerCase() === String(activeGosala.name || "").toLowerCase() ||
+          (m.gosalas && m.gosalas.some((gn) => String(gn || "").toLowerCase() === String(activeGosala.name || "").toLowerCase())) ||
           m.id === activeGosala.managerId,
       ) || null
     )
@@ -445,14 +446,14 @@ export default function Pricing({
 
   // Governing Operations Admin details dynamically derived from active sanctuary's assigned Operations Admin
   const governingAdmin = useMemo(() => {
-    const adminEmail = (activeGosala?.governingAdminEmail || activeGosala?.adminEmail || "").trim().toLowerCase()
-    const adminName = (activeGosala?.governingAdminName || activeGosala?.adminName || "").trim()
+    const adminEmail = String(activeGosala?.governingAdminEmail || activeGosala?.adminEmail || "").trim().toLowerCase()
+    const adminName = String(activeGosala?.governingAdminName || activeGosala?.adminName || "").trim()
     const adminId = activeGosala?.adminId || (activeGosala as any)?.governingAdminId
 
     const matchedUser = (users || []).find((u) => {
-      if (adminId && u.id === adminId) return true
-      if (adminEmail && u.email?.trim().toLowerCase() === adminEmail) return true
-      if (adminName && u.name?.trim().toLowerCase() === adminName.toLowerCase()) return true
+      if (adminId && (u.id === adminId || (u as any).uniqueId === adminId)) return true
+      if (adminEmail && String(u.email || "").trim().toLowerCase() === adminEmail) return true
+      if (adminName && String(u.name || "").trim().toLowerCase() === adminName.toLowerCase()) return true
       return false
     })
 

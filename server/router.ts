@@ -73,6 +73,7 @@ async function resolveRoleProfilesFromDB(): Promise<Record<string, any>> {
       const meta = ((user?.metadata as any) || {})
       profiles[roleKey] = {
         id: user?.id || `USER-${roleKey.toUpperCase()}`,
+        uniqueId: user?.uniqueId || undefined,
         role: roleKey,
         name: user?.name || (roleKey === "super_admin" ? "Super Admin" : roleKey === "admin" ? "Operations Admin" : roleKey === "manager" ? "Gaushala Manager" : roleKey === "driver" ? "Transit Pilot" : "Devotee"),
         phone: user?.phone || "+91 98000 00000",
@@ -3072,7 +3073,7 @@ export async function handleApiRequest(
         orderBy: { createdAt: "asc" },
       })
       const formatted = dbGosalas.map((g: any) => {
-        const meta = getGosalaMeta(g.id, g.name)
+        const meta = (g.metadata && typeof g.metadata === "object") ? { ...(g.metadata as any) } : getGosalaMeta(g.id, g.name)
         const lat =
           g.latitude !== null && g.latitude !== undefined
             ? Number(g.latitude)
@@ -3177,16 +3178,17 @@ export async function handleApiRequest(
         const allowedIds = new Set(authUser.gosalaIds || [])
         const allowedNames = new Set((authUser.gosalaNames || []).map((name) => name.trim().toLowerCase()))
         const userEmail = (authUser.email || "").trim().toLowerCase()
-        const userName = (authUser.name || "").trim().toLowerCase()
-        // Fail closed: only Gaushalas assigned to this Operations Admin or created by them
+        const userId = (authUser.userId || "").trim().toLowerCase()
+
+        // Strict isolation: only Gaushalas assigned to or governed by this Operations Admin
         scopedGosalas = formatted.filter((g: any) => {
           const idMatch = allowedIds.has(g.id)
           const nameMatch = allowedNames.has(String(g.name).trim().toLowerCase())
           const gGovEmail = String(g.governingAdminEmail || g.adminEmail || "").trim().toLowerCase()
           const govEmailMatch = Boolean(userEmail && gGovEmail === userEmail)
-          const adminIdMatch = Boolean(authUser.userId && (g.adminId === authUser.userId))
-          const adminNameMatch = Boolean(userName && String(g.governingAdminName || g.adminName || "").toLowerCase().includes(userName))
-          return idMatch || nameMatch || govEmailMatch || adminIdMatch || adminNameMatch
+          const gAdminId = String(g.adminId || "").trim().toLowerCase()
+          const adminIdMatch = Boolean(userId && gAdminId === userId)
+          return idMatch || nameMatch || govEmailMatch || adminIdMatch
         })
       } else if (authUser?.role === "super_admin") {
         // Super Admin has global oversight across all Operations Admins and Gaushalas!
@@ -3202,6 +3204,9 @@ export async function handleApiRequest(
 
   // POST /api/gosalas
   if (method === "POST" && pathname === "/api/gosalas") {
+    if (!authUser || (authUser.role !== "super_admin" && authUser.role !== "admin")) {
+      return { status: 403, body: { ok: false, error: "Only platform administrators can register new Gaushalas" } }
+    }
     try {
       const {
         name,
@@ -3365,14 +3370,65 @@ export async function handleApiRequest(
   // PUT /api/gosalas/:id
   const putGosalaMatch = pathname.match(/^\/api\/gosalas\/([^/]+)$/)
   if (method === "PUT" && putGosalaMatch) {
-    const id = putGosalaMatch[1]
+    const rawId = putGosalaMatch[1]
+    const decodedId = decodeURIComponent(rawId)
     try {
+      const existing = await prisma.gosala.findFirst({
+        where: {
+          OR: [
+            { id: rawId },
+            { id: decodedId },
+            { name: decodedId },
+            { name: { equals: decodedId, mode: "insensitive" } },
+          ],
+        },
+      })
+      if (!existing) {
+        return { status: 404, body: { error: "Gaushala not found" } }
+      }
+
+      if (!authUser || (authUser.role !== "super_admin" && authUser.role !== "admin" && authUser.role !== "manager")) {
+        return { status: 403, body: { ok: false, error: "Insufficient privileges to modify sanctuary records" } }
+      }
+
+      if (authUser.role === "admin") {
+        const allowedIds = new Set(authUser.gosalaIds || [])
+        const allowedNames = new Set((authUser.gosalaNames || []).map((n) => n.trim().toLowerCase()))
+        const userEmail = (authUser.email || "").trim().toLowerCase()
+        const userId = (authUser.userId || "").trim().toLowerCase()
+        const existingName = (existing.name || "").trim().toLowerCase()
+        const existingAdminEmail = (existing.adminEmail || "").trim().toLowerCase()
+        const existingAdminId = (existing.adminId || "").trim().toLowerCase()
+
+        const isOwner =
+          allowedIds.has(existing.id) ||
+          allowedNames.has(existingName) ||
+          (Boolean(userEmail) && existingAdminEmail === userEmail) ||
+          (Boolean(userId) && existingAdminId === userId)
+
+        if (!isOwner) {
+          return { status: 403, body: { ok: false, error: "Cross-tenant violation: Gaushala outside your operational portfolio" } }
+        }
+      }
+
+      if (authUser.role === "manager") {
+        const allowedIds = new Set(authUser.gosalaIds || [])
+        const allowedNames = new Set((authUser.gosalaNames || []).map((n) => n.trim().toLowerCase()))
+        const existingName = (existing.name || "").trim().toLowerCase()
+
+        const isAssigned = allowedIds.has(existing.id) || allowedNames.has(existingName)
+        if (!isAssigned) {
+          return { status: 403, body: { ok: false, error: "Gaushala outside your custodian assignment" } }
+        }
+      }
+
       const {
         name,
         region,
         address,
         contactPhone,
         email,
+        contactEmail,
         latitude,
         longitude,
         lat,
@@ -3387,22 +3443,6 @@ export async function handleApiRequest(
       const callerAdminEmail = restMeta.governingAdminEmail || restMeta.adminEmail || body.governingAdminEmail || body.adminEmail
       const callerAdminId = restMeta.adminId || body.adminId
 
-      const updated = await prisma.gosala.update({
-        where: { id },
-        data: {
-          name: name ? name.trim() : undefined,
-          region: region ? region.trim() : undefined,
-          address: address ? address.trim() : undefined,
-          contactPhone: contactPhone || undefined,
-          contactEmail: email || undefined,
-          latitude: finalLat,
-          longitude: finalLng,
-          ...(callerAdminId ? { adminId: callerAdminId } : {}),
-          ...(callerAdminEmail ? { adminEmail: callerAdminEmail } : {}),
-          ...(callerAdminName ? { adminName: callerAdminName } : {}),
-        },
-      })
-
       const isActing = body.actAsManagerMyself !== undefined
         ? Boolean(body.actAsManagerMyself)
         : restMeta.isActingManager !== undefined
@@ -3414,7 +3454,12 @@ export async function handleApiRequest(
       const effectiveAdminRole = restMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin")
       const effectiveAdminId = callerAdminId || authUser?.userId || "USER-ADM-101"
 
+      const currentMeta = (existing.metadata && typeof existing.metadata === "object")
+        ? { ...(existing.metadata as any) }
+        : getGosalaMeta(existing.id, existing.name)
+
       const metaPatch: any = {
+        ...currentMeta,
         ...restMeta,
         ...(finalLat !== undefined ? { lat: finalLat } : {}),
         ...(finalLng !== undefined ? { lng: finalLng } : {}),
@@ -3432,7 +3477,7 @@ export async function handleApiRequest(
         metaPatch.managerId = callerAdminId
         metaPatch.caretaker = `${callerAdminName} (Acting Custodian)`
         try {
-          await prisma.gosalaManagerAssignment.deleteMany({ where: { gosalaId: updated.id } })
+          await prisma.gosalaManagerAssignment.deleteMany({ where: { gosalaId: existing.id } })
         } catch {}
       } else if (isActing === false && restMeta.managerName) {
         metaPatch.isActingManager = false
@@ -3464,13 +3509,13 @@ export async function handleApiRequest(
               await prisma.gosalaManagerAssignment.deleteMany({
                 where: {
                   userId: mgrUser.id,
-                  NOT: { gosalaId: updated.id },
+                  NOT: { gosalaId: existing.id },
                 },
               })
             }
             await prisma.gosalaManagerAssignment.deleteMany({
               where: {
-                gosalaId: updated.id,
+                gosalaId: existing.id,
                 NOT: { userId: mgrUser.id },
               },
             })
@@ -3478,13 +3523,13 @@ export async function handleApiRequest(
               where: {
                 userId_gosalaId: {
                   userId: mgrUser.id,
-                  gosalaId: updated.id
+                  gosalaId: existing.id
                 },
               },
               create: {
                 userId: mgrUser.id,
-                gosalaId: updated.id,
-                region: updated.region,
+                gosalaId: existing.id,
+                region: region ? region.trim() : existing.region,
                 status: "Active",
               },
               update: {
@@ -3497,20 +3542,61 @@ export async function handleApiRequest(
         }
       }
 
+      const updated = await prisma.gosala.update({
+        where: { id: existing.id },
+        data: {
+          name: name ? name.trim() : undefined,
+          region: region ? region.trim() : undefined,
+          address: address ? address.trim() : undefined,
+          contactPhone: contactPhone || undefined,
+          contactEmail: email || contactEmail || undefined,
+          latitude: finalLat,
+          longitude: finalLng,
+          metadata: metaPatch, // ATOMICALLY PERSIST TO POSTGRESQL!
+          ...(callerAdminId ? { adminId: callerAdminId } : {}),
+          ...(callerAdminEmail ? { adminEmail: callerAdminEmail } : {}),
+          ...(callerAdminName ? { adminName: callerAdminName } : {}),
+        },
+      })
+
+      // If Gaushala name was updated, synchronize any animal and booking relations
+      if (name && name.trim() !== existing.name) {
+        const newName = name.trim()
+        try {
+          await prisma.animal.updateMany({
+            where: { gosalaId: existing.id },
+            data: { gosala: newName } as any,
+          })
+        } catch {}
+        try {
+          await prisma.booking.updateMany({
+            where: {
+              OR: [
+                { gosalaId: existing.id },
+                { gosala: existing.name },
+              ],
+            },
+            data: {
+              gosala: newName,
+              gosalaName: newName,
+            } as any,
+          })
+        } catch {}
+      }
+
       saveGosalaMeta(updated.id, updated.name, metaPatch)
 
-      const fullMeta = getGosalaMeta(updated.id, updated.name)
       const mergedUpdated = {
         ...updated,
-        ...fullMeta,
+        ...metaPatch,
         id: updated.id,
         name: updated.name,
         region: updated.region,
         address: updated.address,
         contactPhone: updated.contactPhone,
         contactEmail: updated.contactEmail,
-        lat: updated.latitude !== null && updated.latitude !== undefined ? Number(updated.latitude) : fullMeta.lat,
-        lng: updated.longitude !== null && updated.longitude !== undefined ? Number(updated.longitude) : fullMeta.lng,
+        lat: updated.latitude !== null && updated.latitude !== undefined ? Number(updated.latitude) : metaPatch.lat,
+        lng: updated.longitude !== null && updated.longitude !== undefined ? Number(updated.longitude) : metaPatch.lng,
         latitude: updated.latitude,
         longitude: updated.longitude,
       }
@@ -3530,6 +3616,10 @@ export async function handleApiRequest(
       })
       if (!existing) {
         return { status: 404, body: { error: "Gaushala not found" } }
+      }
+
+      if (!authUser || authUser.role !== "super_admin") {
+        return { status: 403, body: { ok: false, error: "Only Super Admin Captain can decommission a Gaushala sanctuary" } }
       }
       // Delete manager assignments
       try {
