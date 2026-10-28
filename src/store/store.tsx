@@ -523,7 +523,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       const role = meRes?.user?.role
-      const isAdminOrSuper = role === "admin" || role === "super_admin"
+      const isSuper = role === "super_admin"
 
       // Step 2: Auxiliary rosters & directory (staggered to protect database connection pool)
       const [animalRes, mgRes, vetRes, profRes, usersRes, schedRes] =
@@ -532,13 +532,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
           api.getManagers().catch(() => null),
           api.getVets().catch(() => null),
           api.getProfiles().catch(() => null),
-          isAdminOrSuper
+          isSuper
             ? api.getUsers().catch(() => null)
             : Promise.resolve(null),
           api.getSettlementSchedule().catch(() => null),
         ])
-      if (usersRes?.ok && Array.isArray(usersRes.users)) {
+      if (isSuper && usersRes?.ok && Array.isArray(usersRes.users)) {
         setUsers(usersRes.users)
+      } else {
+        setUsers([])
       }
       if (bkRes?.bookings && Array.isArray(bkRes.bookings)) {
         const sanitized = bkRes.bookings.map((b: any) => ({

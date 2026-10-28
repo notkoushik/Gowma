@@ -527,12 +527,12 @@ export async function handleApiRequest(
   }
 
   if ((method === "GET" || method === "POST") && pathname === "/api/users") {
-    const denied = requireRole("admin", "super_admin")
+    const denied = requireRole("super_admin")
     if (denied) return denied
   }
 
   if ((method === "PUT" || method === "DELETE") && /^\/api\/users\/[^/]+$/.test(pathname)) {
-    const denied = requireRole("admin", "super_admin")
+    const denied = requireRole("super_admin")
     if (denied) return denied
   }
 
@@ -1261,15 +1261,20 @@ export async function handleApiRequest(
           const myGosalaNames = allGosalas
             .filter((g: any) => {
               const meta = getGosalaMeta(g.id, g.name)
-              const gEmail = (meta.governingAdminEmail || "").toLowerCase()
-              const gName = (meta.governingAdminName || meta.adminName || "").toLowerCase()
-              return (gEmail && gEmail === adminEmail) || (gName && gName.includes(adminName))
+              const gEmail = (g.adminEmail || meta.governingAdminEmail || "").toLowerCase()
+              const gName = (g.adminName || meta.governingAdminName || meta.adminName || "").toLowerCase()
+              const emailMatch = Boolean(gEmail && gEmail === adminEmail)
+              const nameMatch = Boolean(adminName && (gName === adminName || gName.includes(adminName)))
+              const idMatch = Boolean(authUser.userId && g.adminId === authUser.userId)
+              return emailMatch || nameMatch || idMatch
             })
             .map((g: any) => g.name)
           if (myGosalaNames.length > 0) {
             where.OR = myGosalaNames.map((gn: string) => ({
               gosalaName: { equals: gn, mode: "insensitive" },
             }))
+          } else {
+            where.id = "NONE"
           }
         }
       } else if (authUser?.role === "super_admin") {
@@ -2443,7 +2448,34 @@ export async function handleApiRequest(
             OR: [{ id: gNameOrId }, { name: gNameOrId }],
           },
         })
+        if (!targetGosala) {
+          if (authUser?.role === "admin") {
+            return {
+              status: 403,
+              body: {
+                ok: false,
+                error: `Forbidden: Gaushala "${gNameOrId}" is outside your operational portfolio`,
+              },
+            }
+          }
+          continue
+        }
         if (targetGosala) {
+          // Multi-tenant check: Operations Admin can only assign managers to Gaushalas within their operational portfolio
+          if (authUser?.role === "admin") {
+            const adminEmail = (authUser.email || "").toLowerCase()
+            const adminName = (authUser.name || "").toLowerCase()
+            const adminId = authUser.userId || ""
+            const isMyGosala = targetGosala.adminId === adminId ||
+              (targetGosala.adminEmail && targetGosala.adminEmail.toLowerCase() === adminEmail) ||
+              (targetGosala.adminName && targetGosala.adminName.toLowerCase().includes(adminName))
+            if (!isMyGosala) {
+              return {
+                status: 403,
+                body: { ok: false, error: `Forbidden: You cannot assign managers to ${targetGosala.name} outside your operational portfolio` },
+              }
+            }
+          }
           // Relieve any prior managers for this Gaushala to enforce 1:1 invariant
           await prisma.gosalaManagerAssignment.deleteMany({
             where: {
@@ -2587,6 +2619,18 @@ export async function handleApiRequest(
             OR: [{ id: gNameOrId }, { name: gNameOrId }],
           },
         })
+        if (!targetGosala) {
+          if (authUser?.role === "admin") {
+            return {
+              status: 403,
+              body: {
+                ok: false,
+                error: `Forbidden: Gaushala "${gNameOrId}" is outside your operational portfolio`,
+              },
+            }
+          }
+          continue
+        }
         if (targetGosala) {
           // Relieve any other manager who was previously assigned to this Gaushala
           await prisma.gosalaManagerAssignment.deleteMany({

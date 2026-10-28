@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
   Building2,
   CheckCircle2,
@@ -101,6 +101,12 @@ export default function GosalaManagers() {
   const [activeTab, setActiveTab] = useState<"matrix" | "managers" | "users">(
     "matrix",
   )
+
+  useEffect(() => {
+    if (currentRole !== "super_admin" && activeTab === "users") {
+      setActiveTab("matrix")
+    }
+  }, [currentRole, activeTab])
   const [query, setQuery] = useState("")
   const [userQuery, setUserQuery] = useState("")
   const [userRoleFilter, setUserRoleFilter] = useState("All")
@@ -1273,29 +1279,31 @@ export default function GosalaManagers() {
                 <span>Add Manager</span>
               </button>
 
-              {/* Add Platform User Button (spans 2 cols on mobile) */}
-              <button
-                type="button"
-                onClick={() => {
-                  setNewUserName("")
-                  setNewUserEmail("")
-                  setNewUserPhone("+91 ")
-                  setNewUserRole("customer")
-                  setNewUserPassword(generateRandomPassword("User"))
-                  setShowNewUserPassword(false)
-                  setNewUserAddress("")
-                  setShowAddUserModal(true)
-                }}
-                className={`col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1.5 h-9 text-[12px] sm:text-[12.5px] font-medium px-3 sm:px-3.5 rounded-sm transition shadow-xs cursor-pointer whitespace-nowrap ${
-                  activeTab === "users"
-                    ? "bg-amber-600 hover:bg-amber-700 text-white"
-                    : "bg-paper hover:bg-paper-deep text-ink border border-line"
-                }`}
-                title="Authorize a new devotee, driver, or user"
-              >
-                <Plus size={14} className="shrink-0" />
-                <span>Add User / Role</span>
-              </button>
+              {/* Add Platform User Button (spans 2 cols on mobile, Super Admin only) */}
+              {currentRole === "super_admin" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewUserName("")
+                    setNewUserEmail("")
+                    setNewUserPhone("+91 ")
+                    setNewUserRole("customer")
+                    setNewUserPassword(generateRandomPassword("User"))
+                    setShowNewUserPassword(false)
+                    setNewUserAddress("")
+                    setShowAddUserModal(true)
+                  }}
+                  className={`col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1.5 h-9 text-[12px] sm:text-[12.5px] font-medium px-3 sm:px-3.5 rounded-sm transition shadow-xs cursor-pointer whitespace-nowrap ${
+                    activeTab === "users"
+                      ? "bg-amber-600 hover:bg-amber-700 text-white"
+                      : "bg-paper hover:bg-paper-deep text-ink border border-line"
+                  }`}
+                  title="Authorize a new devotee, driver, or user"
+                >
+                  <Plus size={14} className="shrink-0" />
+                  <span>Add User / Role</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -1322,16 +1330,18 @@ export default function GosalaManagers() {
               >
                 Managers ({scopedManagers.length})
               </button>
-              <button
-                onClick={() => setActiveTab("users")}
-                className={`flex-1 sm:flex-initial text-center px-3 py-1.5 text-[11.5px] sm:text-[12px] font-mono rounded-sm transition cursor-pointer whitespace-nowrap ${
-                  activeTab === "users"
-                    ? "bg-saffron text-white font-medium shadow-xs"
-                    : "text-ink-soft hover:text-ink"
-                }`}
-              >
-                All Users &amp; Roles ({users.length})
-              </button>
+              {currentRole === "super_admin" && (
+                <button
+                  onClick={() => setActiveTab("users")}
+                  className={`flex-1 sm:flex-initial text-center px-3 py-1.5 text-[11.5px] sm:text-[12px] font-mono rounded-sm transition cursor-pointer whitespace-nowrap ${
+                    activeTab === "users"
+                      ? "bg-saffron text-white font-medium shadow-xs"
+                      : "text-ink-soft hover:text-ink"
+                  }`}
+                >
+                  All Users &amp; Roles ({users.length})
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -2042,8 +2052,8 @@ export default function GosalaManagers() {
           </div>
         )}
 
-        {/* TAB 3: ALL PLATFORM USERS & JWT ACCESS CONTROL */}
-        {activeTab === "users" && (
+        {/* TAB 3: ALL PLATFORM USERS & JWT ACCESS CONTROL (SUPER ADMIN ONLY) */}
+        {currentRole === "super_admin" && activeTab === "users" && (
           <div>
             <div className="p-4 border-b border-line bg-card/40 flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -3746,9 +3756,9 @@ export default function GosalaManagers() {
         </div>
       )}
       {/* ------------------------------------------------------------------------- */}
-      {/* MODAL 5: ADD PLATFORM USER (ROLE-BASED JWT)                               */}
+      {/* MODAL 5: ADD PLATFORM USER (ROLE-BASED JWT - SUPER ADMIN ONLY)            */}
       {/* ------------------------------------------------------------------------- */}
-      {showAddUserModal && (
+      {currentRole === "super_admin" && showAddUserModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-ink/50 backdrop-blur-sm"

@@ -23,6 +23,7 @@ import {
   Crosshair,
   Building2,
   PawPrint,
+  X,
 } from "lucide-react"
 import { type Animal, type AnimalType } from "../data/animals"
 import { pricing, type Gosala } from "../data/customer"
@@ -1146,8 +1147,18 @@ function MobileCustomer({
   myBookings: MyBooking[]
   onCreate: (s: BookingSummary) => void
 }) {
-  const { profiles, refreshAnimals, authUser, isLoading } = useStore()
+  const {
+    profiles,
+    refreshAnimals,
+    authUser,
+    isLoading,
+    notifications,
+    markNotificationRead,
+    markAllNotificationsRead,
+  } = useStore()
   const [tab, setTab] = useState<Tab>("discover")
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const unreadCount = notifications.filter((n) => !n.read).length
 
   useEffect(() => {
     refreshAnimals?.().catch(() => {})
@@ -1156,7 +1167,7 @@ function MobileCustomer({
   const [gosalaProfileId, setGosalaProfileId] = useState<string | null>(null)
   const [gosalaProfileDist, setGosalaProfileDist] =
     useState<number | undefined>(undefined)
-  const [flow, setFlow] = useState<{ animal: Animal gosala: Gosala } | null>(
+  const [flow, setFlow] = useState<{ animal: Animal; gosala: Gosala } | null>(
     null,
   )
   const [editProfileOpen, setEditProfileOpen] = useState(false)
@@ -1180,7 +1191,7 @@ function MobileCustomer({
     myBookings.find((b) => b.status === "Under Review") ||
     myBookings[0]
 
-  const tabs: { id: Tab label: string icon: typeof Home }[] = [
+  const tabs: { id: Tab; label: string; icon: typeof Home }[] = [
     { id: "discover", label: "Discover", icon: Compass },
     { id: "bookings", label: "Bookings", icon: Ticket },
     { id: "track", label: "Track", icon: Truck },
@@ -1201,13 +1212,106 @@ function MobileCustomer({
               Book a Gau Seva
             </div>
           </div>
-          <button
-            className="ml-auto relative h-9 w-9 grid place-items-center rounded-sm text-ink-soft"
-            aria-label="Notifications"
-          >
-            <Bell size={17} />
-            <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-saffron" />
-          </button>
+          <div className="ml-auto relative">
+            <button
+              onClick={() => setNotificationsOpen((prev) => !prev)}
+              className="relative h-9 w-9 grid place-items-center rounded-sm text-ink-soft hover:text-ink transition-colors cursor-pointer"
+              aria-label="Notifications"
+              title="Notifications"
+            >
+              <Bell size={17} />
+              {unreadCount > 0 ? (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] rounded-full bg-saffron text-white text-[9.5px] font-mono font-bold flex items-center justify-center px-1 shadow-xs animate-pulse">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              ) : (
+                <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-forest" />
+              )}
+            </button>
+
+            {/* Notification Center Flyout Sheet */}
+            {notificationsOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-[1px]"
+                  onClick={() => setNotificationsOpen(false)}
+                />
+                <div className="fixed inset-x-3 bottom-4 max-h-[75vh] bg-card border border-line rounded-xl shadow-2xl z-50 overflow-hidden text-ink flex flex-col animate-fade-in">
+                  <div className="px-4 py-3 border-b border-line bg-paper flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-serif text-[15px] font-semibold text-ink">
+                        Devotee Alerts
+                      </span>
+                      {unreadCount > 0 && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-saffron/15 text-saffron-deep font-semibold">
+                          {unreadCount} new
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px]">
+                      {unreadCount > 0 && (
+                        <button
+                          onClick={() => markAllNotificationsRead()}
+                          className="text-forest hover:underline font-medium cursor-pointer"
+                        >
+                          Mark all read
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setNotificationsOpen(false)}
+                        className="text-ink-faint hover:text-ink p-1 rounded-sm"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="overflow-y-auto divide-y divide-line/60 p-1 flex-1">
+                    {notifications.length === 0 ? (
+                      <div className="p-8 text-center text-ink-faint text-[12.5px]">
+                        <Bell size={24} className="mx-auto text-ink-faint/40 mb-2" />
+                        No notifications yet.
+                        <div className="text-[11px] text-ink-faint/70 mt-1">
+                          Booking approvals, driver assignments, and transit updates appear here.
+                        </div>
+                      </div>
+                    ) : (
+                      notifications.map((n) => (
+                        <div
+                          key={n.id}
+                          onClick={() => {
+                            markNotificationRead(n.id)
+                            if (n.bookingId) {
+                              setSelectedTrackBookingId(n.bookingId)
+                              setTab("track")
+                              setNotificationsOpen(false)
+                            }
+                          }}
+                          className={`p-3 transition-colors cursor-pointer rounded-sm ${
+                            n.read
+                              ? "bg-card hover:bg-paper"
+                              : "bg-saffron-soft/40 hover:bg-saffron-soft/60"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="font-semibold text-[12.5px] text-ink">
+                              {n.title}
+                            </span>
+                            <span className="text-[10px] font-mono text-ink-faint shrink-0">
+                              {n.timestamp}
+                            </span>
+                          </div>
+                          <p className="text-[11.5px] text-ink-soft mt-1 leading-snug">
+                            {n.message}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
           <button
             onClick={onSignOut}
             className="text-ink-faint hover:text-ink p-1"

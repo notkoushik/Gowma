@@ -442,16 +442,57 @@ export default function Pricing({
     )
   }, [managers, activeGosala])
 
-  // Governing Admin details
-  const governingAdmin = {
-    name: authUser?.name || profiles?.admin?.name || "",
-    role: isSuperAdmin
-      ? "Sovereign Master Authority"
-      : "Chief of Regional Operations",
-    email: authUser?.email || profiles?.admin?.email || "admin@gomaa.in",
-    phone: authUser?.phone || profiles?.admin?.phone || "+91 94220 18492",
-    hub: activeGosala?.region || "Regional Operations Hub",
-  }
+  // Governing Operations Admin details dynamically derived from active sanctuary's assigned Operations Admin
+  const governingAdmin = useMemo(() => {
+    const adminEmail = (activeGosala?.governingAdminEmail || activeGosala?.adminEmail || "").trim().toLowerCase()
+    const adminName = (activeGosala?.governingAdminName || activeGosala?.adminName || "").trim()
+    const adminId = activeGosala?.adminId || (activeGosala as any)?.governingAdminId
+
+    const matchedUser = users.find((u) => {
+      if (adminId && u.id === adminId) return true
+      if (adminEmail && u.email?.trim().toLowerCase() === adminEmail) return true
+      if (adminName && u.name?.trim().toLowerCase() === adminName.toLowerCase()) return true
+      return false
+    })
+
+    if (matchedUser) {
+      return {
+        name: matchedUser.name,
+        role: "Regional Operations Admin",
+        email: matchedUser.email,
+        phone: matchedUser.phone || "+91 98222 33347",
+        hub: activeGosala?.region || "Regional Operations Hub",
+      }
+    }
+
+    if (adminName) {
+      return {
+        name: adminName,
+        role: "Regional Operations Admin",
+        email: adminEmail || "operations@gomaa.in",
+        phone: activeGosala?.contactPhone || "+91 98222 33347",
+        hub: activeGosala?.region || "Regional Operations Hub",
+      }
+    }
+
+    if (!isSuperAdmin && authUser?.role === "admin") {
+      return {
+        name: authUser.name || "Operations Admin",
+        role: "Regional Operations Admin",
+        email: authUser.email || "operations@gomaa.in",
+        phone: authUser.phone || "+91 98222 33347",
+        hub: activeGosala?.region || "Regional Operations Hub",
+      }
+    }
+
+    return {
+      name: "GOMAA Operations",
+      role: "Regional Operations Admin",
+      email: "gomaa052026@gmail.com",
+      phone: "+91 98222 33347",
+      hub: activeGosala?.region || "Regional Operations Hub",
+    }
+  }, [activeGosala, users, isSuperAdmin, authUser])
 
   // Animal Price Quick Edit State
   const [editingAnimalName, setEditingAnimalName] = useState<string | null>(
