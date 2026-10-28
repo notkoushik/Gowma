@@ -539,6 +539,8 @@ export default function Gaushalas({
     profiles,
     authUser,
     isLoading,
+    activeGosalaFilter,
+    setActiveGosalaFilter,
   } = useStore()
   const { notify } = useToast()
 
@@ -552,7 +554,18 @@ export default function Gaushalas({
     useState<"my_portfolio" | "all_network">("all_network")
 
   // Selected Gaushala for Professional Profile View
-  const [selectedGosalaId, setSelectedGosalaId] = useState<string | null>(null)
+  const [selectedGosalaId, setSelectedGosalaId] = useState<string | null>(() => {
+    return activeGosalaFilter && activeGosalaFilter !== "ALL"
+      ? activeGosalaFilter
+      : null
+  })
+
+  // Synchronize when store's activeGosalaFilter changes externally
+  useEffect(() => {
+    if (activeGosalaFilter && activeGosalaFilter !== "ALL") {
+      setSelectedGosalaId(activeGosalaFilter)
+    }
+  }, [activeGosalaFilter])
 
   // Resolved Selected Gosala
   const selectedGosala = useMemo(() => {
@@ -922,7 +935,10 @@ export default function Gaushalas({
       {selectedGosala ? (
         <GaushalaProfileView
           gosala={selectedGosala}
-          onBack={() => setSelectedGosalaId(null)}
+          onBack={() => {
+            setSelectedGosalaId(null)
+            setActiveGosalaFilter("ALL")
+          }}
           onEdit={handleOpenEdit}
           onUpdatePhotos={handleOpenQuickPhotoEdit}
           onRegisterCow={(gosalaName) => {

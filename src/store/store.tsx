@@ -507,31 +507,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setIsLoading(true)
     setIsLoadingProfiles(true)
     try {
-      const [
-        bkRes,
-        prRes,
-        mgRes,
-        stRes,
-        profRes,
-        gosalaRes,
-        animalRes,
-        vetRes,
-        schedRes,
-        meRes,
-        usersRes,
-      ] = await Promise.all([
-        api.getBookings().catch(() => null),
-        api.getPricingConfig().catch(() => null),
-        api.getManagers().catch(() => null),
-        api.getSettlements().catch(() => null),
-        api.getProfiles().catch(() => null),
-        api.getGosalas().catch(() => null),
-        api.getAnimals().catch(() => null),
-        api.getVets().catch(() => null),
-        api.getSettlementSchedule().catch(() => null),
+      // Step 1: Core operational state
+      const [meRes, gosalaRes, prRes, bkRes, stRes] = await Promise.all([
         api.getMe().catch(() => null),
-        api.getUsers().catch(() => null),
+        api.getGosalas().catch(() => null),
+        api.getPricingConfig().catch(() => null),
+        api.getBookings().catch(() => null),
+        api.getSettlements().catch(() => null),
       ])
+
+      // Step 2: Auxiliary rosters & directory (staggered to protect database connection pool)
+      const [animalRes, mgRes, vetRes, profRes, usersRes, schedRes] =
+        await Promise.all([
+          api.getAnimals().catch(() => null),
+          api.getManagers().catch(() => null),
+          api.getVets().catch(() => null),
+          api.getProfiles().catch(() => null),
+          api.getUsers().catch(() => null),
+          api.getSettlementSchedule().catch(() => null),
+        ])
       if (meRes?.ok && meRes.user) {
         setAuthUser(meRes.user)
       }

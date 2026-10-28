@@ -694,7 +694,7 @@ export default function ManagerLedger() {
             <Building2 size={16} />
           </div>
           <div>
-            <div className="text-[14px] font-semibold text-ink flex items-center gap-2">
+            <div className="text-[14px] font-semibold text-ink flex items-center gap-2 flex-wrap">
               <span>Gaushala Account Scope:</span>
               <span className="font-serif text-forest text-[15px]">
                 {currentRole === "manager"
@@ -703,6 +703,21 @@ export default function ManagerLedger() {
                     ? "Consolidated Portfolio (All Gaushalas)"
                     : activeGosalaFilter}
               </span>
+              {activeGosalaFilter !== "ALL" && currentRole !== "manager" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetRole =
+                      currentRole === "super_admin" ? "super_admin" : "admin"
+                    window.location.hash = `#${targetRole}/gosalas`
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-forest-soft hover:bg-forest hover:text-white text-forest border border-forest/30 transition cursor-pointer shadow-2xs"
+                  title={`Open ${activeGosalaFilter} Sanctuary directory & profile`}
+                >
+                  <ExternalLink size={11} />
+                  <span>Go to {activeGosalaFilter} Profile & Herd ↗</span>
+                </button>
+              )}
             </div>
             <div className="text-[11.5px] text-ink-faint">
               {currentRole === "manager"
@@ -712,7 +727,7 @@ export default function ManagerLedger() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
           {currentRole === "manager" ? (
             <div className="flex items-center gap-2">
               <div className="px-3 py-1.5 rounded-md text-[12px] font-semibold bg-forest text-white flex items-center gap-1.5 shadow-2xs">
@@ -1247,11 +1262,65 @@ export default function ManagerLedger() {
               <tbody className="divide-y divide-line/60">
                 {filteredBookings.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={10}
-                      className="px-4 py-12 text-center text-ink-faint text-[13px]"
-                    >
-                      No transactions matched your current filters.
+                    <td colSpan={10} className="px-4 py-12 text-center">
+                      <div className="max-w-md mx-auto space-y-3">
+                        <div className="h-12 w-12 rounded-full bg-forest-soft text-forest flex items-center justify-center mx-auto shadow-2xs">
+                          <Building2 size={24} />
+                        </div>
+                        <div>
+                          <div className="font-serif text-[17px] font-semibold text-ink">
+                            {activeGosalaFilter === "ALL"
+                              ? "No Seva Transactions in Portfolio Yet"
+                              : `No Seva Transactions for ${activeGosalaFilter} Yet`}
+                          </div>
+                          <p className="text-[12px] text-ink-faint mt-1 leading-relaxed">
+                            {activeGosalaFilter === "ALL"
+                              ? "All sanctuaries and nodal escrow accounts are live. Itemized Vedic bookings, 80% net shelter allocations, and 100% transport pass-throughs will stream here automatically upon booking."
+                              : `${activeGosalaFilter} is registered, active, and monitored under your operations portfolio. When devotees book rituals, cremations, or darshans deployed from this sanctuary, payments will populate here in real-time.`}
+                          </p>
+                        </div>
+                        <div className="flex items-center justify-center gap-2 pt-2 flex-wrap">
+                          {activeGosalaFilter !== "ALL" && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const targetRole =
+                                    currentRole === "super_admin"
+                                      ? "super_admin"
+                                      : "admin"
+                                  window.location.hash = `#${targetRole}/gosalas`
+                                }}
+                                className="px-3 py-1.5 rounded-md text-[12px] font-medium bg-forest text-white hover:bg-forest-deep transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                              >
+                                <ExternalLink size={12} />
+                                <span>
+                                  Go to {activeGosalaFilter} Profile & Roster ↗
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setActiveGosalaFilter("ALL")}
+                                className="px-3 py-1.5 rounded-md text-[12px] font-medium bg-paper border border-line text-ink-soft hover:text-ink hover:bg-paper-deep transition cursor-pointer"
+                              >
+                                View Consolidated Portfolio
+                              </button>
+                            </>
+                          )}
+                          {activeGosalaFilter === "ALL" && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                window.location.hash = "#customer"
+                              }}
+                              className="px-3 py-1.5 rounded-md text-[12px] font-medium bg-saffron text-white hover:bg-saffron-deep transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                            >
+                              <Sparkles size={12} />
+                              <span>Explore Devotee Booking Portal ↗</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 ) : (
