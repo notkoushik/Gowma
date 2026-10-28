@@ -91,55 +91,65 @@ export default function Overview() {
 
   // Group Gaushalas, Bookings & Revenue by Operations Admin for Super Admin
   const adminPortfolios = useMemo(() => {
-    const portfoliosMap = new Map<string, {
+    // Dynamically derive registered Operations Admins strictly from the database users directory
+    const registeredOpsAdmins = users.filter(
+      (u) => u.role === "admin" || (u as any).dbRole === "OPERATIONS_ADMIN",
+    )
+
+    const adminEntries: {
       name: string
       email: string
+      id: string
       gosalas: Gosala[]
       bookings: any[]
       gross: number
       commission: number
       managers: Set<string>
       actingCount: number
-    }>()
+    }[] = registeredOpsAdmins.map((adm) => ({
+      name: adm.name,
+      email: adm.email,
+      id: adm.id,
+      gosalas: [],
+      bookings: [],
+      gross: 0,
+      commission: 0,
+      managers: new Set<string>(),
+      actingCount: 0,
+    }))
 
-    // Dynamically derive registered Operations Admins from the database users
-    const registeredOpsAdmins = users.filter(
-      (u) => u.role === "admin" || (u as any).dbRole === "OPERATIONS_ADMIN",
-    )
+    const findPortfolio = (
+      name?: string,
+      email?: string,
+      id?: string,
+    ) => {
+      const normName = name?.trim().toLowerCase()
+      const normEmail = email?.trim().toLowerCase()
+      const normId = id?.trim().toLowerCase()
 
-    registeredOpsAdmins.forEach((adm) => {
-      portfoliosMap.set(adm.name.toLowerCase(), {
-        name: adm.name,
-        email: adm.email,
-        gosalas: [],
-        bookings: [],
-        gross: 0,
-        commission: 0,
-        managers: new Set(),
-        actingCount: 0,
+      return adminEntries.find((entry) => {
+        if (normId && entry.id.toLowerCase() === normId) return true
+        if (normEmail && entry.email.toLowerCase() === normEmail) return true
+        if (normName && entry.name.toLowerCase() === normName) return true
+        return false
       })
-    })
+    }
 
-    // Map each Gaushala to its governing Operations Admin
+    // Map each Gaushala exclusively to its verified governing Operations Admin
     gosalas.forEach((g: any) => {
-      const targetName = g.governingAdminName || g.adminName
-      if (!targetName) return
+      const p = findPortfolio(
+        g.governingAdminName || g.adminName,
+        g.governingAdminEmail || g.adminEmail,
+        g.adminId || g.governingAdminId,
+      )
 
-      let p = portfoliosMap.get(targetName.toLowerCase())
-      if (!p) {
-        p = {
-          name: targetName,
-          email: g.governingAdminEmail || g.contactEmail || "",
-          gosalas: [],
-          bookings: [],
-          gross: 0,
-          commission: 0,
-          managers: new Set(),
-          actingCount: 0,
-        }
-        portfoliosMap.set(targetName.toLowerCase(), p)
+      // Strictly ignore unverified / unregistered phantom names
+      if (!p) return
+
+      if (!p.gosalas.some((item) => item.id === g.id || item.name === g.name)) {
+        p.gosalas.push(g)
       }
-      p.gosalas.push(g)
+
       if (
         g.isActingManager ||
         g.managerName?.includes("Admin") ||
@@ -151,31 +161,19 @@ export default function Overview() {
       }
     })
 
-    // Map each booking to its Gaushala's Operations Admin
+    // Map each booking to its verified Gaushala Operations Admin
     validBookings.forEach((b: any) => {
       const g = gosalas.find(
-        (x) => x.name.toLowerCase() === b.gosala.toLowerCase(),
+        (x) => x.name.toLowerCase() === (b.gosala || "").toLowerCase(),
       )
-      const targetName =
-        b.governingAdminName ||
-        (g as any)?.governingAdminName ||
-        (g as any)?.adminName
-      if (!targetName) return
+      const p = findPortfolio(
+        b.governingAdminName || (g as any)?.governingAdminName || (g as any)?.adminName,
+        b.governingAdminEmail || (g as any)?.governingAdminEmail || (g as any)?.adminEmail,
+        b.governingAdminId || (g as any)?.adminId,
+      )
 
-      let p = portfoliosMap.get(targetName.toLowerCase())
-      if (!p) {
-        p = {
-          name: targetName,
-          email: "",
-          gosalas: [],
-          bookings: [],
-          gross: 0,
-          commission: 0,
-          managers: new Set(),
-          actingCount: 0,
-        }
-        portfoliosMap.set(targetName.toLowerCase(), p)
-      }
+      if (!p) return
+
       p.bookings.push(b)
       p.gross += b.total
       p.commission += Math.round(
@@ -183,7 +181,7 @@ export default function Overview() {
       )
     })
 
-    return Array.from(portfoliosMap.values())
+    return adminEntries
   }, [gosalas, validBookings, users])
 
   const dynamicKpis = [
