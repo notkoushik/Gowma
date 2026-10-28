@@ -1,0 +1,719 @@
+gomaa plan of testing
+Yes. We should treat this as a **pre-P3 validation program**, not as a few isolated fixes. The application should not move into P3 feature development until the complete role, booking, payment, settlement, tracking, and performance validation gates pass.
+
+The revised requirements PDF is the functional source of truth, and the role isolation rules you provided are the security source of truth.
+
+The detailed plan is saved at:
+
+```text
+ROLE_ISOLATION_AND_FULL_QA_PLAN.md
+```
+
+# Final implementation and validation plan
+
+## Gate 0 — Establish test truth
+
+Before changing more code:
+
+1. Create a dedicated QA database/schema.
+2. Seed deterministic test data:
+   - Gosala A
+   - Gosala B
+   - Animal A1
+   - Animal B1
+   - Super Admin
+   - Operations Admin A
+   - Operations Admin B
+   - Manager A
+   - Manager B
+   - Driver A
+   - Driver B
+   - Customer A
+   - Customer B
+3. Never use production data for automated tests.
+4. Never use real credentials or real payment accounts.
+5. Redact passwords, JWTs, Aadhaar data, bank data, and payment secrets from logs.
+6. Add a test-run ID to all created records.
+7. Ensure every test cleans up or uses an isolated schema.
+
+This establishes repeatable testing instead of manual testing against unknown existing data.
+
+---
+
+# Gate 1 — Identity, authentication, and sessions
+
+## Required behavior
+
+- Login rejects incorrect passwords.
+- Login rejects inactive users.
+- Registration stores only password hashes.
+- User APIs never return passwords or password hashes.
+- JWTs contain only minimal identity and scope claims.
+- Sensitive profile data is not placed into JWTs.
+- Tokens expire.
+- Password changes invalidate old sessions.
+- Role changes invalidate old sessions.
+- Account deactivation invalidates old sessions.
+- Login is rate-limited.
+- Unknown users cannot be auto-created through login.
+- Missing/invalid JWT returns `401`.
+
+## Tests
+
+```text
+wrong password -> 401
+inactive account -> 401
+expired token -> 401
+revoked token -> 401
+old token after password change -> 401
+old token after role change -> 401
+old token after deactivation -> 401
+user directory response contains no password fields
+JWT contains no Aadhaar/license/bank data
+login rate limit activates after repeated failures
+```
+
+---
+
+# Gate 2 — Capability and role isolation
+
+The backend must authorize based on:
+
+```text
+verified identity
+database role
+database Gosala scope
+resource ownership
+current active session
+```
+
+Never authorize based on:
+
+```text
+body.role
+callerRole
+callerGosala
+adminName
+managerName
+localStorage role
+URL role
+frontend navigation
+```
+
+## Super Admin rules
+
+Super Admin can access all non-GPS application information:
+
+- Users
+- Gosalas
+- Animals
+- Bookings
+- Pricing
+- Payments
+- Settlements
+- Reports
+- Audit logs
+- Configuration
+
+But:
+
+```text
+Super Admin live tracking = disabled by default
+```
+
+Tests:
+
+```text
+Super Admin does not see Live Tracking navigation
+Super Admin direct tracking URL is rejected
+Super Admin opens zero GPS WebSocket channels
+Super Admin triggers zero map/GPS provider calls
+Super Admin cannot receive GPS telemetry by default
+Super Admin retains all non-GPS governance access
+```
+
+## Operations Admin rules
+
+Operations Admin can access only assigned Gosalas.
+
+Tests:
+
+```text
+Admin A sees Gosala A
+Admin A does not see Gosala B
+Admin A cannot read Gosala B animals
+Admin A cannot read Gosala B bookings
+Admin A cannot mutate Gosala B
+Admin A cannot read Gosala B settlements
+Admin A cannot subscribe to Gosala B channels
+Admin with no assignments sees empty results
+Admin cannot expand scope through request body
+Admin cannot expand scope through query string
+Admin cannot expand scope through direct URL
+```
+
+## Super Admin operational context
+
+The Super Admin may enter an operational context for a specific portfolio.
+
+When operating in that context:
+
+```text
+visible data = explicit operational portfolio only
+```
+
+When returning to Super Admin:
+
+```text
+non-GPS governance data = all application data
+GPS = still disabled by default
+```
+
+The context must be server-issued and audited with:
+
+```text
+actor ID
+effective role
+effective Gosala IDs
+reason
+issued time
+expiry time
+audit ID
+```
+
+Tests:
+
+```text
+Super Admin enters operational scope A -> only A visible
+Operational scope A cannot access B
+Scope expires -> access denied
+Scope is revoked -> access denied
+Return to Super Admin -> all non-GPS data visible
+Return to Super Admin -> no GPS subscription appears
+```
+
+---
+
+# Gate 3 — Customer booking and availability
+
+The PDF requires availability to be based on:
+
+```text
+individual animal
++ Gosala
++ date
++ start time
++ end time
++ booking status
+```
+
+## Required validations
+
+- Animal is active.
+- Animal is healthy/available.
+- Gosala is active.
+- Animal belongs to selected Gosala.
+- Date is valid.
+- Start time is valid.
+- End time is after start time.
+- Duration matches start/end.
+- Duration does not exceed maximum.
+- Booking is within operating hours.
+- Location is confirmed.
+- Distance is server-derived or server-approved.
+- Service radius is enforced.
+- Add-ons are valid and available.
+- Add-on quantity limits are enforced.
+- Price is server-calculated.
+- Quote expires.
+- Quote belongs to the customer.
+- Hold belongs to the customer.
+
+## Boundary tests
+
+```text
+60-minute booking -> valid
+90-minute booking -> correct extra charge
+120-minute booking -> correct extra charge
+duration one minute above slab -> correct rounding
+duration above maximum -> rejected
+start equals end -> rejected
+end before start -> rejected
+booking outside operating hours -> rejected
+inactive animal -> rejected
+medical/resting animal -> rejected
+animal from another Gosala -> rejected
+location outside service radius -> rejected
+invalid distance -> rejected
+invalid add-on -> rejected
+negative quantity -> rejected
+expired quote -> rejected
+tampered total -> rejected
+tampered tax -> rejected
+tampered commission -> rejected
+tampered customer ID -> rejected
+```
+
+---
+
+# Gate 4 — Hold lifecycle
+
+Hold state must be explicit:
+
+```text
+ACTIVE
+CONSUMED
+RELEASED
+EXPIRED
+```
+
+## Required behavior
+
+- Hold requires authenticated customer.
+- Hold stores customer ID.
+- Hold stores animal ID.
+- Hold stores date/start/duration.
+- Hold TTL is bounded.
+- Overlapping active holds are rejected.
+- Overlapping bookings are rejected.
+- Only owner can release a hold.
+- Admin support release is audited.
+- Consumed hold cannot be released.
+- Released hold cannot be reused.
+- Expired hold cannot create a booking.
+- Failed payment releases or expires the hold correctly.
+
+## Concurrency tests
+
+```text
+two customers request same slot -> exactly one succeeds
+same customer sends duplicate hold requests -> exactly one succeeds
+two overlapping duration requests -> exactly one succeeds
+hold expires while booking request is in flight -> booking rejected
+release and booking race -> exactly one terminal state
+hold cleanup does not release another customer's hold
+```
+
+---
+
+# Gate 5 — Atomic booking transaction
+
+Booking creation must be one server-side transaction:
+
+```text
+verify session
+verify quote
+verify payment
+lock hold
+verify hold ownership
+verify hold active/expiry
+lock animal/resource
+recheck availability
+create booking
+create audit record
+consume hold
+commit
+```
+
+If any stage fails:
+
+```text
+rollback everything
+```
+
+## Tests
+
+```text
+valid booking -> 201
+missing quote -> 400
+expired quote -> 409
+wrong quote owner -> 409
+missing hold -> 409
+wrong hold owner -> 403/409
+consumed hold -> 409
+expired hold -> 409
+tampered amount -> 402/400
+database error -> 5xx
+database error does not return 201
+hold remains correct after rollback
+booking is not partially created
+audit record is not partially created
+duplicate booking request -> 409 or original booking
+same slot concurrent booking -> one success only
+```
+
+---
+
+# Gate 6 — Razorpay payment lifecycle
+
+The complete payment lifecycle must be implemented, not simulated.
+
+## States
+
+```text
+CREATED
+AUTHORIZED
+CAPTURED
+FAILED
+REFUNDED
+PARTIALLY_REFUNDED
+```
+
+## Required flow
+
+```text
+server quote
+→ server Razorpay order
+→ Razorpay Checkout
+→ client callback
+→ server signature verification
+→ Razorpay API verification
+→ webhook verification
+→ payment persistence
+→ booking transition
+```
+
+## Required validations
+
+- Test key only in QA.
+- Key secret never reaches frontend.
+- Amount is derived from server quote.
+- Amount is in paise as a safe integer.
+- Currency must be INR.
+- Order ID must match.
+- Payment ID must match.
+- Signature must match.
+- Payment must be captured.
+- Razorpay order must be paid.
+- Customer note must match.
+- Hold note must match.
+- Quote digest must match.
+- Webhook signature must match.
+- Webhook event must be idempotent.
+- Browser callback and webhook may arrive in either order.
+- Duplicate callbacks must not create duplicate payments/bookings.
+- Payment failure must not create a paid booking.
+- Payment timeout must release/expire the hold.
+- Refund must update payment and booking/settlement eligibility.
+
+## Payment tests
+
+```text
+valid sandbox payment -> captured
+wrong signature -> rejected
+wrong amount -> rejected
+wrong currency -> rejected
+wrong order -> rejected
+wrong customer -> rejected
+wrong hold -> rejected
+wrong quote -> rejected
+uncaptured payment -> rejected
+duplicate callback -> no duplicate booking
+webhook before callback -> correct final state
+callback before webhook -> correct final state
+replayed webhook -> no duplicate event
+provider timeout -> retryable state
+provider 5xx -> no paid booking
+missing credentials -> fail closed
+client isPaid=true without provider evidence -> ignored
+```
+
+---
+
+# Gate 7 — Manager and admin workflow
+
+Required workflow:
+
+```text
+PAYMENT_CAPTURED
+→ MANAGER_REVIEW
+→ MANAGER_CONFIRMED
+→ ADMIN_REVIEW
+→ CONFIRMED
+```
+
+## Tests
+
+```text
+paid booking enters manager queue
+unpaid booking does not enter paid queue
+Manager A sees only Gosala A
+Manager A cannot approve Gosala B
+Manager rejection stores actor, timestamp, remark
+Manager approval stores actor, timestamp, remark
+Admin sees only portfolio bookings
+Admin cannot finalize unrelated Gosala
+Admin confirmation creates CONFIRMED state
+Customer cannot approve
+Driver cannot approve
+stale approval returns 409
+invalid transition is rejected
+duplicate approval is idempotent
+```
+
+---
+
+# Gate 8 — Driver and GPS isolation
+
+## GPS rules
+
+GPS should be active only when:
+
+```text
+booking is operationally confirmed
+driver is assigned
+trip is within active stages
+tracking capability is allowed
+```
+
+GPS must stop after:
+
+```text
+completion
+cancellation
+rejection
+timeout
+driver unassignment
+```
+
+## Role tests
+
+```text
+Customer can track only own active booking
+Driver can track/publish only assigned booking
+Driver cannot publish another driver's booking
+Manager can access only allowed operational Gosala trips
+Operations Admin has no GPS access by default
+Super Admin has no GPS access by default
+Direct WebSocket channel tampering is rejected
+Unauthorized WebSocket upgrade is rejected
+Invalid coordinates are rejected
+Invalid stage is rejected
+Telemetry rate is bounded
+```
+
+## Performance tests
+
+```text
+Super Admin mounts dashboard -> zero GPS calls
+Super Admin changes views repeatedly -> zero GPS subscriptions
+Operations Admin mounts dashboard -> zero GPS calls by default
+Customer tracking mount/unmount -> no handler leak
+Driver tracking mount/unmount -> no interval leak
+1 active trip -> stable
+10 active trips -> stable
+50 active trips -> measured
+100 active trips -> measured
+30-minute soak -> no unbounded memory growth
+```
+
+---
+
+# Gate 9 — Pricing and accounting
+
+Use one canonical calculation engine for:
+
+- Quote
+- Booking snapshot
+- Commission
+- Gosala payable
+- Settlement
+
+## Required snapshots
+
+Store:
+
+```text
+base price
+duration
+extra time
+extra-time rate
+distance
+free distance
+chargeable distance
+transport rate
+transport charge
+add-ons
+tax
+discount
+commission percentage
+commission amount
+Gosala payable
+pricing configuration version
+allocation policy version
+```
+
+## Tests
+
+```text
+default price
+free distance boundary
+fractional distance
+transport rounding
+60 minutes
+90 minutes
+120 minutes
+maximum duration
+tax exempt
+reduced tax
+fixed commission
+percentage commission
+discount
+full discount
+add-on pass-through
+historical booking after pricing change
+```
+
+Historical booking values must never change when current Admin pricing changes.
+
+---
+
+# Gate 10 — Settlement and refund safety
+
+Eligibility:
+
+```text
+booking COMPLETED
+payment CAPTURED
+not refunded
+not already settled
+operational approval complete
+```
+
+## Tests
+
+```text
+empty settlement -> no batch
+same booking cannot settle twice
+settlement includes exact booking IDs
+commission matches snapshot
+Gosala payout matches snapshot
+provider failure -> FAILED
+provider timeout -> retryable
+PAID requires provider transaction ID
+beneficiary snapshot is immutable
+refund prevents settlement
+partial refund recalculates correctly
+settlement retry is idempotent
+```
+
+---
+
+# Gate 11 — Failure and fallback policy
+
+Production must not silently fall back to memory for business operations.
+
+These must fail with a clear 5xx or retryable state if PostgreSQL fails:
+
+- Booking
+- Hold consumption
+- Payment verification
+- User mutation
+- Pricing mutation
+- Settlement
+- Refund
+- Audit persistence
+
+Not acceptable:
+
+```text
+database fails
+→ save in memory
+→ return success
+```
+
+Required test:
+
+```text
+simulate database failure
+verify no success response
+verify no misleading notification
+verify no partial business state
+```
+
+---
+
+# Gate 12 — Automation commands
+
+The project should expose:
+
+```json
+{
+  "test": "node --test scripts/**/*.test.mjs",
+  "test:unit": "node --test scripts/test-password-security.mjs scripts/test-razorpay-security.mjs scripts/test-hold-booking-contracts.mjs",
+  "test:roles": "node scripts/qa-api-role-isolation.mjs",
+  "test:booking": "node scripts/qa-booking-lifecycle.mjs",
+  "test:payments": "node scripts/qa-payment-lifecycle.mjs",
+  "test:tracking": "node scripts/qa-tracking-isolation.mjs",
+  "test:concurrency": "node scripts/qa-concurrency.mjs",
+  "typecheck": "tsc --noEmit",
+  "build": "vite build"
+}
+```
+
+Every automated test must:
+
+- Use isolated QA data.
+- Use sandbox payment credentials.
+- Redact secrets.
+- Record request ID/test ID.
+- Clean up data.
+- Fail on unexpected `2xx`.
+- Validate database state, not only HTTP response.
+- Validate audit records.
+- Validate WebSocket subscriptions.
+- Validate memory/resource behavior where relevant.
+
+# Final P3 readiness criteria
+
+P3 starts only when all these are true:
+
+```text
+[ ] PDF customer booking flow passes
+[ ] Authentication tests pass
+[ ] Authorization matrix passes
+[ ] Operations Admin portfolio isolation passes
+[ ] Super Admin non-GPS rule passes
+[ ] Super Admin operational context isolation passes
+[ ] Quote ownership and expiry pass
+[ ] Hold ownership and concurrency pass
+[ ] Booking transaction and rollback pass
+[ ] Razorpay browser checkout passes in test mode
+[ ] Razorpay callback verification passes
+[ ] Razorpay webhook verification passes
+[ ] Payment idempotency passes
+[ ] Manager approval isolation passes
+[ ] Admin approval isolation passes
+[ ] Driver assignment isolation passes
+[ ] GPS channel isolation passes
+[ ] GPS performance soak passes
+[ ] Pricing and accounting invariants pass
+[ ] Settlement idempotency passes
+[ ] Refund/cancellation behavior passes
+[ ] Audit records are complete
+[ ] Database failures fail closed
+[ ] No passwords/secrets leak
+[ ] Production build is non-destructive
+[ ] Full QA suite passes repeatedly
+```
+
+## Final recommendation
+
+The next implementation order should be:
+
+```text
+1. Authoritative role/scope policy
+2. Remove Super Admin tracking from frontend and realtime
+3. Enforce Operations Admin portfolio isolation
+4. Implement explicit Super Admin operational context
+5. Complete Razorpay Checkout and webhook lifecycle
+6. Finish booking/payment state machine
+7. Add manager/admin audit workflow tests
+8. Complete GPS authorization and performance controls
+9. Run full disposable PostgreSQL QA suite
+10. Run browser E2E and concurrency tests
+11. Run tracking soak test
+12. Begin P3 only after all release gates pass
+```
+
+This plan accounts for the PDF requirements, your role-specific rules, payment security, booking integrity, realtime isolation, performance risk, and full QA automation.

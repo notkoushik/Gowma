@@ -727,7 +727,10 @@ export default function ManagerLedger() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+        <div
+          data-testid="gaushala-scope-strip"
+          className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none"
+        >
           {currentRole === "manager" ? (
             <div className="flex items-center gap-2">
               <div className="px-3 py-1.5 rounded-md text-[12px] font-semibold bg-forest text-white flex items-center gap-1.5 shadow-2xs">

@@ -1,7 +1,9 @@
 import puppeteer from "puppeteer-core"
 
 const CHROME_PATH = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
-const TARGET_URL = process.env.TEST_TARGET_URL || "https://gowma.vercel.app"
+const TARGET_URL = process.argv[2]?.startsWith("http")
+  ? process.argv[2]
+  : process.env.TEST_TARGET_URL || "https://gowma.vercel.app"
 
 async function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -121,21 +123,23 @@ async function runApplicationCrawler() {
     // Interactively find and click each Gaushala filter button on the ledger
     console.log("  3.1 Interactively switching between Gaushala Shelters...")
     const gaushalaButtons = await page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll("button"))
+      const strip = document.querySelector('[data-testid="gaushala-scope-strip"]') || document
+      const buttons = Array.from(strip.querySelectorAll("button"))
       return buttons
         .map((b) => b.innerText.trim())
-        .filter((txt) => txt.includes("Portfolio") || txt.includes("Gaushala"))
+        .filter((txt) => (txt.includes("Portfolio") || txt.startsWith("Gaushala")) && !txt.includes("Pop-up"))
     })
     console.log(`  Found Scope Tabs: [${gaushalaButtons.join(", ")}]`)
 
     for (const btnText of gaushalaButtons.slice(0, 5)) {
       console.log(`  Clicking Gaushala scope tab: '${btnText}'...`)
       await page.evaluate((targetText) => {
-        const btns = Array.from(document.querySelectorAll("button"))
+        const strip = document.querySelector('[data-testid="gaushala-scope-strip"]') || document
+        const btns = Array.from(strip.querySelectorAll("button"))
         const found = btns.find((b) => b.innerText.includes(targetText))
         if (found) found.click()
       }, btnText)
-      await sleep(1200)
+      await sleep(1500)
       auditLog.interactionsTested++
     }
 
@@ -165,6 +169,9 @@ async function runApplicationCrawler() {
     // STAGE 4: SUPER ADMIN SOVEREIGN CAPTAIN MODE AUDIT
     // =========================================================================
     console.log("\n[STAGE 4] Testing Super Admin Sovereign Captain View...")
+    await page.evaluate(() => {
+      try { localStorage.clear() } catch {}
+    })
     await page.goto(`${TARGET_URL}/#/login`, { waitUntil: "networkidle2", timeout: 30000 })
     await sleep(2000)
 
