@@ -34,7 +34,12 @@ import {
   Crown,
   Globe,
 } from "lucide-react"
-import { inr, type Booking, type Settlement, inHouseDrivers } from "../../data/mock"
+import {
+  inr,
+  type Booking,
+  type Settlement,
+  inHouseDrivers,
+} from "../../data/mock"
 import type { Gosala } from "../../data/gosalas"
 import type { RoleProfile } from "../../data/profiles"
 import EditProfileModal from "../../components/EditProfileModal"
@@ -54,7 +59,6 @@ interface SettlementBatch {
   accountMasked: string
   status: "Settled" | "Processing" | "Scheduled"
 }
-
 
 export const getGaushalaBankDetails = (
   gName: string,
@@ -136,87 +140,32 @@ export const getGaushalaBankDetails = (
     }
   }
 
-  const customBank = gObj?.customDetails?.find(cd => cd.key.toLowerCase().includes("bank"))?.value
-  const customAcc = gObj?.customDetails?.find(cd => cd.key.toLowerCase().includes("account"))?.value
-  const customIfsc = gObj?.customDetails?.find(cd => cd.key.toLowerCase().includes("ifsc"))?.value
+  const customBank = gObj?.customDetails?.find((cd) =>
+    cd.key.toLowerCase().includes("bank"),
+  )?.value
+  const customAcc = gObj?.customDetails?.find((cd) =>
+    cd.key.toLowerCase().includes("account"),
+  )?.value
+  const customIfsc = gObj?.customDetails?.find((cd) =>
+    cd.key.toLowerCase().includes("ifsc"),
+  )?.value
 
-  const gaushalaKey = gName.toLowerCase()
-  if (gaushalaKey.includes("nandini")) {
-    return {
-      beneficiary: "Nandini Goseva Sadan Charitable Trust",
-      bankName: customBank || "State Bank of India · Gachibowli Branch, Hyderabad",
-      accountMasked: customAcc || "•••• •••• 7120",
-      ifsc: customIfsc || "SBIN0000312",
-      regNo: gObj?.trustRegistrationNo || "AWBI-TR-0618",
-      cycle: "Every Sunday at 23:59 IST",
-      mode: "Direct RBI NEFT / Instant IMPS",
-      escrowPool: "ICICI Nodal Trust Escrow",
-      nextBatch: "Upcoming Sunday Midnight",
-      badgeLabel: "Weekly Auto-Sweep",
-      statusBadge: "Active Direct Credit",
-      accountType: "CURRENT_TRUST" as const,
-      isDynamic: false,
-    }
-  }
-  if (gaushalaKey.includes("gopal")) {
-    return {
-      beneficiary: "Gopal Gaushala Trust Public Trust",
-      bankName: customBank || "HDFC Bank Ltd · Banjara Hills Branch, Hyderabad",
-      accountMasked: customAcc || "•••• •••• 9304",
-      ifsc: customIfsc || "HDFC0004182",
-      regNo: gObj?.trustRegistrationNo || "AWBI-TR-0792",
-      cycle: "Every Sunday at 23:59 IST",
-      mode: "Direct RBI NEFT / Instant IMPS",
-      escrowPool: "ICICI Nodal Trust Escrow",
-      nextBatch: "Upcoming Sunday Midnight",
-      badgeLabel: "Weekly Auto-Sweep",
-      statusBadge: "Active Direct Credit",
-      accountType: "CURRENT_TRUST" as const,
-      isDynamic: false,
-    }
-  }
-  if (gaushalaKey.includes("vrindavan")) {
-    return {
-      beneficiary: "Vrindavan Goshala Welfare Society",
-      bankName: customBank || "ICICI Bank Ltd · Financial District Branch, Hyderabad",
-      accountMasked: customAcc || "•••• •••• 5519",
-      ifsc: customIfsc || "ICIC0001048",
-      regNo: gObj?.trustRegistrationNo || "AWBI-TR-1034",
-      cycle: "Every Sunday at 23:59 IST",
-      mode: "Direct RBI NEFT / Instant IMPS",
-      escrowPool: "ICICI Nodal Trust Escrow",
-      nextBatch: "Upcoming Sunday Midnight",
-      badgeLabel: "Weekly Auto-Sweep",
-      statusBadge: "Active Direct Credit",
-      accountType: "CURRENT_TRUST" as const,
-      isDynamic: false,
-    }
-  }
-  if (gaushalaKey.includes("kamdhenu") || gaushalaKey.includes("kamadhenu")) {
-    return {
-      beneficiary: "Kamdhenu Seva Kendra Trust",
-      bankName: customBank || "Axis Bank · Madhapur Branch, Hyderabad",
-      accountMasked: customAcc || "•••• •••• 8831",
-      ifsc: customIfsc || "UTIB0002194",
-      regNo: gObj?.trustRegistrationNo || "AWBI-TR-1190",
-      cycle: "Every Sunday at 23:59 IST",
-      mode: "Direct RBI NEFT / Instant IMPS",
-      escrowPool: "ICICI Nodal Trust Escrow",
-      nextBatch: "Upcoming Sunday Midnight",
-      badgeLabel: "Weekly Auto-Sweep",
-      statusBadge: "Active Direct Credit",
-      accountType: "CURRENT_TRUST" as const,
-      isDynamic: false,
-    }
-  }
-
-  // Default for Shri Krishna Gaushala or custom newly added Gaushalas
   return {
-    beneficiary: `${gName} Charitable Trust`,
-    bankName: customBank || "HDFC Bank Ltd · Kondapur Branch, Hyderabad",
-    accountMasked: customAcc || "•••• •••• 4829",
-    ifsc: customIfsc || "HDFC0001824",
-    regNo: gObj?.trustRegistrationNo || "AWBI-TR-0421",
+    beneficiary: gObj?.name
+      ? `${gObj.name} Charitable Trust`
+      : `${gName} Charitable Trust`,
+    bankName:
+      customBank ||
+      (gObj?.region
+        ? `State Bank of India · ${gObj.region} Branch`
+        : "State Bank of India · Regional Branch"),
+    accountMasked:
+      customAcc ||
+      (gObj?.id
+        ? `•••• •••• ${gObj.id.replace(/\D/g, "").slice(-4) || "7120"}`
+        : "•••• •••• 7120"),
+    ifsc: customIfsc || "SBIN0000312",
+    regNo: gObj?.trustRegistrationNo || "AWBI/TRUST-REG",
     cycle: "Every Sunday at 23:59 IST",
     mode: "Direct RBI NEFT / Instant IMPS",
     escrowPool: "ICICI Nodal Trust Escrow",
@@ -224,7 +173,7 @@ export const getGaushalaBankDetails = (
     badgeLabel: "Weekly Auto-Sweep",
     statusBadge: "Active Direct Credit",
     accountType: "CURRENT_TRUST" as const,
-    isDynamic: false,
+    isDynamic: Boolean(customBank || customAcc),
   }
 }
 
@@ -243,10 +192,23 @@ export const getDevoteeGotra = (customerName: string) => {
 }
 
 export default function ManagerLedger() {
-  const { bookings, animals, settlements, profiles, gosalas, activeGosalaFilter, activeManagerGosala, setActiveGosalaFilter, currentRole, pricingConfig, authUser } = useStore()
+  const {
+    bookings,
+    animals,
+    settlements,
+    profiles,
+    gosalas,
+    activeGosalaFilter,
+    activeManagerGosala,
+    setActiveGosalaFilter,
+    currentRole,
+    pricingConfig,
+    authUser,
+    isLoading,
+  } = useStore()
   const { notify } = useToast()
 
-  const activeAdminName = authUser?.name || profiles?.admin?.name || "Operations Admin"
+  const activeAdminName = authUser?.name || profiles?.admin?.name || ""
 
   // Dynamic Revenue Split Configuration derived from Master Pricing & Platform Economics
   const defaultCommissionPct = pricingConfig?.commissionPct ?? 20
@@ -256,25 +218,39 @@ export default function ManagerLedger() {
   const poolInsurancePct = Math.round(defaultCommissionPct * 0.35)
   const poolGpsPct = Math.round(defaultCommissionPct * 0.25)
   const poolCarePct = Math.round(defaultCommissionPct * 0.25)
-  const poolEscrowPct = Math.max(0, defaultCommissionPct - poolInsurancePct - poolGpsPct - poolCarePct)
+  const poolEscrowPct = Math.max(
+    0,
+    defaultCommissionPct - poolInsurancePct - poolGpsPct - poolCarePct,
+  )
 
   // State management
   const [activeCategory, setActiveCategory] = useState<TopCategory>("gross")
   const [isPerGosalaModalOpen, setIsPerGosalaModalOpen] = useState(false)
   const [modalSelectedGosala, setModalSelectedGosala] = useState<string>("ALL")
-  const [expandedPaymentId, setExpandedPaymentId] = useState<string | null>("GMA-24815")
-  const [expandedGosalaActionId, setExpandedGosalaActionId] = useState<string | null>(null)
+  const [expandedPaymentId, setExpandedPaymentId] = useState<string | null>(
+    "GMA-24815",
+  )
+  const [expandedGosalaActionId, setExpandedGosalaActionId] =
+    useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState<"all" | "completed" | "confirmed" | "in_service">("all")
+  const [statusFilter, setStatusFilter] =
+    useState<"all" | "completed" | "confirmed" | "in_service">("all")
   const [receiptBooking, setReceiptBooking] = useState<Booking | null>(null)
 
   // Current Gaushala Information (Zero-leakage manager isolation)
   const currentGosalaName =
     currentRole === "manager"
-      ? (activeManagerGosala || (activeGosalaFilter !== "ALL" ? activeGosalaFilter : "") || profiles?.manager?.managerData?.gosala || gosalas[0]?.name || "")
-      : (activeGosalaFilter !== "ALL"
-          ? activeGosalaFilter
-          : activeManagerGosala || profiles?.manager?.managerData?.gosala || gosalas[0]?.name || "")
+      ? activeManagerGosala ||
+        (activeGosalaFilter !== "ALL" ? activeGosalaFilter : "") ||
+        profiles?.manager?.managerData?.gosala ||
+        gosalas[0]?.name ||
+        ""
+      : activeGosalaFilter !== "ALL"
+        ? activeGosalaFilter
+        : activeManagerGosala ||
+          profiles?.manager?.managerData?.gosala ||
+          gosalas[0]?.name ||
+          ""
 
   const currentGosala = gosalas.find(
     (g) => g.name.toLowerCase() === currentGosalaName.toLowerCase(),
@@ -283,7 +259,10 @@ export default function ManagerLedger() {
   // All verified bookings strictly scoped for manager
   const allRelevantBookings = bookings.filter((b) => {
     if (currentRole === "manager") {
-      if (currentGosalaName && (b.gosala || "").toLowerCase() !== currentGosalaName.toLowerCase()) {
+      if (
+        currentGosalaName &&
+        (b.gosala || "").toLowerCase() !== currentGosalaName.toLowerCase()
+      ) {
         return false
       }
     }
@@ -295,35 +274,32 @@ export default function ManagerLedger() {
   })
 
   // Compute per-gaushala aggregated net shares and actions performed
-  const gosalaBreakdownMap: Record<
-    string,
-    {
-      name: string
-      gosalaObj?: (typeof gosalas)[0]
-      sevasCount: number
-      gross: number
+  const gosalaBreakdownMap: Record<string, {
+    name: string
+    gosalaObj?: typeof gosalas[0]
+    sevasCount: number
+    gross: number
+    netShare: number
+    transport: number
+    addons: number
+    platformFee: number
+    totalKm: number
+    animals: Set<string>
+    drivers: Set<string>
+    actions: {
+      bookingId: string
+      customer: string
+      ritual: string
+      animal: string
+      animalType: string
+      driver: string
+      distanceKm: number
+      totalPaid: number
       netShare: number
-      transport: number
-      addons: number
-      platformFee: number
-      totalKm: number
-      animals: Set<string>
-      drivers: Set<string>
-      actions: {
-        bookingId: string
-        customer: string
-        ritual: string
-        animal: string
-        animalType: string
-        driver: string
-        distanceKm: number
-        totalPaid: number
-        netShare: number
-        date: string
-        status: string
-      }[]
-    }
-  > = {}
+      date: string
+      status: string
+    }[]
+  }> = {}
 
   // Pre-seed with registered gaushalas so all appear
   gosalas.forEach((g) => {
@@ -345,7 +321,8 @@ export default function ManagerLedger() {
 
   // Aggregate stats from verified sevas
   allRelevantBookings.forEach((b) => {
-    const gName = b.gosala || currentGosalaName || (gosalas[0]?.name || "Gaushala")
+    const gName =
+      b.gosala || currentGosalaName || gosalas[0]?.name || "Gaushala"
     if (!gosalaBreakdownMap[gName]) {
       const found = gosalas.find(
         (g) => g.name.toLowerCase() === gName.toLowerCase(),
@@ -404,16 +381,19 @@ export default function ManagerLedger() {
   const gosalaBreakdownList =
     currentRole === "manager"
       ? Object.values(gosalaBreakdownMap).filter(
-          (g) => !currentGosalaName || g.name.toLowerCase() === currentGosalaName.toLowerCase(),
+          (g) =>
+            !currentGosalaName ||
+            g.name.toLowerCase() === currentGosalaName.toLowerCase(),
         )
       : Object.values(gosalaBreakdownMap)
 
   // Filter relevant bookings for the active gaushala scope (or ALL)
   const relevantBookings = bookings.filter((b) => {
-    const bGosala = b.gosala || currentGosalaName || (gosalas[0]?.name || "")
+    const bGosala = b.gosala || currentGosalaName || gosalas[0]?.name || ""
     const matchesGosala =
       currentRole === "manager"
-        ? (!currentGosalaName || bGosala.toLowerCase() === currentGosalaName.toLowerCase())
+        ? !currentGosalaName ||
+          bGosala.toLowerCase() === currentGosalaName.toLowerCase()
         : activeGosalaFilter === "ALL" ||
           bGosala.toLowerCase() === activeGosalaFilter.toLowerCase()
 
@@ -498,7 +478,8 @@ export default function ManagerLedger() {
         title: b.ritualPurpose || "Antim Sanskar & Gau Moksha Seva",
         badge: "Antim Sanskar Cremation",
         badgeClass: "bg-purple-100 text-purple-900 border-purple-200",
-        description: "Sacred cow Vedic final rites with holy ash urn collection",
+        description:
+          "Sacred cow Vedic final rites with holy ash urn collection",
       }
     }
     return {
@@ -511,16 +492,34 @@ export default function ManagerLedger() {
     }
   }
 
-  const cremationBookings = relevantBookings.filter((b) => getBookingServiceInfo(b).isCremation)
-  const pujaBookings = relevantBookings.filter((b) => !getBookingServiceInfo(b).isCremation)
-  const cremationGross = cremationBookings.reduce((acc, b) => acc + (b.total || 0), 0)
+  const cremationBookings = relevantBookings.filter(
+    (b) => getBookingServiceInfo(b).isCremation,
+  )
+  const pujaBookings = relevantBookings.filter(
+    (b) => !getBookingServiceInfo(b).isCremation,
+  )
+  const cremationGross = cremationBookings.reduce(
+    (acc, b) => acc + (b.total || 0),
+    0,
+  )
   const pujaGross = pujaBookings.reduce((acc, b) => acc + (b.total || 0), 0)
-  const totalKmTraveled = relevantBookings.reduce((acc, b) => acc + (b.distanceKm || 0), 0)
+  const totalKmTraveled = relevantBookings.reduce(
+    (acc, b) => acc + (b.distanceKm || 0),
+    0,
+  )
 
   // Dynamic Operational & Banking Computations
-  const completedCount = relevantBookings.filter((b) => b.status === "Completed").length
-  const completionRate = relevantBookings.length > 0 ? Math.round((completedCount / relevantBookings.length) * 100) : 100
-  const effectiveCommissionPct = totalGross > 0 ? ((totalGomaaCommission / totalGross) * 100).toFixed(1) : "18.2"
+  const completedCount = relevantBookings.filter(
+    (b) => b.status === "Completed",
+  ).length
+  const completionRate =
+    relevantBookings.length > 0
+      ? Math.round((completedCount / relevantBookings.length) * 100)
+      : 100
+  const effectiveCommissionPct =
+    totalGross > 0
+      ? ((totalGomaaCommission / totalGross) * 100).toFixed(1)
+      : "18.2"
 
   const poolInsurance = Math.round(totalGomaaCommission * 0.35)
   const poolGps = Math.round(totalGomaaCommission * 0.25)
@@ -551,7 +550,8 @@ export default function ManagerLedger() {
       : profiles?.[currentRole || "manager"]
   }, [currentRole, activeGosalaFilter, currentGosalaName, profiles])
 
-  const [ledgerPortfolioScope, setLedgerPortfolioScope] = useState<"my_portfolio" | "all_network">("my_portfolio")
+  const [ledgerPortfolioScope, setLedgerPortfolioScope] =
+    useState<"my_portfolio" | "all_network">("my_portfolio")
 
   const displayLedgerGosalas = useMemo(() => {
     if (currentRole === "manager") return []
@@ -577,7 +577,11 @@ export default function ManagerLedger() {
     return gosalas
   }, [gosalas, currentRole, ledgerPortfolioScope])
 
-  const activeBank = getGaushalaBankDetails(currentGosalaName, currentGosala, effectiveBankProfile)
+  const activeBank = getGaushalaBankDetails(
+    currentGosalaName,
+    currentGosala,
+    effectiveBankProfile,
+  )
 
   // Dynamic Settlement Batches computed from actual volume and active shelter bank
   const dynamicBatches: SettlementBatch[] = useMemo(() => {
@@ -586,20 +590,47 @@ export default function ManagerLedger() {
     }
 
     const weeks = [
-      { label: "W4", date: "Current Week Dispatch", utrSuffix: "8109281", multiplier: 1.0 },
-      { label: "W3", date: "Previous Week Dispatch", utrSuffix: "1048209", multiplier: 0.82 },
-      { label: "W2", date: "Cycle -2 Dispatch", utrSuffix: "4091218", multiplier: 0.91 },
-      { label: "W1", date: "Cycle -3 Dispatch", utrSuffix: "7012903", multiplier: 0.74 },
+      {
+        label: "W4",
+        date: "Current Week Dispatch",
+        utrSuffix: "8109281",
+        multiplier: 1.0,
+      },
+      {
+        label: "W3",
+        date: "Previous Week Dispatch",
+        utrSuffix: "1048209",
+        multiplier: 0.82,
+      },
+      {
+        label: "W2",
+        date: "Cycle -2 Dispatch",
+        utrSuffix: "4091218",
+        multiplier: 0.91,
+      },
+      {
+        label: "W1",
+        date: "Cycle -3 Dispatch",
+        utrSuffix: "7012903",
+        multiplier: 0.74,
+      },
     ]
 
     return weeks.map((w, idx) => {
       const grossVal = Math.round(totalGross * w.multiplier)
       const netVal = Math.round(totalGaushalaNet * w.multiplier)
-      const countVal = Math.max(1, Math.round(relevantBookings.length * w.multiplier))
+      const countVal = Math.max(
+        1,
+        Math.round(relevantBookings.length * w.multiplier),
+      )
       const utrPrefix = (activeBank.ifsc || "HDFC").slice(0, 4)
 
       return {
-        id: `BTH-${activeGosalaFilter === "ALL" ? "GMA" : activeGosalaFilter.slice(0, 3).toUpperCase()}-2026-${w.label}`,
+        id: `BTH-${
+          activeGosalaFilter === "ALL"
+            ? "GMA"
+            : activeGosalaFilter.slice(0, 3).toUpperCase()
+        }-2026-${w.label}`,
         date: w.date,
         sevasCount: countVal,
         gross: grossVal,
@@ -607,14 +638,25 @@ export default function ManagerLedger() {
         utr: `${utrPrefix}N2626${w.utrSuffix}`,
         bankName: activeBank.bankName.split("·")[0].trim(),
         accountMasked: activeBank.accountMasked,
-        status: (idx === 0 && relevantBookings.some((b) => b.status === "In Service") ? "Processing" : "Settled") as "Settled" | "Processing",
+        status: (idx === 0 &&
+        relevantBookings.some((b) => b.status === "In Service")
+          ? "Processing"
+          : "Settled") as "Settled" | "Processing",
       }
     })
-  }, [activeGosalaFilter, totalGross, totalGaushalaNet, relevantBookings, activeBank])
+  }, [
+    activeGosalaFilter,
+    totalGross,
+    totalGaushalaNet,
+    relevantBookings,
+    activeBank,
+  ])
 
   // Driver and vehicle fleet details dynamically resolved from inHouseDrivers
   const getDriverVehicleInfo = (driverName: string | null) => {
-    const found = inHouseDrivers.find((d) => d.name.toLowerCase() === (driverName || "").toLowerCase())
+    const found = inHouseDrivers.find(
+      (d) => d.name.toLowerCase() === (driverName || "").toLowerCase(),
+    )
     if (found) {
       return {
         driver: found.name,
@@ -730,7 +772,8 @@ export default function ManagerLedger() {
                     : "bg-paper border border-line text-ink-soft hover:text-ink hover:bg-paper-deep"
                 }`}
               >
-                {currentRole === "super_admin" && ledgerPortfolioScope === "my_portfolio"
+                {currentRole === "super_admin" &&
+                ledgerPortfolioScope === "my_portfolio"
                   ? `Sovereign Portfolio (${displayLedgerGosalas.length} Shelters)`
                   : currentRole === "admin"
                     ? `${activeAdminName} Portfolio (${displayLedgerGosalas.length} Shelters)`
@@ -787,7 +830,9 @@ export default function ManagerLedger() {
         <div className="flex items-center justify-between mb-2.5">
           <div className="flex items-center gap-2">
             <h2 className="font-serif text-[20px] text-ink font-semibold">
-              {activeGosalaFilter === "ALL" ? "Consolidated Financial Summary" : `${activeGosalaFilter} Financial Summary`}
+              {activeGosalaFilter === "ALL"
+                ? "Consolidated Financial Summary"
+                : `${activeGosalaFilter} Financial Summary`}
             </h2>
             <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-forest-soft text-forest font-semibold">
               Live Escrow
@@ -837,7 +882,9 @@ export default function ManagerLedger() {
                     : "text-ink-faint group-hover:text-ink"
                 }`}
               >
-                {activeCategory === "gross" ? "Active Breakdown ▾" : "Tap for info →"}
+                {activeCategory === "gross"
+                  ? "Active Breakdown ▾"
+                  : "Tap for info →"}
               </span>
             </div>
           </div>
@@ -881,7 +928,9 @@ export default function ManagerLedger() {
                       : "text-ink-faint group-hover:text-forest"
                   }`}
                 >
-                  {activeCategory === "net" ? "Active Breakdown ▾" : "Tap for info →"}
+                  {activeCategory === "net"
+                    ? "Active Breakdown ▾"
+                    : "Tap for info →"}
                 </span>
                 <button
                   type="button"
@@ -937,7 +986,9 @@ export default function ManagerLedger() {
                     : "text-ink-faint group-hover:text-amber-800"
                 }`}
               >
-                {activeCategory === "transport" ? "Active Breakdown ▾" : "Tap for info →"}
+                {activeCategory === "transport"
+                  ? "Active Breakdown ▾"
+                  : "Tap for info →"}
               </span>
             </div>
           </div>
@@ -980,16 +1031,15 @@ export default function ManagerLedger() {
                     : "text-ink-faint group-hover:text-blue-700"
                 }`}
               >
-                {activeCategory === "platform" ? "Active Breakdown ▾" : "Tap for info →"}
+                {activeCategory === "platform"
+                  ? "Active Breakdown ▾"
+                  : "Tap for info →"}
               </span>
             </div>
           </div>
         </div>
       </div>
 
-
-
-      
       {/* =========================================================================
           VIEW 1: TOTAL GROSS BOOKINGS (CUSTOMER PAYMENTS & ALL CREMATIONS / SEVAS)
           ========================================================================= */}
@@ -1004,12 +1054,15 @@ export default function ManagerLedger() {
                   <span>Customer Bookings & All Seva Payments Ledger</span>
                 </h3>
                 <p className="text-[12px] text-ink-faint mt-0.5">
-                  Itemized record of each payment from the customer, Vedic ceremonies, and overall sacred cow cremations (Antim Sanskar) with full settlement transparency.
+                  Itemized record of each payment from the customer, Vedic
+                  ceremonies, and overall sacred cow cremations (Antim Sanskar)
+                  with full settlement transparency.
                 </p>
               </div>
               <div className="flex items-center gap-2 self-start sm:self-auto">
                 <span className="font-mono text-[11px] text-ink-faint bg-paper-deep px-2.5 py-1 rounded border border-line">
-                  {filteredBookings.length} of {relevantBookings.length} transactions
+                  {filteredBookings.length} of {relevantBookings.length}{" "}
+                  transactions
                 </span>
                 <span className="text-[11px] font-mono bg-forest-soft text-forest px-2.5 py-1 rounded border border-forest/20 font-medium">
                   Razorpay Escrow Verified
@@ -1029,7 +1082,9 @@ export default function ManagerLedger() {
                 </div>
                 <div className="text-[11px] text-ink-soft flex items-center justify-between">
                   <span>{relevantBookings.length} total bookings</span>
-                  <span className="text-forest font-semibold">+${completionRate}% Fulfill Rate</span>
+                  <span className="text-forest font-semibold">
+                    +${completionRate}% Fulfill Rate
+                  </span>
                 </div>
               </div>
 
@@ -1043,7 +1098,9 @@ export default function ManagerLedger() {
                 </div>
                 <div className="text-[11px] text-purple-800 flex items-center justify-between">
                   <span>{inr(cremationGross)} collected</span>
-                  <span className="font-mono font-medium">Vedic Holy Rites</span>
+                  <span className="font-mono font-medium">
+                    Vedic Holy Rites
+                  </span>
                 </div>
               </div>
 
@@ -1057,7 +1114,9 @@ export default function ManagerLedger() {
                 </div>
                 <div className="text-[11px] text-ink-soft flex items-center justify-between">
                   <span>{inr(pujaGross)} collected</span>
-                  <span className="font-mono font-medium text-forest">Griha Pravesh & Puja</span>
+                  <span className="font-mono font-medium text-forest">
+                    Griha Pravesh & Puja
+                  </span>
                 </div>
               </div>
 
@@ -1071,7 +1130,9 @@ export default function ManagerLedger() {
                 </div>
                 <div className="text-[11px] text-ink-soft flex items-center justify-between">
                   <span>UPI / Netbanking</span>
-                  <span className="font-mono font-medium text-ink-faint">Instant Webhook</span>
+                  <span className="font-mono font-medium text-ink-faint">
+                    Instant Webhook
+                  </span>
                 </div>
               </div>
             </div>
@@ -1128,13 +1189,19 @@ export default function ManagerLedger() {
                     if (expandedPaymentId) {
                       setExpandedPaymentId(null)
                     } else {
-                      setExpandedPaymentId(filteredBookings[0]?.id || "GMA-24815")
+                      setExpandedPaymentId(
+                        filteredBookings[0]?.id || "GMA-24815",
+                      )
                     }
                   }}
                   className="px-2.5 py-1 text-[11.5px] font-medium rounded-lg border border-forest/30 bg-forest-soft hover:bg-forest hover:text-white text-forest transition cursor-pointer whitespace-nowrap flex items-center gap-1 shadow-2xs"
                 >
                   <FileText size={12} />
-                  <span>{expandedPaymentId ? "Hide Dossiers ▲" : "Expand Dossier Details ▼"}</span>
+                  <span>
+                    {expandedPaymentId
+                      ? "Hide Dossiers ▲"
+                      : "Expand Dossier Details ▼"}
+                  </span>
                 </button>
               </div>
             </div>
@@ -1180,7 +1247,10 @@ export default function ManagerLedger() {
               <tbody className="divide-y divide-line/60">
                 {filteredBookings.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-12 text-center text-ink-faint text-[13px]">
+                    <td
+                      colSpan={10}
+                      className="px-4 py-12 text-center text-ink-faint text-[13px]"
+                    >
                       No transactions matched your current filters.
                     </td>
                   </tr>
@@ -1191,11 +1261,17 @@ export default function ManagerLedger() {
                     const baseAndExtra = (b.base || 0) + (b.extraTime || 0)
                     const transport = b.transport || 0
                     const addons = b.addons || 0
-                    const commissionPct = b.commissionPct ?? defaultCommissionPct
+                    const commissionPct =
+                      b.commissionPct ?? defaultCommissionPct
 
-                    const ritualCut = Math.round(baseAndExtra * (1 - commissionPct / 100))
-                    const platformRitualCut = Math.round(baseAndExtra * (commissionPct / 100))
-                    const gaushalaNet = ritualCut + transport + Math.round(addons * 0.9)
+                    const ritualCut = Math.round(
+                      baseAndExtra * (1 - commissionPct / 100),
+                    )
+                    const platformRitualCut = Math.round(
+                      baseAndExtra * (commissionPct / 100),
+                    )
+                    const gaushalaNet =
+                      ritualCut + transport + Math.round(addons * 0.9)
                     const platformCut = (b.total || 0) - gaushalaNet
                     const driverObj = getDriverVehicleInfo(b.driver)
 
@@ -1227,8 +1303,14 @@ export default function ManagerLedger() {
                           {/* Gaushala Shelter Column */}
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-1.5 font-semibold text-ink">
-                              <Building2 size={13} className="text-forest shrink-0" />
-                              <span className="truncate max-w-[170px]" title={b.gosala}>
+                              <Building2
+                                size={13}
+                                className="text-forest shrink-0"
+                              />
+                              <span
+                                className="truncate max-w-[170px]"
+                                title={b.gosala}
+                              >
                                 {b.gosala}
                               </span>
                             </div>
@@ -1247,7 +1329,10 @@ export default function ManagerLedger() {
                               </span>
                             </div>
                             <div className="text-[12px] font-medium text-ink mt-0.5">
-                              {b.animal} <span className="text-ink-faint text-[11px]">({b.animalType})</span>
+                              {b.animal}{" "}
+                              <span className="text-ink-faint text-[11px]">
+                                ({b.animalType})
+                              </span>
                             </div>
                           </td>
 
@@ -1333,17 +1418,27 @@ export default function ManagerLedger() {
                                         <span className="text-[10px] font-mono text-forest bg-forest-soft border border-forest/20 px-2 py-0.5 rounded-full font-medium">
                                           Verified Devotee
                                         </span>
-                                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-medium border ${serviceInfo.badgeClass}`}>
+                                        <span
+                                          className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-medium border ${serviceInfo.badgeClass}`}
+                                        >
                                           {serviceInfo.badge}
                                         </span>
                                         <span className="text-[11px] font-mono text-ink-faint bg-paper px-2 py-0.5 rounded border border-line">
-                                          Executing Shelter: <strong className="text-ink">{b.gosala}</strong>
+                                          Executing Shelter:{" "}
+                                          <strong className="text-ink">
+                                            {b.gosala}
+                                          </strong>
                                         </span>
                                       </div>
                                       <div className="text-[12px] text-ink-faint flex items-center gap-2 mt-0.5 flex-wrap">
-                                        <span>Aadhaar: {b.aadhaarNumber || "XXXX-XXXX-4819"}</span>
+                                        <span>
+                                          Aadhaar:{" "}
+                                          {b.aadhaarNumber || "XXXX-XXXX-4819"}
+                                        </span>
                                         <span>•</span>
-                                        <span>Gotra: {getDevoteeGotra(b.customer)}</span>
+                                        <span>
+                                          Gotra: {getDevoteeGotra(b.customer)}
+                                        </span>
                                         <span>•</span>
                                         <span>Phone: {b.phone}</span>
                                       </div>
@@ -1355,11 +1450,15 @@ export default function ManagerLedger() {
                                       onClick={() => setReceiptBooking(b)}
                                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-forest/30 bg-forest-soft hover:bg-forest hover:text-white text-forest text-[12px] font-medium transition cursor-pointer shadow-2xs"
                                     >
-                                      <FileText size={13} /> View Official Voucher
+                                      <FileText size={13} /> View Official
+                                      Voucher
                                     </button>
                                     <button
                                       onClick={() =>
-                                        notify(`Downloaded seva voucher for ${b.id}`, "ok")
+                                        notify(
+                                          `Downloaded seva voucher for ${b.id}`,
+                                          "ok",
+                                        )
                                       }
                                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-line bg-card hover:bg-paper-deep text-ink text-[12px] font-medium transition cursor-pointer"
                                     >
@@ -1373,7 +1472,8 @@ export default function ManagerLedger() {
                                   {/* Left 7 cols: What Really Happened */}
                                   <div className="lg:col-span-7 space-y-3">
                                     <div className="font-mono text-[11px] uppercase tracking-wider text-forest font-semibold flex items-center gap-1.5">
-                                      <ShieldCheck size={14} /> What Really Happened (Audit Narrative)
+                                      <ShieldCheck size={14} /> What Really
+                                      Happened (Audit Narrative)
                                     </div>
 
                                     <div className="bg-card p-4 rounded-lg border border-line space-y-3 shadow-2xs">
@@ -1406,7 +1506,10 @@ export default function ManagerLedger() {
                                           <span className="text-[10.5px] uppercase font-mono text-ink-faint block">
                                             Destination & Route
                                           </span>
-                                          <span className="text-ink truncate block" title={b.address}>
+                                          <span
+                                            className="text-ink truncate block"
+                                            title={b.address}
+                                          >
                                             {b.address}
                                           </span>
                                         </div>
@@ -1414,9 +1517,12 @@ export default function ManagerLedger() {
 
                                       <div className="p-3 bg-paper rounded border border-line/70 text-[11.5px] space-y-1">
                                         <div className="flex items-center justify-between text-ink-soft">
-                                          <span>Assigned Driver & Transit:</span>
+                                          <span>
+                                            Assigned Driver & Transit:
+                                          </span>
                                           <span className="font-semibold text-ink">
-                                            {driverObj.driver} ({driverObj.model})
+                                            {driverObj.driver} (
+                                            {driverObj.model})
                                           </span>
                                         </div>
                                         <div className="flex items-center justify-between text-ink-soft">
@@ -1428,13 +1534,17 @@ export default function ManagerLedger() {
                                         <div className="flex items-center justify-between text-ink-soft">
                                           <span>Animal Welfare Protocol:</span>
                                           <span className="text-forest font-medium">
-                                            ✓ Air-cushioned hydraulic ramp · Zero stress logged
+                                            ✓ Air-cushioned hydraulic ramp ·
+                                            Zero stress logged
                                           </span>
                                         </div>
                                       </div>
 
                                       <div className="text-[11.5px] text-ink-soft italic bg-paper-deep/60 p-2.5 rounded">
-                                        "{b.managerRemark || "Operational check passed. Sacred cow arrived resting and in serene condition. Devotee completed Vedic rituals with blessed family."}"
+                                        "
+                                        {b.managerRemark ||
+                                          "Operational check passed. Sacred cow arrived resting and in serene condition. Devotee completed Vedic rituals with blessed family."}
+                                        "
                                       </div>
                                     </div>
                                   </div>
@@ -1442,30 +1552,43 @@ export default function ManagerLedger() {
                                   {/* Right 5 cols: Itemized Financial Breakdown */}
                                   <div className="lg:col-span-5 space-y-3">
                                     <div className="font-mono text-[11px] uppercase tracking-wider text-forest font-semibold flex items-center gap-1.5">
-                                      <Receipt size={14} /> Itemized Digital Payment Audit
+                                      <Receipt size={14} /> Itemized Digital
+                                      Payment Audit
                                     </div>
 
                                     <div className="bg-card p-4 rounded-lg border border-line space-y-2 shadow-2xs">
                                       <div className="flex items-center justify-between text-ink-soft">
                                         <span>Base Seva Fee:</span>
-                                        <span className="font-mono text-ink">{inr(b.base)}</span>
+                                        <span className="font-mono text-ink">
+                                          {inr(b.base)}
+                                        </span>
                                       </div>
 
                                       {b.extraTime > 0 && (
                                         <div className="flex items-center justify-between text-ink-soft">
                                           <span>Extended Darshan:</span>
-                                          <span className="font-mono text-ink">+{inr(b.extraTime)}</span>
+                                          <span className="font-mono text-ink">
+                                            +{inr(b.extraTime)}
+                                          </span>
                                         </div>
                                       )}
 
                                       <div className="flex items-center justify-between text-emerald-800">
-                                        <span>Transport Pass-Through (100% to Shelter):</span>
-                                        <span className="font-mono font-medium">+{inr(transport)}</span>
+                                        <span>
+                                          Transport Pass-Through (100% to
+                                          Shelter):
+                                        </span>
+                                        <span className="font-mono font-medium">
+                                          +{inr(transport)}
+                                        </span>
                                       </div>
 
                                       {addons > 0 && (
                                         <div className="flex items-center justify-between text-ink-soft">
-                                          <span>Puja Samagri Add-ons (90% to Shelter):</span>
+                                          <span>
+                                            Puja Samagri Add-ons (90% to
+                                            Shelter):
+                                          </span>
                                           <span className="font-mono text-ink">
                                             +{inr(Math.round(addons * 0.9))}
                                           </span>
@@ -1474,12 +1597,19 @@ export default function ManagerLedger() {
 
                                       <div className="pt-2 border-t border-line/60 flex items-center justify-between font-semibold text-ink">
                                         <span>Total Paid by Devotee:</span>
-                                        <span className="font-mono text-[13px]">{inr(b.total)}</span>
+                                        <span className="font-mono text-[13px]">
+                                          {inr(b.total)}
+                                        </span>
                                       </div>
 
                                       <div className="flex items-center justify-between text-ink-faint text-[11.5px]">
-                                        <span>GOMAA Platform Fee ({commissionPct}% on Base):</span>
-                                        <span className="font-mono">−{inr(platformCut)}</span>
+                                        <span>
+                                          GOMAA Platform Fee ({commissionPct}%
+                                          on Base):
+                                        </span>
+                                        <span className="font-mono">
+                                          −{inr(platformCut)}
+                                        </span>
                                       </div>
 
                                       <div className="pt-2 border-t border-forest/30 bg-forest-soft/30 p-2.5 rounded flex items-center justify-between font-semibold text-forest text-[13px]">
@@ -1490,8 +1620,13 @@ export default function ManagerLedger() {
                                       </div>
 
                                       <div className="pt-1 text-[11px] text-ink-faint font-mono flex items-center justify-between">
-                                        <span>Gateway Ref: UPI-TXN-{b.id.replace(/\D/g, "")}</span>
-                                        <span className="text-forest font-semibold">✓ Settled to Trust A/C</span>
+                                        <span>
+                                          Gateway Ref: UPI-TXN-
+                                          {b.id.replace(/\D/g, "")}
+                                        </span>
+                                        <span className="text-forest font-semibold">
+                                          ✓ Settled to Trust A/C
+                                        </span>
                                       </div>
                                     </div>
                                   </div>
@@ -1519,10 +1654,13 @@ export default function ManagerLedger() {
             <div>
               <h3 className="font-serif text-[19px] text-ink font-bold flex items-center gap-2">
                 <Building2 size={19} className="text-forest" />
-                <span>Per-Gaushala Actions Performed & Net Share Breakdown</span>
+                <span>
+                  Per-Gaushala Actions Performed & Net Share Breakdown
+                </span>
               </h3>
               <p className="text-[12px] text-ink-faint mt-0.5">
-                Specific actions completed by each shelter, cattle deployed, transit distances, and the exact money earned for each trust.
+                Specific actions completed by each shelter, cattle deployed,
+                transit distances, and the exact money earned for each trust.
               </p>
             </div>
             <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -1548,7 +1686,8 @@ export default function ManagerLedger() {
               <div className="flex items-center gap-2">
                 <ShieldCheck size={16} className="text-forest" />
                 <span className="font-serif text-[15px] text-ink font-bold">
-                  Transparent {defaultGaushalaNetPct}/{defaultCommissionPct} Gaushala Trust Revenue Architecture
+                  Transparent {defaultGaushalaNetPct}/{defaultCommissionPct}{" "}
+                  Gaushala Trust Revenue Architecture
                 </span>
               </div>
               <span className="text-[10.5px] font-mono bg-forest text-white px-2 py-0.5 rounded-full font-medium">
@@ -1556,7 +1695,9 @@ export default function ManagerLedger() {
               </span>
             </div>
             <p className="text-[12px] text-ink-soft leading-relaxed">
-              Every ceremonial rupee earned is protected by the Board of Trustees. The {defaultGaushalaNetPct}% net shelter allocation is strictly locked into three non-divertible operational accounts:
+              Every ceremonial rupee earned is protected by the Board of
+              Trustees. The {defaultGaushalaNetPct}% net shelter allocation is
+              strictly locked into three non-divertible operational accounts:
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
               <div className="p-3 rounded-lg bg-card border border-line space-y-1">
@@ -1565,7 +1706,8 @@ export default function ManagerLedger() {
                   <span className="font-mono text-forest font-bold">55%</span>
                 </div>
                 <p className="text-[11px] text-ink-faint">
-                  Hydroponic green fodder, mustard seed cakes, wheat bran & dry straw supplies.
+                  Hydroponic green fodder, mustard seed cakes, wheat bran & dry
+                  straw supplies.
                 </p>
               </div>
 
@@ -1575,7 +1717,8 @@ export default function ManagerLedger() {
                   <span className="font-mono text-forest font-bold">25%</span>
                 </div>
                 <p className="text-[11px] text-ink-faint">
-                  Routine doctor check-ups, vaccines, arthritis tonics & geriatric hospice care.
+                  Routine doctor check-ups, vaccines, arthritis tonics &
+                  geriatric hospice care.
                 </p>
               </div>
 
@@ -1585,7 +1728,8 @@ export default function ManagerLedger() {
                   <span className="font-mono text-forest font-bold">20%</span>
                 </div>
                 <p className="text-[11px] text-ink-faint">
-                  Fair living wages, health coverage & festival bonuses for dedicated cattle handlers.
+                  Fair living wages, health coverage & festival bonuses for
+                  dedicated cattle handlers.
                 </p>
               </div>
             </div>
@@ -1620,9 +1764,15 @@ export default function ManagerLedger() {
                           )}
                         </h4>
                         <div className="text-[11.5px] text-ink-faint mt-0.5 flex items-center gap-2 flex-wrap">
-                          <span>{g.gosalaObj?.trustRegistrationNo || "AWBI Reg: MAH-PUN-0421"}</span>
+                          <span>
+                            {g.gosalaObj?.trustRegistrationNo ||
+                              "AWBI Reg: MAH-PUN-0421"}
+                          </span>
                           <span>•</span>
-                          <span>Caretaker: {g.gosalaObj?.caretaker || "Assigned Caretaker"}</span>
+                          <span>
+                            Caretaker:{" "}
+                            {g.gosalaObj?.caretaker || "Assigned Caretaker"}
+                          </span>
                         </div>
                       </div>
 
@@ -1650,29 +1800,11 @@ export default function ManagerLedger() {
                             ✓
                           </span>
                           <div>
-                            <div className="font-semibold text-ink">{g.sevasCount} Sevas / Cremations</div>
-                            <div className="text-[10.5px] text-ink-faint">Completed successfully</div>
-                          </div>
-                        </div>
-
-                        <div className="p-2 rounded bg-paper-deep border border-line flex items-center gap-2">
-                          <span className="h-5 w-5 rounded-full bg-forest/15 text-forest flex items-center justify-center font-bold text-[10px] shrink-0">
-                            ✓
-                          </span>
-                          <div>
-                            <div className="font-semibold text-ink">{g.totalKm.toFixed(1)} km Transit</div>
-                            <div className="text-[10.5px] text-ink-faint">0 Heat stress incidents</div>
-                          </div>
-                        </div>
-
-                        <div className="p-2 rounded bg-paper-deep border border-line flex items-center gap-2">
-                          <span className="h-5 w-5 rounded-full bg-forest/15 text-forest flex items-center justify-center font-bold text-[10px] shrink-0">
-                            ✓
-                          </span>
-                          <div>
-                            <div className="font-semibold text-ink">{g.animals.size || 2} Cattle Deployed</div>
-                            <div className="text-[10.5px] text-ink-faint truncate max-w-[120px]">
-                              {Array.from(g.animals).join(", ") || (animals.filter(a => a.gosala?.toLowerCase() === g.name.toLowerCase()).map(a => a.name).join(", ")) || "Sacred Cattle"}
+                            <div className="font-semibold text-ink">
+                              {g.sevasCount} Sevas / Cremations
+                            </div>
+                            <div className="text-[10.5px] text-ink-faint">
+                              Completed successfully
                             </div>
                           </div>
                         </div>
@@ -1682,8 +1814,49 @@ export default function ManagerLedger() {
                             ✓
                           </span>
                           <div>
-                            <div className="font-semibold text-ink">100% Feeding Protocol</div>
-                            <div className="text-[10.5px] text-ink-faint">Organic grass logged</div>
+                            <div className="font-semibold text-ink">
+                              {g.totalKm.toFixed(1)} km Transit
+                            </div>
+                            <div className="text-[10.5px] text-ink-faint">
+                              0 Heat stress incidents
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="p-2 rounded bg-paper-deep border border-line flex items-center gap-2">
+                          <span className="h-5 w-5 rounded-full bg-forest/15 text-forest flex items-center justify-center font-bold text-[10px] shrink-0">
+                            ✓
+                          </span>
+                          <div>
+                            <div className="font-semibold text-ink">
+                              {g.animals.size || 2} Cattle Deployed
+                            </div>
+                            <div className="text-[10.5px] text-ink-faint truncate max-w-[120px]">
+                              {Array.from(g.animals).join(", ") ||
+                                animals
+                                  .filter(
+                                    (a) =>
+                                      a.gosala?.toLowerCase() ===
+                                      g.name.toLowerCase(),
+                                  )
+                                  .map((a) => a.name)
+                                  .join(", ") ||
+                                "Sacred Cattle"}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="p-2 rounded bg-paper-deep border border-line flex items-center gap-2">
+                          <span className="h-5 w-5 rounded-full bg-forest/15 text-forest flex items-center justify-center font-bold text-[10px] shrink-0">
+                            ✓
+                          </span>
+                          <div>
+                            <div className="font-semibold text-ink">
+                              100% Feeding Protocol
+                            </div>
+                            <div className="text-[10.5px] text-ink-faint">
+                              Organic grass logged
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1693,25 +1866,40 @@ export default function ManagerLedger() {
                     <div className="p-3 rounded-lg bg-forest-soft/30 border border-forest/20 space-y-1.5 text-[12px]">
                       <div className="flex items-center justify-between text-ink-soft">
                         <span>Gross Devotee Volume:</span>
-                        <span className="font-mono text-ink font-medium">{inr(g.gross)}</span>
+                        <span className="font-mono text-ink font-medium">
+                          {inr(g.gross)}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between text-emerald-800">
-                        <span>Transport Pass-Through (100% to this Gaushala):</span>
-                        <span className="font-mono font-medium">+{inr(g.transport)}</span>
+                        <span>
+                          Transport Pass-Through (100% to this Gaushala):
+                        </span>
+                        <span className="font-mono font-medium">
+                          +{inr(g.transport)}
+                        </span>
                       </div>
                       {g.addons > 0 && (
                         <div className="flex items-center justify-between text-ink-soft">
-                          <span>Puja Samagri Add-ons (90% to this Gaushala):</span>
-                          <span className="font-mono font-medium">+{inr(g.addons)}</span>
+                          <span>
+                            Puja Samagri Add-ons (90% to this Gaushala):
+                          </span>
+                          <span className="font-mono font-medium">
+                            +{inr(g.addons)}
+                          </span>
                         </div>
                       )}
                       <div className="flex items-center justify-between text-ink-faint text-[11.5px]">
-                        <span>Platform Operations Fee Deducted ({defaultCommissionPct}%):</span>
+                        <span>
+                          Platform Operations Fee Deducted (
+                          {defaultCommissionPct}%):
+                        </span>
                         <span className="font-mono">−{inr(g.platformFee)}</span>
                       </div>
                       <div className="pt-1.5 border-t border-forest/30 flex items-center justify-between font-bold text-forest text-[13px]">
                         <span>Specific Net Earned by this Gaushala:</span>
-                        <span className="font-mono text-[14.5px] tabular">{inr(g.netShare)}</span>
+                        <span className="font-mono text-[14.5px] tabular">
+                          {inr(g.netShare)}
+                        </span>
                       </div>
                     </div>
 
@@ -1753,17 +1941,22 @@ export default function ManagerLedger() {
                                 <div className="truncate">
                                   <div className="font-semibold text-ink flex items-center gap-1.5">
                                     <span>{act.customer}</span>
-                                    <span className="text-[10px] font-mono text-ink-faint">({act.bookingId})</span>
+                                    <span className="text-[10px] font-mono text-ink-faint">
+                                      ({act.bookingId})
+                                    </span>
                                   </div>
                                   <div className="text-ink-soft text-[11px] truncate">
-                                    {act.ritual} · Cow: {act.animal} ({act.distanceKm} km with {act.driver})
+                                    {act.ritual} · Cow: {act.animal} (
+                                    {act.distanceKm} km with {act.driver})
                                   </div>
                                 </div>
                                 <div className="text-right shrink-0">
                                   <div className="font-mono font-semibold text-forest">
                                     +{inr(act.netShare)}
                                   </div>
-                                  <div className="text-[10px] text-ink-faint">{act.date}</div>
+                                  <div className="text-[10px] text-ink-faint">
+                                    {act.date}
+                                  </div>
                                 </div>
                               </div>
                             ))}
@@ -1775,7 +1968,18 @@ export default function ManagerLedger() {
                     {/* Action row */}
                     <div className="flex items-center justify-between pt-2 border-t border-line/60">
                       <span className="text-[11px] font-mono text-ink-faint">
-                        Disburses to: {getGaushalaBankDetails(g.name, g.gosalaObj).bankName.split("·")[0]} A/C {getGaushalaBankDetails(g.name, g.gosalaObj).accountMasked}
+                        Disburses to:{" "}
+                        {
+                          getGaushalaBankDetails(
+                            g.name,
+                            g.gosalaObj,
+                          ).bankName.split("·")[0]
+                        }{" "}
+                        A/C{" "}
+                        {
+                          getGaushalaBankDetails(g.name, g.gosalaObj)
+                            .accountMasked
+                        }
                       </span>
                       <button
                         onClick={() => {
@@ -1809,7 +2013,9 @@ export default function ManagerLedger() {
                   <span>Transport Pass-Through & Vehicle Transit Ledger</span>
                 </h3>
                 <p className="text-[12px] text-ink-faint mt-0.5">
-                  Clear breakdown of all transport costs: vehicle transit fuel, road kilometers, driver allowances, and 100% direct Gaushala credit with ₹0 platform deduction.
+                  Clear breakdown of all transport costs: vehicle transit fuel,
+                  road kilometers, driver allowances, and 100% direct Gaushala
+                  credit with ₹0 platform deduction.
                 </p>
               </div>
               <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -1823,21 +2029,34 @@ export default function ManagerLedger() {
             <div className="mt-4 p-4 rounded-xl border border-amber-300 bg-amber-50/50 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[11px] uppercase tracking-wider text-amber-900 font-semibold flex items-center gap-1.5">
-                  <ShieldCheck size={14} /> 100% Direct Pass-Through Policy Guarantee
+                  <ShieldCheck size={14} /> 100% Direct Pass-Through Policy
+                  Guarantee
                 </span>
                 <span className="text-[10.5px] font-mono bg-amber-200 text-amber-900 px-2 py-0.5 rounded font-medium">
                   Zero Platform Commission
                 </span>
               </div>
               <p className="text-[12px] text-amber-950 leading-relaxed">
-                GOMAA takes <strong>₹0.00 platform commission</strong> on animal transport logistics. Every rupee paid by devotees for vehicle transit is passed through at 100% directly to the fulfilling Gaushala Trust to fund vehicle diesel, scheduled maintenance, and dedicated driver allowances.
+                GOMAA takes <strong>₹0.00 platform commission</strong> on animal
+                transport logistics. Every rupee paid by devotees for vehicle
+                transit is passed through at 100% directly to the fulfilling
+                Gaushala Trust to fund vehicle diesel, scheduled maintenance,
+                and dedicated driver allowances.
               </p>
               <div className="pt-1 text-[11.5px] font-mono text-amber-900 flex items-center gap-4 flex-wrap">
-                <span><strong>Rate Formula:</strong> ₹300 Base Pickup + ₹40/km Return Route</span>
+                <span>
+                  <strong>Rate Formula:</strong> ₹300 Base Pickup + ₹40/km
+                  Return Route
+                </span>
                 <span>•</span>
-                <span><strong>Verification:</strong> IoT GPS Telematics & Electronic Odometer</span>
+                <span>
+                  <strong>Verification:</strong> IoT GPS Telematics & Electronic
+                  Odometer
+                </span>
                 <span>•</span>
-                <span><strong>Equipment:</strong> Air-Cushioned Hydraulic Ramp Vans</span>
+                <span>
+                  <strong>Equipment:</strong> Air-Cushioned Hydraulic Ramp Vans
+                </span>
               </div>
             </div>
 
@@ -1878,7 +2097,9 @@ export default function ManagerLedger() {
                   3 Vans Active
                 </div>
                 <div className="text-[11px] text-ink-soft">
-                  {inHouseDrivers.map(d => d.vehicleModel.split("(")[0].trim()).join(", ")}
+                  {inHouseDrivers
+                    .map((d) => d.vehicleModel.split("(")[0].trim())
+                    .join(", ")}
                 </div>
               </div>
 
@@ -1937,17 +2158,27 @@ export default function ManagerLedger() {
                   const transportFee = b.transport || 0
 
                   return (
-                    <tr key={b.id} className="text-[12.5px] hover:bg-paper/40 transition">
+                    <tr
+                      key={b.id}
+                      className="text-[12.5px] hover:bg-paper/40 transition"
+                    >
                       <td className="px-4 py-3">
                         <div className="font-mono text-[12px] font-semibold text-ink">
                           {b.id}
                         </div>
-                        <div className="text-[11px] text-ink-faint">{b.date}</div>
+                        <div className="text-[11px] text-ink-faint">
+                          {b.date}
+                        </div>
                       </td>
 
                       <td className="px-4 py-3">
-                        <div className="font-semibold text-ink">{b.customer}</div>
-                        <div className="text-[11.5px] text-ink-soft truncate max-w-[200px]" title={b.address}>
+                        <div className="font-semibold text-ink">
+                          {b.customer}
+                        </div>
+                        <div
+                          className="text-[11.5px] text-ink-soft truncate max-w-[200px]"
+                          title={b.address}
+                        >
                           {b.address}
                         </div>
                       </td>
@@ -1957,18 +2188,25 @@ export default function ManagerLedger() {
                           <Building2 size={12} /> {b.gosala}
                         </div>
                         <div className="text-[11.5px] text-ink flex items-center gap-1 mt-0.5">
-                          <User size={12} className="text-ink-faint" /> {driverObj.driver}
+                          <User size={12} className="text-ink-faint" />{" "}
+                          {driverObj.driver}
                         </div>
                       </td>
 
                       <td className="px-4 py-3">
-                        <div className="font-medium text-ink">{driverObj.model}</div>
-                        <div className="font-mono text-[11px] text-ink-faint">{driverObj.plate}</div>
+                        <div className="font-medium text-ink">
+                          {driverObj.model}
+                        </div>
+                        <div className="font-mono text-[11px] text-ink-faint">
+                          {driverObj.plate}
+                        </div>
                       </td>
 
                       <td className="px-4 py-3 font-mono text-ink">
                         <div>{b.distanceKm} km</div>
-                        <div className="text-[10.5px] text-ink-faint">Odometer Verified</div>
+                        <div className="text-[10.5px] text-ink-faint">
+                          Odometer Verified
+                        </div>
                       </td>
 
                       <td className="px-4 py-3 font-mono font-medium text-ink tabular">
@@ -2008,10 +2246,14 @@ export default function ManagerLedger() {
               <div>
                 <h3 className="font-serif text-[19px] text-ink font-bold flex items-center gap-2">
                   <ShieldCheck size={19} className="text-blue-700" />
-                  <span>GOMAA Platform Fee & Operational Cuttings Overview</span>
+                  <span>
+                    GOMAA Platform Fee & Operational Cuttings Overview
+                  </span>
                 </h3>
                 <p className="text-[12px] text-ink-faint mt-0.5">
-                  Concise overview of the {defaultCommissionPct}% platform cut on base ceremonies used to fund cow transit insurance, GPS telematics, customer care, and escrow compliance.
+                  Concise overview of the {defaultCommissionPct}% platform cut
+                  on base ceremonies used to fund cow transit insurance, GPS
+                  telematics, customer care, and escrow compliance.
                 </p>
               </div>
               <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -2068,40 +2310,52 @@ export default function ManagerLedger() {
               <div className="p-3 rounded-lg border border-line bg-card shadow-2xs space-y-1">
                 <div className="font-semibold text-ink text-[12.5px] flex items-center justify-between">
                   <span>Cow Transit Insurance</span>
-                  <span className="font-mono text-blue-800 font-bold">{poolInsurancePct}% ({inr(poolInsurance)})</span>
+                  <span className="font-mono text-blue-800 font-bold">
+                    {poolInsurancePct}% ({inr(poolInsurance)})
+                  </span>
                 </div>
                 <p className="text-[11px] text-ink-faint">
-                  Accident, heat stress, veterinary emergency cover & road hospitalization for sacred cattle.
+                  Accident, heat stress, veterinary emergency cover & road
+                  hospitalization for sacred cattle.
                 </p>
               </div>
 
               <div className="p-3 rounded-lg border border-line bg-card shadow-2xs space-y-1">
                 <div className="font-semibold text-ink text-[12.5px] flex items-center justify-between">
                   <span>IoT GPS & Telemetry</span>
-                  <span className="font-mono text-blue-800 font-bold">{poolGpsPct}% ({inr(poolGps)})</span>
+                  <span className="font-mono text-blue-800 font-bold">
+                    {poolGpsPct}% ({inr(poolGps)})
+                  </span>
                 </div>
                 <p className="text-[11px] text-ink-faint">
-                  Live vehicle telematics, route telemetry, cabin heat sensors & real-time dispatch map.
+                  Live vehicle telematics, route telemetry, cabin heat sensors &
+                  real-time dispatch map.
                 </p>
               </div>
 
               <div className="p-3 rounded-lg border border-line bg-card shadow-2xs space-y-1">
                 <div className="font-semibold text-ink text-[12.5px] flex items-center justify-between">
                   <span>Devotee Care Desk</span>
-                  <span className="font-mono text-blue-800 font-bold">{poolCarePct}% ({inr(poolCare)})</span>
+                  <span className="font-mono text-blue-800 font-bold">
+                    {poolCarePct}% ({inr(poolCare)})
+                  </span>
                 </div>
                 <p className="text-[11px] text-ink-faint">
-                  Devotee support, Vedic calendar & Muhurat synchronization, Pandit booking verification.
+                  Devotee support, Vedic calendar & Muhurat synchronization,
+                  Pandit booking verification.
                 </p>
               </div>
 
               <div className="p-3 rounded-lg border border-line bg-card shadow-2xs space-y-1">
                 <div className="font-semibold text-ink text-[12.5px] flex items-center justify-between">
                   <span>Escrow & Compliance</span>
-                  <span className="font-mono text-blue-800 font-bold">{poolEscrowPct}% ({inr(poolEscrow)})</span>
+                  <span className="font-mono text-blue-800 font-bold">
+                    {poolEscrowPct}% ({inr(poolEscrow)})
+                  </span>
                 </div>
                 <p className="text-[11px] text-ink-faint">
-                  RBI-compliant nodal escrow pool, Sunday auto-sweeps, AWBI compliance & audited receipts.
+                  RBI-compliant nodal escrow pool, Sunday auto-sweeps, AWBI
+                  compliance & audited receipts.
                 </p>
               </div>
             </div>
@@ -2142,21 +2396,35 @@ export default function ManagerLedger() {
                   const addons = b.addons || 0
                   const commissionPct = b.commissionPct ?? defaultCommissionPct
 
-                  const ritualCut = Math.round(baseAndExtra * (1 - commissionPct / 100))
-                  const gaushalaNet = ritualCut + transport + Math.round(addons * 0.9)
+                  const ritualCut = Math.round(
+                    baseAndExtra * (1 - commissionPct / 100),
+                  )
+                  const gaushalaNet =
+                    ritualCut + transport + Math.round(addons * 0.9)
                   const platformCut = (b.total || 0) - gaushalaNet
                   const serviceInfo = getBookingServiceInfo(b)
 
                   return (
-                    <tr key={b.id} className="text-[12.5px] hover:bg-paper/40 transition">
+                    <tr
+                      key={b.id}
+                      className="text-[12.5px] hover:bg-paper/40 transition"
+                    >
                       <td className="px-4 py-3">
-                        <div className="font-mono text-[12px] font-semibold text-ink">{b.id}</div>
-                        <div className="text-[11.5px] text-ink-soft">{b.customer}</div>
+                        <div className="font-mono text-[12px] font-semibold text-ink">
+                          {b.id}
+                        </div>
+                        <div className="text-[11.5px] text-ink-soft">
+                          {b.customer}
+                        </div>
                       </td>
 
                       <td className="px-4 py-3">
-                        <div className="font-medium text-ink">{serviceInfo.title}</div>
-                        <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border font-medium ${serviceInfo.badgeClass}`}>
+                        <div className="font-medium text-ink">
+                          {serviceInfo.title}
+                        </div>
+                        <span
+                          className={`text-[10px] font-mono px-1.5 py-0.2 rounded border font-medium ${serviceInfo.badgeClass}`}
+                        >
                           {serviceInfo.badge}
                         </span>
                       </td>
@@ -2230,8 +2498,12 @@ export default function ManagerLedger() {
                   </span>
                 </div>
                 <div className="flex justify-between font-mono text-[12px]">
-                  <span className="text-ink-faint font-sans">Account Number:</span>
-                  <span className="text-ink font-semibold">{activeBank.accountMasked}</span>
+                  <span className="text-ink-faint font-sans">
+                    Account Number:
+                  </span>
+                  <span className="text-ink font-semibold">
+                    {activeBank.accountMasked}
+                  </span>
                 </div>
                 <div className="flex justify-between font-mono text-[12px]">
                   <span className="text-ink-faint font-sans">IFSC Code:</span>
@@ -2239,8 +2511,12 @@ export default function ManagerLedger() {
                 </div>
                 {activeBank.upiId && (
                   <div className="flex justify-between font-mono text-[12px]">
-                    <span className="text-ink-faint font-sans">Direct UPI ID:</span>
-                    <span className="text-ink font-mono text-forest">{activeBank.upiId}</span>
+                    <span className="text-ink-faint font-sans">
+                      Direct UPI ID:
+                    </span>
+                    <span className="text-ink font-mono text-forest">
+                      {activeBank.upiId}
+                    </span>
                   </div>
                 )}
               </div>
@@ -2261,19 +2537,27 @@ export default function ManagerLedger() {
               <div className="pt-1 space-y-1 text-[12.5px]">
                 <div className="flex justify-between">
                   <span className="text-ink-faint">Disbursement Cycle:</span>
-                  <span className="text-ink font-medium">{activeBank.cycle}</span>
+                  <span className="text-ink font-medium">
+                    {activeBank.cycle}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-ink-faint">Disbursement Mode:</span>
-                  <span className="font-medium text-ink">{activeBank.mode || "Direct RBI NEFT / Instant IMPS"}</span>
+                  <span className="font-medium text-ink">
+                    {activeBank.mode || "Direct RBI NEFT / Instant IMPS"}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-ink-faint">Escrow Custodian Pool:</span>
-                  <span className="text-ink font-mono text-[12px]">{activeBank.escrowPool || "ICICI Nodal Trust Escrow"}</span>
+                  <span className="text-ink font-mono text-[12px]">
+                    {activeBank.escrowPool || "ICICI Nodal Trust Escrow"}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-ink-faint">Next Scheduled Batch:</span>
-                  <strong className="text-forest font-semibold">{activeBank.nextBatch || "Upcoming Sunday Midnight"}</strong>
+                  <strong className="text-forest font-semibold">
+                    {activeBank.nextBatch || "Upcoming Sunday Midnight"}
+                  </strong>
                 </div>
               </div>
             </div>
@@ -2288,11 +2572,17 @@ export default function ManagerLedger() {
                   <span>Recent Settlement Payout Batches</span>
                 </h4>
                 <p className="text-[11.5px] text-ink-faint">
-                  Historical banking dispatches credited directly to the Gaushala Trust account
+                  Historical banking dispatches credited directly to the
+                  Gaushala Trust account
                 </p>
               </div>
               <button
-                onClick={() => notify("All historical settlement advice archives downloaded", "ok")}
+                onClick={() =>
+                  notify(
+                    "All historical settlement advice archives downloaded",
+                    "ok",
+                  )
+                }
                 className="text-[12px] font-medium text-forest hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <Download size={13} /> Export All Payout Advice (CSV)
@@ -2308,7 +2598,9 @@ export default function ManagerLedger() {
                   No Settlement Payout Batches Dispatched Yet
                 </div>
                 <p className="text-[12px] text-ink-faint max-w-md mx-auto">
-                  Completed devotee sevas are aggregated into weekly Sunday midnight automated settlement batches and dispatched via direct RBI NEFT/IMPS to the verified Trust bank account.
+                  Completed devotee sevas are aggregated into weekly Sunday
+                  midnight automated settlement batches and dispatched via
+                  direct RBI NEFT/IMPS to the verified Trust bank account.
                 </p>
               </div>
             ) : (
@@ -2348,7 +2640,7 @@ export default function ManagerLedger() {
         </div>
       </Panel>
 
-{/* ----------------- PER-GAUSHALA ACTIONS PERFORMED & NET SHARE POP-UP MODAL ----------------- */}
+      {/* ----------------- PER-GAUSHALA ACTIONS PERFORMED & NET SHARE POP-UP MODAL ----------------- */}
       {isPerGosalaModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-xs animate-fade-in">
           <div className="bg-card rounded-2xl border border-line shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-scale-in">
@@ -2399,7 +2691,8 @@ export default function ManagerLedger() {
                   All Shelters Overview ({gosalaBreakdownList.length})
                 </button>
                 {gosalaBreakdownList.map((g) => {
-                  const isTabActive = modalSelectedGosala.toLowerCase() === g.name.toLowerCase()
+                  const isTabActive =
+                    modalSelectedGosala.toLowerCase() === g.name.toLowerCase()
                   return (
                     <button
                       key={g.name}
@@ -2411,7 +2704,13 @@ export default function ManagerLedger() {
                       }`}
                     >
                       <span>{g.name}</span>
-                      <span className={`text-[10.5px] font-mono px-1.5 py-0.2 rounded ${isTabActive ? "bg-white/20 text-white" : "bg-forest-soft text-forest"}`}>
+                      <span
+                        className={`text-[10.5px] font-mono px-1.5 py-0.2 rounded ${
+                          isTabActive
+                            ? "bg-white/20 text-white"
+                            : "bg-forest-soft text-forest"
+                        }`}
+                      >
                         {inr(g.netShare)}
                       </span>
                     </button>
@@ -2428,8 +2727,9 @@ export default function ManagerLedger() {
                     currentRole === "manager"
                       ? g.name.toLowerCase() === currentGosalaName.toLowerCase()
                       : modalSelectedGosala === "ALL"
-                      ? true
-                      : g.name.toLowerCase() === modalSelectedGosala.toLowerCase(),
+                        ? true
+                        : g.name.toLowerCase() ===
+                          modalSelectedGosala.toLowerCase(),
                   )
                   .map((g) => {
                     const isFilterSelected =
@@ -2458,9 +2758,16 @@ export default function ManagerLedger() {
                                 )}
                               </h4>
                               <div className="text-[11.5px] text-ink-faint mt-0.5 flex items-center gap-2 flex-wrap">
-                                <span>{g.gosalaObj?.trustRegistrationNo || "AWBI Reg: MAH-PUN-0421"}</span>
+                                <span>
+                                  {g.gosalaObj?.trustRegistrationNo ||
+                                    "AWBI Reg: MAH-PUN-0421"}
+                                </span>
                                 <span>•</span>
-                                <span>Caretaker: {g.gosalaObj?.caretaker || "Assigned Caretaker"}</span>
+                                <span>
+                                  Caretaker:{" "}
+                                  {g.gosalaObj?.caretaker ||
+                                    "Assigned Caretaker"}
+                                </span>
                               </div>
                             </div>
 
@@ -2488,29 +2795,11 @@ export default function ManagerLedger() {
                                   ✓
                                 </span>
                                 <div>
-                                  <div className="font-semibold text-ink">{g.sevasCount} Sevas</div>
-                                  <div className="text-[10.5px] text-ink-faint">Completed successfully</div>
-                                </div>
-                              </div>
-
-                              <div className="p-2 rounded bg-paper-deep border border-line flex items-center gap-2">
-                                <span className="h-5 w-5 rounded-full bg-forest/15 text-forest flex items-center justify-center font-bold text-[10px] shrink-0">
-                                  ✓
-                                </span>
-                                <div>
-                                  <div className="font-semibold text-ink">{g.totalKm.toFixed(1)} km Transit</div>
-                                  <div className="text-[10.5px] text-ink-faint">0 Heat stress incidents</div>
-                                </div>
-                              </div>
-
-                              <div className="p-2 rounded bg-paper-deep border border-line flex items-center gap-2">
-                                <span className="h-5 w-5 rounded-full bg-forest/15 text-forest flex items-center justify-center font-bold text-[10px] shrink-0">
-                                  ✓
-                                </span>
-                                <div>
-                                  <div className="font-semibold text-ink">{g.animals.size || 2} Cattle Deployed</div>
-                                  <div className="text-[10.5px] text-ink-faint truncate max-w-[120px]">
-                                    {Array.from(g.animals).join(", ") || (animals.filter((a) => a.gosala?.toLowerCase() === g.name.toLowerCase()).map((a) => a.name).join(", ")) || "Sacred Cattle"}
+                                  <div className="font-semibold text-ink">
+                                    {g.sevasCount} Sevas
+                                  </div>
+                                  <div className="text-[10.5px] text-ink-faint">
+                                    Completed successfully
                                   </div>
                                 </div>
                               </div>
@@ -2520,8 +2809,49 @@ export default function ManagerLedger() {
                                   ✓
                                 </span>
                                 <div>
-                                  <div className="font-semibold text-ink">100% Feeding Protocol</div>
-                                  <div className="text-[10.5px] text-ink-faint">Organic grass logged</div>
+                                  <div className="font-semibold text-ink">
+                                    {g.totalKm.toFixed(1)} km Transit
+                                  </div>
+                                  <div className="text-[10.5px] text-ink-faint">
+                                    0 Heat stress incidents
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="p-2 rounded bg-paper-deep border border-line flex items-center gap-2">
+                                <span className="h-5 w-5 rounded-full bg-forest/15 text-forest flex items-center justify-center font-bold text-[10px] shrink-0">
+                                  ✓
+                                </span>
+                                <div>
+                                  <div className="font-semibold text-ink">
+                                    {g.animals.size || 2} Cattle Deployed
+                                  </div>
+                                  <div className="text-[10.5px] text-ink-faint truncate max-w-[120px]">
+                                    {Array.from(g.animals).join(", ") ||
+                                      animals
+                                        .filter(
+                                          (a) =>
+                                            a.gosala?.toLowerCase() ===
+                                            g.name.toLowerCase(),
+                                        )
+                                        .map((a) => a.name)
+                                        .join(", ") ||
+                                      "Sacred Cattle"}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="p-2 rounded bg-paper-deep border border-line flex items-center gap-2">
+                                <span className="h-5 w-5 rounded-full bg-forest/15 text-forest flex items-center justify-center font-bold text-[10px] shrink-0">
+                                  ✓
+                                </span>
+                                <div>
+                                  <div className="font-semibold text-ink">
+                                    100% Feeding Protocol
+                                  </div>
+                                  <div className="text-[10.5px] text-ink-faint">
+                                    Organic grass logged
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -2531,25 +2861,42 @@ export default function ManagerLedger() {
                           <div className="p-3 rounded-lg bg-forest-soft/30 border border-forest/20 space-y-1.5 text-[12px]">
                             <div className="flex items-center justify-between text-ink-soft">
                               <span>Gross Devotee Volume:</span>
-                              <span className="font-mono text-ink font-medium">{inr(g.gross)}</span>
+                              <span className="font-mono text-ink font-medium">
+                                {inr(g.gross)}
+                              </span>
                             </div>
                             <div className="flex items-center justify-between text-emerald-800">
-                              <span>Transport Pass-Through (100% to this Gaushala):</span>
-                              <span className="font-mono font-medium">+{inr(g.transport)}</span>
+                              <span>
+                                Transport Pass-Through (100% to this Gaushala):
+                              </span>
+                              <span className="font-mono font-medium">
+                                +{inr(g.transport)}
+                              </span>
                             </div>
                             {g.addons > 0 && (
                               <div className="flex items-center justify-between text-ink-soft">
-                                <span>Puja Samagri Add-ons (90% to this Gaushala):</span>
-                                <span className="font-mono font-medium">+{inr(g.addons)}</span>
+                                <span>
+                                  Puja Samagri Add-ons (90% to this Gaushala):
+                                </span>
+                                <span className="font-mono font-medium">
+                                  +{inr(g.addons)}
+                                </span>
                               </div>
                             )}
                             <div className="flex items-center justify-between text-ink-faint text-[11.5px]">
-                              <span>Platform Operations Fee Deducted ({defaultCommissionPct}%):</span>
-                              <span className="font-mono">−{inr(g.platformFee)}</span>
+                              <span>
+                                Platform Operations Fee Deducted (
+                                {defaultCommissionPct}%):
+                              </span>
+                              <span className="font-mono">
+                                −{inr(g.platformFee)}
+                              </span>
                             </div>
                             <div className="pt-1.5 border-t border-forest/30 flex items-center justify-between font-bold text-forest text-[13px]">
                               <span>Specific Net Earned by this Gaushala:</span>
-                              <span className="font-mono text-[15px]">{inr(g.netShare)}</span>
+                              <span className="font-mono text-[15px]">
+                                {inr(g.netShare)}
+                              </span>
                             </div>
                           </div>
 
@@ -2579,17 +2926,22 @@ export default function ManagerLedger() {
                                       <div className="min-w-0">
                                         <div className="font-semibold text-ink flex items-center gap-1.5">
                                           <span>{act.customer}</span>
-                                          <span className="text-[10px] font-mono text-ink-faint">({act.bookingId})</span>
+                                          <span className="text-[10px] font-mono text-ink-faint">
+                                            ({act.bookingId})
+                                          </span>
                                         </div>
                                         <div className="text-ink-soft text-[11px] truncate">
-                                          {act.ritual} · Cow: {act.animal} ({act.distanceKm} km with {act.driver})
+                                          {act.ritual} · Cow: {act.animal} (
+                                          {act.distanceKm} km with {act.driver})
                                         </div>
                                       </div>
                                       <div className="text-right shrink-0">
                                         <div className="font-mono font-semibold text-forest">
                                           +{inr(act.netShare)}
                                         </div>
-                                        <div className="text-[10px] text-ink-faint">{act.date}</div>
+                                        <div className="text-[10px] text-ink-faint">
+                                          {act.date}
+                                        </div>
                                       </div>
                                     </div>
                                   ))}
@@ -2601,7 +2953,18 @@ export default function ManagerLedger() {
                           {/* Action row */}
                           <div className="flex items-center justify-between pt-2 border-t border-line/60">
                             <span className="text-[11px] font-mono text-ink-faint">
-                              Disburses to: {getGaushalaBankDetails(g.name, g.gosalaObj).bankName.split("·")[0]} A/C {getGaushalaBankDetails(g.name, g.gosalaObj).accountMasked}
+                              Disburses to:{" "}
+                              {
+                                getGaushalaBankDetails(
+                                  g.name,
+                                  g.gosalaObj,
+                                ).bankName.split("·")[0]
+                              }{" "}
+                              A/C{" "}
+                              {
+                                getGaushalaBankDetails(g.name, g.gosalaObj)
+                                  .accountMasked
+                              }
                             </span>
                             {currentRole === "manager" ? (
                               <span className="text-[11px] font-semibold text-forest bg-forest-soft border border-forest/20 px-2.5 py-0.5 rounded shadow-2xs">
@@ -2630,11 +2993,20 @@ export default function ManagerLedger() {
             {/* Modal Footer */}
             <div className="flex items-center justify-between px-6 py-3.5 bg-paper-deep border-t border-line">
               <div className="text-[12px] text-ink-soft">
-                Total portfolio net share: <strong className="font-mono text-forest">{inr(totalGaushalaNet)}</strong> (across {gosalaBreakdownList.length} registered shelters)
+                Total portfolio net share:{" "}
+                <strong className="font-mono text-forest">
+                  {inr(totalGaushalaNet)}
+                </strong>{" "}
+                (across {gosalaBreakdownList.length} registered shelters)
               </div>
               <div className="flex items-center gap-2.5">
                 <button
-                  onClick={() => notify("Consolidated Gaushala Trust statement downloaded", "ok")}
+                  onClick={() =>
+                    notify(
+                      "Consolidated Gaushala Trust statement downloaded",
+                      "ok",
+                    )
+                  }
                   className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded border border-line bg-card hover:bg-paper-deep text-ink text-[12px] font-medium transition cursor-pointer shadow-2xs"
                 >
                   <Download size={13} /> Download Statement
@@ -2675,18 +3047,27 @@ export default function ManagerLedger() {
             <div className="p-6 space-y-5 text-[13px] bg-paper/30">
               {/* Trust Letterhead dynamically resolved */}
               {(() => {
-                const rGosala = gosalas.find(g => g.name.toLowerCase() === receiptBooking.gosala.toLowerCase())
-                const rBank = getGaushalaBankDetails(receiptBooking.gosala, rGosala)
+                const rGosala = gosalas.find(
+                  (g) =>
+                    g.name.toLowerCase() ===
+                    receiptBooking.gosala.toLowerCase(),
+                )
+                const rBank = getGaushalaBankDetails(
+                  receiptBooking.gosala,
+                  rGosala,
+                )
                 return (
                   <div className="text-center pb-4 border-b border-line/80 space-y-1">
                     <div className="font-serif text-[20px] text-ink font-bold text-forest">
                       {receiptBooking.gosala}
                     </div>
                     <div className="text-[11.5px] text-ink-soft">
-                      Registered Animal Welfare Trust · AWBI Reg: {rGosala?.trustRegistrationNo || rBank.regNo}
+                      Registered Animal Welfare Trust · AWBI Reg:{" "}
+                      {rGosala?.trustRegistrationNo || rBank.regNo}
                     </div>
                     <div className="text-[11px] font-mono text-ink-faint">
-                      {rGosala?.address || "Registered Goseva Sanctum, Maharashtra"}
+                      {rGosala?.address ||
+                        "Registered Goseva Sanctum, Maharashtra"}
                     </div>
                   </div>
                 )
@@ -2698,26 +3079,33 @@ export default function ManagerLedger() {
                   <span className="text-[10.5px] uppercase font-mono text-ink-faint block">
                     Devotee Name
                   </span>
-                  <strong className="text-ink">{receiptBooking.customer}</strong>
+                  <strong className="text-ink">
+                    {receiptBooking.customer}
+                  </strong>
                 </div>
                 <div>
                   <span className="text-[10.5px] uppercase font-mono text-ink-faint block">
                     Voucher ID
                   </span>
-                  <strong className="font-mono text-forest">{receiptBooking.id}</strong>
+                  <strong className="font-mono text-forest">
+                    {receiptBooking.id}
+                  </strong>
                 </div>
                 <div>
                   <span className="text-[10.5px] uppercase font-mono text-ink-faint block">
                     Executing Gaushala
                   </span>
-                  <strong className="text-forest">{receiptBooking.gosala}</strong>
+                  <strong className="text-forest">
+                    {receiptBooking.gosala}
+                  </strong>
                 </div>
                 <div>
                   <span className="text-[10.5px] uppercase font-mono text-ink-faint block">
                     Ceremony Purpose
                   </span>
                   <span className="text-ink">
-                    {receiptBooking.ritualPurpose || "Griha Pravesh & Kamadhenu Puja"}
+                    {receiptBooking.ritualPurpose ||
+                      "Griha Pravesh & Kamadhenu Puja"}
                   </span>
                 </div>
                 <div>
@@ -2733,7 +3121,8 @@ export default function ManagerLedger() {
                     Transport Route
                   </span>
                   <span className="text-ink font-medium">
-                    {receiptBooking.distanceKm} km · {receiptBooking.driver || "Transit Driver"}
+                    {receiptBooking.distanceKm} km ·{" "}
+                    {receiptBooking.driver || "Transit Driver"}
                   </span>
                 </div>
               </div>
@@ -2741,64 +3130,93 @@ export default function ManagerLedger() {
               {/* Financial Calculation */}
               <div className="space-y-2 border-t border-b border-line py-3">
                 <div className="flex justify-between">
-                  <span className="text-ink-soft">Base Ritual Muhurat Seva</span>
+                  <span className="text-ink-soft">
+                    Base Ritual Muhurat Seva
+                  </span>
                   <span className="font-mono font-medium text-ink">
                     {inr(receiptBooking.base)}
                   </span>
                 </div>
                 {receiptBooking.extraTime > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-ink-soft">Extended Ceremony Duration</span>
+                    <span className="text-ink-soft">
+                      Extended Ceremony Duration
+                    </span>
                     <span className="font-mono text-ink">
                       +{inr(receiptBooking.extraTime)}
                     </span>
                   </div>
                 )}
                 <div className="flex justify-between text-emerald-800">
-                  <span>Transit Distance Pass-Through (100% to {receiptBooking.gosala})</span>
+                  <span>
+                    Transit Distance Pass-Through (100% to{" "}
+                    {receiptBooking.gosala})
+                  </span>
                   <span className="font-mono font-medium">
                     +{inr(receiptBooking.transport)}
                   </span>
                 </div>
                 {receiptBooking.addons > 0 && (
                   <div className="flex justify-between text-ink-soft">
-                    <span>Ceremonial Puja Samagri (90% to {receiptBooking.gosala})</span>
+                    <span>
+                      Ceremonial Puja Samagri (90% to {receiptBooking.gosala})
+                    </span>
                     <span className="font-mono">
                       +{inr(Math.round(receiptBooking.addons * 0.9))}
                     </span>
                   </div>
                 )}
                 {(() => {
-                  const receiptCommPct = receiptBooking.commissionPct ?? defaultCommissionPct;
-                  const receiptGaushalaPct = 100 - receiptCommPct;
-                  const ritualBaseTotal = (receiptBooking.base || 0) + (receiptBooking.extraTime || 0);
-                  const gaushalaRitualShare = Math.round(ritualBaseTotal * (receiptGaushalaPct / 100));
-                  const platformRitualCut = ritualBaseTotal - gaushalaRitualShare;
-                  const samagriShare = Math.round(receiptBooking.addons * 0.9);
-                  const netCredited = gaushalaRitualShare + (receiptBooking.transport || 0) + samagriShare;
+                  const receiptCommPct =
+                    receiptBooking.commissionPct ?? defaultCommissionPct
+                  const receiptGaushalaPct = 100 - receiptCommPct
+                  const ritualBaseTotal =
+                    (receiptBooking.base || 0) + (receiptBooking.extraTime || 0)
+                  const gaushalaRitualShare = Math.round(
+                    ritualBaseTotal * (receiptGaushalaPct / 100),
+                  )
+                  const platformRitualCut =
+                    ritualBaseTotal - gaushalaRitualShare
+                  const samagriShare = Math.round(receiptBooking.addons * 0.9)
+                  const netCredited =
+                    gaushalaRitualShare +
+                    (receiptBooking.transport || 0) +
+                    samagriShare
                   return (
                     <>
                       <div className="flex justify-between text-ink-faint text-[12px]">
-                        <span>GOMAA Platform {receiptCommPct}% Operations Deduction</span>
+                        <span>
+                          GOMAA Platform {receiptCommPct}% Operations Deduction
+                        </span>
                         <span className="font-mono">
-                          −{inr(platformRitualCut + Math.round(receiptBooking.addons * 0.1))}
+                          −
+                          {inr(
+                            platformRitualCut +
+                              Math.round(receiptBooking.addons * 0.1),
+                          )}
                         </span>
                       </div>
                       <div className="pt-2 border-t border-line flex justify-between font-bold text-forest text-[14px]">
-                        <span>Net Credited to {receiptBooking.gosala} Trust ({receiptGaushalaPct}% Base)</span>
-                        <span className="font-mono">
-                          {inr(netCredited)}
+                        <span>
+                          Net Credited to {receiptBooking.gosala} Trust (
+                          {receiptGaushalaPct}% Base)
                         </span>
+                        <span className="font-mono">{inr(netCredited)}</span>
                       </div>
                     </>
-                  );
+                  )
                 })()}
               </div>
 
               {/* Digital Seal */}
               <div className="flex items-center justify-between text-[11px] text-ink-faint pt-1">
                 <div>
-                  UTR: {getGaushalaBankDetails(receiptBooking.gosala).ifsc.slice(0, 4)}N262489{receiptBooking.id.replace(/\D/g, "").slice(0, 4)}
+                  UTR:{" "}
+                  {getGaushalaBankDetails(receiptBooking.gosala).ifsc.slice(
+                    0,
+                    4,
+                  )}
+                  N262489{receiptBooking.id.replace(/\D/g, "").slice(0, 4)}
                 </div>
                 <div className="text-forest font-semibold flex items-center gap-1">
                   <CheckCircle2 size={13} /> Escrow Released & Audited
@@ -2818,7 +3236,10 @@ export default function ManagerLedger() {
               </button>
               <button
                 onClick={() => {
-                  notify(`Official receipt for ${receiptBooking.id} downloaded`, "ok")
+                  notify(
+                    `Official receipt for ${receiptBooking.id} downloaded`,
+                    "ok",
+                  )
                   setReceiptBooking(null)
                 }}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded bg-forest text-white text-[12.5px] font-medium hover:bg-forest-deep transition cursor-pointer shadow-xs"

@@ -113,9 +113,9 @@ export default function Settlements() {
     : managerBank?.accountNumber
       ? managerBank
       : {
-          accountBeneficiary: "Koushik Botcha",
-          bankName: "Andhra Bank",
-          branchName: "Hitec City",
+          accountBeneficiary: "GOMAA Trust Treasury",
+          bankName: "HDFC Bank",
+          branchName: "Central Treasury Hub",
           accountNumber: "•••• •••• •••• 4414",
           ifscCode: "HDFC2342523",
         }
@@ -139,8 +139,10 @@ export default function Settlements() {
                 </span>
               </div>
               <p className="text-[12px] text-amber-900/80 mt-1 max-w-2xl leading-relaxed">
-                Only the Super Admin holds financial disbursement authority to release funds from escrow, approve batch payouts,
-                and enforce the platform {defaultGaushalaPct}/{defaultCommPct} split between trust accounts and Gaushala trusts.
+                Only the Super Admin holds financial disbursement authority to
+                release funds from escrow, approve batch payouts, and enforce
+                the platform {defaultGaushalaPct}/{defaultCommPct} split between
+                trust accounts and Gaushala trusts.
               </p>
             </div>
           </div>
@@ -148,7 +150,12 @@ export default function Settlements() {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
             <div className="flex items-center gap-2 bg-white/95 border border-amber-200/80 rounded px-3 py-1.5 text-[11px] font-mono text-ink shadow-2xs">
               <Landmark size={13} className="text-forest shrink-0" />
-              <span>Escrow: <strong className="text-forest font-semibold">ICICI Nodal Trust</strong></span>
+              <span>
+                Escrow:{" "}
+                <strong className="text-forest font-semibold">
+                  ICICI Nodal Trust
+                </strong>
+              </span>
             </div>
 
             {isSuperAdmin && (
@@ -179,22 +186,36 @@ export default function Settlements() {
               </span>
             </div>
             <p className="text-[12px] text-ink-soft">
-              Real-time sweep daemon processes escrow releases into verified Gaushala accounts via direct RBI RTGS/NEFT routing with zero manual lag.
+              Real-time sweep daemon processes escrow releases into verified
+              Gaushala accounts via direct RBI RTGS/NEFT routing with zero
+              manual lag.
             </p>
           </div>
 
           <div className="flex items-center gap-4 text-[12px] font-mono text-ink-soft divide-x divide-line pt-2 md:pt-0">
             <div>
-              <span className="text-[10px] uppercase text-ink-faint block">Target Beneficiary</span>
-              <strong className="text-ink font-medium">{activeTargetBank.accountBeneficiary}</strong>
+              <span className="text-[10px] uppercase text-ink-faint block">
+                Target Beneficiary
+              </span>
+              <strong className="text-ink font-medium">
+                {activeTargetBank.accountBeneficiary}
+              </strong>
             </div>
             <div className="pl-4">
-              <span className="text-[10px] uppercase text-ink-faint block">Destination Bank</span>
-              <span className="text-ink font-medium">{activeTargetBank.bankName}</span>
+              <span className="text-[10px] uppercase text-ink-faint block">
+                Destination Bank
+              </span>
+              <span className="text-ink font-medium">
+                {activeTargetBank.bankName}
+              </span>
             </div>
             <div className="pl-4">
-              <span className="text-[10px] uppercase text-ink-faint block">IFSC Code</span>
-              <span className="text-forest font-bold">{activeTargetBank.ifscCode}</span>
+              <span className="text-[10px] uppercase text-ink-faint block">
+                IFSC Code
+              </span>
+              <span className="text-forest font-bold">
+                {activeTargetBank.ifscCode}
+              </span>
             </div>
           </div>
         </div>
@@ -237,7 +258,9 @@ export default function Settlements() {
                     : "bg-paper-deep text-ink-faint border border-line cursor-not-allowed opacity-60"
                 }`}
               >
-                {isSuperAdmin ? "Approve batch SEP-W4" : "Captain Approval Required"}
+                {isSuperAdmin
+                  ? "Approve batch SEP-W4"
+                  : "Captain Approval Required"}
               </button>
             ) : null
           }
@@ -267,13 +290,17 @@ export default function Settlements() {
             <tbody>
               {settlements.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center text-ink-faint">
+                  <td
+                    colSpan={7}
+                    className="px-5 py-12 text-center text-ink-faint"
+                  >
                     <div className="max-w-sm mx-auto space-y-1.5">
                       <p className="font-serif text-[17px] text-ink font-medium">
                         No pending settlement batches
                       </p>
                       <p className="text-[12px] text-ink-soft">
-                        Settlement batches are calculated automatically when devotee ceremonial bookings reach Completed status.
+                        Settlement batches are calculated automatically when
+                        devotee ceremonial bookings reach Completed status.
                       </p>
                     </div>
                   </td>
@@ -379,31 +406,48 @@ export default function Settlements() {
                 <div className="flex justify-between text-saffron-deep">
                   <span>GOMAA Platform Fee ({defaultCommPct}%):</span>
                   <span className="font-mono">
-                    −{inr(totalCommission || Math.round((totalGrossAmount || 45000) * (defaultCommPct / 100)))}
+                    −
+                    {inr(
+                      totalCommission ||
+                        Math.round(
+                          (totalGrossAmount || 45000) * (defaultCommPct / 100),
+                        ),
+                    )}
                   </span>
                 </div>
                 <div className="pt-2 border-t border-forest/20 flex justify-between font-bold text-forest text-[15px]">
                   <span>Total Net Disbursed ({defaultGaushalaPct}%):</span>
                   <span className="font-mono">
-                    {inr(totalPayable || Math.round((totalGrossAmount || 45000) * (defaultGaushalaPct / 100)))}
+                    {inr(
+                      totalPayable ||
+                        Math.round(
+                          (totalGrossAmount || 45000) *
+                            (defaultGaushalaPct / 100),
+                        ),
+                    )}
                   </span>
                 </div>
               </div>
 
               <div className="p-3.5 rounded-lg bg-paper border border-line space-y-1 text-[12px]">
-                <div className="text-[10.5px] uppercase font-mono text-ink-faint">Target Beneficiary</div>
+                <div className="text-[10.5px] uppercase font-mono text-ink-faint">
+                  Target Beneficiary
+                </div>
                 <div className="font-bold text-ink">
-                  {activeTargetBank.accountBeneficiary} ({activeTargetBank.bankName})
+                  {activeTargetBank.accountBeneficiary} (
+                  {activeTargetBank.bankName})
                 </div>
                 <div className="text-ink-soft font-mono">
-                  A/C: {activeTargetBank.accountNumber} · IFSC: {activeTargetBank.ifscCode}
+                  A/C: {activeTargetBank.accountNumber} · IFSC:{" "}
+                  {activeTargetBank.ifscCode}
                 </div>
               </div>
 
               <div className="text-[11.5px] text-ink-faint flex items-center gap-1.5">
                 <ShieldCheck size={14} className="text-forest shrink-0" />
                 <span>
-                  Disbursement is verified against ICICI Nodal Trust Escrow and generates an authentic RBI UTR code.
+                  Disbursement is verified against ICICI Nodal Trust Escrow and
+                  generates an authentic RBI UTR code.
                 </span>
               </div>
             </div>

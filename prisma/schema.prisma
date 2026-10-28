@@ -84,6 +84,7 @@ model User {
   password  String?
   avatar    String?
   isActive  Boolean  @default(true)
+  metadata  Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -134,6 +135,7 @@ model Gosala {
   customTaxPct      Float?   // e.g. 0.0 for exempt, 5.0 for concessional
   bufferMinutes     Int?     @default(30) // Turnaround/sanctuary buffer between bookings
   partnershipNotes  String?  // Rationale for special commission/tier
+  metadata          Json?
 
   // Relationships
   animals     Animal[]
@@ -173,6 +175,7 @@ model Animal {
   healthStatus HealthStatus @default(HEALTHY)
   price        Int          @default(3500)
   isActive     Boolean      @default(true)
+  metadata     Json?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
@@ -455,5 +458,26 @@ model VerificationOtp {
 
   @@index([identifier, purpose, used])
   @@map("verification_otps")
+}
+
+// -------------------------------------------------------------
+// Veterinary Welfare & Medical Directory
+// -------------------------------------------------------------
+
+model EmpanelledVet {
+  id              String   @id @default(uuid())
+  name            String
+  qualification   String
+  regNo           String   @unique
+  clinic          String
+  phone           String
+  address         String
+  specialization  String
+  emergency24x7   Boolean  @default(true)
+  assignedGosalas String[] @default([])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("empanelled_vets")
 }
 

@@ -40,7 +40,9 @@ export default function CustomerTrackingDossier({
   const [revealedOtp, setRevealedOtp] = useState(false)
 
   const stage = booking.driverStage ?? 0
-  const isDriverAssigned = Boolean(booking.driver && booking.driver.trim().length > 0)
+  const isDriverAssigned = Boolean(
+    booking.driver && booking.driver.trim().length > 0,
+  )
   const isArrived = stage === 5
   const isHandoverVerified = Boolean(booking.handoverOtpVerified || stage >= 6)
 
@@ -102,7 +104,8 @@ export default function CustomerTrackingDossier({
                 Allocating Nearest Cattle Ambulance
               </div>
               <div className="text-[11.5px] text-ink-faint">
-                Broadcasting to AWBI-certified bovine handlers near {booking.gosala}
+                Broadcasting to AWBI-certified bovine handlers near{" "}
+                {booking.gosala}
               </div>
             </div>
           </div>
@@ -226,7 +229,8 @@ export default function CustomerTrackingDossier({
                   </span>
                 </div>
                 <div className="text-[12px] text-emerald-800 mt-0.5">
-                  Bovine safely received at devotee entrance. Puja ceremony is active!
+                  Bovine safely received at devotee entrance. Puja ceremony is
+                  active!
                 </div>
               </div>
             </div>
@@ -234,10 +238,13 @@ export default function CustomerTrackingDossier({
               <span>Devotee Receipt: Verified at Altar</span>
               <span>
                 {booking.handoverOtpVerifiedAt
-                  ? new Date(booking.handoverOtpVerifiedAt).toLocaleTimeString("en-IN", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })
+                  ? new Date(booking.handoverOtpVerifiedAt).toLocaleTimeString(
+                      "en-IN",
+                      {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      },
+                    )
                   : "Verified"}
               </span>
             </div>
@@ -248,7 +255,10 @@ export default function CustomerTrackingDossier({
             <div className="flex items-start justify-between gap-2">
               <div>
                 <div className="flex items-center gap-1.5 text-saffron-deep font-bold text-[13px] uppercase font-mono tracking-wider">
-                  <Sparkles size={14} className="text-saffron animate-spin-slow" />
+                  <Sparkles
+                    size={14}
+                    className="text-saffron animate-spin-slow"
+                  />
                   Ambulance Outside Doorstep!
                 </div>
                 <h3 className="font-serif text-[17px] text-ink font-semibold mt-0.5 leading-snug">
@@ -261,8 +271,9 @@ export default function CustomerTrackingDossier({
             </div>
 
             <p className="text-[12px] text-ink-soft leading-relaxed">
-              Please inspect <strong className="text-ink">{booking.animal}</strong> to
-              confirm comfort, then share this 4-digit OTP with your pilot to begin the
+              Please inspect{" "}
+              <strong className="text-ink">{booking.animal}</strong> to confirm
+              comfort, then share this 4-digit OTP with your pilot to begin the
               puja:
             </p>
 
@@ -304,7 +315,9 @@ export default function CustomerTrackingDossier({
 
             {/* Devotee Checklist */}
             <div className="rounded bg-white/70 border border-saffron/20 p-2.5 text-[11.5px] text-ink-soft space-y-1">
-              <div className="font-semibold text-saffron-deep">Doorstep Inspection Checklist:</div>
+              <div className="font-semibold text-saffron-deep">
+                Doorstep Inspection Checklist:
+              </div>
               <div className="flex items-center gap-1.5">
                 <Check size={12} className="text-forest shrink-0" />
                 <span>Bovine is calm, well-hydrated, and uninjured</span>
@@ -355,14 +368,19 @@ export default function CustomerTrackingDossier({
                   className="p-1.5 rounded text-ink-soft hover:text-saffron-deep hover:bg-card transition cursor-pointer"
                   title="Copy OTP"
                 >
-                  {copiedOtp ? <Check size={16} className="text-forest" /> : <Copy size={16} />}
+                  {copiedOtp ? (
+                    <Check size={16} className="text-forest" />
+                  ) : (
+                    <Copy size={16} />
+                  )}
                 </button>
               </div>
             </div>
 
             <p className="text-[11px] text-ink-faint leading-relaxed">
-              ⚠️ Share this 4-digit PIN with the driver <strong>only after</strong> the cattle
-              ambulance arrives at your address and you have inspected the sacred animal.
+              ⚠️ Share this 4-digit PIN with the driver{" "}
+              <strong>only after</strong> the cattle ambulance arrives at your
+              address and you have inspected the sacred animal.
             </p>
           </div>
         )}
@@ -403,7 +421,11 @@ export default function CustomerTrackingDossier({
                   <div
                     className={`text-[12px] flex items-center justify-between ${
                       state === "todo" ? "text-ink-faint" : "text-ink"
-                    } ${state === "current" ? "font-semibold text-saffron-deep" : ""}`}
+                    } ${
+                      state === "current"
+                        ? "font-semibold text-saffron-deep"
+                        : ""
+                    }`}
                   >
                     <span>{s}</span>
                     {i === 5 && (

@@ -405,11 +405,10 @@ async function buildDocx() {
           createTable(
             ["Role", "Name", "Email Address", "Mobile Phone", "Password", "Assigned Scope"],
             [
-              ["Super Admin", "Koushik", "koushik@gmail.com", "+91 98000 00000", "Koushik.git", "All Platform Sanctuaries"],
-              ["Super Admin (Alt)", "Koushik", "nanikoushik96@gmail.com", "+91 98000 00000", "Koushik.git", "All Platform Sanctuaries"],
-              ["Operations Admin", "Admin_1", "alt.yq-fs88dj2@yopmail.com", "+91 98222 33344", "Koushik.git", "Gaushala_01, 02, 03"],
-              ["Gaushala Manager", "Manager 1", "manager1@gomaa.in", "+91 98111 22233", "Koushik.git", "Gaushala_01 (Custodian)"],
-              ["Gaushala Manager", "Manager 2", "manager2@gomaa.in", "+91 98444 55566", "Koushik.git", "Gaushala_03 (Custodian)"],
+              ["Super Admin", "Super Admin", "superadmin@gomaa.in", "+91 98000 00000", "SuperAdmin@2026!", "All Platform Sanctuaries"],
+              ["Operations Admin", "Admin_1", "alt.yq-fs88dj2@yopmail.com", "+91 98222 33344", "GomaaAdmin@2026!", "Gaushala_01, 02, 03"],
+              ["Gaushala Manager", "Manager 1", "manager1@gomaa.in", "+91 98111 22233", "GomaaAdmin@2026!", "Gaushala_01 (Custodian)"],
+              ["Gaushala Manager", "Manager 2", "manager2@gomaa.in", "+91 98444 55566", "GomaaAdmin@2026!", "Gaushala_03 (Custodian)"],
             ]
           ),
 

@@ -34,7 +34,7 @@ async function run() {
       await emailMgr.click({ clickCount: 3 })
       await emailMgr.type("manager1@gomaa.in")
       await passMgr.click({ clickCount: 3 })
-      await passMgr.type("Koushik.git")
+      await passMgr.type("GomaaAdmin@2026!")
       const btn = await page.$('button[type="submit"]')
       if (btn) await btn.click()
     }
@@ -152,7 +152,7 @@ async function run() {
     // -------------------------------------------------------------------------
     // 2. Super Admin Offerings Read-Only & Live Tracking Removal
     // -------------------------------------------------------------------------
-    console.log("\n2. Logging in as Super Admin (nanikoushik96@gmail.com)...")
+    console.log("\n2. Logging in as Super Admin (superadmin@gomaa.in)...")
     await page.goto(`${TARGET_URL}/#/login`, { waitUntil: "networkidle2" })
     await sleep(3000)
 
@@ -160,9 +160,9 @@ async function run() {
     const passSA = await page.$('input[type="password"]')
     if (emailSA && passSA) {
       await emailSA.click({ clickCount: 3 })
-      await emailSA.type("nanikoushik96@gmail.com")
+      await emailSA.type("superadmin@gomaa.in")
       await passSA.click({ clickCount: 3 })
-      await passSA.type("Koushik.git")
+      await passSA.type("SuperAdmin@2026!")
       const btn = await page.$('button[type="submit"]')
       if (btn) await btn.click()
     }

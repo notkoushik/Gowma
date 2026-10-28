@@ -1,6 +1,6 @@
 {
   "timestamp": "2026-10-05T18:52:56.685Z",
-  "description": "Snapshot archive prior to complete reset & Koushik Super Admin seeding",
+  "description": "Snapshot archive prior to complete reset & Super Admin Super Admin seeding",
   "counts": {
     "users": 27,
     "bookings": 3,
@@ -134,7 +134,7 @@
       },
       {
         "id": "933c936e-23d1-49f9-88e1-ddec59f997d5",
-        "email": "nanikoushik96@gmail.com",
+        "email": "superadmin@gomaa.in",
         "name": "Devraj",
         "phone": "+91 9848507545",
         "role": "GOSALA_MANAGER",

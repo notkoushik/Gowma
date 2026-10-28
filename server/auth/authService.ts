@@ -161,7 +161,7 @@ export async function authenticateOrResolveUser(
   if (!password) throw new Error("Password is required")
   if (isPasswordHash(user.password)) {
     let isValid = verifyPassword(password, user.password)
-    // First-letter case-resilience fallback (e.g. "koushik.git" vs "Koushik.git" on mobile auto-capitalize)
+    // First-letter case-resilience fallback (e.g. handle first letter case difference on mobile auto-capitalize)
     if (!isValid && password.length >= 8) {
       const altFirstChar =
         password[0] === password[0].toUpperCase()

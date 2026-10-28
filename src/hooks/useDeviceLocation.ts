@@ -27,12 +27,19 @@ export function getIndianLocalityFromCoords(lat: number, lng: number): string {
 }
 
 // Backward-compatible alias for existing code
-export function getRegionalLocalityFromCoords(lat: number, lng: number): string {
+export function getRegionalLocalityFromCoords(
+  lat: number,
+  lng: number,
+): string {
   return getIndianLocalityFallback(lat, lng)
 }
 
 // In-memory cache for reverse geocoding to avoid rate-limiting (OSM Nominatim policy)
-const geocodeCache = new Map<string, { address: string; city: string; state: string }>()
+const geocodeCache = new Map<string, {
+  address: string
+  city: string
+  state: string
+}>()
 
 function getCacheKey(lat: number, lng: number): string {
   return `${lat.toFixed(3)},${lng.toFixed(3)}`
@@ -42,7 +49,7 @@ function getCacheKey(lat: number, lng: number): string {
 export async function reverseGeocodeCoords(
   lat: number,
   lng: number,
-): Promise<{ address: string; city: string; state: string }> {
+): Promise<{ address: string city: string state: string }> {
   const key = getCacheKey(lat, lng)
   if (geocodeCache.has(key)) {
     return geocodeCache.get(key)!
@@ -191,9 +198,7 @@ export async function geocodeAddress(
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 4000)
 
-    const query = address.includes("India")
-      ? address
-      : `${address}, India`
+    const query = address.includes("India") ? address : `${address}, India`
     const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&limit=1`
     const res = await fetch(url, {
       headers: {
@@ -236,7 +241,8 @@ export function useDeviceLocation() {
           state: parsed.state || null,
           error: null,
           isLoading: false,
-          hasPermission: parsed.source === "GPS_HARDWARE" || parsed.source === "USER_MANUAL",
+          hasPermission:
+            parsed.source === "GPS_HARDWARE" || parsed.source === "USER_MANUAL",
           permissionStatus:
             parsed.source === "GPS_HARDWARE" ? "granted" : "prompt",
           source: parsed.source || "OFFLINE_CENTROID",
@@ -309,10 +315,7 @@ export function useDeviceLocation() {
         })
 
         // Reverse geocode high-accuracy coordinates
-        const geoInfo = await reverseGeocodeCoords(
-          gpsResult.lat,
-          gpsResult.lng,
-        )
+        const geoInfo = await reverseGeocodeCoords(gpsResult.lat, gpsResult.lng)
 
         const newState: GeoLocationState = {
           lat: Number(gpsResult.lat.toFixed(5)),
@@ -343,7 +346,10 @@ export function useDeviceLocation() {
           state: newState.state!,
         }
       } catch (err: any) {
-        console.warn("Browser GPS prompt declined or failed, trying IP fallback...", err)
+        console.warn(
+          "Browser GPS prompt declined or failed, trying IP fallback...",
+          err,
+        )
       }
     }
 
@@ -422,22 +428,24 @@ export function useDeviceLocation() {
           if (perm.state === "granted") {
             requestLocation()
           } else {
-            getIpLocationFallback().then((ipLoc) => {
-              if (ipLoc) {
-                setState((s) => {
-                  if (s.hasPermission) return s
-                  return {
-                    ...s,
-                    lat: ipLoc.lat,
-                    lng: ipLoc.lng,
-                    city: ipLoc.city,
-                    state: ipLoc.state,
-                    address: ipLoc.address,
-                    source: "IP_FALLBACK",
-                  }
-                })
-              }
-            }).catch(() => {})
+            getIpLocationFallback()
+              .then((ipLoc) => {
+                if (ipLoc) {
+                  setState((s) => {
+                    if (s.hasPermission) return s
+                    return {
+                      ...s,
+                      lat: ipLoc.lat,
+                      lng: ipLoc.lng,
+                      city: ipLoc.city,
+                      state: ipLoc.state,
+                      address: ipLoc.address,
+                      source: "IP_FALLBACK",
+                    }
+                  })
+                }
+              })
+              .catch(() => {})
           }
 
           perm.onchange = () => {
@@ -453,25 +461,26 @@ export function useDeviceLocation() {
         })
         .catch(() => {})
     } else {
-      getIpLocationFallback().then((ipLoc) => {
-        if (ipLoc) {
-          setState((s) => {
-            if (s.hasPermission) return s
-            return {
-              ...s,
-              lat: ipLoc.lat,
-              lng: ipLoc.lng,
-              city: ipLoc.city,
-              state: ipLoc.state,
-              address: ipLoc.address,
-              source: "IP_FALLBACK",
-            }
-          })
-        }
-      }).catch(() => {})
+      getIpLocationFallback()
+        .then((ipLoc) => {
+          if (ipLoc) {
+            setState((s) => {
+              if (s.hasPermission) return s
+              return {
+                ...s,
+                lat: ipLoc.lat,
+                lng: ipLoc.lng,
+                city: ipLoc.city,
+                state: ipLoc.state,
+                address: ipLoc.address,
+                source: "IP_FALLBACK",
+              }
+            })
+          }
+        })
+        .catch(() => {})
     }
   }, [requestLocation])
-
 
   // Manual city/region override
   const setManualLocation = useCallback(
@@ -527,7 +536,9 @@ export function useDeviceLocation() {
           const lat = pos.coords.latitude
           const lng = pos.coords.longitude
           const heading = pos.coords.heading
-          const speed = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : null
+          const speed = pos.coords.speed
+            ? Math.round(pos.coords.speed * 3.6)
+            : null
 
           setState((prev) => ({
             ...prev,

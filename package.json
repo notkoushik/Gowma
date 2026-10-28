@@ -9,7 +9,7 @@
     "build": "node scripts/db-deploy.js && npm run build:api && vite build",
     "preview": "vite preview",
     "format": "oxfmt src",
-    "test": "node --test scripts/test-authorization-policy.mjs scripts/test-hold-booking-contracts.mjs scripts/test-p1-contracts.mjs scripts/test-password-security.mjs scripts/test-razorpay-security.mjs scripts/test-role-isolation-contracts.mjs",
+    "test": "node --test scripts/test-authorization-policy.mjs scripts/test-hold-booking-contracts.mjs scripts/test-p1-contracts.mjs scripts/test-password-security.mjs scripts/test-razorpay-security.mjs scripts/test-role-isolation-contracts.mjs scripts/test-skeleton-and-storage-contracts.mjs",
     "test:integration": "node scripts/test-superadmin-context-switch.mjs && node scripts/verify-entire-system.mjs && node scripts/test-registration-and-recovery.mjs && node scripts/test-dynamic-hubs.mjs && node scripts/test-gaushala-map-search.mjs",
     "test:all": "npm test && npm run test:integration",
     "docs:screenshots": "node scripts/capture-docs-screenshots.mjs",

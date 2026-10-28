@@ -57,7 +57,7 @@ export type GosalaDetail = Gosala & {
   bullCount: number
   areaAcres: number
   serviceHours: string
-  certifications: { label: string; issuer: string }[]
+  certifications: { label: string issuer: string }[]
   animalCare: {
     feedSchedule: string
     feedType: string
@@ -101,4 +101,3 @@ export const durationOptions = [
   { min: 90, label: "90 min", extra: 500, tag: "+30 min" },
   { min: 120, label: "120 min", extra: 1000, tag: "+60 min" },
 ]
-

@@ -200,12 +200,17 @@ export default function MapLocationPicker({
   defaultViewMode = "compact",
 }: MapLocationPickerProps) {
   // Screen & View Mode: "compact" (standard) | "elongated" (tall 580px) | "fullscreen" (full viewport studio)
-  const [viewMode, setViewMode] = useState<"compact" | "elongated" | "fullscreen">(defaultViewMode)
+  const [viewMode, setViewMode] =
+    useState<"compact" | "elongated" | "fullscreen">(defaultViewMode)
 
   // Default coordinate initialization with strict NaN validation
   const defaultHub = INDIAN_REGIONAL_HUBS[0] // Hyderabad Central
-  const safeInitialLat = isValidCoordinate(initialLat, initialLng) ? (initialLat as number) : defaultHub.lat
-  const safeInitialLng = isValidCoordinate(initialLat, initialLng) ? (initialLng as number) : defaultHub.lng
+  const safeInitialLat = isValidCoordinate(initialLat, initialLng)
+    ? initialLat as number
+    : defaultHub.lat
+  const safeInitialLng = isValidCoordinate(initialLat, initialLng)
+    ? initialLng as number
+    : defaultHub.lng
 
   const [currentLat, setCurrentLat] = useState<number>(safeInitialLat)
   const [currentLng, setCurrentLng] = useState<number>(safeInitialLng)
@@ -241,7 +246,10 @@ export default function MapLocationPicker({
         map.invalidateSize({ animate: true })
         if (markerRef.current) {
           try {
-            map.panTo(markerRef.current.getLatLng(), { animate: true, duration: 0.25 })
+            map.panTo(markerRef.current.getLatLng(), {
+              animate: true,
+              duration: 0.25,
+            })
           } catch {}
         }
       }
@@ -253,7 +261,11 @@ export default function MapLocationPicker({
   const handleUpdateCoordinates = useCallback(
     async (lat: number, lng: number, skipReverse = false) => {
       if (!isValidCoordinate(lat, lng)) {
-        console.warn("handleUpdateCoordinates: invalid lat/lng ignored:", lat, lng)
+        console.warn(
+          "handleUpdateCoordinates: invalid lat/lng ignored:",
+          lat,
+          lng,
+        )
         return
       }
 
@@ -290,7 +302,8 @@ export default function MapLocationPicker({
       setIsReverseGeocoding(true)
       try {
         const geoResult = await reverseGeocodeCoords(lat, lng)
-        const addr = geoResult.address || `${closest.hub.name}, ${closest.hub.city}`
+        const addr =
+          geoResult.address || `${closest.hub.name}, ${closest.hub.city}`
         setResolvedAddress(addr)
         onChange({
           lat,
@@ -305,7 +318,8 @@ export default function MapLocationPicker({
         onChange({
           lat,
           lng,
-          address: resolvedAddress || `${closest.hub.name}, ${closest.hub.city}`,
+          address:
+            resolvedAddress || `${closest.hub.name}, ${closest.hub.city}`,
           city: closest.hub.city,
           state: closest.hub.state,
           suggestedRegion,
@@ -344,8 +358,8 @@ export default function MapLocationPicker({
   useEffect(() => {
     if (
       isValidCoordinate(initialLat, initialLng) &&
-      (Math.abs((initialLat as number) - currentLat) > 0.0001 ||
-        Math.abs((initialLng as number) - currentLng) > 0.0001)
+      (Math.abs(initialLat as number - currentLat) > 0.0001 ||
+        Math.abs(initialLng as number - currentLng) > 0.0001)
     ) {
       const safeLat = initialLat as number
       const safeLng = initialLng as number
@@ -358,7 +372,10 @@ export default function MapLocationPicker({
       }
       if (mapInstanceRef.current) {
         try {
-          mapInstanceRef.current.panTo([safeLat, safeLng], { animate: true, duration: 0.5 })
+          mapInstanceRef.current.panTo([safeLat, safeLng], {
+            animate: true,
+            duration: 0.5,
+          })
         } catch {}
       }
     }
@@ -601,7 +618,11 @@ export default function MapLocationPicker({
       (err) => {
         console.warn("GPS error:", err.message)
         setIsDetectingGps(false)
-        setGpsError(err.code === 1 ? "Location permission denied" : "Unable to acquire GPS signal")
+        setGpsError(
+          err.code === 1
+            ? "Location permission denied"
+            : "Unable to acquire GPS signal",
+        )
         setTimeout(() => setGpsError(null), 4000)
       },
       { enableHighAccuracy: true, timeout: 9000, maximumAge: 0 },
@@ -621,7 +642,9 @@ export default function MapLocationPicker({
 
   // Copy coordinates to clipboard
   const handleCopyCoords = () => {
-    navigator.clipboard.writeText(`${currentLat.toFixed(5)}, ${currentLng.toFixed(5)}`)
+    navigator.clipboard.writeText(
+      `${currentLat.toFixed(5)}, ${currentLng.toFixed(5)}`,
+    )
     setCopiedNotification(true)
     setTimeout(() => setCopiedNotification(false), 2000)
   }
@@ -648,7 +671,8 @@ export default function MapLocationPicker({
                 Gaushala Geodesic Pinpoint Studio
               </h2>
               <p className="text-[11.5px] text-ink-faint">
-                Full-screen precision geofencing across India. Tap anywhere or drag the sacred pin.
+                Full-screen precision geofencing across India. Tap anywhere or
+                drag the sacred pin.
               </p>
             </div>
           </div>
@@ -686,7 +710,9 @@ export default function MapLocationPicker({
               <span>Geodesic Routing Enabled</span>
             </div>
           </div>
-          <p className="text-[11px] text-ink-faint leading-relaxed">{helperText}</p>
+          <p className="text-[11px] text-ink-faint leading-relaxed">
+            {helperText}
+          </p>
         </>
       )}
 
@@ -696,7 +722,8 @@ export default function MapLocationPicker({
           <div className="flex items-center gap-1.5 min-w-0">
             <Sparkles size={14} className="text-saffron-deep shrink-0" />
             <span className="text-[12px] truncate text-ink-soft">
-              Form Gaushala: <strong className="text-ink font-semibold">{gaushalaName}</strong>
+              Form Gaushala:{" "}
+              <strong className="text-ink font-semibold">{gaushalaName}</strong>
             </span>
           </div>
           <button
@@ -763,7 +790,9 @@ export default function MapLocationPicker({
                 handleSearchExecute(text.trim())
               }
             } catch (e) {
-              const pasted = window.prompt("Paste Google Maps link or coordinates (e.g. https://maps.app.goo.gl/... or 18.5204, 73.8567):")
+              const pasted = window.prompt(
+                "Paste Google Maps link or coordinates (e.g. https://maps.app.goo.gl/... or 18.5204, 73.8567):",
+              )
               if (pasted && pasted.trim()) {
                 setSearchQuery(pasted.trim())
                 handleSearchExecute(pasted.trim())
@@ -786,9 +815,13 @@ export default function MapLocationPicker({
         >
           <Crosshair
             size={13}
-            className={isDetectingGps ? "animate-spin text-saffron" : "text-saffron"}
+            className={
+              isDetectingGps ? "animate-spin text-saffron" : "text-saffron"
+            }
           />
-          <span>{isDetectingGps ? "Acquiring..." : "I'm At The Gaushala (GPS)"}</span>
+          <span>
+            {isDetectingGps ? "Acquiring..." : "I'm At The Gaushala (GPS)"}
+          </span>
         </button>
       </div>
 
@@ -814,17 +847,19 @@ export default function MapLocationPicker({
                   item.source === "gomaa_database"
                     ? "bg-emerald-100 text-emerald-800"
                     : item.source === "sacred_sanctuary"
-                    ? "bg-amber-100 text-amber-800"
-                    : item.source === "google_maps_link" || item.source === "google_places_api"
-                    ? "bg-purple-100 text-purple-800"
-                    : "bg-blue-100 text-blue-800"
+                      ? "bg-amber-100 text-amber-800"
+                      : item.source === "google_maps_link" ||
+                          item.source === "google_places_api"
+                        ? "bg-purple-100 text-purple-800"
+                        : "bg-blue-100 text-blue-800"
                 }`}
               >
                 {item.source === "gomaa_database" ? (
                   <Building2 size={13} />
                 ) : item.source === "sacred_sanctuary" ? (
                   <Compass size={13} />
-                ) : item.source === "google_maps_link" || item.source === "google_places_api" ? (
+                ) : item.source === "google_maps_link" ||
+                  item.source === "google_places_api" ? (
                   <MapPin size={13} className="text-purple-600" />
                 ) : (
                   <MapPin size={13} />
@@ -840,10 +875,11 @@ export default function MapLocationPicker({
                       item.source === "gomaa_database"
                         ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                         : item.source === "sacred_sanctuary"
-                        ? "bg-amber-50 text-amber-700 border border-amber-200"
-                        : item.source === "google_maps_link" || item.source === "google_places_api"
-                        ? "bg-purple-50 text-purple-700 border border-purple-200"
-                        : "bg-blue-50 text-blue-700 border border-blue-200"
+                          ? "bg-amber-50 text-amber-700 border border-amber-200"
+                          : item.source === "google_maps_link" ||
+                              item.source === "google_places_api"
+                            ? "bg-purple-50 text-purple-700 border border-purple-200"
+                            : "bg-blue-50 text-blue-700 border border-blue-200"
                     }`}
                   >
                     {item.badgeText}
@@ -901,12 +937,15 @@ export default function MapLocationPicker({
           viewMode === "fullscreen"
             ? "flex-1 min-h-0 h-full"
             : viewMode === "elongated"
-            ? "h-[580px] sm:h-[620px]"
-            : "h-[300px] sm:h-[340px]"
+              ? "h-[580px] sm:h-[620px]"
+              : "h-[300px] sm:h-[340px]"
         }`}
       >
         {/* Leaflet Mount Container */}
-        <div ref={mapContainerRef} className="h-full w-full z-0 cursor-crosshair" />
+        <div
+          ref={mapContainerRef}
+          className="h-full w-full z-0 cursor-crosshair"
+        />
 
         {/* Floating Viewport Mode Switcher Pill (Top Left) */}
         <div className="absolute top-3 left-3 z-[400] flex items-center gap-1.5 p-1 rounded-lg bg-card/95 backdrop-blur-md border border-line shadow-md text-[11px]">
@@ -919,10 +958,18 @@ export default function MapLocationPicker({
                   ? "bg-forest text-white shadow-2xs"
                   : "text-ink-soft hover:bg-paper hover:text-ink"
               }`}
-              title={viewMode === "elongated" ? "Switch to standard compact map" : "Elongate map to tall view"}
+              title={
+                viewMode === "elongated"
+                  ? "Switch to standard compact map"
+                  : "Elongate map to tall view"
+              }
             >
               <ChevronsUpDown size={12} />
-              <span>{viewMode === "elongated" ? "Elongated (Active)" : "Elongate Map"}</span>
+              <span>
+                {viewMode === "elongated"
+                  ? "Elongated (Active)"
+                  : "Elongate Map"}
+              </span>
             </button>
           )}
 

@@ -47,7 +47,7 @@ async function runE2ETesting() {
     const passInput = await page.$('input[type="password"]')
     if (passInput) {
       await passInput.click({ clickCount: 3 })
-      await passInput.type("Koushik.git")
+      await passInput.type("GomaaAdmin@2026!")
     }
 
     const submitBtn = await page.$('button[type="submit"]')
@@ -137,13 +137,13 @@ async function runE2ETesting() {
     const saEmail = await page.$('input[type="text"], input[type="email"]')
     if (saEmail) {
       await saEmail.click({ clickCount: 3 })
-      await saEmail.type("nanikoushik96@gmail.com")
+      await saEmail.type("superadmin@gomaa.in")
     }
 
     const saPass = await page.$('input[type="password"]')
     if (saPass) {
       await saPass.click({ clickCount: 3 })
-      await saPass.type("Koushik.git")
+      await saPass.type("SuperAdmin@2026!")
     }
 
     const saSubmit = await page.$('button[type="submit"]')
@@ -247,7 +247,7 @@ async function runE2ETesting() {
     const mgrPass = await page.$('input[type="password"]')
     if (mgrPass) {
       await mgrPass.click({ clickCount: 3 })
-      await mgrPass.type("Koushik.git")
+      await mgrPass.type("GomaaAdmin@2026!")
     }
 
     const mgrSubmit = await page.$('button[type="submit"]')

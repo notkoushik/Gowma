@@ -32,4 +32,3 @@ export type Trip = {
 
 // 0 hardcoded trips - dynamically populated from bookings
 export const trips: Trip[] = []
-

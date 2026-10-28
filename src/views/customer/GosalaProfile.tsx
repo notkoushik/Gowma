@@ -67,7 +67,7 @@ export function resolveGosalaDetail(
   storeGosalas: any[],
   storeAnimals: Animal[] = [],
   storeVets: EmpanelledVet[] = [],
-  customerCoords?: { lat: number; lng: number } | null,
+  customerCoords?: { lat: number lng: number } | null,
   overrideDistanceKm?: number,
 ): GosalaDetail | null {
   const found = storeGosalas.find(
@@ -121,7 +121,7 @@ export function resolveGosalaDetail(
     (a) => a.type === "Bull" || (a as any).category === "Bull",
   ).length
   const totalAnimals =
-    matchingAnimals.length > 0 ? matchingAnimals.length : (found.capacity || 40)
+    matchingAnimals.length > 0 ? matchingAnimals.length : found.capacity || 40
 
   // Assigned Vet lookup
   const assignedVet = storeVets.find((v) =>
@@ -135,13 +135,15 @@ export function resolveGosalaDetail(
   const gLat =
     found.lat !== undefined && found.lat !== null
       ? Number(found.lat)
-      : (found as any).latitude !== undefined && (found as any).latitude !== null
+      : (found as any).latitude !== undefined &&
+          (found as any).latitude !== null
         ? Number((found as any).latitude)
         : undefined
   const gLng =
     found.lng !== undefined && found.lng !== null
       ? Number(found.lng)
-      : (found as any).longitude !== undefined && (found as any).longitude !== null
+      : (found as any).longitude !== undefined &&
+          (found as any).longitude !== null
         ? Number((found as any).longitude)
         : undefined
 
@@ -209,7 +211,8 @@ export function resolveGosalaDetail(
       feedType: "Hydroponic maize, green grass, jaggery & mineral cakes",
       vetVisits: "Twice weekly scheduled inspections + 24/7 on-call triage",
       vaccination: "FMD, Brucellosis, and Hemorrhagic Septicemia certified",
-      restPeriod: "Mandatory 90-min cooldown after any sacred darshan or transit",
+      restPeriod:
+        "Mandatory 90-min cooldown after any sacred darshan or transit",
       grooming: "Daily dawn brush down, neem water bath, and hoof inspection",
     },
     facilities:
@@ -247,7 +250,7 @@ export function resolveGosalaDetail(
   }
 }
 
-function StarRow({ rating, size = 13 }: { rating: number; size?: number }) {
+function StarRow({ rating, size = 13 }: { rating: number size?: number }) {
   return (
     <span className="inline-flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((i) => (
@@ -265,7 +268,7 @@ function StarRow({ rating, size = 13 }: { rating: number; size?: number }) {
   )
 }
 
-function CertBadge({ label, issuer }: { label: string; issuer: string }) {
+function CertBadge({ label, issuer }: { label: string issuer: string }) {
   return (
     <div className="flex items-start gap-3 rounded-lg border border-ok/30 bg-ok-soft/50 p-3 shadow-2xs">
       <CheckCircle2 size={16} className="text-ok shrink-0 mt-0.5" />
@@ -299,7 +302,11 @@ function AnimalCard({
     >
       <div className="h-36 bg-paper-deep overflow-hidden relative">
         <img
-          src={animal.photo || (animal.photos && animal.photos[0]) || "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=600&h=400&fit=crop&auto=format"}
+          src={
+            animal.photo ||
+            (animal.photos && animal.photos[0]) ||
+            "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=600&h=400&fit=crop&auto=format"
+          }
           alt={animal.name}
           className="h-full w-full object-cover group-hover:scale-[1.04] transition-transform duration-500"
         />
@@ -330,13 +337,16 @@ function AnimalCard({
       <div className="p-3.5 flex flex-col flex-1 justify-between gap-2">
         <div>
           <div className="flex items-baseline justify-between gap-1">
-            <span className="font-serif text-[16px] text-ink font-bold group-hover:text-forest transition-colors">{animal.name}</span>
+            <span className="font-serif text-[16px] text-ink font-bold group-hover:text-forest transition-colors">
+              {animal.name}
+            </span>
             <span className="font-mono text-[13px] text-ink font-bold tabular shrink-0">
               {inr(animal.price || 3500)}
             </span>
           </div>
           <div className="text-[11.5px] text-ink-soft mt-0.5 line-clamp-1">
-            {animal.type} · {animal.age || `${animal.ageYears || 5} yrs`} {animal.lactationStatus ? `· ${animal.lactationStatus}` : ""}
+            {animal.type} · {animal.age || `${animal.ageYears || 5} yrs`}{" "}
+            {animal.lactationStatus ? `· ${animal.lactationStatus}` : ""}
           </div>
         </div>
         <div className="pt-2 border-t border-line/60 flex items-center justify-between text-[11px]">
@@ -360,7 +370,9 @@ function ReviewCard({ review }: { review: GosalaDetail["reviews"][0] }) {
           {review.initials}
         </div>
         <div className="min-w-0">
-          <div className="text-[13px] text-ink font-semibold">{review.name}</div>
+          <div className="text-[13px] text-ink font-semibold">
+            {review.name}
+          </div>
           <div className="flex items-center gap-2 mt-0.5">
             <StarRow rating={review.rating} size={11} />
             <span className="font-mono text-[10px] text-ink-faint">
@@ -433,10 +445,18 @@ export function EnRouteModal({
   const [isLoadingRoute, setIsLoadingRoute] = useState(false)
 
   // Default coordinate fallbacks if coordinates are not yet acquired or NaN
-  const effectiveCustLat = typeof customerLat === "number" && !isNaN(customerLat) ? customerLat : 17.4401
-  const effectiveCustLng = typeof customerLng === "number" && !isNaN(customerLng) ? customerLng : 78.3489
-  const effectiveGosalaLat = typeof gosalaLat === "number" && !isNaN(gosalaLat) ? gosalaLat : 17.3753
-  const effectiveGosalaLng = typeof gosalaLng === "number" && !isNaN(gosalaLng) ? gosalaLng : 78.3615
+  const effectiveCustLat =
+    typeof customerLat === "number" && !isNaN(customerLat)
+      ? customerLat
+      : 17.4401
+  const effectiveCustLng =
+    typeof customerLng === "number" && !isNaN(customerLng)
+      ? customerLng
+      : 78.3489
+  const effectiveGosalaLat =
+    typeof gosalaLat === "number" && !isNaN(gosalaLat) ? gosalaLat : 17.3753
+  const effectiveGosalaLng =
+    typeof gosalaLng === "number" && !isNaN(gosalaLng) ? gosalaLng : 78.3615
 
   // Fetch real road route
   useEffect(() => {
@@ -446,10 +466,10 @@ export function EnRouteModal({
     let cancelled = false
     setIsLoadingRoute(true)
 
-    fetchRoadRoute(
-      [effectiveCustLat, effectiveCustLng],
-      [effectiveGosalaLat, effectiveGosalaLng],
-    ).then((route) => {
+    fetchRoadRoute([effectiveCustLat, effectiveCustLng], [
+      effectiveGosalaLat,
+      effectiveGosalaLng,
+    ]).then((route) => {
       if (!cancelled) {
         setRoadRoute(route)
         setIsLoadingRoute(false)
@@ -550,10 +570,10 @@ export function EnRouteModal({
           map.fitBounds(polyline.getBounds(), { padding: [50, 50] })
         } catch {}
       } else {
-        const bounds = L.latLngBounds(
-          [effectiveCustLat, effectiveCustLng],
-          [effectiveGosalaLat, effectiveGosalaLng],
-        )
+        const bounds = L.latLngBounds([effectiveCustLat, effectiveCustLng], [
+          effectiveGosalaLat,
+          effectiveGosalaLng,
+        ])
         map.fitBounds(bounds, { padding: [60, 60] })
       }
     } else {
@@ -611,7 +631,9 @@ export function EnRouteModal({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-serif text-[17px] sm:text-[19px] font-bold text-ink">
-                  {mode === "route" ? "Sacred Transit & Road Route" : "Gaushala Premise Pinpoint"}
+                  {mode === "route"
+                    ? "Sacred Transit & Road Route"
+                    : "Gaushala Premise Pinpoint"}
                 </h3>
                 <span className="font-mono text-[11px] px-2 py-0.5 rounded-full bg-forest text-white font-medium">
                   {mode === "route" ? "Live Roadway" : "Satellite Verified"}
@@ -651,20 +673,32 @@ export function EnRouteModal({
           <div className="p-3 sm:p-4 bg-paper-deep/60 border-b border-line flex flex-wrap items-center justify-between gap-3 text-[12.5px]">
             <div className="flex items-center gap-4 flex-wrap">
               <div className="flex items-center gap-1.5 font-medium text-ink">
-                <span className="text-ink-faint font-mono text-[11px] uppercase tracking-wider">Distance:</span>
+                <span className="text-ink-faint font-mono text-[11px] uppercase tracking-wider">
+                  Distance:
+                </span>
                 <span className="font-serif font-bold text-[15px] text-forest">
-                  {roadRoute?.distanceKm ? `${roadRoute.distanceKm} km` : "Calculating..."}
+                  {roadRoute?.distanceKm
+                    ? `${roadRoute.distanceKm} km`
+                    : "Calculating..."}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 font-medium text-ink">
-                <span className="text-ink-faint font-mono text-[11px] uppercase tracking-wider">Est. Transit:</span>
+                <span className="text-ink-faint font-mono text-[11px] uppercase tracking-wider">
+                  Est. Transit:
+                </span>
                 <span className="font-serif font-bold text-[15px] text-saffron-deep">
-                  {roadRoute?.durationMin ? `~${roadRoute.durationMin} mins` : "Calculating..."}
+                  {roadRoute?.durationMin
+                    ? `~${roadRoute.durationMin} mins`
+                    : "Calculating..."}
                 </span>
               </div>
               <div className="hidden sm:flex items-center gap-1.5 text-ink-soft">
-                <span className="text-ink-faint font-mono text-[11px] uppercase tracking-wider">Corridor:</span>
-                <span className="font-medium text-ink">{roadRoute?.summary || "Direct Arterial"}</span>
+                <span className="text-ink-faint font-mono text-[11px] uppercase tracking-wider">
+                  Corridor:
+                </span>
+                <span className="font-medium text-ink">
+                  {roadRoute?.summary || "Direct Arterial"}
+                </span>
               </div>
             </div>
 
@@ -714,7 +748,12 @@ export function MobileGosalaProfile({
   onBack: () => void
   onSelectAnimal: (a: Animal) => void
 }) {
-  const { gosalas: storeGosalas, animals: storeAnimals, vets: storeVets, refreshAnimals } = useStore()
+  const {
+    gosalas: storeGosalas,
+    animals: storeAnimals,
+    vets: storeVets,
+    refreshAnimals,
+  } = useStore()
   const [fetchedAnimals, setFetchedAnimals] = useState<Animal[]>([])
   const deviceLocation = useDeviceLocation()
   const customerCoords =
@@ -724,11 +763,19 @@ export function MobileGosalaProfile({
 
   useEffect(() => {
     let active = true
-    api.getAnimals().then((res) => {
-      if (active && res?.animals && Array.isArray(res.animals) && res.animals.length > 0) {
-        setFetchedAnimals(res.animals)
-      }
-    }).catch(() => {})
+    api
+      .getAnimals()
+      .then((res) => {
+        if (
+          active &&
+          res?.animals &&
+          Array.isArray(res.animals) &&
+          res.animals.length > 0
+        ) {
+          setFetchedAnimals(res.animals)
+        }
+      })
+      .catch(() => {})
     refreshAnimals?.().catch(() => {})
     return () => {
       active = false
@@ -758,7 +805,9 @@ export function MobileGosalaProfile({
   const [photoIdx, setPhotoIdx] = useState(0)
   const [tab, setTab] = useState<ProfileTab>("about")
   const [showRouteModal, setShowRouteModal] = useState(false)
-  const [routeModalMode, setRouteModalMode] = useState<"route" | "pinpoint">("route")
+  const [routeModalMode, setRouteModalMode] = useState<"route" | "pinpoint">(
+    "route",
+  )
 
   const gosalaAnimals = useMemo(() => {
     if (!g) return []
@@ -849,21 +898,23 @@ export function MobileGosalaProfile({
             </span>
           </span>
           <span className="text-ink-faint text-[12px]">·</span>
-          <span className="text-[12px] text-ink-soft font-mono">
-            {g.area}
-          </span>
+          <span className="text-[12px] text-ink-soft font-mono">{g.area}</span>
         </div>
 
         {/* 4 Key stats */}
         <div className="grid grid-cols-4 rounded-lg border border-line mt-3 overflow-hidden text-center bg-card">
           <div className="py-2.5 border-r border-line">
-            <div className="font-mono text-[13px] text-ink font-semibold">{g.totalAnimals}</div>
+            <div className="font-mono text-[13px] text-ink font-semibold">
+              {g.totalAnimals}
+            </div>
             <div className="font-mono text-[8.5px] uppercase tracking-wider text-ink-faint">
               Animals
             </div>
           </div>
           <div className="py-2.5 border-r border-line">
-            <div className="font-mono text-[13px] text-ink font-semibold">{g.areaAcres} ac</div>
+            <div className="font-mono text-[13px] text-ink font-semibold">
+              {g.areaAcres} ac
+            </div>
             <div className="font-mono text-[8.5px] uppercase tracking-wider text-ink-faint">
               Land
             </div>
@@ -972,31 +1023,45 @@ export function MobileGosalaProfile({
             <div className="space-y-2 text-[12.5px]">
               <div className="rounded-lg border border-line bg-card p-3 space-y-2">
                 <div className="flex gap-2">
-                  <UtensilsCrossed size={14} className="text-saffron shrink-0 mt-0.5" />
+                  <UtensilsCrossed
+                    size={14}
+                    className="text-saffron shrink-0 mt-0.5"
+                  />
                   <div>
                     <strong className="text-ink">Feed Schedule:</strong>{" "}
-                    <span className="text-ink-soft">{g.animalCare.feedSchedule}</span>
+                    <span className="text-ink-soft">
+                      {g.animalCare.feedSchedule}
+                    </span>
                   </div>
                 </div>
                 <div className="flex gap-2">
                   <Sprout size={14} className="text-forest shrink-0 mt-0.5" />
                   <div>
                     <strong className="text-ink">Feed Mix:</strong>{" "}
-                    <span className="text-ink-soft">{g.animalCare.feedType}</span>
+                    <span className="text-ink-soft">
+                      {g.animalCare.feedType}
+                    </span>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Stethoscope size={14} className="text-info shrink-0 mt-0.5" />
+                  <Stethoscope
+                    size={14}
+                    className="text-info shrink-0 mt-0.5"
+                  />
                   <div>
                     <strong className="text-ink">Veterinary Visits:</strong>{" "}
-                    <span className="text-ink-soft">{g.animalCare.vetVisits}</span>
+                    <span className="text-ink-soft">
+                      {g.animalCare.vetVisits}
+                    </span>
                   </div>
                 </div>
                 <div className="flex gap-2">
                   <Syringe size={14} className="text-ok shrink-0 mt-0.5" />
                   <div>
                     <strong className="text-ink">Vaccinations:</strong>{" "}
-                    <span className="text-ink-soft">{g.animalCare.vaccination}</span>
+                    <span className="text-ink-soft">
+                      {g.animalCare.vaccination}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1031,7 +1096,9 @@ export function MobileGosalaProfile({
                 {g.managerInitials}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[14px] text-ink font-semibold">{g.managerName}</div>
+                <div className="text-[14px] text-ink font-semibold">
+                  {g.managerName}
+                </div>
                 <div className="font-mono text-[10px] uppercase tracking-wider text-ink-faint mt-0.5">
                   Gaushala Custodian & Manager
                 </div>
@@ -1090,7 +1157,8 @@ export function MobileGosalaProfile({
             Available Herd
           </div>
           <div className="text-[13.5px] text-ink font-semibold">
-            {gosalaAnimals.filter((a) => a.status === "Available").length} cattle ready
+            {gosalaAnimals.filter((a) => a.status === "Available").length}{" "}
+            cattle ready
           </div>
         </div>
         <button
@@ -1118,7 +1186,12 @@ export function DesktopGosalaProfile({
   onBack: () => void
   onSelectAnimal: (a: Animal) => void
 }) {
-  const { gosalas: storeGosalas, animals: storeAnimals, vets: storeVets, refreshAnimals } = useStore()
+  const {
+    gosalas: storeGosalas,
+    animals: storeAnimals,
+    vets: storeVets,
+    refreshAnimals,
+  } = useStore()
   const [fetchedAnimals, setFetchedAnimals] = useState<Animal[]>([])
   const deviceLocation = useDeviceLocation()
   const customerCoords =
@@ -1128,11 +1201,19 @@ export function DesktopGosalaProfile({
 
   useEffect(() => {
     let active = true
-    api.getAnimals().then((res) => {
-      if (active && res?.animals && Array.isArray(res.animals) && res.animals.length > 0) {
-        setFetchedAnimals(res.animals)
-      }
-    }).catch(() => {})
+    api
+      .getAnimals()
+      .then((res) => {
+        if (
+          active &&
+          res?.animals &&
+          Array.isArray(res.animals) &&
+          res.animals.length > 0
+        ) {
+          setFetchedAnimals(res.animals)
+        }
+      })
+      .catch(() => {})
     refreshAnimals?.().catch(() => {})
     return () => {
       active = false
@@ -1162,7 +1243,9 @@ export function DesktopGosalaProfile({
   const [photoIdx, setPhotoIdx] = useState(0)
   const [tab, setTab] = useState<ProfileTab>("about")
   const [showRouteModal, setShowRouteModal] = useState(false)
-  const [routeModalMode, setRouteModalMode] = useState<"route" | "pinpoint">("route")
+  const [routeModalMode, setRouteModalMode] = useState<"route" | "pinpoint">(
+    "route",
+  )
 
   const gosalaAnimals = useMemo(() => {
     if (!g) return []
@@ -1186,7 +1269,8 @@ export function DesktopGosalaProfile({
           Gaushala Not Found
         </h3>
         <p className="text-sm text-ink-soft mb-6">
-          The requested Gaushala could not be located or has not been registered yet.
+          The requested Gaushala could not be located or has not been registered
+          yet.
         </p>
         <button
           onClick={onBack}
@@ -1339,7 +1423,9 @@ export function DesktopGosalaProfile({
               {g.managerInitials}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[14px] text-ink font-semibold">{g.managerName}</div>
+              <div className="text-[14px] text-ink font-semibold">
+                {g.managerName}
+              </div>
               <div className="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
                 Gosala Manager · AWBI Custodian
               </div>
@@ -1367,10 +1453,13 @@ export function DesktopGosalaProfile({
               <div className="flex items-center gap-1.5 font-medium text-ink">
                 <Navigation size={13} className="text-forest" />
                 <span>
-                  {g.distanceKm > 0 ? `${g.distanceKm} km from your location` : "Doorstep Route Active"}
+                  {g.distanceKm > 0
+                    ? `${g.distanceKm} km from your location`
+                    : "Doorstep Route Active"}
                 </span>
                 <span className="text-ink-faint font-mono text-[11px]">
-                  (approx. {Math.max(10, Math.round(g.distanceKm * 2.2))} mins drive)
+                  (approx. {Math.max(10, Math.round(g.distanceKm * 2.2))} mins
+                  drive)
                 </span>
               </div>
               <span className="font-mono text-[10.5px] px-2 py-0.5 rounded-full bg-forest-soft text-forest font-semibold">
@@ -1436,7 +1525,9 @@ export function DesktopGosalaProfile({
             {/* Animal Care Grid */}
             <div className="flex items-center gap-2 mb-3">
               <Leaf size={16} className="text-forest" />
-              <h3 className="font-serif text-[17px] text-ink font-semibold">Animal Care & Welfare</h3>
+              <h3 className="font-serif text-[17px] text-ink font-semibold">
+                Animal Care & Welfare
+              </h3>
             </div>
             <div className="grid sm:grid-cols-2 gap-3 mb-6">
               <div className="rounded-lg border border-line bg-card p-3.5 space-y-1 shadow-2xs">
@@ -1480,7 +1571,9 @@ export function DesktopGosalaProfile({
             {/* Facilities */}
             <div className="flex items-center gap-2 mb-3">
               <TreeDeciduous size={16} className="text-forest" />
-              <h3 className="font-serif text-[17px] text-ink font-semibold">Facilities & Infrastructure</h3>
+              <h3 className="font-serif text-[17px] text-ink font-semibold">
+                Facilities & Infrastructure
+              </h3>
             </div>
             <div className="grid sm:grid-cols-2 gap-3">
               {g.facilities.map((f) => (
@@ -1538,7 +1631,9 @@ export function DesktopGosalaProfile({
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <Mail size={16} className="text-ink-faint" />
-                <h3 className="font-serif text-[17px] text-ink font-semibold">Direct Communication</h3>
+                <h3 className="font-serif text-[17px] text-ink font-semibold">
+                  Direct Communication
+                </h3>
               </div>
               <div className="space-y-2 text-[12.5px] rounded-lg border border-line bg-card p-4 shadow-2xs">
                 <div className="flex items-center gap-2 text-ink-soft">
@@ -1555,10 +1650,7 @@ export function DesktopGosalaProfile({
                   <span>{g.email}</span>
                 </div>
                 <div className="flex items-start gap-2 text-ink-soft">
-                  <MapPin
-                    size={13}
-                    className="text-saffron shrink-0 mt-0.5"
-                  />
+                  <MapPin size={13} className="text-saffron shrink-0 mt-0.5" />
                   <span>{g.address}</span>
                 </div>
                 <div className="flex items-center gap-2 text-ink-soft">
@@ -1575,7 +1667,8 @@ export function DesktopGosalaProfile({
       {tab === "animals" && (
         <div>
           <p className="text-[13px] text-ink-faint mb-5">
-            {gosalaAnimals.length} sacred animals currently resident and available from {g.name}
+            {gosalaAnimals.length} sacred animals currently resident and
+            available from {g.name}
           </p>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
             {gosalaAnimals.map((a) => (
@@ -1604,7 +1697,8 @@ export function DesktopGosalaProfile({
               </div>
             </div>
             <div className="text-[13px] text-ink-soft max-w-md">
-              All reviews are from verified devotees who performed Darshan or Go-seva from this sanctuary.
+              All reviews are from verified devotees who performed Darshan or
+              Go-seva from this sanctuary.
             </div>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">

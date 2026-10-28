@@ -4,21 +4,7 @@
  * for dynamic location detection and nearest-Gaushala matching.
  */
 
-export type IndianState =
-  | "Telangana"
-  | "Maharashtra"
-  | "Karnataka"
-  | "Gujarat"
-  | "Delhi NCR"
-  | "Uttar Pradesh"
-  | "Rajasthan"
-  | "Andhra Pradesh"
-  | "Tamil Nadu"
-  | "Madhya Pradesh"
-  | "Haryana"
-  | "Punjab"
-  | "West Bengal"
-  | "Kerala"
+export type IndianState = "Telangana" | "Maharashtra" | "Karnataka" | "Gujarat" | "Delhi NCR" | "Uttar Pradesh" | "Rajasthan" | "Andhra Pradesh" | "Tamil Nadu" | "Madhya Pradesh" | "Haryana" | "Punjab" | "West Bengal" | "Kerala"
 
 export interface OperationalRegionHub {
   id: string
@@ -509,13 +495,18 @@ export function calculateRoadDistanceKm(
   return Math.round(straight * tortuosity * 10) / 10
 }
 
+export interface NearestHubResult {
+  hub: OperationalRegionHub
+  distanceKm: number
+}
+
 /**
  * Fast offline lookup to find closest operational Indian hub from any coordinates
  */
 export function findNearestIndianHub(
   lat: number,
   lng: number,
-): { hub: OperationalRegionHub; distanceKm: number } {
+): NearestHubResult {
   let closest = INDIAN_REGIONAL_HUBS[0]
   let minDist = Infinity
 
@@ -556,7 +547,9 @@ export function getAllIndianStates(): (IndianState | string)[] {
 /**
  * Get all hubs for a given state
  */
-export function getHubsForState(state: IndianState | string): OperationalRegionHub[] {
+export function getHubsForState(
+  state: IndianState | string,
+): OperationalRegionHub[] {
   return INDIAN_REGIONAL_HUBS.filter((h) => h.state === state)
 }
 
@@ -609,7 +602,10 @@ export function registerDynamicHub(hub: OperationalRegionHub) {
 
 export function syncDynamicHubs(hubs: OperationalRegionHub[]) {
   for (const h of hubs) {
-    if (!INDIAN_REGIONAL_HUBS.some((b) => b.id === h.id) && !dynamicHubsCache.some((c) => c.id === h.id)) {
+    if (
+      !INDIAN_REGIONAL_HUBS.some((b) => b.id === h.id) &&
+      !dynamicHubsCache.some((c) => c.id === h.id)
+    ) {
       dynamicHubsCache.push(h)
     }
   }

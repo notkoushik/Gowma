@@ -34,7 +34,7 @@ async function run() {
       await emailMgr.click({ clickCount: 3 })
       await emailMgr.type("manager1@gomaa.in")
       await passMgr.click({ clickCount: 3 })
-      await passMgr.type("Koushik.git")
+      await passMgr.type("GomaaAdmin@2026!")
       const btn = await page.$('button[type="submit"]')
       if (btn) await btn.click()
     }
@@ -84,7 +84,7 @@ async function run() {
       await emailAdm.click({ clickCount: 3 })
       await emailAdm.type("alt.yq-fs88dj2@yopmail.com")
       await passAdm.click({ clickCount: 3 })
-      await passAdm.type("Koushik.git")
+      await passAdm.type("GomaaAdmin@2026!")
       const btn = await page.$('button[type="submit"]')
       if (btn) await btn.click()
     }

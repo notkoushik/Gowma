@@ -30,9 +30,8 @@ import {
 import { tripStages, type Trip } from "../data/driver"
 import { inr, type Booking } from "../data/mock"
 import { useStore } from "../store/store"
+import { Skeleton } from "../components/common/Skeleton"
 import LiveTripMap from "../components/LiveTripMap"
-import { useDeviceLocation } from "../hooks/useDeviceLocation"
-import LocationPromptBanner from "../components/LocationPromptBanner"
 import { useRealtime } from "../hooks/useRealtime"
 import { api } from "../services/api"
 
@@ -143,7 +142,9 @@ function HandoverOtpModal({
     e?.preventDefault()
     const otpCode = pin.join("")
     if (otpCode.length < 4) {
-      setErrorMsg("Please enter the complete 4-digit PIN provided by the devotee.")
+      setErrorMsg(
+        "Please enter the complete 4-digit PIN provided by the devotee.",
+      )
       return
     }
     setLoading(true)
@@ -197,13 +198,17 @@ function HandoverOtpModal({
               Doorstep Handover Verification
             </p>
             <p className="text-[12px] text-ink-faint">
-              Ask devotee <strong className="text-ink">{trip.customer}</strong> for
-              the 4-digit code displayed on their GOMAA live tracking screen.
+              Ask devotee <strong className="text-ink">{trip.customer}</strong>{" "}
+              for the 4-digit code displayed on their GOMAA live tracking
+              screen.
             </p>
           </div>
 
           {/* 4 PIN inputs */}
-          <div className="flex justify-center gap-2.5 my-2" onPaste={handlePaste}>
+          <div
+            className="flex justify-center gap-2.5 my-2"
+            onPaste={handlePaste}
+          >
             {pin.map((digit, idx) => (
               <input
                 key={idx}
@@ -278,87 +283,6 @@ function TripDetail({
 }) {
   const [showOtpModal, setShowOtpModal] = useState(false)
   const done = trip.stageIndex >= tripStages.length - 1
-  const isEnRoute = trip.stageIndex >= 4 && !done
-  const deviceLocation = useDeviceLocation()
-
-  const handleTogglePhoneGps = async () => {
-    if (deviceLocation.isWatching) {
-      deviceLocation.stopWatching()
-    } else {
-      const initial = await deviceLocation.requestLocation()
-      if (initial) {
-        api
-          .sendTelemetry(trip.bookingId, {
-            lat: initial.lat,
-            lng: initial.lng,
-            speedKmh: 30,
-            bearing: 45,
-            stage: trip.stageIndex,
-            stageLabel: tripStages[trip.stageIndex],
-          })
-          .catch(console.error)
-
-        deviceLocation.startWatching((pos) => {
-          api
-            .sendTelemetry(trip.bookingId, {
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude,
-              speedKmh: pos.coords.speed
-                ? Math.round(pos.coords.speed * 3.6)
-                : 32,
-              bearing: pos.coords.heading || 45,
-              stage: trip.stageIndex,
-              stageLabel: tripStages[trip.stageIndex],
-            })
-            .catch(console.error)
-        })
-      }
-    }
-  }
-
-  // Automatic 1-Minute Driver Location Beacon when en route
-  useEffect(() => {
-    if (!isEnRoute) return
-
-    const sendBeacon = async () => {
-      if (deviceLocation.lat && deviceLocation.lng) {
-        api
-          .sendTelemetry(trip.bookingId, {
-            lat: deviceLocation.lat,
-            lng: deviceLocation.lng,
-            speedKmh: deviceLocation.speed || 34,
-            bearing: deviceLocation.heading || 45,
-            stage: trip.stageIndex,
-            stageLabel: tripStages[trip.stageIndex],
-          })
-          .catch(console.error)
-      } else {
-        const initial = await deviceLocation.requestLocation().catch(() => null)
-        if (initial) {
-          api
-            .sendTelemetry(trip.bookingId, {
-              lat: initial.lat,
-              lng: initial.lng,
-              speedKmh: 34,
-              bearing: 45,
-              stage: trip.stageIndex,
-              stageLabel: tripStages[trip.stageIndex],
-            })
-            .catch(console.error)
-        }
-      }
-    }
-
-    sendBeacon()
-    const interval = setInterval(sendBeacon, 60000)
-    return () => clearInterval(interval)
-  }, [
-    isEnRoute,
-    trip.bookingId,
-    trip.stageIndex,
-    deviceLocation.lat,
-    deviceLocation.lng,
-  ])
 
   return (
     <div>
@@ -377,19 +301,7 @@ function TripDetail({
       </div>
 
       <div className="p-4 space-y-4">
-        {/* Proactive Location Banner */}
-        <LocationPromptBanner
-          role="DRIVER"
-          hasPermission={deviceLocation.hasPermission}
-          permissionStatus={deviceLocation.permissionStatus}
-          isLoading={deviceLocation.isLoading}
-          error={deviceLocation.error}
-          accuracy={deviceLocation.accuracy}
-          address={deviceLocation.address}
-          onRequestLocation={handleTogglePhoneGps}
-        />
-
-        {/* Live Trip Map */}
+        {/* Logistics & Google Maps Navigation */}
         <LiveTripMap
           bookingId={trip.bookingId}
           pickupLocation={trip.pickup}
@@ -397,73 +309,8 @@ function TripDetail({
           driverName={driverName}
           stageIndex={trip.stageIndex}
           distanceKm={trip.distanceKm}
-          driverCoords={
-            deviceLocation.lat && deviceLocation.lng
-              ? [deviceLocation.lat, deviceLocation.lng]
-              : null
-          }
           viewerRole="DRIVER"
-          heightClass="h-64"
         />
-
-        {/* Real Location & Simulation Controls */}
-        <div className="rounded-sm border border-line bg-card p-3.5 space-y-2.5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
-              Driver GPS Source
-            </span>
-            <span className="text-[11px] font-mono text-saffron-deep font-medium">
-              {deviceLocation.isWatching
-                ? "● Phone GPS Active"
-                : isEnRoute
-                  ? "● Simulated Road GPS"
-                  : "Standby"}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={handleTogglePhoneGps}
-              className={`inline-flex items-center justify-center gap-1.5 rounded-sm py-2 px-2 text-[12px] font-medium border transition-colors cursor-pointer ${
-                deviceLocation.isWatching
-                  ? "bg-ok text-white border-ok"
-                  : "bg-paper text-ink border-line hover:border-line-strong"
-              }`}
-            >
-              <Radio
-                size={13}
-                className={deviceLocation.isWatching ? "animate-pulse" : ""}
-              />
-              {deviceLocation.isWatching
-                ? "Stop Phone GPS"
-                : "Broadcast Phone GPS"}
-            </button>
-
-            <button
-              onClick={() => onResetStage(4)}
-              className="inline-flex items-center justify-center gap-1.5 rounded-sm py-2 px-2 text-[12px] font-medium bg-saffron-soft text-saffron-deep border border-saffron/30 hover:bg-saffron hover:text-white transition-colors cursor-pointer"
-            >
-              <RefreshCw size={13} />
-              Simulate Live Drive
-            </button>
-          </div>
-
-          {deviceLocation.error && (
-            <div className="text-[11px] text-danger bg-danger-soft/60 rounded p-2 leading-relaxed">
-              {deviceLocation.error}
-            </div>
-          )}
-
-          {deviceLocation.lat && (
-            <div className="text-[10.5px] font-mono text-ink-soft bg-paper rounded px-2.5 py-1 flex items-center justify-between">
-              <span>
-                Location: {deviceLocation.lat.toFixed(4)}°N,{" "}
-                {deviceLocation.lng?.toFixed(4)}°E
-              </span>
-              <span>±{Math.round(deviceLocation.accuracy || 0)}m</span>
-            </div>
-          )}
-        </div>
 
         <div className="flex items-center justify-between">
           <div>
@@ -483,7 +330,7 @@ function TripDetail({
           </a>
         </div>
 
-        {/* Route Details */}
+        {/* Route Details with Google Maps Actions */}
         <div className="rounded-sm border border-line bg-card">
           <div className="flex gap-3 p-3.5 border-b border-line">
             <MapPin size={16} className="text-forest mt-0.5 shrink-0" />
@@ -493,8 +340,18 @@ function TripDetail({
               </div>
               <div className="text-[13px] text-ink">{trip.pickup}</div>
             </div>
-            <button className="text-forest self-center">
-              <Navigation size={16} />
+            <button
+              onClick={() =>
+                window.open(
+                  `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(trip.pickup)}`,
+                  "_blank",
+                )
+              }
+              className="text-forest hover:bg-forest-soft rounded p-1.5 cursor-pointer flex items-center gap-1 text-[11px] font-medium"
+              title="Open Pickup in Google Maps"
+            >
+              <Navigation size={14} />
+              <span>Maps</span>
             </button>
           </div>
           <div className="flex gap-3 p-3.5">
@@ -505,8 +362,18 @@ function TripDetail({
               </div>
               <div className="text-[13px] text-ink">{trip.drop}</div>
             </div>
-            <button className="text-saffron self-center">
-              <Navigation size={16} />
+            <button
+              onClick={() =>
+                window.open(
+                  `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(trip.drop)}`,
+                  "_blank",
+                )
+              }
+              className="text-saffron hover:bg-saffron-soft rounded p-1.5 cursor-pointer flex items-center gap-1 text-[11px] font-medium"
+              title="Open Destination in Google Maps"
+            >
+              <Navigation size={14} />
+              <span>Maps</span>
             </button>
           </div>
         </div>
@@ -569,7 +436,8 @@ function TripDetail({
                 Verify Devotee Handover OTP & Begin Seva
               </button>
               <p className="text-[11.5px] text-center text-ink-faint">
-                Devotee must inspect bovine comfort and provide 4-digit code before seva commences.
+                Devotee must inspect bovine comfort and provide 4-digit code
+                before seva commences.
               </p>
             </div>
           ) : (
@@ -598,7 +466,7 @@ function TripDetail({
   )
 }
 
-function TripRow({ trip, onOpen }: { trip: Trip; onOpen: () => void }) {
+function TripRow({ trip, onOpen }: { trip: Trip onOpen: () => void }) {
   const done = trip.stageIndex >= tripStages.length - 1
   const active = trip.stageIndex >= 1 && !done
   return (
@@ -634,7 +502,7 @@ function TripRow({ trip, onOpen }: { trip: Trip; onOpen: () => void }) {
 class DriverErrorBoundary extends Component<{
   children: ReactNode
   onSignOut: () => void
-}, { hasError: boolean; errorMsg: string }> {
+}, { hasError: boolean errorMsg: string }> {
   state = { hasError: false, errorMsg: "" }
 
   static getDerivedStateFromError(error: Error) {
@@ -685,17 +553,28 @@ class DriverErrorBoundary extends Component<{
 import EditProfileModal from "../components/EditProfileModal"
 
 function DriverAppContent({ onSignOut }: { onSignOut: () => void }) {
-  const { bookings, advanceTrip, verifyHandoverOtp, assignDriver, notify, profiles } = useStore()
+  const {
+    bookings,
+    advanceTrip,
+    verifyHandoverOtp,
+    assignDriver,
+    notify,
+    profiles,
+    authUser,
+    isLoading,
+  } = useStore()
   const [openId, setOpenId] = useState<string | null>(null)
   const [online, setOnline] = useState(true)
   const [editProfileOpen, setEditProfileOpen] = useState(false)
 
   const driverProfile = profiles?.driver
-  const driverName = driverProfile?.name || "Assigned Seva Driver"
-  const firstName = driverName.split(" ")[0] || "Driver"
-  const vehicleNo = driverProfile?.driverData?.vehicleNumber || "Cattle Ambulance / Van"
+  const driverName = authUser?.name || driverProfile?.name || "Assigned Pilot"
+  const firstName = driverName ? driverName.split(" ")[0] : "Pilot"
+  const vehicleNo =
+    driverProfile?.driverData?.vehicleNumber || "Cattle Ambulance / Van"
   const licenseNo =
-    driverProfile?.driverData?.licenseNumber || "Govt Certified Transport License"
+    driverProfile?.driverData?.licenseNumber ||
+    "Govt Certified Transport License"
 
   // Map trips dynamically matching driver name, driverId, or unassigned active trips
   const trips = (bookings || [])
@@ -715,7 +594,9 @@ function DriverAppContent({ onSignOut }: { onSignOut: () => void }) {
   const unacceptedTrips = (bookings || []).filter(
     (b) =>
       (!b.driver || b.driverStage === 0) &&
-      (b.status === "Confirmed" || b.status === "Admin Review" || b.status === "Payment Verified"),
+      (b.status === "Confirmed" ||
+        b.status === "Admin Review" ||
+        b.status === "Payment Verified"),
   )
 
   const open =
@@ -730,7 +611,10 @@ function DriverAppContent({ onSignOut }: { onSignOut: () => void }) {
     try {
       const res = await verifyHandoverOtp(open.bookingId, otpCode)
       if (res.success) {
-        notify(`Handover OTP verified! Stage 6: Service Started at Altar.`, "ok")
+        notify(
+          `Handover OTP verified! Stage 6: Service Started at Altar.`,
+          "ok",
+        )
         return true
       } else {
         notify(res.error || "Invalid OTP code", "err")
@@ -815,7 +699,11 @@ function DriverAppContent({ onSignOut }: { onSignOut: () => void }) {
                     Driver Assigned Portal
                   </div>
                   <h1 className="font-serif text-[24px] text-ink leading-tight mt-1">
-                    Namaste, {firstName}
+                    {isLoading ? (
+                      <Skeleton variant="text" className="h-7 w-40 inline-block" />
+                    ) : (
+                      `Namaste, ${firstName}`
+                    )}
                   </h1>
                 </div>
                 <button
@@ -883,7 +771,8 @@ function DriverAppContent({ onSignOut }: { onSignOut: () => void }) {
 
                   <div>
                     <div className="text-[17px] font-serif font-bold text-ink">
-                      {unacceptedTrips[0].animal} ({unacceptedTrips[0].animalType})
+                      {unacceptedTrips[0].animal} (
+                      {unacceptedTrips[0].animalType})
                     </div>
                     <div className="text-[12px] text-ink-faint mt-0.5 truncate">
                       From: {unacceptedTrips[0].gosala}

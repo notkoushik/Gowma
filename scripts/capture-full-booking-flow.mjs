@@ -53,7 +53,7 @@ async function runBooking() {
       await email.click({ clickCount: 3 })
       await email.type("devpulseorg@gmail.com")
       await pass.click({ clickCount: 3 })
-      await pass.type("Koushik.git")
+      await pass.type("GomaaAdmin@2026!")
       const btn = await page.$('button[type="submit"]')
       if (btn) await btn.click()
     }

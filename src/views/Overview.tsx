@@ -10,12 +10,16 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { ArrowUpRight, Minus, Crown, Building2, ShieldCheck, Users, CheckCircle2 } from "lucide-react"
 import {
-  inr,
-  type BookingStatus,
-  type KpiItem,
-} from "../data/mock"
+  ArrowUpRight,
+  Minus,
+  Crown,
+  Building2,
+  ShieldCheck,
+  Users,
+  CheckCircle2,
+} from "lucide-react"
+import { inr, type BookingStatus, type KpiItem } from "../data/mock"
 import { useStore, type Gosala } from "../store/store"
 import { Eyebrow, Panel, PanelHead, StatusPill } from "../lib/ui"
 
@@ -136,7 +140,11 @@ export default function Overview() {
         portfoliosMap.set(targetName.toLowerCase(), p)
       }
       p.gosalas.push(g)
-      if (g.isActingManager || g.managerName?.includes("Admin") || g.managerName?.includes("Acting")) {
+      if (
+        g.isActingManager ||
+        g.managerName?.includes("Admin") ||
+        g.managerName?.includes("Acting")
+      ) {
         p.actingCount += 1
       } else if (g.managerName) {
         p.managers.add(g.managerName)
@@ -145,8 +153,13 @@ export default function Overview() {
 
     // Map each booking to its Gaushala's Operations Admin
     validBookings.forEach((b: any) => {
-      const g = gosalas.find((x) => x.name.toLowerCase() === b.gosala.toLowerCase())
-      const targetName = b.governingAdminName || (g as any)?.governingAdminName || (g as any)?.adminName
+      const g = gosalas.find(
+        (x) => x.name.toLowerCase() === b.gosala.toLowerCase(),
+      )
+      const targetName =
+        b.governingAdminName ||
+        (g as any)?.governingAdminName ||
+        (g as any)?.adminName
       if (!targetName) return
 
       let p = portfoliosMap.get(targetName.toLowerCase())
@@ -165,7 +178,9 @@ export default function Overview() {
       }
       p.bookings.push(b)
       p.gross += b.total
-      p.commission += Math.round((b.base + b.extraTime) * (b.commissionPct / 100))
+      p.commission += Math.round(
+        (b.base + b.extraTime) * (b.commissionPct / 100),
+      )
     })
 
     return Array.from(portfoliosMap.values())
@@ -213,7 +228,7 @@ export default function Overview() {
 
   // Dynamically calculate 7-day revenue trend from actual bookings
   const dynamicRevenueSeries = useMemo(() => {
-    const days: { day: string; gross: number; commission: number }[] = []
+    const days: { day: string gross: number commission: number }[] = []
     const now = new Date()
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now)
@@ -236,11 +251,15 @@ export default function Overview() {
 
   // Dynamically calculate booking mix from actual bookings
   const dynamicBookingMix = useMemo(() => {
-    const pairCount = bookings.filter((b) => b.animalType === "Cow & Calf").length
+    const pairCount = bookings.filter(
+      (b) => b.animalType === "Cow & Calf",
+    ).length
     const cowCount = bookings.filter((b) => b.animalType === "Cow").length
     const bullCount = bookings.filter((b) => b.animalType === "Bull").length
     const calfCount = bookings.filter((b) => b.animalType === "Calf").length
-    const buffaloCount = bookings.filter((b) => b.animalType === "Buffalo").length
+    const buffaloCount = bookings.filter(
+      (b) => b.animalType === "Buffalo",
+    ).length
     const total = bookings.length
     if (total === 0) {
       return [
@@ -318,76 +337,111 @@ export default function Overview() {
                   No Operations Admins Provisioned Yet
                 </p>
                 <p className="text-[12px] mt-1 max-w-md mx-auto">
-                  When you register regional Operations Admins from Manager Governance, their portfolio performance, managed sanctuaries, and financial breakdowns will appear here dynamically.
+                  When you register regional Operations Admins from Manager
+                  Governance, their portfolio performance, managed sanctuaries,
+                  and financial breakdowns will appear here dynamically.
                 </p>
               </div>
             ) : (
               adminPortfolios.map((p) => {
-              const managerList = Array.from(p.managers)
-              return (
-                <div key={p.name} className="p-5 hover:bg-paper/40 transition-colors space-y-3.5">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2.5">
-                        <span className="font-medium text-[15px] text-ink">{p.name}</span>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-forest-soft text-forest font-semibold uppercase tracking-wider">
-                          Operations Admin
-                        </span>
+                const managerList = Array.from(p.managers)
+                return (
+                  <div
+                    key={p.name}
+                    className="p-5 hover:bg-paper/40 transition-colors space-y-3.5"
+                  >
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2.5">
+                          <span className="font-medium text-[15px] text-ink">
+                            {p.name}
+                          </span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-forest-soft text-forest font-semibold uppercase tracking-wider">
+                            Operations Admin
+                          </span>
+                        </div>
+                        <div className="text-[12px] text-ink-faint flex items-center gap-3 font-mono">
+                          <span>{p.email}</span>
+                          <span>·</span>
+                          <span>
+                            {p.gosalas.length} Managed Gaushala
+                            {p.gosalas.length !== 1 ? "s" : ""}
+                          </span>
+                          {managerList.length > 0 && (
+                            <>
+                              <span>·</span>
+                              <span>
+                                {managerList.length} Manager
+                                {managerList.length !== 1 ? "s" : ""}:{" "}
+                                {managerList.join(", ")}
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-[12px] text-ink-faint flex items-center gap-3 font-mono">
-                        <span>{p.email}</span>
-                        <span>·</span>
-                        <span>{p.gosalas.length} Managed Gaushala{p.gosalas.length !== 1 ? "s" : ""}</span>
-                        {managerList.length > 0 && (
-                          <>
-                            <span>·</span>
-                            <span>{managerList.length} Manager{managerList.length !== 1 ? "s" : ""}: {managerList.join(", ")}</span>
-                          </>
-                        )}
+
+                      <div className="flex flex-wrap items-center gap-4 sm:gap-6 font-mono text-right">
+                        <div>
+                          <div className="text-[10.5px] uppercase tracking-wider text-ink-faint">
+                            Bookings
+                          </div>
+                          <div className="text-[16px] font-semibold text-ink tabular">
+                            {p.bookings.length}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10.5px] uppercase tracking-wider text-ink-faint">
+                            Gross Volume
+                          </div>
+                          <div className="text-[16px] font-semibold text-forest tabular">
+                            {inr(p.gross)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10.5px] uppercase tracking-wider text-ink-faint">
+                            Platform Cut (20%)
+                          </div>
+                          <div className="text-[16px] font-semibold text-saffron tabular">
+                            {inr(p.commission)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10.5px] uppercase tracking-wider text-ink-faint">
+                            Gaushala Share (80%)
+                          </div>
+                          <div className="text-[16px] font-semibold text-ink-soft tabular">
+                            {inr(p.gross - p.commission)}
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-4 sm:gap-6 font-mono text-right">
-                      <div>
-                        <div className="text-[10.5px] uppercase tracking-wider text-ink-faint">Bookings</div>
-                        <div className="text-[16px] font-semibold text-ink tabular">{p.bookings.length}</div>
-                      </div>
-                      <div>
-                        <div className="text-[10.5px] uppercase tracking-wider text-ink-faint">Gross Volume</div>
-                        <div className="text-[16px] font-semibold text-forest tabular">{inr(p.gross)}</div>
-                      </div>
-                      <div>
-                        <div className="text-[10.5px] uppercase tracking-wider text-ink-faint">Platform Cut (20%)</div>
-                        <div className="text-[16px] font-semibold text-saffron tabular">{inr(p.commission)}</div>
-                      </div>
-                      <div>
-                        <div className="text-[10.5px] uppercase tracking-wider text-ink-faint">Gaushala Share (80%)</div>
-                        <div className="text-[16px] font-semibold text-ink-soft tabular">{inr(p.gross - p.commission)}</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Gaushalas in this portfolio */}
-                  <div className="pt-2 border-t border-line/60 flex flex-wrap items-center gap-2">
-                    <span className="text-[11.5px] font-mono text-ink-faint mr-1">Sanctuaries:</span>
-                    {p.gosalas.map((g) => (
-                      <span
-                        key={g.id || g.name}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-paper border border-line text-[12px] text-ink"
-                      >
-                        <Building2 size={12} className="text-forest" />
-                        <span className="font-medium">{g.name}</span>
-                        <span className="text-ink-faint text-[10.5px]">
-                          ({g.isActingManager || g.managerName?.includes("Admin")
-                            ? "Admin Acting as Manager"
-                            : g.managerName || "Staffed"})
-                        </span>
+                    {/* Gaushalas in this portfolio */}
+                    <div className="pt-2 border-t border-line/60 flex flex-wrap items-center gap-2">
+                      <span className="text-[11.5px] font-mono text-ink-faint mr-1">
+                        Sanctuaries:
                       </span>
-                    ))}
+                      {p.gosalas.map((g) => (
+                        <span
+                          key={g.id || g.name}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm bg-paper border border-line text-[12px] text-ink"
+                        >
+                          <Building2 size={12} className="text-forest" />
+                          <span className="font-medium">{g.name}</span>
+                          <span className="text-ink-faint text-[10.5px]">
+                            (
+                            {g.isActingManager ||
+                            g.managerName?.includes("Admin")
+                              ? "Admin Acting as Manager"
+                              : g.managerName || "Staffed"}
+                            )
+                          </span>
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )
-            })
+                )
+              })
             )}
           </div>
         </Panel>

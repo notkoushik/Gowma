@@ -36,7 +36,7 @@ export type Gosala = {
   email: string
   managerId: string
   managerName: string
-  assignedManagers?: { id: string; name: string; phone?: string; email?: string }[]
+  assignedManagers?: { id: string name: string phone?: string email?: string }[]
   caretaker: string
   caretakerPhone?: string
   caretakerShift?: string
@@ -198,32 +198,38 @@ export const GOSALA_REGION_PRESETS = [
 export const GOSALA_PHOTO_PRESETS = [
   {
     label: "Vedic Sanctum Courtyard & Mandir",
-    description: "Traditional stone courtyard with sacred banyan trees, havan kund & clean water troughs",
+    description:
+      "Traditional stone courtyard with sacred banyan trees, havan kund & clean water troughs",
     url: "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=480&fit=crop&auto=format",
   },
   {
     label: "Organic Green Grazing Pasture",
-    description: "Spacious open green pastures with organic Napier grass and shade trees",
+    description:
+      "Spacious open green pastures with organic Napier grass and shade trees",
     url: "https://images.unsplash.com/photo-1500595046743-cd271d694d30?w=800&h=480&fit=crop&auto=format",
   },
   {
     label: "Covered Resting Sheds & Feeding Pens",
-    description: "High-roof weather-protected bovine sheds with non-slip flooring and automatic fodder racks",
+    description:
+      "High-roof weather-protected bovine sheds with non-slip flooring and automatic fodder racks",
     url: "https://images.unsplash.com/photo-1527153857715-3908f2ae5e81?w=800&h=480&fit=crop&auto=format",
   },
   {
     label: "Veterinary Clinical & Care Bay",
-    description: "Dedicated medical examination stalls with clean maternity and recovery isolation units",
+    description:
+      "Dedicated medical examination stalls with clean maternity and recovery isolation units",
     url: "https://images.unsplash.com/photo-1589923188900-85dae523342b?w=800&h=480&fit=crop&auto=format",
   },
   {
     label: "Open Solar Grazing Yard",
-    description: "Sunlit open exercise yards with sand bedding, solar lamps and automated water sprinklers",
+    description:
+      "Sunlit open exercise yards with sand bedding, solar lamps and automated water sprinklers",
     url: "https://images.unsplash.com/photo-1570042225831-d98fa7577f1e?w=800&h=480&fit=crop&auto=format",
   },
   {
     label: "Rural Goseva Sanctuary",
-    description: "Lush rural perimeter with dedicated cow grooming pavilions and devotee pradakshina paths",
+    description:
+      "Lush rural perimeter with dedicated cow grooming pavilions and devotee pradakshina paths",
     url: "https://images.unsplash.com/photo-1613445564548-7dd79ec70f08?w=800&h=480&fit=crop&auto=format",
   },
 ]

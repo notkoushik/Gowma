@@ -4,9 +4,7 @@ import { generateUniqueId } from "../server/auth/authService.ts"
 const prisma = new PrismaClient()
 
 const KNOWN_UNIQUE_IDS = {
-  "nanikoushik96@gmail.com": "GMA-SA-0001",
-  "nanikoushik@gmail.com": "GMA-SA-0002",
-  "koushik@gmail.com": "GMA-SA-0003",
+  "superadmin@gomaa.in": "GMA-SA-0001",
   "alt.yq-fs88dj2@yopmail.com": "GMA-OPS-0101",
   "admin@gomaa.in": "GMA-OPS-0102",
   "operations@gomaa.in": "GMA-OPS-0103",

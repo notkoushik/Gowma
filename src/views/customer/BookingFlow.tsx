@@ -164,7 +164,8 @@ export default function BookingFlow({
   onClose: () => void
   onComplete: (summary: import("../CustomerApp").BookingSummary) => void
 }) {
-  const { pricingConfig, checkAnimalAvailability, profiles, authUser } = useStore()
+  const { pricingConfig, checkAnimalAvailability, profiles, authUser } =
+    useStore()
   const devoteeName = authUser?.name || profiles?.customer?.name || "Devotee"
   const deviceLocation = useDeviceLocation()
 
@@ -181,16 +182,22 @@ export default function BookingFlow({
         h.state.toLowerCase() === nearestHub.state.toLowerCase(),
     ).slice(0, 4)
 
-    const list: { name: string; distanceKm: number }[] = []
+    const list: { name: string distanceKm: number }[] = []
 
     // 1. If devotee has a detected or active device location, calculate real road distance to this Gaushala
     if (deviceLocation.lat && deviceLocation.lng) {
       const roadDist = Math.max(
         2.5,
-        calculateRoadDistanceKm(originLat, originLng, deviceLocation.lat, deviceLocation.lng),
+        calculateRoadDistanceKm(
+          originLat,
+          originLng,
+          deviceLocation.lat,
+          deviceLocation.lng,
+        ),
       )
       const userLabel =
-        deviceLocation.address || `${deviceLocation.city || nearestHub.city} (Current Devotee Location)`
+        deviceLocation.address ||
+        `${deviceLocation.city || nearestHub.city} (Current Devotee Location)`
       list.push({
         name: `Current Location: ${userLabel}`,
         distanceKm: roadDist,
@@ -211,8 +218,14 @@ export default function BookingFlow({
 
     if (list.length === 0) {
       list.push(
-        { name: `${gosala.name} Environs (${gosala.area || nearestHub.city})`, distanceKm: 4.2 },
-        { name: `Central Temple Courtyard, ${nearestHub.city}`, distanceKm: 8.5 },
+        {
+          name: `${gosala.name} Environs (${gosala.area || nearestHub.city})`,
+          distanceKm: 4.2,
+        },
+        {
+          name: `Central Temple Courtyard, ${nearestHub.city}`,
+          distanceKm: 8.5,
+        },
       )
     }
 
@@ -233,21 +246,34 @@ export default function BookingFlow({
   const [slot, setSlot] = useState<string | null>(null)
   const [duration, setDuration] = useState(60)
   const [qty, setQty] = useState<Record<string, number>>({})
-  const [includeCalfPair, setIncludeCalfPair] = useState(animal.type === "Cow & Calf")
+  const [includeCalfPair, setIncludeCalfPair] = useState(
+    animal.type === "Cow & Calf",
+  )
   const CALF_PAIR_ADDON_PRICE = 1300
-  const isPairService = animal.type === "Cow & Calf" || (animal.type === "Cow" && includeCalfPair)
-  const pairSurcharge = (animal.type === "Cow" && includeCalfPair) ? CALF_PAIR_ADDON_PRICE : 0
-  const effectiveAnimalType: AnimalType = isPairService ? "Cow & Calf" : (animal.type as AnimalType)
+  const isPairService =
+    animal.type === "Cow & Calf" || (animal.type === "Cow" && includeCalfPair)
+  const pairSurcharge =
+    animal.type === "Cow" && includeCalfPair ? CALF_PAIR_ADDON_PRICE : 0
+  const effectiveAnimalType: AnimalType = isPairService
+    ? "Cow & Calf"
+    : animal.type as AnimalType
   const effectiveAnimalName =
     animal.type === "Cow" && includeCalfPair
       ? `${animal.name} & Accompanying Baby Calf`
       : animal.name
   const [selectedLocIndex, setSelectedLocIndex] = useState(0)
-  const [address, setAddress] = useState(() => venueOptions[0]?.name || "Local Sanctuary Area")
-  const [distanceKm, setDistanceKm] = useState(() => venueOptions[0]?.distanceKm || 6.5)
+  const [address, setAddress] = useState(
+    () => venueOptions[0]?.name || "Local Sanctuary Area",
+  )
+  const [distanceKm, setDistanceKm] = useState(
+    () => venueOptions[0]?.distanceKm || 6.5,
+  )
 
   useEffect(() => {
-    if (venueOptions.length > 0 && (!address || address === "Local Sanctuary Area")) {
+    if (
+      venueOptions.length > 0 &&
+      (!address || address === "Local Sanctuary Area")
+    ) {
       setAddress(venueOptions[0].name)
       setDistanceKm(venueOptions[0].distanceKm)
     }
@@ -260,7 +286,8 @@ export default function BookingFlow({
   const [done, setDone] = useState(false)
   const [holdSecs, setHoldSecs] = useState(300) // 5 minutes temporary slot hold
   const [photoInspectorOpen, setPhotoInspectorOpen] = useState(false)
-  const [inspectorCategory, setInspectorCategory] = useState<"animal" | "shelter">("animal")
+  const [inspectorCategory, setInspectorCategory] =
+    useState<"animal" | "shelter">("animal")
 
   const animalPhotos = useMemo(() => {
     if (animal.photos && animal.photos.length > 0) return animal.photos
@@ -369,16 +396,17 @@ export default function BookingFlow({
   const dur =
     durationOptions.find((d) => d.min === duration) || durationOptions[0]
   const addonTotal =
-    dynamicAddons.reduce((a, x) => a + (qty[x.id] || 0) * x.price, 0) + pairSurcharge
+    dynamicAddons.reduce((a, x) => a + (qty[x.id] || 0) * x.price, 0) +
+    pairSurcharge
 
   const effectiveTaxPct =
     gosala.taxTreatment === "section_80g_exempt"
       ? 0
       : gosala.taxTreatment === "reduced_charity_gst"
-      ? 5
-      : gosala.customTaxPct !== undefined
-      ? gosala.customTaxPct
-      : pricingConfig.taxPct
+        ? 5
+        : gosala.customTaxPct !== undefined
+          ? gosala.customTaxPct
+          : pricingConfig.taxPct
 
   // Real-time backend pricing engine call
   useEffect(() => {
@@ -392,7 +420,8 @@ export default function BookingFlow({
         distanceKm,
         addonsCost: addonTotal,
         taxPct: effectiveTaxPct,
-        commissionPct: gosala.customCommissionPct ?? pricingConfig.commissionPct,
+        commissionPct:
+          gosala.customCommissionPct ?? pricingConfig.commissionPct,
         commissionFlat: gosala.customCommissionFlat,
         gosalaId: gosala.id,
         gosala: gosala.name,
@@ -535,7 +564,9 @@ export default function BookingFlow({
       .catch((err) => {
         if (active) {
           console.warn("Slot hold error:", err)
-          setHoldError("We could not secure this slot. Please select another available slot and try again.")
+          setHoldError(
+            "We could not secure this slot. Please select another available slot and try again.",
+          )
         }
       })
       .finally(() => {
@@ -601,15 +632,21 @@ export default function BookingFlow({
       return
     }
     if (isHoldingSlot) {
-      setPaymentError("Please wait while this slot hold is secured before continuing.")
+      setPaymentError(
+        "Please wait while this slot hold is secured before continuing.",
+      )
       return
     }
     if (!holdId || holdSecs <= 0) {
-      setPaymentError("Your slot hold is missing or expired. Please return to the time step and choose a slot again.")
+      setPaymentError(
+        "Your slot hold is missing or expired. Please return to the time step and choose a slot again.",
+      )
       return
     }
     if (!backendPricing?.quoteToken) {
-      setPaymentError("A current pricing quote is unavailable. Please wait for pricing to load and try again.")
+      setPaymentError(
+        "A current pricing quote is unavailable. Please wait for pricing to load and try again.",
+      )
       return
     }
 
@@ -643,7 +680,12 @@ export default function BookingFlow({
           </p>
           <div className="mt-6 rounded-sm border border-line bg-card p-4 text-left space-y-2 text-[13px]">
             {[
-              ["Service Category", effectiveAnimalType === "Cow & Calf" ? "Gau-Vatsa Jodi Seva (Mother & Calf Pair)" : effectiveAnimalType],
+              [
+                "Service Category",
+                effectiveAnimalType === "Cow & Calf"
+                  ? "Gau-Vatsa Jodi Seva (Mother & Calf Pair)"
+                  : effectiveAnimalType,
+              ],
               ["Bovine", effectiveAnimalName],
               ["Gosala", gosala.name],
               ["Date", selectedDateStr],
@@ -688,12 +730,12 @@ export default function BookingFlow({
                 extraUnitRateSnapshot:
                   backendPricing?.extraUnitRateSnapshot ??
                   pricingConfig.extraUnitRate,
-                 commissionSnapshot: backendPricing?.commission,
-                 quoteToken: backendPricing?.quoteToken,
-                 commissionPct:
+                commissionSnapshot: backendPricing?.commission,
+                quoteToken: backendPricing?.quoteToken,
+                commissionPct:
                   backendPricing?.commissionPct ??
                   (gosala.customCommissionPct !== undefined
-                      ? gosala.customCommissionPct
+                    ? gosala.customCommissionPct
                     : pricingConfig.commissionPct),
               })
             }
@@ -806,7 +848,10 @@ export default function BookingFlow({
 
           {step === 0 && (
             <div className="rounded-sm border border-line bg-card p-4">
-              <Calendar selectedDate={selectedDate} onSelect={setSelectedDate} />
+              <Calendar
+                selectedDate={selectedDate}
+                onSelect={setSelectedDate}
+              />
               <p className="text-[11.5px] text-ink-faint mt-3 pt-3 border-t border-line">
                 Availability is checked live for {animal.name} on the selected
                 date ({selectedDateStr}).
@@ -952,7 +997,9 @@ export default function BookingFlow({
                         </span>
                       </div>
                       <p className="text-[11.5px] text-ink-soft mt-1 leading-relaxed">
-                        Bring the accompanying baby calf along with {animal.name} for sacred Mother-Calf puja & blessings at your doorstep. Both bovines arrive together.
+                        Bring the accompanying baby calf along with{" "}
+                        {animal.name} for sacred Mother-Calf puja & blessings at
+                        your doorstep. Both bovines arrive together.
                       </p>
                       <div className="font-mono text-[12.5px] text-amber-900 font-bold mt-1.5 flex items-center gap-1.5">
                         <span>+{inr(CALF_PAIR_ADDON_PRICE)}</span>
@@ -970,7 +1017,9 @@ export default function BookingFlow({
                           : "bg-paper text-ink border border-line hover:border-line-strong hover:bg-paper-deep"
                       }`}
                     >
-                      {includeCalfPair ? "✓ Pair Selected" : "+ Add Calf (Jodi)"}
+                      {includeCalfPair
+                        ? "✓ Pair Selected"
+                        : "+ Add Calf (Jodi)"}
                     </button>
                   </div>
                 </div>
@@ -985,7 +1034,9 @@ export default function BookingFlow({
                     </span>
                   </div>
                   <p className="text-[11.5px] text-ink-soft mt-1 leading-relaxed">
-                    This booking includes both the Mother Cow and her nursing Calf together for a single-time holistic Vedic blessing ceremony.
+                    This booking includes both the Mother Cow and her nursing
+                    Calf together for a single-time holistic Vedic blessing
+                    ceremony.
                   </p>
                 </div>
               )}
@@ -999,59 +1050,65 @@ export default function BookingFlow({
                     </span>
                   </div>
                   <p className="text-[11.5px] text-ink-soft mt-0.5 leading-relaxed">
-                    Doorstep darshan and Gau Gras feeding for revered indigenous buffalo breed with trained attendant.
+                    Doorstep darshan and Gau Gras feeding for revered indigenous
+                    buffalo breed with trained attendant.
                   </p>
                 </div>
               )}
 
               <div className="space-y-2.5">
                 {dynamicAddons.map((a) => {
-                const q = qty[a.id] || 0
-                return (
-                  <div
-                    key={a.id}
-                    className="flex items-center gap-3 rounded-sm border border-line bg-card p-3.5"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[13.5px] text-ink font-medium">
-                        {a.name}
+                  const q = qty[a.id] || 0
+                  return (
+                    <div
+                      key={a.id}
+                      className="flex items-center gap-3 rounded-sm border border-line bg-card p-3.5"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13.5px] text-ink font-medium">
+                          {a.name}
+                        </div>
+                        <div className="text-[11px] text-ink-faint">
+                          {a.desc}
+                        </div>
+                        <div className="font-mono text-[12px] text-ink mt-0.5 tabular">
+                          {inr(a.price)}
+                        </div>
                       </div>
-                      <div className="text-[11px] text-ink-faint">{a.desc}</div>
-                      <div className="font-mono text-[12px] text-ink mt-0.5 tabular">
-                        {inr(a.price)}
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          onClick={() =>
+                            setQty((p) => ({
+                              ...p,
+                              [a.id]: Math.max(0, q - 1),
+                            }))
+                          }
+                          disabled={q === 0}
+                          className="h-7 w-7 grid place-items-center rounded-sm border border-line text-ink-soft disabled:opacity-40 hover:bg-paper-deep"
+                          aria-label="Decrease"
+                        >
+                          <Minus size={13} />
+                        </button>
+                        <span className="font-mono text-[13px] w-4 text-center tabular">
+                          {q}
+                        </span>
+                        <button
+                          onClick={() =>
+                            setQty((p) => ({
+                              ...p,
+                              [a.id]: Math.min(a.maxQty, q + 1),
+                            }))
+                          }
+                          disabled={q >= a.maxQty}
+                          className="h-7 w-7 grid place-items-center rounded-sm border border-line text-ink-soft disabled:opacity-40 hover:bg-paper-deep"
+                          aria-label="Increase"
+                        >
+                          <Plus size={13} />
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2.5">
-                      <button
-                        onClick={() =>
-                          setQty((p) => ({ ...p, [a.id]: Math.max(0, q - 1) }))
-                        }
-                        disabled={q === 0}
-                        className="h-7 w-7 grid place-items-center rounded-sm border border-line text-ink-soft disabled:opacity-40 hover:bg-paper-deep"
-                        aria-label="Decrease"
-                      >
-                        <Minus size={13} />
-                      </button>
-                      <span className="font-mono text-[13px] w-4 text-center tabular">
-                        {q}
-                      </span>
-                      <button
-                        onClick={() =>
-                          setQty((p) => ({
-                            ...p,
-                            [a.id]: Math.min(a.maxQty, q + 1),
-                          }))
-                        }
-                        disabled={q >= a.maxQty}
-                        className="h-7 w-7 grid place-items-center rounded-sm border border-line text-ink-soft disabled:opacity-40 hover:bg-paper-deep"
-                        aria-label="Increase"
-                      >
-                        <Plus size={13} />
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
               </div>
             </div>
           )}
@@ -1060,7 +1117,8 @@ export default function BookingFlow({
             <div className="space-y-4">
               <div>
                 <label className="font-mono text-[10.5px] uppercase tracking-wider text-ink-faint block mb-2">
-                  Select service area / landmark ({venueOptions.length} available)
+                  Select service area / landmark ({venueOptions.length}{" "}
+                  available)
                 </label>
                 <div className="grid grid-cols-1 gap-2">
                   {venueOptions.map((loc, idx) => (
@@ -1174,7 +1232,9 @@ export default function BookingFlow({
                 <div className="rounded-sm border border-danger/40 bg-danger-soft/60 p-3.5 flex items-start gap-2.5 text-[12.5px] text-danger">
                   <AlertCircle size={17} className="shrink-0 mt-0.5" />
                   <div>
-                    <div className="font-semibold text-[13px]">Payment unavailable</div>
+                    <div className="font-semibold text-[13px]">
+                      Payment unavailable
+                    </div>
                     <div className="mt-0.5 text-danger/90">{paymentError}</div>
                   </div>
                 </div>
@@ -1213,8 +1273,12 @@ export default function BookingFlow({
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent pointer-events-none" />
                     <div className="absolute bottom-1.5 inset-x-2 text-white">
-                      <div className="text-[11px] font-medium truncate">🐄 {animal.name}</div>
-                      <div className="text-[9.5px] opacity-85 font-mono">{animalPhotos.length} angles</div>
+                      <div className="text-[11px] font-medium truncate">
+                        🐄 {animal.name}
+                      </div>
+                      <div className="text-[9.5px] opacity-85 font-mono">
+                        {animalPhotos.length} angles
+                      </div>
                     </div>
                   </div>
 
@@ -1232,8 +1296,12 @@ export default function BookingFlow({
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent pointer-events-none" />
                     <div className="absolute bottom-1.5 inset-x-2 text-white">
-                      <div className="text-[11px] font-medium truncate">🏛️ {gosala.name}</div>
-                      <div className="text-[9.5px] opacity-85 font-mono">{shelterPhotos.length} facility photos</div>
+                      <div className="text-[11px] font-medium truncate">
+                        🏛️ {gosala.name}
+                      </div>
+                      <div className="text-[9.5px] opacity-85 font-mono">
+                        {shelterPhotos.length} facility photos
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1244,8 +1312,16 @@ export default function BookingFlow({
                   Booking overview
                 </div>
                 {[
-                  ["Service Category", isPairService ? "Gau-Vatsa Jodi Seva (Mother & Calf Pair)" : effectiveAnimalType],
-                  ["Bovine", `${effectiveAnimalName} (${animal.breed || "Indigenous Gir"})`],
+                  [
+                    "Service Category",
+                    isPairService
+                      ? "Gau-Vatsa Jodi Seva (Mother & Calf Pair)"
+                      : effectiveAnimalType,
+                  ],
+                  [
+                    "Bovine",
+                    `${effectiveAnimalName} (${animal.breed || "Indigenous Gir"})`,
+                  ],
                   ["Gosala", gosala.name],
                   ["Date", selectedDateStr],
                   ["Time", `${slot} – ${endTime}`],
@@ -1254,7 +1330,9 @@ export default function BookingFlow({
                 ].map(([l, v]) => (
                   <div key={l} className="flex justify-between gap-4">
                     <span className="text-ink-faint shrink-0">{l}</span>
-                    <span className="text-ink text-right truncate font-medium">{v}</span>
+                    <span className="text-ink text-right truncate font-medium">
+                      {v}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -1311,7 +1389,9 @@ export default function BookingFlow({
                   {pairSurcharge > 0 && (
                     <div className="flex justify-between text-amber-900 font-medium text-[12.5px]">
                       <span>Accompanying Baby Calf Seva (Gau-Vatsa Jodi)</span>
-                      <span className="font-mono tabular">+{inr(pairSurcharge)}</span>
+                      <span className="font-mono tabular">
+                        +{inr(pairSurcharge)}
+                      </span>
                     </div>
                   )}
                   {extraTime > 0 && (
@@ -1325,7 +1405,10 @@ export default function BookingFlow({
                     v={transport}
                   />
                   {addonTotal - pairSurcharge > 0 && (
-                    <Line l="Sacred Offerings & Add-ons" v={addonTotal - pairSurcharge} />
+                    <Line
+                      l="Sacred Offerings & Add-ons"
+                      v={addonTotal - pairSurcharge}
+                    />
                   )}
                   <Line
                     l={
@@ -1447,7 +1530,7 @@ export default function BookingFlow({
   )
 }
 
-function Line({ l, v }: { l: string; v: number }) {
+function Line({ l, v }: { l: string v: number }) {
   return (
     <div className="flex justify-between">
       <span className="text-ink-soft">{l}</span>

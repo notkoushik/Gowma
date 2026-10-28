@@ -70,7 +70,7 @@ export function projectPointOntoSegment(
   p: LatLng,
   a: LatLng,
   b: LatLng,
-): { projectedPoint: LatLng; t: number; distanceMeters: number } {
+): { projectedPoint: LatLng t: number distanceMeters: number } {
   // Equirectangular approximation for local meter coordinates around average latitude
   const latAvg = (((a[0] + b[0]) / 2) * Math.PI) / 180
   const cosLat = Math.cos(latAvg)

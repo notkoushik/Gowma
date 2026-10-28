@@ -1,16 +1,4 @@
-export type BookingStatus =
-  | "Payment Verified"
-  | "Manager Review"
-  | "Manager Confirmed"
-  | "Admin Review"
-  | "Confirmed"
-  | "In Service"
-  | "Completed"
-  | "Rejected"
-  | "Cancelled"
-  | "Driver Assigned"
-  | "En Route"
-  | "At Altar"
+export type BookingStatus = "Payment Verified" | "Manager Review" | "Manager Confirmed" | "Admin Review" | "Confirmed" | "In Service" | "Completed" | "Rejected" | "Cancelled" | "Driver Assigned" | "En Route" | "At Altar"
 
 export type ApprovalRecord = {
   userId: string
@@ -154,7 +142,11 @@ export const kpis: KpiItem[] = [
   },
 ]
 
-export const revenueSeries: Array<{ day: string; gross: number; commission: number }> = [
+export const revenueSeries: Array<{
+  day: string
+  gross: number
+  commission: number
+}> = [
   { day: "Mon", gross: 0, commission: 0 },
   { day: "Tue", gross: 0, commission: 0 },
   { day: "Wed", gross: 0, commission: 0 },
@@ -164,15 +156,19 @@ export const revenueSeries: Array<{ day: string; gross: number; commission: numb
   { day: "Sun", gross: 0, commission: 0 },
 ]
 
-export const bookingMix: Array<{ name: string; value: number; color: string }> = [
+export const bookingMix: Array<{ name: string value: number color: string }> = [
   { name: "Cow", value: 0, color: "var(--color-saffron)" },
   { name: "Bull", value: 0, color: "var(--color-forest)" },
   { name: "Calf", value: 0, color: "var(--color-info)" },
 ]
 
-export const pipeline: Array<{ stage: string; count: number }> = []
+export const pipeline: Array<{ stage: string count: number }> = []
 
-export const availabilityAnimals: Array<{ name: string; gosala: string; type: string }> = []
+export const availabilityAnimals: Array<{
+  name: string
+  gosala: string
+  type: string
+}> = []
 
 export const slots = [
   "08:00",

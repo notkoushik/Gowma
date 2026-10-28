@@ -558,6 +558,7 @@ export default function Queue({
     assignPorterTransport,
     animals,
     profiles,
+    authUser,
     currentRole,
   } = useStore()
   const { notify } = useToast()
@@ -630,7 +631,8 @@ export default function Queue({
   const [porterVehicle, setPorterVehicle] = useState<string>(
     "Tata 407 (8ft Open Ramp)",
   )
-  const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({})
+  const [expandedCardIds, setExpandedCardIds] =
+    useState<Record<string, boolean>>({})
 
   const toggleCard = (bookingId: string) => {
     setExpandedCardIds((prev) => ({
@@ -807,7 +809,7 @@ export default function Queue({
       b.id,
       true,
       remark || "Operational feasibility & animal health verified",
-      profiles?.manager?.name || "Gaushala Custodian",
+      authUser?.name || profiles?.manager?.name || "Gaushala Custodian",
     )
   }
 
@@ -833,7 +835,7 @@ export default function Queue({
       rejectingBooking.id,
       false,
       finalRemark,
-      profiles?.manager?.name || "Gaushala Custodian",
+      authUser?.name || profiles?.manager?.name || "Gaushala Custodian",
       selectedReasonCode,
     )
 
@@ -1044,7 +1046,11 @@ export default function Queue({
               type="button"
               onClick={isAnyExpanded ? handleCollapseAll : handleExpandAll}
               className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11.5px] font-medium text-ink-soft bg-paper-deep hover:bg-card border border-line rounded transition cursor-pointer"
-              title={isAnyExpanded ? "Collapse all open booking cards" : "Expand all booking cards"}
+              title={
+                isAnyExpanded
+                  ? "Collapse all open booking cards"
+                  : "Expand all booking cards"
+              }
             >
               {isAnyExpanded ? (
                 <>
@@ -1111,7 +1117,9 @@ export default function Queue({
                 <ReviewCard
                   key={b.id}
                   b={b}
-                  isOpen={Boolean(expandedCardIds[b.id] || b.id === forceOpenBookingId)}
+                  isOpen={Boolean(
+                    expandedCardIds[b.id] || b.id === forceOpenBookingId,
+                  )}
                   onToggle={() => toggleCard(b.id)}
                   onConfirm={handleConfirm}
                   onOpenRejectModal={handleOpenReject}
@@ -1153,7 +1161,9 @@ export default function Queue({
                 <ReviewCard
                   key={b.id}
                   b={b}
-                  isOpen={Boolean(expandedCardIds[b.id] || b.id === forceOpenBookingId)}
+                  isOpen={Boolean(
+                    expandedCardIds[b.id] || b.id === forceOpenBookingId,
+                  )}
                   onToggle={() => toggleCard(b.id)}
                   onConfirm={handleConfirm}
                   onOpenRejectModal={handleOpenReject}
@@ -1181,7 +1191,9 @@ export default function Queue({
                   <ReviewCard
                     key={b.id}
                     b={b}
-                    isOpen={Boolean(expandedCardIds[b.id] || b.id === forceOpenBookingId)}
+                    isOpen={Boolean(
+                      expandedCardIds[b.id] || b.id === forceOpenBookingId,
+                    )}
                     onToggle={() => toggleCard(b.id)}
                     onConfirm={handleConfirm}
                     onOpenRejectModal={handleOpenReject}
@@ -1637,7 +1649,8 @@ export default function Queue({
                     const isCalf =
                       b.animalType === "Calf" || bAnimal.includes("kesari")
                     const isPair = b.animalType === "Cow & Calf"
-                    const maxDist = animalObj?.maxRadiusKm || (isCalf ? 8 : isPair ? 15 : 20)
+                    const maxDist =
+                      animalObj?.maxRadiusKm || (isCalf ? 8 : isPair ? 15 : 20)
                     const distSafe = (b.distanceKm || 0) <= maxDist
                     const isMidday =
                       (b.start || "") >= "12:00" && (b.start || "") <= "15:30"

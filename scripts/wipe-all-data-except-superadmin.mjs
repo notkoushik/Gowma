@@ -76,9 +76,7 @@ async function wipeAllExceptSuperAdmin() {
   // 5. Clear non-superadmin users
   console.log("[4/6] Purging all users except Super Admins...")
   const allowedEmails = [
-    "nanikoushik96@gmail.com",
-    "nanikoushik@gmail.com",
-    "koushik@gmail.com",
+    "superadmin@gomaa.in",
   ]
 
   try {
@@ -100,30 +98,12 @@ async function wipeAllExceptSuperAdmin() {
   console.log("[5/6] Verifying Super Admin accounts...")
   const superAdmins = [
     {
-      id: "USER-SA-NANIKOUSHIK-96",
-      name: "Koushik",
-      email: "nanikoushik96@gmail.com",
+      id: "USER-SA-SUPERADMIN",
+      name: "Super Admin",
+      email: "superadmin@gomaa.in",
       phone: "+91 98000 00000",
       role: "SUPER_ADMIN",
-      password: hashPassword("Koushik.git"),
-      isActive: true,
-    },
-    {
-      id: "USER-SA-NANIKOUSHIK",
-      name: "Koushik",
-      email: "nanikoushik@gmail.com",
-      phone: "+91 98000 00000",
-      role: "SUPER_ADMIN",
-      password: hashPassword("Koushik.git"),
-      isActive: true,
-    },
-    {
-      id: "USER-SA-KOUSHIK",
-      name: "Koushik",
-      email: "koushik@gmail.com",
-      phone: "+91 98000 00000",
-      role: "SUPER_ADMIN",
-      password: hashPassword("Koushik.git"),
+      password: hashPassword("SuperAdmin@2026!"),
       isActive: true,
     },
   ]

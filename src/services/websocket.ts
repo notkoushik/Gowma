@@ -76,7 +76,10 @@ export class WebSocketClient {
     try {
       this.ws = new WebSocket(wsUrl)
     } catch (e) {
-      if (typeof window !== "undefined" && window.location.hostname === "localhost") {
+      if (
+        typeof window !== "undefined" &&
+        window.location.hostname === "localhost"
+      ) {
         console.warn("[WS] Failed to instantiate WebSocket:", e)
       }
       this.scheduleReconnect()
@@ -116,7 +119,11 @@ export class WebSocketClient {
     }
 
     this.ws.onerror = (err) => {
-      if (this.reconnectAttempts <= 1 && typeof window !== "undefined" && window.location.hostname === "localhost") {
+      if (
+        this.reconnectAttempts <= 1 &&
+        typeof window !== "undefined" &&
+        window.location.hostname === "localhost"
+      ) {
         console.warn("[WS] Socket error:", err)
       }
       this.ws?.close()
@@ -217,7 +224,8 @@ export class WebSocketClient {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) return
 
     const isServerlessHost =
-      typeof window !== "undefined" && window.location.hostname.includes("vercel.app")
+      typeof window !== "undefined" &&
+      window.location.hostname.includes("vercel.app")
     if (isServerlessHost && this.reconnectAttempts >= 2) {
       return
     }

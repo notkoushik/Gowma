@@ -93,7 +93,7 @@ export default function Schedule() {
 
   // Hover Popover State for Date Strip
   const [hoveredDate, setHoveredDate] = useState<string | null>(null)
-  const [hoverPos, setHoverPos] = useState<{ top: number; left: number }>({
+  const [hoverPos, setHoverPos] = useState<{ top: number left: number }>({
     top: 0,
     left: 0,
   })

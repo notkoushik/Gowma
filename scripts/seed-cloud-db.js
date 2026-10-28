@@ -13,33 +13,13 @@ async function seed() {
   try {
     const superAdmins = [
       {
-        id: "USER-SA-NANIKOUSHIK-96",
+        id: "USER-SA-SUPERADMIN",
         uniqueId: "GMA-SA-0001",
-        name: "Koushik",
-        email: "nanikoushik96@gmail.com",
+        name: "Super Admin",
+        email: "superadmin@gomaa.in",
         phone: "+91 98000 00000",
         role: "SUPER_ADMIN",
-        password: hashPassword("Koushik.git"),
-        isActive: true,
-      },
-      {
-        id: "USER-SA-NANIKOUSHIK",
-        uniqueId: "GMA-SA-0002",
-        name: "Koushik",
-        email: "nanikoushik@gmail.com",
-        phone: "+91 98000 00000",
-        role: "SUPER_ADMIN",
-        password: hashPassword("Koushik.git"),
-        isActive: true,
-      },
-      {
-        id: "USER-SA-KOUSHIK",
-        uniqueId: "GMA-SA-0003",
-        name: "Koushik",
-        email: "koushik@gmail.com",
-        phone: "+91 98000 00000",
-        role: "SUPER_ADMIN",
-        password: hashPassword("Koushik.git"),
+        password: hashPassword("SuperAdmin@2026!"),
         isActive: true,
       },
     ]
@@ -94,7 +74,7 @@ async function seed() {
               phone: d.phone,
               role: "CUSTOMER",
               isActive: true,
-              password: hashPassword("Koushik.git"),
+              password: hashPassword("GomaaAdmin@2026!"),
             },
           })
           console.log(`[Seed] Devotee ${d.email} re-verified with unique ID ${d.uniqueId}`)
@@ -107,7 +87,7 @@ async function seed() {
               phone: d.phone,
               role: "CUSTOMER",
               isActive: true,
-              password: hashPassword("Koushik.git"),
+              password: hashPassword("GomaaAdmin@2026!"),
             },
           })
           console.log(`[Seed] Devotee ${d.email} created with unique ID ${d.uniqueId}`)
@@ -124,21 +104,21 @@ async function seed() {
         uniqueId: "GMA-OPS-0101",
         name: "Admin_1",
         phone: "+91 98222 33344",
-        password: hashPassword("Koushik.git"),
+        password: hashPassword("GomaaAdmin@2026!"),
       },
       {
         email: "admin@gomaa.in",
         uniqueId: "GMA-OPS-0102",
         name: "Operations Admin",
         phone: "+91 98222 33345",
-        password: hashPassword("Koushik.git"),
+        password: hashPassword("GomaaAdmin@2026!"),
       },
       {
         email: "operations@gomaa.in",
         uniqueId: "GMA-OPS-0103",
         name: "Operations Admin",
         phone: "+91 98222 33346",
-        password: hashPassword("Koushik.git"),
+        password: hashPassword("GomaaAdmin@2026!"),
       },
       {
         email: "gomaa052026@gmail.com",
@@ -259,7 +239,7 @@ async function seed() {
         email: "manager1@gomaa.in",
         phone: "+91 98111 22233",
         role: "GOSALA_MANAGER",
-        password: hashPassword("Koushik.git"),
+        password: hashPassword("GomaaAdmin@2026!"),
         isActive: true,
         targetGosalaName: "Gaushala_01",
       },
@@ -270,7 +250,7 @@ async function seed() {
         email: "manager2@gomaa.in",
         phone: "+91 98444 55566",
         role: "GOSALA_MANAGER",
-        password: hashPassword("Koushik.git"),
+        password: hashPassword("GomaaAdmin@2026!"),
         isActive: true,
         targetGosalaName: "Gaushala_03",
       },

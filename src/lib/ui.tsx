@@ -37,7 +37,7 @@ export function PanelHead({
   )
 }
 
-const statusTone: Record<BookingStatus, { fg: string; bg: string; dot: string }> =
+const statusTone: Record<BookingStatus, { fg: string bg: string dot: string }> =
   {
     "Payment Verified": { fg: "text-info", bg: "bg-info-soft", dot: "bg-info" },
     "Manager Review": { fg: "text-warn", bg: "bg-warn-soft", dot: "bg-warn" },
@@ -61,7 +61,11 @@ const statusTone: Record<BookingStatus, { fg: string; bg: string; dot: string }>
     Rejected: { fg: "text-danger", bg: "bg-danger-soft", dot: "bg-danger" },
     Cancelled: { fg: "text-danger", bg: "bg-danger-soft", dot: "bg-danger" },
     "Driver Assigned": { fg: "text-info", bg: "bg-info-soft", dot: "bg-info" },
-    "En Route": { fg: "text-saffron-deep", bg: "bg-saffron-soft", dot: "bg-saffron" },
+    "En Route": {
+      fg: "text-saffron-deep",
+      bg: "bg-saffron-soft",
+      dot: "bg-saffron",
+    },
     "At Altar": { fg: "text-forest", bg: "bg-forest-soft", dot: "bg-forest" },
   }
 

@@ -1,7 +1,4 @@
-import fs from "fs"
-import path from "path"
-
-const META_FILE_PATH = path.resolve(process.cwd(), "server/data/users_meta.json")
+import { prisma } from "./prisma.ts"
 
 export interface UserRichMeta {
   password?: string
@@ -44,72 +41,42 @@ export interface UserRichMeta {
   }
 }
 
-// In-memory cache backed by server/data/users_meta.json
+// In-memory cache backed by PostgreSQL `users.metadata`
 let metaStore: Record<string, UserRichMeta> = {}
+let isInitialized = false
 
-function loadMetaStore() {
+async function initMetaStore() {
+  if (isInitialized) return
   try {
-    if (fs.existsSync(META_FILE_PATH)) {
-      const raw = fs.readFileSync(META_FILE_PATH, "utf-8")
-      metaStore = JSON.parse(raw)
+    const users = await prisma.user.findMany({
+      select: { id: true, email: true, metadata: true }
+    })
+    for (const u of users) {
+      if (u.metadata && typeof u.metadata === "object") {
+        if (u.id) metaStore[u.id.toLowerCase()] = u.metadata as UserRichMeta
+        if (u.email) metaStore[u.email.toLowerCase()] = u.metadata as UserRichMeta
+      }
     }
+    isInitialized = true
   } catch (err) {
-    console.warn("Could not load users_meta.json:", err)
-    metaStore = {}
+    console.warn("[userMeta] Could not preload users metadata from DB:", (err as any)?.message)
   }
 }
 
-function persistMetaStore() {
-  try {
-    const dir = path.dirname(META_FILE_PATH)
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true })
-    }
-    fs.writeFileSync(META_FILE_PATH, JSON.stringify(metaStore, null, 2), "utf-8")
-  } catch (err) {
-    console.error("Failed to save users_meta.json:", err)
-  }
-}
-
-// Initialize on module load
-loadMetaStore()
-
-// Seed defaults if empty
-if (Object.keys(metaStore).length === 0) {
-  metaStore["ananya.deshmukh@gmail.com"] = {
-    customerData: {
-      address: "14 Tulsi Nagar, Kondapur, Hyderabad",
-      city: "Hyderabad",
-      aadhaarNumber: "XXXX-XXXX-4819",
-      memberSince: "Aug 2024",
-      totalBookings: 4,
-      preferredCeremony: "Griha Pravesh & Kamadhenu Puja",
-    },
-  }
-  metaStore["sunil.pawar@gomaa.in"] = {
-    driverData: {
-      driverId: "DRV-102",
-      vehicleNumber: "MH-12-Q-4491",
-      vehicleType: "Tata 407 (8ft Open Bed)",
-      licenseNumber: "DL-142011009823",
-      gosalaBase: "Surya",
-      status: "Available",
-      rating: 4.92,
-      totalTrips: 1280,
-    },
-  }
-  persistMetaStore()
-}
+// Trigger initial load asynchronously
+initMetaStore().catch(() => {})
 
 export function getUserMeta(identifier: string): UserRichMeta {
+  if (!identifier) return {}
   const key = identifier.trim().toLowerCase()
   return metaStore[key] || {}
 }
 
 export function saveUserMeta(identifier: string, patch: Partial<UserRichMeta>) {
+  if (!identifier) return
   const key = identifier.trim().toLowerCase()
   const existing = metaStore[key] || {}
-  metaStore[key] = {
+  const updated: UserRichMeta = {
     ...existing,
     ...patch,
     customerData: patch.customerData
@@ -125,13 +92,53 @@ export function saveUserMeta(identifier: string, patch: Partial<UserRichMeta>) {
       ? { ...(existing.adminData || {}), ...patch.adminData }
       : existing.adminData,
   }
-  persistMetaStore()
+
+  metaStore[key] = updated
+
+  // Asynchronously persist to PostgreSQL
+  prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: { equals: identifier, mode: "insensitive" } },
+        { id: identifier }
+      ]
+    }
+  }).then(async (user) => {
+    if (user) {
+      metaStore[user.id.toLowerCase()] = updated
+      if (user.email) metaStore[user.email.toLowerCase()] = updated
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { metadata: updated as any }
+      })
+    }
+  }).catch((err) => {
+    console.error(`[userMeta] Failed to persist metadata to DB for ${identifier}:`, err.message)
+  })
 }
 
 export function deleteUserMeta(identifier: string) {
+  if (!identifier) return
   const key = identifier.trim().toLowerCase()
   delete metaStore[key]
-  persistMetaStore()
+
+  prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: { equals: identifier, mode: "insensitive" } },
+        { id: identifier }
+      ]
+    }
+  }).then(async (user) => {
+    if (user) {
+      delete metaStore[user.id.toLowerCase()]
+      if (user.email) delete metaStore[user.email.toLowerCase()]
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { metadata: {} }
+      })
+    }
+  }).catch(() => {})
 }
 
 export const setUserMeta = saveUserMeta

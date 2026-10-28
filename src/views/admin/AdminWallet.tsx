@@ -41,7 +41,8 @@ export default function AdminWallet({
   const { notify } = useToast()
 
   const [refreshKey, setRefreshKey] = useState(0)
-  const [selectedManagerId, setSelectedManagerId] = useState<string>("manager1@gomaa.in")
+  const [selectedManagerId, setSelectedManagerId] =
+    useState<string>("manager1@gomaa.in")
   const [editSharePct, setEditSharePct] = useState<number>(25)
   const [editBonusPerPuja, setEditBonusPerPuja] = useState<number>(100)
   const [savingPolicy, setSavingPolicy] = useState(false)
@@ -67,17 +68,19 @@ export default function AdminWallet({
         x.managerId.toLowerCase() === selectedManagerId.toLowerCase(),
     )
     if (p) return p
-    return policies[0] || {
-      managerId: "GMA-MGR-0101",
-      managerEmail: "manager1@gomaa.in",
-      managerName: "Shyam Sundar Sharma",
-      gosalaName: "Nandini Goseva Sadan",
-      managerSharePct: 25,
-      gosalaCorpusPct: 75,
-      bonusPerPuja: 100,
-      lastUpdated: new Date().toISOString(),
-      updatedBy: "Operations Admin",
-    }
+    return (
+      policies[0] || {
+        managerId: managers[0]?.id || "GMA-MGR-0001",
+        managerEmail: managers[0]?.email || "manager@gomaa.in",
+        managerName: managers[0]?.name || "Gaushala Manager",
+        gosalaName: gosalas[0]?.name || "Governed Gaushala",
+        managerSharePct: 25,
+        gosalaCorpusPct: 75,
+        bonusPerPuja: 100,
+        lastUpdated: new Date().toISOString(),
+        updatedBy: "Operations Admin",
+      }
+    )
   }, [policies, selectedManagerId])
 
   // Update slider/input when selected manager changes
@@ -95,14 +98,17 @@ export default function AdminWallet({
       const mgr = managers.find(
         (m) =>
           m.gosala?.toLowerCase() === g.name.toLowerCase() ||
-          (m.gosalas && m.gosalas.some((gn) => gn.toLowerCase() === g.name.toLowerCase())) ||
+          (m.gosalas &&
+            m.gosalas.some(
+              (gn) => gn.toLowerCase() === g.name.toLowerCase(),
+            )) ||
           m.id === g.managerId ||
           m.name.toLowerCase() === (g.managerName || "").toLowerCase(),
       )
 
-      const managerEmail = mgr?.email || (g.name.includes("Kamdhenu") ? "manager2@gomaa.in" : "manager1@gomaa.in")
-      const managerName = mgr?.name || g.managerName || (g.name.includes("Kamdhenu") ? "Radhe Shyam Tiwari" : "Shyam Sundar Sharma")
-      const managerUniqueId = (mgr as any)?.uniqueId || (g.name.includes("Kamdhenu") ? "GMA-MGR-0201" : "GMA-MGR-0101")
+      const managerEmail = mgr?.email || "unassigned@gomaa.in"
+      const managerName = mgr?.name || g.managerName || "Unassigned Manager"
+      const managerUniqueId = (mgr as any)?.uniqueId || mgr?.id || "N/A"
 
       const summary = computeManagerWallet(
         managerEmail,
@@ -116,12 +122,20 @@ export default function AdminWallet({
       const targetGosala = g.name.trim().toLowerCase()
       const gBookings = bookings.filter((b) => {
         const bg = (b.gosala || "").trim().toLowerCase()
-        return bg === targetGosala || (!b.gosala && targetGosala.includes("nandini"))
+        return bg === targetGosala
       })
 
-      const gTotalGross = gBookings.reduce((sum, b) => sum + (b.total || (b.base || 0) + (b.extraTime || 0)), 0)
-      const gGaushalaNet = Math.round(gTotalGross * ((100 - commissionPct) / 100))
-      const sanctuaryCorpus = Math.max(0, gGaushalaNet - summary.totalLifetimeEarned)
+      const gTotalGross = gBookings.reduce(
+        (sum, b) => sum + (b.total || (b.base || 0) + (b.extraTime || 0)),
+        0,
+      )
+      const gGaushalaNet = Math.round(
+        gTotalGross * ((100 - commissionPct) / 100),
+      )
+      const sanctuaryCorpus = Math.max(
+        0,
+        gGaushalaNet - summary.totalLifetimeEarned,
+      )
 
       return {
         gosala: g,
@@ -166,7 +180,12 @@ export default function AdminWallet({
 
   // Interactive Live Calculation Simulation on a sample ₹4,000 seva
   const simulation = useMemo(() => {
-    return simulatePujaSplit(4000, commissionPct, editSharePct, editBonusPerPuja)
+    return simulatePujaSplit(
+      4000,
+      commissionPct,
+      editSharePct,
+      editBonusPerPuja,
+    )
   }, [commissionPct, editSharePct, editBonusPerPuja])
 
   // Handle Save Share Policy
@@ -229,7 +248,9 @@ export default function AdminWallet({
               Regional Treasury &amp; Manager Wallets
             </h1>
             <p className="text-[13px] text-sky-100 max-w-2xl leading-relaxed">
-              Supervise regional Gaushala inflows, manage custodian wallets, and configure the revenue share split between sanctuary infrastructure funds and shed managers.
+              Supervise regional Gaushala inflows, manage custodian wallets, and
+              configure the revenue share split between sanctuary infrastructure
+              funds and shed managers.
             </p>
           </div>
 
@@ -334,7 +355,9 @@ export default function AdminWallet({
               </h2>
             </div>
             <p className="text-[12.5px] text-ink-soft leading-relaxed max-w-2xl">
-              As Regional Operations Admin, configure the revenue percentage awarded to Gaushala Managers versus retained for Sanctuary Maintenance &amp; Fodder.
+              As Regional Operations Admin, configure the revenue percentage
+              awarded to Gaushala Managers versus retained for Sanctuary
+              Maintenance &amp; Fodder.
             </p>
           </div>
 
@@ -359,10 +382,16 @@ export default function AdminWallet({
             <div className="space-y-2">
               <div className="flex items-center justify-between text-[13px]">
                 <span className="font-semibold text-ink">
-                  Manager Custodian Cut: <strong className="text-forest text-[15px]">{editSharePct}%</strong>
+                  Manager Custodian Cut:{" "}
+                  <strong className="text-forest text-[15px]">
+                    {editSharePct}%
+                  </strong>
                 </span>
                 <span className="font-mono text-[12px] text-ink-faint">
-                  Sanctuary Corpus: <strong className="text-emerald-800">{100 - editSharePct}%</strong>
+                  Sanctuary Corpus:{" "}
+                  <strong className="text-emerald-800">
+                    {100 - editSharePct}%
+                  </strong>
                 </span>
               </div>
               <input
@@ -396,17 +425,23 @@ export default function AdminWallet({
                 max="1000"
                 step="50"
                 value={editBonusPerPuja}
-                onChange={(e) => setEditBonusPerPuja(Math.max(0, Number(e.target.value)))}
+                onChange={(e) =>
+                  setEditBonusPerPuja(Math.max(0, Number(e.target.value)))
+                }
                 className="w-full px-3.5 py-2 bg-paper border border-line rounded-lg text-[14px] font-mono font-bold text-ink focus:outline-none focus:ring-2 focus:ring-forest"
               />
               <p className="text-[11.5px] text-ink-faint">
-                Direct operational bonus granted to the manager for every successfully executed and verified Darshan.
+                Direct operational bonus granted to the manager for every
+                successfully executed and verified Darshan.
               </p>
             </div>
 
             <div className="pt-2 flex items-center justify-between">
               <div className="text-[11.5px] text-ink-soft">
-                Last updated: {new Date(selectedPolicy.lastUpdated).toLocaleDateString("en-IN")}
+                Last updated:{" "}
+                {new Date(selectedPolicy.lastUpdated).toLocaleDateString(
+                  "en-IN",
+                )}
               </div>
               <button
                 onClick={handleSavePolicy}
@@ -442,10 +477,14 @@ export default function AdminWallet({
             <div className="space-y-2 text-[12.5px] font-mono">
               <div className="flex justify-between py-1 border-b border-line">
                 <span className="text-ink-soft">Gross Devotee Dakshina:</span>
-                <span className="font-bold text-ink">{inr(simulation.grossDakshina)}</span>
+                <span className="font-bold text-ink">
+                  {inr(simulation.grossDakshina)}
+                </span>
               </div>
               <div className="flex justify-between py-1 border-b border-line text-ink-soft">
-                <span>Platform Commission ({simulation.platformCommissionPct}%):</span>
+                <span>
+                  Platform Commission ({simulation.platformCommissionPct}%):
+                </span>
                 <span>-{inr(simulation.platformFee)}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-line font-semibold text-emerald-800">
@@ -453,20 +492,27 @@ export default function AdminWallet({
                 <span>{inr(simulation.gaushalaNet)}</span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-line text-purple-900 bg-purple-50/50 px-2 rounded">
-                <span>Manager Custodian Cut ({simulation.managerSharePct}%):</span>
+                <span>
+                  Manager Custodian Cut ({simulation.managerSharePct}%):
+                </span>
                 <span className="font-bold text-forest">
                   +{inr(simulation.managerBaseCut)}
-                  {simulation.bonusPerPuja > 0 && ` (+${inr(simulation.bonusPerPuja)} bonus)`}
+                  {simulation.bonusPerPuja > 0 &&
+                    ` (+${inr(simulation.bonusPerPuja)} bonus)`}
                 </span>
               </div>
               <div className="flex justify-between py-1.5 font-bold text-emerald-900 bg-emerald-50 px-2 rounded">
-                <span>Sanctuary Fodder Corpus ({simulation.shelterCorpusPct}%):</span>
+                <span>
+                  Sanctuary Fodder Corpus ({simulation.shelterCorpusPct}%):
+                </span>
                 <span>{inr(simulation.shelterCorpusNet)}</span>
               </div>
             </div>
 
             <div className="text-[11px] text-ink-faint leading-tight">
-              ✓ Manager receives <strong>{inr(simulation.managerTotalEarning)}</strong> in their personal wallet immediately upon ceremony completion.
+              ✓ Manager receives{" "}
+              <strong>{inr(simulation.managerTotalEarning)}</strong> in their
+              personal wallet immediately upon ceremony completion.
             </div>
           </div>
         </div>
@@ -480,7 +526,8 @@ export default function AdminWallet({
               Regional Sanctuaries &amp; Custodian Wallets Matrix
             </h3>
             <p className="text-[12px] text-ink-soft">
-              Real-time balance status for all Gaushalas and their appointed shed custodians.
+              Real-time balance status for all Gaushalas and their appointed
+              shed custodians.
             </p>
           </div>
           <div className="w-full sm:w-64">
@@ -503,18 +550,26 @@ export default function AdminWallet({
                   <th className="py-3 px-4">Appointed Manager</th>
                   <th className="py-3 px-4 text-center">Sevas Hosted</th>
                   <th className="py-3 px-4 text-right">Sanctuary Corpus</th>
-                  <th className="py-3 px-4 text-right">Manager Wallet Balance</th>
+                  <th className="py-3 px-4 text-right">
+                    Manager Wallet Balance
+                  </th>
                   <th className="py-3 px-4 text-center">Configured Split</th>
                   <th className="py-3 px-4 text-right">Quick Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {filteredMatrix.map((item) => (
-                  <tr key={item.gosala.id} className="hover:bg-paper/40 transition-colors">
+                  <tr
+                    key={item.gosala.id}
+                    className="hover:bg-paper/40 transition-colors"
+                  >
                     <td className="py-3.5 px-4">
-                      <div className="font-bold text-ink">{item.gosala.name}</div>
+                      <div className="font-bold text-ink">
+                        {item.gosala.name}
+                      </div>
                       <div className="font-mono text-[11px] text-ink-faint">
-                        AWBI: {item.gosala.trustRegistrationNo || "AWBI-TR-0421"}
+                        AWBI:{" "}
+                        {item.gosala.trustRegistrationNo || "AWBI-TR-0421"}
                       </div>
                     </td>
                     <td className="py-3.5 px-4">
@@ -524,7 +579,9 @@ export default function AdminWallet({
                           #{item.managerUniqueId}
                         </span>
                       </div>
-                      <div className="text-[11px] text-ink-soft">{item.managerEmail}</div>
+                      <div className="text-[11px] text-ink-soft">
+                        {item.managerEmail}
+                      </div>
                     </td>
                     <td className="py-3.5 px-4 text-center font-mono font-medium text-ink">
                       {item.totalBookings}
@@ -550,7 +607,10 @@ export default function AdminWallet({
                           setEditSharePct(item.sharePct)
                           setEditBonusPerPuja(item.bonusPerPuja || 0)
                           window.scrollTo({ top: 350, behavior: "smooth" })
-                          notify(`Selected ${item.managerName} for share split adjustment`, "info")
+                          notify(
+                            `Selected ${item.managerName} for share split adjustment`,
+                            "info",
+                          )
                         }}
                         className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-forest hover:underline cursor-pointer"
                       >
@@ -594,11 +654,17 @@ export default function AdminWallet({
                     <tr key={w.id} className="hover:bg-paper/40">
                       <td className="py-3 px-4 font-mono font-bold text-ink">
                         {w.utrNumber}
-                        <div className="text-[10.5px] text-ink-faint font-normal">{w.timestamp}</div>
+                        <div className="text-[10.5px] text-ink-faint font-normal">
+                          {w.timestamp}
+                        </div>
                       </td>
                       <td className="py-3 px-4">
-                        <div className="font-semibold text-ink">{w.managerName}</div>
-                        <div className="text-[11px] text-ink-soft">{w.gosala}</div>
+                        <div className="font-semibold text-ink">
+                          {w.managerName}
+                        </div>
+                        <div className="text-[11px] text-ink-soft">
+                          {w.gosala}
+                        </div>
                       </td>
                       <td className="py-3 px-4 font-mono text-[11.5px] text-ink">
                         {w.bankName} ({w.accountMasked})

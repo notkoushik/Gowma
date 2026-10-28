@@ -42,6 +42,7 @@ import { Eyebrow, Panel, PanelHead, Tag } from "../lib/ui"
 import { INDIAN_REGIONAL_HUBS } from "../data/regions"
 import MapLocationPicker from "../components/MapLocationPicker"
 import DynamicHubSelector from "../components/DynamicHubSelector"
+import { Skeleton } from "../components/common/Skeleton"
 
 export type CredentialShareInfo = {
   name: string
@@ -83,11 +84,13 @@ export default function GosalaManagers() {
     updateUser,
     deleteUser,
     refreshUsers,
+    isLoading,
   } = useStore()
   const { notify } = useToast()
 
-  const activeAdminName = authUser?.name || profiles?.admin?.name || "Operations Admin"
-  const activeSuperAdminName = authUser?.name || profiles?.super_admin?.name || "Koushik"
+  const activeAdminName = authUser?.name || profiles?.admin?.name || ""
+  const activeSuperAdminName =
+    authUser?.name || profiles?.super_admin?.name || ""
 
   const registeredOperationsAdmins = useMemo(() => {
     return users.filter(
@@ -95,7 +98,9 @@ export default function GosalaManagers() {
     )
   }, [users])
 
-  const [activeTab, setActiveTab] = useState<"matrix" | "managers" | "users">("matrix")
+  const [activeTab, setActiveTab] = useState<"matrix" | "managers" | "users">(
+    "matrix",
+  )
   const [query, setQuery] = useState("")
   const [userQuery, setUserQuery] = useState("")
   const [userRoleFilter, setUserRoleFilter] = useState("All")
@@ -105,22 +110,30 @@ export default function GosalaManagers() {
   const [newUserPhone, setNewUserPhone] = useState("+91 ")
   const [newUserPassword, setNewUserPassword] = useState("User@Gomaa2026!")
   const [showNewUserPassword, setShowNewUserPassword] = useState(false)
-  const [newUserRole, setNewUserRole] = useState<"customer" | "driver" | "manager" | "admin">("customer")
+  const [newUserRole, setNewUserRole] =
+    useState<"customer" | "driver" | "manager" | "admin">("customer")
   const [newUserAddress, setNewUserAddress] = useState("")
   const [newUserVehiclePlate, setNewUserVehiclePlate] = useState("TS-09-")
   const [newUserLicense, setNewUserLicense] = useState("DL-")
-  const [newUserGosala, setNewUserGosala] = useState(gosalas[0]?.name || "Surya")
+  const [newUserGosala, setNewUserGosala] = useState(
+    gosalas[0]?.name || "Surya",
+  )
   const [statusFilter, setStatusFilter] =
     useState<"All" | "Active" | "Inactive">("All")
-  const [portfolioScope, setPortfolioScope] = useState<"my_portfolio" | "all_network">("my_portfolio")
-  const [adminPortfolioFilter, setAdminPortfolioFilter] = useState<string>("All")
+  const [portfolioScope, setPortfolioScope] =
+    useState<"my_portfolio" | "all_network">("my_portfolio")
+  const [adminPortfolioFilter, setAdminPortfolioFilter] =
+    useState<string>("All")
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false)
-  const [editingManager, setEditingManager] = useState<GosalaManager | null>(null)
+  const [editingManager, setEditingManager] = useState<GosalaManager | null>(
+    null,
+  )
 
   // Share Credentials Modal state
-  const [shareCredentials, setShareCredentials] = useState<CredentialShareInfo | null>(null)
+  const [shareCredentials, setShareCredentials] =
+    useState<CredentialShareInfo | null>(null)
   const [copiedSuccess, setCopiedSuccess] = useState(false)
   const [showSharePassword, setShowSharePassword] = useState(false)
 
@@ -143,13 +156,16 @@ export default function GosalaManagers() {
     ]
     const text = lines.join("\n")
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(() => {
-        setCopiedSuccess(true)
-        notify("Credentials copied to clipboard! Ready to share.", "ok")
-        setTimeout(() => setCopiedSuccess(false), 3000)
-      }).catch(() => {
-        notify("Credentials ready to copy.", "ok")
-      })
+      navigator.clipboard
+        .writeText(text)
+        .then(() => {
+          setCopiedSuccess(true)
+          notify("Credentials copied to clipboard! Ready to share.", "ok")
+          setTimeout(() => setCopiedSuccess(false), 3000)
+        })
+        .catch(() => {
+          notify("Credentials ready to copy.", "ok")
+        })
     } else {
       notify("Credentials ready to copy.", "ok")
     }
@@ -172,20 +188,27 @@ export default function GosalaManagers() {
     const text = lines.join("\n")
     const cleanPhone = (info.phone || "").replace(/[^0-9]/g, "")
     if (cleanPhone && cleanPhone.length >= 10) {
-      const intlPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone
+      const intlPhone =
+        cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone
       return `https://wa.me/${intlPhone}?text=${encodeURIComponent(text)}`
     }
     return `https://wa.me/?text=${encodeURIComponent(text)}`
   }
 
   // Confirmation Modals for Deactivation & Deletion
-  const [deactivatingManager, setDeactivatingManager] = useState<GosalaManager | null>(null)
-  const [deletingManager, setDeletingManager] = useState<GosalaManager | null>(null)
+  const [deactivatingManager, setDeactivatingManager] =
+    useState<GosalaManager | null>(null)
+  const [deletingManager, setDeletingManager] = useState<GosalaManager | null>(
+    null,
+  )
 
   // Reassign Modal
-  const [reassigningGosala, setReassigningGosala] = useState<Gosala | null>(null)
+  const [reassigningGosala, setReassigningGosala] = useState<Gosala | null>(
+    null,
+  )
   const [selectedManagerId, setSelectedManagerId] = useState<string>("")
-  const [reassignMode, setReassignMode] = useState<"exclusive" | "multicustody">("exclusive")
+  const [reassignMode, setReassignMode] =
+    useState<"exclusive" | "multicustody">("exclusive")
   const [reassignAdminEmail, setReassignAdminEmail] = useState<string>("")
 
   // Form state
@@ -201,13 +224,17 @@ export default function GosalaManagers() {
   // Register Gaushala Modal state
   const [showAddGosalaModal, setShowAddGosalaModal] = useState(false)
   const [gFormName, setGFormName] = useState("")
-  const [gFormRegion, setGFormRegion] = useState("Hyderabad Central (Banjara Hills / Jubilee Hills)")
+  const [gFormRegion, setGFormRegion] = useState(
+    "Hyderabad Central (Banjara Hills / Jubilee Hills)",
+  )
   const [gFormAddress, setGFormAddress] = useState("")
   const [gFormPhone, setGFormPhone] = useState("+91 98")
   const [gFormEmail, setGFormEmail] = useState("trust@gomaa.in")
   const [gFormTrustNo, setGFormTrustNo] = useState("")
   const [gFormCapacity, setGFormCapacity] = useState("50")
-  const [gFormCaretaker, setGFormCaretaker] = useState("Dedicated Gosevak Caretaker")
+  const [gFormCaretaker, setGFormCaretaker] = useState(
+    "Dedicated Gosevak Caretaker",
+  )
   const [gFormManagerId, setGFormManagerId] = useState("")
   const [gFormActAsManager, setGFormActAsManager] = useState(false)
   const [gFormGoverningAdminEmail, setGFormGoverningAdminEmail] = useState("")
@@ -249,7 +276,9 @@ export default function GosalaManagers() {
     const mEmail = (m.email || "").trim().toLowerCase()
 
     const gMgrId = (g.managerId || "").trim()
-    const gMgrCleanId = gMgrId.startsWith("MGR-") ? gMgrId.replace(/^MGR-/, "") : gMgrId
+    const gMgrCleanId = gMgrId.startsWith("MGR-")
+      ? gMgrId.replace(/^MGR-/, "")
+      : gMgrId
     const gMgrName = (g.managerName || "").trim().toLowerCase()
 
     // 1. If Gaushala has an explicit managerId or managerName assigned:
@@ -283,11 +312,16 @@ export default function GosalaManagers() {
     if (Array.isArray(g.assignedManagers) && g.assignedManagers.length > 0) {
       return g.assignedManagers.some((am: any) => {
         const amId = (am.id || "").trim()
-        const amCleanId = amId.startsWith("MGR-") ? amId.replace(/^MGR-/, "") : amId
+        const amCleanId = amId.startsWith("MGR-")
+          ? amId.replace(/^MGR-/, "")
+          : amId
         const amName = (am.name || "").trim().toLowerCase()
         const amEmail = (am.email || "").trim().toLowerCase()
         return (
-          (amId && (amId === mId || amId === mCleanId || (mRawId && amId === mRawId))) ||
+          (amId &&
+            (amId === mId ||
+              amId === mCleanId ||
+              (mRawId && amId === mRawId))) ||
           (amName && mName && amName === mName) ||
           (amEmail && mEmail && amEmail === mEmail)
         )
@@ -324,11 +358,10 @@ export default function GosalaManagers() {
       return isManagerAssignedToGosala(m, match)
     })
 
-    return Array.from(new Set([...mappedFromGosalas, ...verifiedDirect])).filter(
-      Boolean,
-    )
+    return Array.from(
+      new Set([...mappedFromGosalas, ...verifiedDirect]),
+    ).filter(Boolean)
   }
-
 
   const handleOpenAdd = () => {
     setEditingManager(null)
@@ -350,7 +383,9 @@ export default function GosalaManagers() {
     setFormPhone(mgr.phone)
     setFormPassword(mgr.password || "")
     setShowFormPassword(false)
-    setFormRegion(mgr.region || gosalas[0]?.region || "Cyberabad / Gachibowli Zone")
+    setFormRegion(
+      mgr.region || gosalas[0]?.region || "Cyberabad / Gachibowli Zone",
+    )
     const existing = getManagerAssignedGosalas(mgr)
     setFormSelectedGosalas(existing)
     setGosalaSearchFilter("")
@@ -549,9 +584,7 @@ export default function GosalaManagers() {
     setReassigningGosala(g)
     setReassignMode("exclusive")
     setReassignAdminEmail(
-      (g as any).adminEmail ||
-      (g as any).governingAdminEmail ||
-      ""
+      (g as any).adminEmail || (g as any).governingAdminEmail || "",
     )
     // Find current manager ID if any
     const cur = managers.find((m) => {
@@ -565,7 +598,8 @@ export default function GosalaManagers() {
   }
 
   const handleTakeOverAsActing = (g: Gosala) => {
-    const callerName = currentRole === "super_admin" ? activeSuperAdminName : activeAdminName
+    const callerName =
+      currentRole === "super_admin" ? activeSuperAdminName : activeAdminName
     // Remove g from all managers' assigned list
     const assignedMgrs = managers.filter((m) => {
       const gList = getManagerAssignedGosalas(m)
@@ -600,11 +634,16 @@ export default function GosalaManagers() {
 
   const handleSaveReassignment = () => {
     if (!reassigningGosala) return
-    const callerName = currentRole === "super_admin" ? activeSuperAdminName : activeAdminName
+    const callerName =
+      currentRole === "super_admin" ? activeSuperAdminName : activeAdminName
 
     let nextAdminPatch: any = {}
     if (currentRole === "super_admin") {
-      if (!reassignAdminEmail || reassignAdminEmail === "super_admin" || reassignAdminEmail === authUser?.email) {
+      if (
+        !reassignAdminEmail ||
+        reassignAdminEmail === "super_admin" ||
+        reassignAdminEmail === authUser?.email
+      ) {
         nextAdminPatch = {
           governingAdminRole: "super_admin",
           governingAdminName: activeSuperAdminName,
@@ -642,8 +681,9 @@ export default function GosalaManagers() {
       const assignedMgrs = managers.filter((m) => {
         const gList = getManagerAssignedGosalas(m)
         return (
-          gList.some((gn) => gn.toLowerCase() === reassigningGosala.name.toLowerCase()) ||
-          m.id === reassigningGosala.managerId
+          gList.some(
+            (gn) => gn.toLowerCase() === reassigningGosala.name.toLowerCase(),
+          ) || m.id === reassigningGosala.managerId
         )
       })
       for (const mgr of assignedMgrs) {
@@ -677,9 +717,13 @@ export default function GosalaManagers() {
           if (m.id === chosen.id) return false
           const mList = getManagerAssignedGosalas(m)
           return (
-            mList.some((gn) => gn.toLowerCase() === reassigningGosala.name.toLowerCase()) ||
+            mList.some(
+              (gn) => gn.toLowerCase() === reassigningGosala.name.toLowerCase(),
+            ) ||
             m.id === reassigningGosala.managerId ||
-            (reassigningGosala.managerName && m.name.toLowerCase() === reassigningGosala.managerName.toLowerCase())
+            (reassigningGosala.managerName &&
+              m.name.toLowerCase() ===
+                reassigningGosala.managerName.toLowerCase())
           )
         })
 
@@ -734,7 +778,9 @@ export default function GosalaManagers() {
           ...nextAdminPatch,
         } as any)
         notify(
-          `Assigned ${chosen.name} as Manager for ${reassigningGosala.name}. (${nextList.length} Gaushala${nextList.length > 1 ? "s" : ""} in portfolio)`,
+          `Assigned ${chosen.name} as Manager for ${reassigningGosala.name}. (${nextList.length} Gaushala${
+            nextList.length > 1 ? "s" : ""
+          } in portfolio)`,
           "ok",
         )
       } else if (Object.keys(nextAdminPatch).length > 0) {
@@ -812,8 +858,8 @@ export default function GosalaManagers() {
         if (assigned.length === 0) return true
         return assigned.some((gName) =>
           scopedGosalas.some(
-            (sg) => sg.name.toLowerCase() === gName.toLowerCase()
-          )
+            (sg) => sg.name.toLowerCase() === gName.toLowerCase(),
+          ),
         )
       })
     }
@@ -823,8 +869,8 @@ export default function GosalaManagers() {
         if (assigned.length === 0) return true
         return assigned.some((gName) =>
           scopedGosalas.some(
-            (sg) => sg.name.toLowerCase() === gName.toLowerCase()
-          )
+            (sg) => sg.name.toLowerCase() === gName.toLowerCase(),
+          ),
         )
       })
     }
@@ -890,7 +936,9 @@ export default function GosalaManagers() {
     if (availableManagersForAppointing.length > 0) {
       setGFormManagerId(availableManagersForAppointing[0].id)
     }
-    setGFormGoverningAdminEmail(adminPortfolioFilter !== "All" ? adminPortfolioFilter : "")
+    setGFormGoverningAdminEmail(
+      adminPortfolioFilter !== "All" ? adminPortfolioFilter : "",
+    )
     setShowAddGosalaModal(true)
   }
 
@@ -910,13 +958,20 @@ export default function GosalaManagers() {
     let governingAdminEmail = authUser?.email || "admin@gomaa.in"
 
     if (currentRole === "super_admin") {
-      if (!gFormGoverningAdminEmail || gFormGoverningAdminEmail === "super_admin" || gFormGoverningAdminEmail === authUser?.email) {
+      if (
+        !gFormGoverningAdminEmail ||
+        gFormGoverningAdminEmail === "super_admin" ||
+        gFormGoverningAdminEmail === authUser?.email
+      ) {
         governingAdminRole = "super_admin"
         governingAdminName = activeSuperAdminName
         governingAdminEmail = authUser?.email || "superadmin@gomaa.in"
       } else {
         const selectedOpsAdmin = registeredOperationsAdmins.find(
-          (a) => a.email.toLowerCase() === gFormGoverningAdminEmail.toLowerCase() || a.name.toLowerCase() === gFormGoverningAdminEmail.toLowerCase() || a.id === gFormGoverningAdminEmail
+          (a) =>
+            a.email.toLowerCase() === gFormGoverningAdminEmail.toLowerCase() ||
+            a.name.toLowerCase() === gFormGoverningAdminEmail.toLowerCase() ||
+            a.id === gFormGoverningAdminEmail,
         )
         if (selectedOpsAdmin) {
           governingAdminRole = "admin"
@@ -932,11 +987,19 @@ export default function GosalaManagers() {
       address: gFormAddress.trim(),
       contactPhone: gFormPhone.trim(),
       email: gFormEmail.trim(),
-      trustRegistrationNo: gFormTrustNo.trim() || `AWBI-TR-${Math.floor(1000 + Math.random() * 8999)}`,
+      trustRegistrationNo:
+        gFormTrustNo.trim() ||
+        `AWBI-TR-${Math.floor(1000 + Math.random() * 8999)}`,
       capacity: Number(gFormCapacity) || 40,
-      caretaker: isActing ? `${governingAdminName} (Acting Custodian)` : gFormCaretaker.trim() || chosenMgr?.name || "Chief Gosevak",
-      managerId: isActing ? "" : (chosenMgr ? chosenMgr.id : ""),
-      managerName: isActing ? `${governingAdminName} (Acting Manager)` : (chosenMgr ? chosenMgr.name : "None (Admin Acting)"),
+      caretaker: isActing
+        ? `${governingAdminName} (Acting Custodian)`
+        : gFormCaretaker.trim() || chosenMgr?.name || "Chief Gosevak",
+      managerId: isActing ? "" : chosenMgr ? chosenMgr.id : "",
+      managerName: isActing
+        ? `${governingAdminName} (Acting Manager)`
+        : chosenMgr
+          ? chosenMgr.name
+          : "None (Admin Acting)",
       isActingManager: isActing,
       actAsManagerMyself: isActing,
       lat: gFormLat,
@@ -947,7 +1010,8 @@ export default function GosalaManagers() {
         "Padded Cattle Ambulance / Van",
         "24/7 Pure Borewell Water & Trough",
       ],
-      photo: "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=600&h=400&fit=crop&auto=format",
+      photo:
+        "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=600&h=400&fit=crop&auto=format",
       governingAdminRole,
       governingAdminName,
       governingAdminEmail,
@@ -969,7 +1033,7 @@ export default function GosalaManagers() {
           ? `Admin ${governingAdminName} Acting as Manager`
           : `Assigned to Manager ${chosenMgr?.name} under ${governingAdminName}'s Portfolio`
       })`,
-      "ok"
+      "ok",
     )
   }
 
@@ -1028,7 +1092,9 @@ export default function GosalaManagers() {
   const unassignedSheltersCount = matrixData.filter(
     (x) => x.activeManagers.length === 0,
   ).length
-  const activeManagersCount = scopedManagers.filter((m) => m.status === "Active").length
+  const activeManagersCount = scopedManagers.filter(
+    (m) => m.status === "Active",
+  ).length
 
   return (
     <div className="space-y-6">
@@ -1052,11 +1118,17 @@ export default function GosalaManagers() {
             <div className="text-[13.5px] font-semibold text-ink flex items-center gap-2">
               <span>Administering Portfolio:</span>
               <span className="font-serif text-forest font-bold">
-                {currentRole === "super_admin"
-                  ? adminPortfolioFilter === "All"
+                {isLoading ? (
+                  <Skeleton variant="text" className="h-5 w-48 inline-block" />
+                ) : currentRole === "super_admin" ? (
+                  adminPortfolioFilter === "All"
                     ? "Consolidated Platform Governance (All Portfolios)"
                     : `${adminPortfolioFilter} Portfolio`
-                  : `${activeAdminName} (Operations Admin Hub)`}
+                ) : activeAdminName ? (
+                  `${activeAdminName} (Operations Admin Hub)`
+                ) : (
+                  "Operations Admin Hub (Not Configured)"
+                )}
               </span>
             </div>
             <p className="text-[11.5px] text-ink-faint">
@@ -1074,7 +1146,9 @@ export default function GosalaManagers() {
               onChange={(e) => setAdminPortfolioFilter(e.target.value)}
               className="w-full sm:w-auto bg-paper border border-amber-300 rounded px-2.5 py-2 sm:py-1.5 text-[12px] text-ink font-medium outline-none focus:border-amber-500 transition shadow-2xs"
             >
-              <option value="All">All Operations Portfolios ({gosalas.length} Sanctuaries)</option>
+              <option value="All">
+                All Operations Portfolios ({gosalas.length} Sanctuaries)
+              </option>
               {registeredOperationsAdmins.map((adm) => {
                 const count = gosalas.filter(
                   (g) =>
@@ -1272,7 +1346,10 @@ export default function GosalaManagers() {
                   inactiveManagers,
                   animalsCount,
                 }) => (
-                  <div key={gosala.id} className="p-3.5 space-y-2.5 hover:bg-paper/50 transition">
+                  <div
+                    key={gosala.id}
+                    className="p-3.5 space-y-2.5 hover:bg-paper/50 transition"
+                  >
                     {/* Top Row: Name + Status */}
                     <div className="flex items-start justify-between gap-2">
                       <div>
@@ -1283,12 +1360,16 @@ export default function GosalaManagers() {
                           <MapPin size={11} className="text-saffron shrink-0" />
                           <span>{gosala.region}</span>
                           <span>·</span>
-                          <span className="font-medium text-ink-soft">{animalsCount} cows</span>
+                          <span className="font-medium text-ink-soft">
+                            {animalsCount} cows
+                          </span>
                         </div>
                       </div>
                       {activeManagers.length > 0 ? (
                         <Tag tone="ok">
-                          {activeManagers.length > 1 ? `${activeManagers.length} Staffed` : "Staffed"}
+                          {activeManagers.length > 1
+                            ? `${activeManagers.length} Staffed`
+                            : "Staffed"}
                         </Tag>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-[10.5px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 font-semibold border border-amber-500/20 shrink-0">
@@ -1305,14 +1386,21 @@ export default function GosalaManagers() {
                       {activeManagers.length > 0 ? (
                         <div className="space-y-1.5">
                           {activeManagers.map((m) => (
-                            <div key={m.id} className="flex items-center justify-between gap-2">
+                            <div
+                              key={m.id}
+                              className="flex items-center justify-between gap-2"
+                            >
                               <div className="flex items-center gap-2">
                                 <div className="h-6 w-6 rounded-full bg-forest-soft text-forest text-[10.5px] font-semibold flex items-center justify-center shrink-0">
                                   {m.name.slice(0, 1)}
                                 </div>
-                                <span className="font-medium text-ink">{m.name}</span>
+                                <span className="font-medium text-ink">
+                                  {m.name}
+                                </span>
                               </div>
-                              <span className="font-mono text-[10.5px] text-ink-faint">({m.id})</span>
+                              <span className="font-mono text-[10.5px] text-ink-faint">
+                                ({m.id})
+                              </span>
                             </div>
                           ))}
                         </div>
@@ -1322,12 +1410,16 @@ export default function GosalaManagers() {
                             {inactiveManagers[0].name} (Inactive)
                           </div>
                           <span className="inline-flex items-center gap-1 font-mono text-[10px] text-amber-700 dark:text-amber-400 font-semibold">
-                            <AlertTriangle size={10} /> Unassigned · Inactive Manager
+                            <AlertTriangle size={10} /> Unassigned · Inactive
+                            Manager
                           </span>
                         </div>
                       ) : (
                         <div className="inline-flex items-center gap-1.5 text-amber-700 dark:text-amber-400 font-mono text-[11px] font-medium">
-                          <ShieldAlert size={13} className="shrink-0 text-amber-600" />
+                          <ShieldAlert
+                            size={13}
+                            className="shrink-0 text-amber-600"
+                          />
                           <span>Direct Operations Admin In-Charge</span>
                         </div>
                       )}
@@ -1342,7 +1434,10 @@ export default function GosalaManagers() {
                             onClick={() => handleTakeOverAsActing(gosala)}
                             className="flex-1 inline-flex items-center justify-center gap-1 text-[11.5px] font-medium text-amber-800 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 py-2 px-2.5 rounded border border-amber-500/30 transition shadow-2xs cursor-pointer"
                           >
-                            <ShieldCheck size={13} className="text-amber-600 shrink-0" />
+                            <ShieldCheck
+                              size={13}
+                              className="text-amber-600 shrink-0"
+                            />
                             <span>Act as Manager</span>
                           </button>
                           <button
@@ -1374,8 +1469,12 @@ export default function GosalaManagers() {
                   <div className="h-10 w-10 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center mx-auto border border-amber-200 mb-2">
                     <Building2 size={20} />
                   </div>
-                  <div className="font-serif text-[15px] font-medium text-ink">No Gaushalas Registered</div>
-                  <p className="text-[12px] text-ink-faint mt-1">Click &quot;Register Gaushala&quot; above to add one.</p>
+                  <div className="font-serif text-[15px] font-medium text-ink">
+                    No Gaushalas Registered
+                  </div>
+                  <p className="text-[12px] text-ink-faint mt-1">
+                    Click &quot;Register Gaushala&quot; above to add one.
+                  </p>
                 </div>
               )}
             </div>
@@ -1451,12 +1550,16 @@ export default function GosalaManagers() {
                                 {inactiveManagers[0].name} (Inactive)
                               </div>
                               <span className="inline-flex items-center gap-1 font-mono text-[10px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 font-semibold border border-amber-500/30">
-                                <AlertTriangle size={11} /> Unassigned · Inactive Manager
+                                <AlertTriangle size={11} /> Unassigned ·
+                                Inactive Manager
                               </span>
                             </div>
                           ) : (
                             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 font-mono text-[11px] font-semibold">
-                              <ShieldAlert size={13} className="shrink-0 text-amber-600" />
+                              <ShieldAlert
+                                size={13}
+                                className="shrink-0 text-amber-600"
+                              />
                               <span>Unassigned · Direct Admin Custodian</span>
                             </div>
                           )}
@@ -1488,7 +1591,10 @@ export default function GosalaManagers() {
                             </div>
                           ) : (
                             <div className="text-[12px] text-amber-800 dark:text-amber-300 font-medium flex items-center gap-1">
-                              <ShieldCheck size={13} className="text-amber-600 shrink-0" />
+                              <ShieldCheck
+                                size={13}
+                                className="text-amber-600 shrink-0"
+                              />
                               <span>Operations Admin</span>
                             </div>
                           )}
@@ -1504,7 +1610,10 @@ export default function GosalaManagers() {
                                   className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded border border-amber-500/30 transition-colors cursor-pointer shadow-2xs"
                                   title="Directly take over and manage this Gaushala as Operations Admin"
                                 >
-                                  <ShieldCheck size={12} className="text-amber-600" />
+                                  <ShieldCheck
+                                    size={12}
+                                    className="text-amber-600"
+                                  />
                                   <span>Act as Manager</span>
                                 </button>
                                 <button
@@ -1547,7 +1656,10 @@ export default function GosalaManagers() {
                             No Gaushalas Registered Yet
                           </div>
                           <p className="text-[12.5px] text-ink-faint leading-relaxed">
-                            The platform sanctuary registry is completely clean. Click &quot;Register Gaushala&quot; above to register your first accredited sanctuary and test assignment workflows from scratch.
+                            The platform sanctuary registry is completely clean.
+                            Click &quot;Register Gaushala&quot; above to
+                            register your first accredited sanctuary and test
+                            assignment workflows from scratch.
                           </p>
                           <div className="pt-2">
                             <button
@@ -1616,7 +1728,10 @@ export default function GosalaManagers() {
                 ).length
 
                 return (
-                  <div key={m.id} className="p-3.5 space-y-2.5 hover:bg-paper/50 transition">
+                  <div
+                    key={m.id}
+                    className="p-3.5 space-y-2.5 hover:bg-paper/50 transition"
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2.5">
                         <div className="h-9 w-9 rounded-full bg-saffron-soft text-saffron-deep font-semibold flex items-center justify-center text-[12px] shrink-0 border border-saffron/20">
@@ -1645,7 +1760,9 @@ export default function GosalaManagers() {
                     <div>
                       <div className="text-[10px] font-mono uppercase tracking-wider text-ink-faint mb-1 flex items-center justify-between">
                         <span>Assigned Sanctuaries</span>
-                        <span className="font-medium text-ink-soft">{dynamicCowCount} cows</span>
+                        <span className="font-medium text-ink-soft">
+                          {dynamicCowCount} cows
+                        </span>
                       </div>
                       {managerGosalas.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
@@ -1667,7 +1784,10 @@ export default function GosalaManagers() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-soft bg-card/60 border border-line rounded px-2.5 py-1.5 font-mono">
-                      <a href={`tel:${m.phone}`} className="flex items-center gap-1 hover:text-ink">
+                      <a
+                        href={`tel:${m.phone}`}
+                        className="flex items-center gap-1 hover:text-ink"
+                      >
                         <Phone size={11} className="text-ink-faint shrink-0" />
                         <span>{m.phone}</span>
                       </a>
@@ -1708,10 +1828,14 @@ export default function GosalaManagers() {
                         type="button"
                         onClick={() => setDeactivatingManager(m)}
                         className={`inline-flex items-center justify-center gap-1 py-1.5 px-1.5 bg-paper border border-line rounded text-[11px] font-medium transition shadow-2xs ${
-                          m.status === "Active" ? "text-amber-700 hover:bg-amber-50" : "text-forest hover:bg-forest-soft"
+                          m.status === "Active"
+                            ? "text-amber-700 hover:bg-amber-50"
+                            : "text-forest hover:bg-forest-soft"
                         }`}
                       >
-                        <span>{m.status === "Active" ? "Pause" : "Resume"}</span>
+                        <span>
+                          {m.status === "Active" ? "Pause" : "Resume"}
+                        </span>
                       </button>
                       <button
                         type="button"
@@ -1804,7 +1928,9 @@ export default function GosalaManagers() {
                                 ))}
                               </div>
                               <div className="text-[10.5px] text-ink-faint">
-                                {managerGosalas.length} facility{managerGosalas.length > 1 ? "s" : ""} under custody
+                                {managerGosalas.length} facility
+                                {managerGosalas.length > 1 ? "s" : ""} under
+                                custody
                               </div>
                             </div>
                           ) : (
@@ -1854,7 +1980,8 @@ export default function GosalaManagers() {
                                   email: m.email,
                                   phone: m.phone,
                                   password: m.password || "Mgr@Gomaa2026!",
-                                  assignedScope: m.gosalas?.join(", ") || m.gosala,
+                                  assignedScope:
+                                    m.gosalas?.join(", ") || m.gosala,
                                   region: m.region,
                                 })
                               }}
@@ -1880,7 +2007,9 @@ export default function GosalaManagers() {
                                   : "text-forest"
                               }`}
                             >
-                              {m.status === "Active" ? "Deactivate" : "Activate"}
+                              {m.status === "Active"
+                                ? "Deactivate"
+                                : "Activate"}
                             </button>
                             <span className="text-line-strong">|</span>
                             <button
@@ -1998,12 +2127,16 @@ export default function GosalaManagers() {
                         ? u.customerData?.address || "Devotee Altar"
                         : isSa
                           ? "Central Treasury & Sovereign Governance"
-                          : u.assignedGosalaNames && u.assignedGosalaNames.length > 0
+                          : u.assignedGosalaNames &&
+                              u.assignedGosalaNames.length > 0
                             ? u.assignedGosalaNames.join(", ")
                             : "Regional Sanctuary Cluster"
 
                   return (
-                    <div key={u.id} className="p-3.5 space-y-2.5 hover:bg-paper/50 transition">
+                    <div
+                      key={u.id}
+                      className="p-3.5 space-y-2.5 hover:bg-paper/50 transition"
+                    >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2.5">
                           <div className="h-9 w-9 rounded-full bg-paper-deep text-ink flex items-center justify-center font-bold text-[12px] border border-line shrink-0">
@@ -2025,18 +2158,29 @@ export default function GosalaManagers() {
                         <div className="text-[10px] font-mono uppercase tracking-wider text-ink-faint">
                           JWT Scope / Facility
                         </div>
-                        <div className="font-medium text-ink truncate mt-0.5" title={boundScope}>
+                        <div
+                          className="font-medium text-ink truncate mt-0.5"
+                          title={boundScope}
+                        >
                           {boundScope}
                         </div>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-soft font-mono">
-                        <a href={`tel:${u.phone}`} className="flex items-center gap-1 hover:text-ink">
-                          <Phone size={11} className="text-ink-faint shrink-0" />
+                        <a
+                          href={`tel:${u.phone}`}
+                          className="flex items-center gap-1 hover:text-ink"
+                        >
+                          <Phone
+                            size={11}
+                            className="text-ink-faint shrink-0"
+                          />
                           <span>{u.phone}</span>
                         </a>
                         <span className="text-line-strong">·</span>
-                        <span className="truncate max-w-[170px]">{u.email}</span>
+                        <span className="truncate max-w-[170px]">
+                          {u.email}
+                        </span>
                       </div>
 
                       <div className="flex items-center justify-between gap-2 pt-1">
@@ -2065,7 +2209,8 @@ export default function GosalaManagers() {
                                 password:
                                   (u as any).password ||
                                   "[Confidential / Set at Registration]",
-                                assignedScope: (u as any).assignedGosalaNames?.join(", "),
+                                assignedScope:
+                                  (u as any).assignedGosalaNames?.join(", "),
                               })
                             }}
                             className="inline-flex items-center gap-1 py-1 px-2.5 bg-paper border border-line rounded text-[11.5px] font-medium text-forest hover:bg-paper-deep transition shadow-2xs"
@@ -2075,7 +2220,9 @@ export default function GosalaManagers() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => updateUser(u.id, { isActive: !u.isActive })}
+                            onClick={() =>
+                              updateUser(u.id, { isActive: !u.isActive })
+                            }
                             className="inline-flex items-center gap-1 py-1 px-2.5 bg-paper border border-line rounded text-[11.5px] font-medium text-saffron-deep hover:bg-paper-deep transition shadow-2xs"
                           >
                             <span>{u.isActive ? "Suspend" : "Activate"}</span>
@@ -2126,8 +2273,12 @@ export default function GosalaManagers() {
                     .filter((u) => {
                       const matchesQuery =
                         !userQuery ||
-                        u.name.toLowerCase().includes(userQuery.toLowerCase()) ||
-                        u.email.toLowerCase().includes(userQuery.toLowerCase()) ||
+                        u.name
+                          .toLowerCase()
+                          .includes(userQuery.toLowerCase()) ||
+                        u.email
+                          .toLowerCase()
+                          .includes(userQuery.toLowerCase()) ||
                         u.phone.includes(userQuery)
                       const matchesRole =
                         userRoleFilter === "All" || u.role === userRoleFilter
@@ -2170,7 +2321,8 @@ export default function GosalaManagers() {
                             ? u.customerData?.address || "Devotee Altar"
                             : isSa
                               ? "Central Treasury & Sovereign Governance"
-                              : u.assignedGosalaNames && u.assignedGosalaNames.length > 0
+                              : u.assignedGosalaNames &&
+                                  u.assignedGosalaNames.length > 0
                                 ? u.assignedGosalaNames.join(", ")
                                 : "Regional Sanctuary Cluster"
 
@@ -2192,9 +2344,7 @@ export default function GosalaManagers() {
                             </div>
                           </td>
 
-                          <td className="px-4 py-3.5">
-                            {roleBadge}
-                          </td>
+                          <td className="px-4 py-3.5">{roleBadge}</td>
 
                           <td className="px-4 py-3.5">
                             <div className="text-[12px] text-ink flex items-center gap-1.5">
@@ -2208,7 +2358,10 @@ export default function GosalaManagers() {
                           </td>
 
                           <td className="px-4 py-3.5 text-[12px] text-ink">
-                            <div className="max-w-[220px] truncate" title={boundScope}>
+                            <div
+                              className="max-w-[220px] truncate"
+                              title={boundScope}
+                            >
                               {boundScope}
                             </div>
                           </td>
@@ -2222,7 +2375,12 @@ export default function GosalaManagers() {
                           </td>
 
                           <td className="px-4 py-3.5 font-mono text-[11.5px] text-ink-faint">
-                            {u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-IN", { month: "short", day: "2-digit" }) : "Active"}
+                            {u.createdAt
+                              ? new Date(u.createdAt).toLocaleDateString(
+                                  "en-IN",
+                                  { month: "short", day: "2-digit" },
+                                )
+                              : "Active"}
                           </td>
 
                           <td className="px-4 py-3.5">
@@ -2245,7 +2403,10 @@ export default function GosalaManagers() {
                                     password:
                                       (u as any).password ||
                                       "[Confidential / Set at Registration]",
-                                    assignedScope: (u as any).assignedGosalaNames?.join(", "),
+                                    assignedScope:
+                                      (u as any).assignedGosalaNames?.join(
+                                        ", ",
+                                      ),
                                   })
                                 }}
                                 className="text-forest hover:underline flex items-center gap-1 cursor-pointer font-medium"
@@ -2256,7 +2417,9 @@ export default function GosalaManagers() {
                               </button>
                               <span className="text-line-strong">|</span>
                               <button
-                                onClick={() => updateUser(u.id, { isActive: !u.isActive })}
+                                onClick={() =>
+                                  updateUser(u.id, { isActive: !u.isActive })
+                                }
                                 className="text-saffron-deep hover:underline cursor-pointer font-medium"
                               >
                                 {u.isActive ? "Suspend" : "Activate"}
@@ -2285,10 +2448,13 @@ export default function GosalaManagers() {
 
         <div className="p-4 border-t border-line bg-card/30 text-[12px] text-ink-faint flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <span>
-            Operations Admin Governance: 1 Gaushala maps to 1 local Custodian Manager. In case of manager absence, the Operations Admin holds Acting Custodian authority to prevent booking stalls.
+            Operations Admin Governance: 1 Gaushala maps to 1 local Custodian
+            Manager. In case of manager absence, the Operations Admin holds
+            Acting Custodian authority to prevent booking stalls.
           </span>
           <span className="font-mono text-[11px] text-saffron shrink-0">
-            {activeManagersCount} active custodians · {unassignedSheltersCount} acting admin
+            {activeManagersCount} active custodians · {unassignedSheltersCount}{" "}
+            acting admin
           </span>
         </div>
       </Panel>
@@ -2327,7 +2493,9 @@ export default function GosalaManagers() {
                   <MapPin size={12} className="text-saffron" />
                   <span>{reassigningGosala.region}</span>
                   <span>·</span>
-                  <span>AWBI: {reassigningGosala.trustRegistrationNo || "Verified"}</span>
+                  <span>
+                    AWBI: {reassigningGosala.trustRegistrationNo || "Verified"}
+                  </span>
                 </div>
               </div>
 
@@ -2341,7 +2509,11 @@ export default function GosalaManagers() {
                   className="w-full bg-paper border border-line rounded-md px-3.5 py-2.5 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition cursor-pointer"
                 >
                   <option value="ACTING_ADMIN">
-                    🛡️ Act as Manager / Custodian Myself ({currentRole === "super_admin" ? activeSuperAdminName : activeAdminName})
+                    🛡️ Act as Manager / Custodian Myself (
+                    {currentRole === "super_admin"
+                      ? activeSuperAdminName
+                      : activeAdminName}
+                    )
                   </option>
                   <option value="UNASSIGNED">
                     ⚠️ Leave Unassigned (Admin Custody)
@@ -2350,12 +2522,15 @@ export default function GosalaManagers() {
                     const managerGosalas = getManagerAssignedGosalas(m)
                     const isCurrentlyHere = managerGosalas.some(
                       (gn) =>
-                        gn.toLowerCase() === reassigningGosala.name.toLowerCase(),
+                        gn.toLowerCase() ===
+                        reassigningGosala.name.toLowerCase(),
                     )
                     return (
                       <option key={m.id} value={m.id}>
-                        {m.name} ({m.id}) · {managerGosalas.length} facility(ies) managed{" "}
-                        {isCurrentlyHere ? "· [Already Assigned Here]" : ""} ({m.status})
+                        {m.name} ({m.id}) · {managerGosalas.length}{" "}
+                        facility(ies) managed{" "}
+                        {isCurrentlyHere ? "· [Already Assigned Here]" : ""} (
+                        {m.status})
                       </option>
                     )
                   })}
@@ -2364,10 +2539,15 @@ export default function GosalaManagers() {
 
               {/* Multi-Custody Conflict Warning & Mode Selection */}
               {(() => {
-                const chosenMgr = managers.find((m) => m.id === selectedManagerId)
+                const chosenMgr = managers.find(
+                  (m) => m.id === selectedManagerId,
+                )
                 if (!chosenMgr) return null
-                const otherGosalas = getManagerAssignedGosalas(chosenMgr).filter(
-                  (gn) => gn.toLowerCase() !== reassigningGosala.name.toLowerCase()
+                const otherGosalas = getManagerAssignedGosalas(
+                  chosenMgr,
+                ).filter(
+                  (gn) =>
+                    gn.toLowerCase() !== reassigningGosala.name.toLowerCase(),
                 )
                 if (otherGosalas.length === 0) return null
 
@@ -2377,7 +2557,9 @@ export default function GosalaManagers() {
                       <span>⚠️ Multi-Facility Custody Notice</span>
                     </div>
                     <p className="text-ink text-[12px] leading-relaxed">
-                      <strong>{chosenMgr.name}</strong> is currently assigned to <strong>{otherGosalas.join(", ")}</strong>. Choose the assignment protocol:
+                      <strong>{chosenMgr.name}</strong> is currently assigned to{" "}
+                      <strong>{otherGosalas.join(", ")}</strong>. Choose the
+                      assignment protocol:
                     </p>
                     <div className="space-y-2 pt-1 border-t border-amber-500/20">
                       <label className="flex items-start gap-2.5 cursor-pointer">
@@ -2393,7 +2575,9 @@ export default function GosalaManagers() {
                             Exclusive Transfer (Recommended)
                           </div>
                           <div className="text-[11px] text-ink-muted">
-                            Assign {chosenMgr.name} solely to {reassigningGosala.name}. They will be relieved from {otherGosalas.join(", ")}.
+                            Assign {chosenMgr.name} solely to{" "}
+                            {reassigningGosala.name}. They will be relieved from{" "}
+                            {otherGosalas.join(", ")}.
                           </div>
                         </div>
                       </label>
@@ -2410,7 +2594,9 @@ export default function GosalaManagers() {
                             Joint Multi-Custody Portfolio
                           </div>
                           <div className="text-[11px] text-ink-muted">
-                            Maintain existing assignments and authorize joint management across {otherGosalas.length + 1} facilities simultaneously.
+                            Maintain existing assignments and authorize joint
+                            management across {otherGosalas.length + 1}{" "}
+                            facilities simultaneously.
                           </div>
                         </div>
                       </label>
@@ -2431,7 +2617,8 @@ export default function GosalaManagers() {
                     className="w-full bg-paper border border-line rounded-md px-3.5 py-2.5 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition cursor-pointer"
                   >
                     <option value="">
-                      👑 Direct Super Admin Oversight ({activeSuperAdminName}) - Platform Managed
+                      👑 Direct Super Admin Oversight ({activeSuperAdminName}) -
+                      Platform Managed
                     </option>
                     {registeredOperationsAdmins.map((adm) => (
                       <option key={adm.id} value={adm.email}>
@@ -2440,7 +2627,8 @@ export default function GosalaManagers() {
                     ))}
                   </select>
                   <p className="text-[11px] text-ink-faint mt-1">
-                    Assign which Operations Admin oversees this Gaushala's bookings and daily operations.
+                    Assign which Operations Admin oversees this Gaushala's
+                    bookings and daily operations.
                   </p>
                 </div>
               )}
@@ -2493,7 +2681,10 @@ export default function GosalaManagers() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="mt-4 space-y-4 overflow-y-auto pr-1 flex-1">
+            <form
+              onSubmit={handleSubmit}
+              className="mt-4 space-y-4 overflow-y-auto pr-1 flex-1"
+            >
               <div>
                 <label className="block text-[12.5px] font-semibold text-ink mb-1">
                   Manager Full Name *
@@ -2545,7 +2736,9 @@ export default function GosalaManagers() {
                   </label>
                   <button
                     type="button"
-                    onClick={() => setFormPassword(generateRandomPassword("Mgr"))}
+                    onClick={() =>
+                      setFormPassword(generateRandomPassword("Mgr"))
+                    }
                     className="inline-flex items-center gap-1 text-[11px] font-semibold text-saffron-deep hover:text-saffron bg-saffron-soft px-2 py-0.5 rounded cursor-pointer transition"
                   >
                     <RefreshCw size={11} />
@@ -2567,11 +2760,17 @@ export default function GosalaManagers() {
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink p-1 cursor-pointer"
                     title={showFormPassword ? "Hide password" : "Show password"}
                   >
-                    {showFormPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    {showFormPassword ? (
+                      <EyeOff size={15} />
+                    ) : (
+                      <Eye size={15} />
+                    )}
                   </button>
                 </div>
                 <p className="text-[11px] text-ink-faint leading-relaxed">
-                  Set this manager's sign-in password. Upon saving, you will get a ready-to-share card with 1-click WhatsApp and clipboard copy.
+                  Set this manager's sign-in password. Upon saving, you will get
+                  a ready-to-share card with 1-click WhatsApp and clipboard
+                  copy.
                 </p>
               </div>
 
@@ -2604,7 +2803,10 @@ export default function GosalaManagers() {
                 {/* Search inside Gaushalas list */}
                 {scopedGosalas.length > 4 && (
                   <div className="mb-2 relative">
-                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" />
+                    <Search
+                      size={13}
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint"
+                    />
                     <input
                       type="text"
                       value={gosalaSearchFilter}
@@ -2623,14 +2825,17 @@ export default function GosalaManagers() {
                   ) : (
                     scopedGosalas
                       .filter((g) =>
-                        g.name.toLowerCase().includes(gosalaSearchFilter.toLowerCase()),
+                        g.name
+                          .toLowerCase()
+                          .includes(gosalaSearchFilter.toLowerCase()),
                       )
                       .map((g) => {
                         const isSelected = formSelectedGosalas.some(
                           (gn) => gn.toLowerCase() === g.name.toLowerCase(),
                         )
                         const cowsInG = animals.filter(
-                          (a) => a.gosala.toLowerCase() === g.name.toLowerCase(),
+                          (a) =>
+                            a.gosala.toLowerCase() === g.name.toLowerCase(),
                         ).length
 
                         return (
@@ -2669,7 +2874,10 @@ export default function GosalaManagers() {
                                   {g.name}
                                 </div>
                                 <div className="text-[10.5px] text-ink-faint flex items-center gap-1.5">
-                                  <MapPin size={10} className="text-saffron shrink-0" />
+                                  <MapPin
+                                    size={10}
+                                    className="text-saffron shrink-0"
+                                  />
                                   <span>{g.region}</span>
                                 </div>
                               </div>
@@ -2729,7 +2937,9 @@ export default function GosalaManagers() {
                   type="submit"
                   className="bg-forest text-white px-5 py-2 text-[13px] font-semibold rounded-md hover:bg-forest-deep transition-colors cursor-pointer shadow-xs"
                 >
-                  {editingManager ? "Save Manager Changes" : "Create Manager Profile"}
+                  {editingManager
+                    ? "Save Manager Changes"
+                    : "Create Manager Profile"}
                 </button>
               </div>
             </form>
@@ -2769,7 +2979,8 @@ export default function GosalaManagers() {
                     : "Reactivate Custodian Manager"}
                 </h3>
                 <p className="text-[12px] text-ink-soft mt-0.5">
-                  Review the operational impact before changing custodian status.
+                  Review the operational impact before changing custodian
+                  status.
                 </p>
               </div>
               <button
@@ -2796,19 +3007,28 @@ export default function GosalaManagers() {
                       {deactivatingManager.name}
                     </div>
                     <div className="text-[11.5px] font-mono text-ink-faint">
-                      ID: {deactivatingManager.id} · {deactivatingManager.region}
+                      ID: {deactivatingManager.id} ·{" "}
+                      {deactivatingManager.region}
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-[12px] pt-2 border-t border-line/70">
                   <div>
-                    <span className="text-ink-faint text-[10.5px] block font-mono uppercase">Phone</span>
-                    <span className="font-mono text-ink">{deactivatingManager.phone}</span>
+                    <span className="text-ink-faint text-[10.5px] block font-mono uppercase">
+                      Phone
+                    </span>
+                    <span className="font-mono text-ink">
+                      {deactivatingManager.phone}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-ink-faint text-[10.5px] block font-mono uppercase">Current Status</span>
-                    <span className="font-semibold text-ink">{deactivatingManager.status}</span>
+                    <span className="text-ink-faint text-[10.5px] block font-mono uppercase">
+                      Current Status
+                    </span>
+                    <span className="font-semibold text-ink">
+                      {deactivatingManager.status}
+                    </span>
                   </div>
                 </div>
 
@@ -2819,15 +3039,17 @@ export default function GosalaManagers() {
                   </span>
                   {getManagerAssignedGosalas(deactivatingManager).length > 0 ? (
                     <div className="flex flex-wrap gap-1">
-                      {getManagerAssignedGosalas(deactivatingManager).map((gn) => (
-                        <span
-                          key={gn}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-forest-soft text-forest border border-forest/20"
-                        >
-                          <Building2 size={10} />
-                          <span>{gn}</span>
-                        </span>
-                      ))}
+                      {getManagerAssignedGosalas(deactivatingManager).map(
+                        (gn) => (
+                          <span
+                            key={gn}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-forest-soft text-forest border border-forest/20"
+                          >
+                            <Building2 size={10} />
+                            <span>{gn}</span>
+                          </span>
+                        ),
+                      )}
                     </div>
                   ) : (
                     <span className="text-[11.5px] text-amber-700 font-mono">
@@ -2842,16 +3064,27 @@ export default function GosalaManagers() {
                 <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-md text-[12px] text-amber-900 dark:text-amber-300 leading-relaxed flex items-start gap-2">
                   <Info size={16} className="text-amber-700 shrink-0 mt-0.5" />
                   <div>
-                    <strong className="font-semibold">Acting Custodian Handover: </strong>
-                    Deactivating this manager will immediately suspend their authority to triage darshan requests. Regional Operations Admin will automatically assume emergency Acting Custodian triage.
+                    <strong className="font-semibold">
+                      Acting Custodian Handover:{" "}
+                    </strong>
+                    Deactivating this manager will immediately suspend their
+                    authority to triage darshan requests. Regional Operations
+                    Admin will automatically assume emergency Acting Custodian
+                    triage.
                   </div>
                 </div>
               ) : (
                 <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-md text-[12px] text-emerald-900 dark:text-emerald-300 leading-relaxed flex items-start gap-2">
-                  <Check size={16} className="text-emerald-700 shrink-0 mt-0.5" />
+                  <Check
+                    size={16}
+                    className="text-emerald-700 shrink-0 mt-0.5"
+                  />
                   <div>
-                    <strong className="font-semibold">Restoring Authority: </strong>
-                    Reactivating this manager will restore their login access and custody over their assigned Gaushala sanctuary.
+                    <strong className="font-semibold">
+                      Restoring Authority:{" "}
+                    </strong>
+                    Reactivating this manager will restore their login access
+                    and custody over their assigned Gaushala sanctuary.
                   </div>
                 </div>
               )}
@@ -2904,7 +3137,8 @@ export default function GosalaManagers() {
                   Confirm Permanent Deletion
                 </h3>
                 <p className="text-[12px] text-red-600 font-medium mt-0.5">
-                  ⚠️ Irreversible Action: This manager profile will be permanently deleted.
+                  ⚠️ Irreversible Action: This manager profile will be
+                  permanently deleted.
                 </p>
               </div>
               <button
@@ -2944,7 +3178,8 @@ export default function GosalaManagers() {
                     <strong>Assigned Gaushalas: </strong>
                     {getManagerAssignedGosalas(deletingManager).length > 0 ? (
                       <span className="text-red-700 font-semibold">
-                        {getManagerAssignedGosalas(deletingManager).join(", ")} (Will become Unassigned)
+                        {getManagerAssignedGosalas(deletingManager).join(", ")}{" "}
+                        (Will become Unassigned)
                       </span>
                     ) : (
                       <span className="text-ink-faint">None</span>
@@ -2954,7 +3189,9 @@ export default function GosalaManagers() {
               </div>
 
               <div className="p-3 bg-paper border border-line rounded-md text-[12px] text-ink-soft leading-relaxed">
-                Deleting this record will unassign any associated shelters and immediately transfer all pending ceremony verifications to <strong>Regional Operations Admin</strong> triage.
+                Deleting this record will unassign any associated shelters and
+                immediately transfer all pending ceremony verifications to{" "}
+                <strong>Regional Operations Admin</strong> triage.
               </div>
 
               {/* Actions */}
@@ -3034,7 +3271,10 @@ export default function GosalaManagers() {
             </div>
           </header>
 
-          <form onSubmit={handleRegisterGosala} className="flex-1 flex flex-col">
+          <form
+            onSubmit={handleRegisterGosala}
+            className="flex-1 flex flex-col"
+          >
             <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-8 py-6 space-y-6">
               {/* Top Banner Notice */}
               <div className="p-4 rounded-lg bg-saffron-soft/30 border border-saffron/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-ink">
@@ -3047,7 +3287,9 @@ export default function GosalaManagers() {
                       Accredited Sacred Cattle Sanctuary Onboarding
                     </div>
                     <div className="text-[12px] text-ink-soft mt-0.5">
-                      Enter verified legal credentials, physical address, and assigned custodian to activate live booking serviceability.
+                      Enter verified legal credentials, physical address, and
+                      assigned custodian to activate live booking
+                      serviceability.
                     </div>
                   </div>
                 </div>
@@ -3092,11 +3334,15 @@ export default function GosalaManagers() {
                             currentLat={gFormLat}
                             currentLng={gFormLng}
                             onSelectHub={(hub) => {
-                              setGFormRegion(`${hub.name} (${hub.city}, ${hub.state})`)
+                              setGFormRegion(
+                                `${hub.name} (${hub.city}, ${hub.state})`,
+                              )
                               setGFormLat(hub.lat)
                               setGFormLng(hub.lng)
                               if (!gFormAddress) {
-                                setGFormAddress(`${hub.name}, ${hub.city}, ${hub.state}`)
+                                setGFormAddress(
+                                  `${hub.name}, ${hub.city}, ${hub.state}`,
+                                )
                               }
                             }}
                           />
@@ -3209,20 +3455,26 @@ export default function GosalaManagers() {
                           </label>
                           <select
                             value={gFormGoverningAdminEmail}
-                            onChange={(e) => setGFormGoverningAdminEmail(e.target.value)}
+                            onChange={(e) =>
+                              setGFormGoverningAdminEmail(e.target.value)
+                            }
                             className="w-full bg-card border border-line rounded-md px-3 py-2 text-[12.5px] text-ink outline-none focus:border-amber-500 transition cursor-pointer font-medium"
                           >
                             <option value="">
-                              ★ Direct Super Admin Oversight ({activeSuperAdminName}) - Platform Managed
+                              ★ Direct Super Admin Oversight (
+                              {activeSuperAdminName}) - Platform Managed
                             </option>
                             {registeredOperationsAdmins.map((adm) => (
                               <option key={adm.id} value={adm.email}>
-                                🛡️ {adm.name} ({adm.email}) - Regional Operations Portfolio
+                                🛡️ {adm.name} ({adm.email}) - Regional Operations
+                                Portfolio
                               </option>
                             ))}
                           </select>
                           <p className="text-[11px] text-ink-faint leading-relaxed">
-                            Gaushalas assigned to an Operations Admin will be isolated to their regional dashboard, staff management, and bookings pipeline.
+                            Gaushalas assigned to an Operations Admin will be
+                            isolated to their regional dashboard, staff
+                            management, and bookings pipeline.
                           </p>
                         </div>
                       )}
@@ -3232,39 +3484,55 @@ export default function GosalaManagers() {
                           Manager Appointment &amp; Sanctuary Supervision
                         </label>
                         <div className="space-y-2">
-                          <label className={`p-3 rounded-md border flex items-start gap-2.5 cursor-pointer transition ${
-                            !gFormActAsManager
-                              ? "border-saffron bg-saffron-soft/40 ring-1 ring-saffron/30"
-                              : "border-line bg-paper hover:border-line-strong"
-                          }`}>
+                          <label
+                            className={`p-3 rounded-md border flex items-start gap-2.5 cursor-pointer transition ${
+                              !gFormActAsManager
+                                ? "border-saffron bg-saffron-soft/40 ring-1 ring-saffron/30"
+                                : "border-line bg-paper hover:border-line-strong"
+                            }`}
+                          >
                             <input
                               type="radio"
                               name="managerGovernanceChoice"
                               checked={!gFormActAsManager}
                               onChange={() => {
                                 setGFormActAsManager(false)
-                                if (availableManagersForAppointing.length > 0 && !gFormManagerId) {
-                                  setGFormManagerId(availableManagersForAppointing[0].id)
+                                if (
+                                  availableManagersForAppointing.length > 0 &&
+                                  !gFormManagerId
+                                ) {
+                                  setGFormManagerId(
+                                    availableManagersForAppointing[0].id,
+                                  )
                                 }
                               }}
                               className="mt-0.5 text-saffron focus:ring-saffron cursor-pointer"
                             />
                             <div className="flex-1">
                               <div className="font-semibold text-[12.5px] text-ink flex items-center gap-1.5">
-                                <Building2 size={14} className="text-saffron-deep" />
-                                <span>Appoint an Authorized Manager from Roster</span>
+                                <Building2
+                                  size={14}
+                                  className="text-saffron-deep"
+                                />
+                                <span>
+                                  Appoint an Authorized Manager from Roster
+                                </span>
                               </div>
                               <p className="text-[11px] text-ink-faint mt-0.5 leading-relaxed">
-                                Delegate day-to-day sanctuary supervision, devotee welcomes, and animal welfare to an authorized manager.
+                                Delegate day-to-day sanctuary supervision,
+                                devotee welcomes, and animal welfare to an
+                                authorized manager.
                               </p>
                             </div>
                           </label>
 
-                          <label className={`p-3 rounded-md border flex items-start gap-2.5 cursor-pointer transition ${
-                            gFormActAsManager
-                              ? "border-forest bg-forest-soft/40 ring-1 ring-forest/30"
-                              : "border-line bg-paper hover:border-line-strong"
-                          }`}>
+                          <label
+                            className={`p-3 rounded-md border flex items-start gap-2.5 cursor-pointer transition ${
+                              gFormActAsManager
+                                ? "border-forest bg-forest-soft/40 ring-1 ring-forest/30"
+                                : "border-line bg-paper hover:border-line-strong"
+                            }`}
+                          >
                             <input
                               type="radio"
                               name="managerGovernanceChoice"
@@ -3277,11 +3545,23 @@ export default function GosalaManagers() {
                             />
                             <div className="flex-1">
                               <div className="font-semibold text-[12.5px] text-ink flex items-center gap-1.5">
-                                <ShieldCheck size={14} className="text-forest" />
-                                <span>I will act as Manager / Custodian myself ({currentRole === "super_admin" ? activeSuperAdminName : activeAdminName})</span>
+                                <ShieldCheck
+                                  size={14}
+                                  className="text-forest"
+                                />
+                                <span>
+                                  I will act as Manager / Custodian myself (
+                                  {currentRole === "super_admin"
+                                    ? activeSuperAdminName
+                                    : activeAdminName}
+                                  )
+                                </span>
                               </div>
                               <p className="text-[11px] text-ink-faint mt-0.5 leading-relaxed">
-                                You retain direct operational management, booking triage, and cattle herd oversight for this sanctuary without appointing an external manager.
+                                You retain direct operational management,
+                                booking triage, and cattle herd oversight for
+                                this sanctuary without appointing an external
+                                manager.
                               </p>
                             </div>
                           </label>
@@ -3292,26 +3572,40 @@ export default function GosalaManagers() {
                             <label className="block text-[11.5px] font-semibold text-ink flex items-center justify-between">
                               <span>Select Authorized Manager:</span>
                               <span className="text-[11px] text-forest font-medium">
-                                {availableManagersForAppointing.length} manager{availableManagersForAppointing.length !== 1 ? "s" : ""} available
+                                {availableManagersForAppointing.length} manager
+                                {availableManagersForAppointing.length !== 1
+                                  ? "s"
+                                  : ""}{" "}
+                                available
                               </span>
                             </label>
-                            {availableManagersForAppointing.filter((m) => m.status === "Active" || !m.status).length > 0 ? (
+                            {availableManagersForAppointing.filter(
+                              (m) => m.status === "Active" || !m.status,
+                            ).length > 0 ? (
                               <select
                                 value={gFormManagerId}
-                                onChange={(e) => setGFormManagerId(e.target.value)}
+                                onChange={(e) =>
+                                  setGFormManagerId(e.target.value)
+                                }
                                 className="w-full bg-card border border-line rounded-md px-3 py-2 text-[12.5px] text-ink outline-none focus:border-saffron transition cursor-pointer font-medium"
                               >
                                 {availableManagersForAppointing
-                                  .filter((m) => m.status === "Active" || !m.status)
+                                  .filter(
+                                    (m) => m.status === "Active" || !m.status,
+                                  )
                                   .map((m) => (
                                     <option key={m.id} value={m.id}>
-                                      {m.name} {m.email ? `(${m.email})` : ""} · {m.gosalas?.length || 0} facility(ies) · {m.region || "Hub"}
+                                      {m.name} {m.email ? `(${m.email})` : ""} ·{" "}
+                                      {m.gosalas?.length || 0} facility(ies) ·{" "}
+                                      {m.region || "Hub"}
                                     </option>
                                   ))}
                               </select>
                             ) : (
                               <div className="text-[12px] text-amber-700 bg-amber-50 p-2.5 rounded border border-amber-200">
-                                No active managers currently registered in your roster. You can add one using "+ Add Manager" above.
+                                No active managers currently registered in your
+                                roster. You can add one using "+ Add Manager"
+                                above.
                               </div>
                             )}
                           </div>
@@ -3340,11 +3634,19 @@ export default function GosalaManagers() {
                             if (matched.trustNo && !gFormTrustNo) {
                               setGFormTrustNo(matched.trustNo)
                             }
-                            if (matched.capacity && (!gFormCapacity || gFormCapacity === "50")) {
+                            if (
+                              matched.capacity &&
+                              (!gFormCapacity || gFormCapacity === "50")
+                            ) {
                               setGFormCapacity(String(matched.capacity))
                             }
                           }}
-                          onChange={({ lat, lng, address, suggestedRegion }) => {
+                          onChange={({
+                            lat,
+                            lng,
+                            address,
+                            suggestedRegion,
+                          }) => {
                             setGFormLat(lat)
                             setGFormLng(lng)
                             if (address && !gFormAddress) {
@@ -3368,7 +3670,9 @@ export default function GosalaManagers() {
                             type="number"
                             step="any"
                             value={gFormLat}
-                            onChange={(e) => setGFormLat(parseFloat(e.target.value) || 0)}
+                            onChange={(e) =>
+                              setGFormLat(parseFloat(e.target.value) || 0)
+                            }
                             className="w-full bg-paper border border-line rounded px-3 py-1.5 text-[12px] font-mono text-ink outline-none focus:border-saffron"
                           />
                         </div>
@@ -3380,16 +3684,23 @@ export default function GosalaManagers() {
                             type="number"
                             step="any"
                             value={gFormLng}
-                            onChange={(e) => setGFormLng(parseFloat(e.target.value) || 0)}
+                            onChange={(e) =>
+                              setGFormLng(parseFloat(e.target.value) || 0)
+                            }
                             className="w-full bg-paper border border-line rounded px-3 py-1.5 text-[12px] font-mono text-ink outline-none focus:border-saffron"
                           />
                         </div>
                       </div>
 
                       <div className="p-3 bg-paper border border-line rounded-md text-[11.5px] text-ink-soft leading-relaxed flex items-center gap-2">
-                        <Sparkles size={14} className="text-saffron-deep shrink-0" />
+                        <Sparkles
+                          size={14}
+                          className="text-saffron-deep shrink-0"
+                        />
                         <span>
-                          Coordinates are automatically synchronized with the chosen regional hub for live doorstep distance calculations.
+                          Coordinates are automatically synchronized with the
+                          chosen regional hub for live doorstep distance
+                          calculations.
                         </span>
                       </div>
                     </div>
@@ -3470,7 +3781,9 @@ export default function GosalaManagers() {
                 e.preventDefault()
                 const passwordToSave =
                   newUserPassword.trim() ||
-                  generateRandomPassword(newUserRole === "admin" ? "OpsAdmin" : "User")
+                  generateRandomPassword(
+                    newUserRole === "admin" ? "OpsAdmin" : "User",
+                  )
                 const payload: any = {
                   name: newUserName.trim(),
                   email: newUserEmail.trim(),
@@ -3514,10 +3827,10 @@ export default function GosalaManagers() {
                     newUserRole === "manager"
                       ? newUserGosala
                       : newUserRole === "driver"
-                      ? `Base: ${newUserGosala} (${newUserVehiclePlate})`
-                      : newUserRole === "customer"
-                      ? newUserAddress || "Direct Devotee"
-                      : "Regional Operations Admin",
+                        ? `Base: ${newUserGosala} (${newUserVehiclePlate})`
+                        : newUserRole === "customer"
+                          ? newUserAddress || "Direct Devotee"
+                          : "Regional Operations Admin",
                 })
 
                 setNewUserName("")
@@ -3535,9 +3848,19 @@ export default function GosalaManagers() {
                   {[
                     { id: "customer", label: "Devotee", icon: HeartHandshake },
                     { id: "driver", label: "Transit Pilot", icon: Truck },
-                    { id: "manager", label: "Gaushala Manager", icon: Building2 },
+                    {
+                      id: "manager",
+                      label: "Gaushala Manager",
+                      icon: Building2,
+                    },
                     ...(currentRole === "super_admin"
-                      ? [{ id: "admin", label: "Operations Admin", icon: ShieldCheck }]
+                      ? [
+                          {
+                            id: "admin",
+                            label: "Operations Admin",
+                            icon: ShieldCheck,
+                          },
+                        ]
                       : []),
                   ].map((r) => {
                     const active = newUserRole === r.id
@@ -3560,13 +3883,21 @@ export default function GosalaManagers() {
                 </div>
                 {currentRole !== "super_admin" ? (
                   <p className="text-[10.5px] text-ink-faint mt-1">
-                    * Operations Admin accounts can only be provisioned by the Super Admin.
+                    * Operations Admin accounts can only be provisioned by the
+                    Super Admin.
                   </p>
                 ) : newUserRole === "admin" ? (
                   <div className="mt-2 p-2.5 rounded bg-amber-500/10 border border-amber-500/20 text-[11.5px] text-ink-soft leading-relaxed flex items-start gap-2">
-                    <ShieldCheck size={14} className="text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <ShieldCheck
+                      size={14}
+                      className="text-amber-700 dark:text-amber-400 shrink-0 mt-0.5"
+                    />
                     <div>
-                      <strong className="text-ink font-semibold">Super Admin Provisioning:</strong> This account will be authorized as a regional Operations Admin with their own portfolio of Gaushalas and managers.
+                      <strong className="text-ink font-semibold">
+                        Super Admin Provisioning:
+                      </strong>{" "}
+                      This account will be authorized as a regional Operations
+                      Admin with their own portfolio of Gaushalas and managers.
                     </div>
                   </div>
                 ) : null}
@@ -3624,7 +3955,9 @@ export default function GosalaManagers() {
                     type="button"
                     onClick={() =>
                       setNewUserPassword(
-                        generateRandomPassword(newUserRole === "admin" ? "OpsAdmin" : "User")
+                        generateRandomPassword(
+                          newUserRole === "admin" ? "OpsAdmin" : "User",
+                        ),
                       )
                     }
                     className="text-[10.5px] text-saffron-deep hover:underline flex items-center gap-1 font-medium cursor-pointer"
@@ -3646,9 +3979,15 @@ export default function GosalaManagers() {
                     type="button"
                     onClick={() => setShowNewUserPassword(!showNewUserPassword)}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink p-1 cursor-pointer"
-                    title={showNewUserPassword ? "Hide password" : "Show password"}
+                    title={
+                      showNewUserPassword ? "Hide password" : "Show password"
+                    }
                   >
-                    {showNewUserPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                    {showNewUserPassword ? (
+                      <EyeOff size={14} />
+                    ) : (
+                      <Eye size={14} />
+                    )}
                   </button>
                 </div>
                 <p className="text-[10.5px] text-ink-faint mt-1">
@@ -3677,7 +4016,9 @@ export default function GosalaManagers() {
                 <div className="space-y-2.5 p-3 bg-paper border border-line rounded">
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[11px] text-ink-faint">Vehicle Plate</label>
+                      <label className="text-[11px] text-ink-faint">
+                        Vehicle Plate
+                      </label>
                       <input
                         type="text"
                         value={newUserVehiclePlate}
@@ -3687,7 +4028,9 @@ export default function GosalaManagers() {
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] text-ink-faint">License No</label>
+                      <label className="text-[11px] text-ink-faint">
+                        License No
+                      </label>
                       <input
                         type="text"
                         value={newUserLicense}
@@ -3698,7 +4041,9 @@ export default function GosalaManagers() {
                     </div>
                   </div>
                   <div>
-                    <label className="text-[11px] text-ink-faint">Home Gaushala Base</label>
+                    <label className="text-[11px] text-ink-faint">
+                      Home Gaushala Base
+                    </label>
                     <select
                       value={newUserGosala}
                       onChange={(e) => setNewUserGosala(e.target.value)}
@@ -3773,7 +4118,8 @@ export default function GosalaManagers() {
                     Account Credentials Ready
                   </h3>
                   <p className="text-[11.5px] text-ink-faint">
-                    Copy and share these credentials with {shareCredentials.name}
+                    Copy and share these credentials with{" "}
+                    {shareCredentials.name}
                   </p>
                 </div>
               </div>
@@ -3789,11 +4135,17 @@ export default function GosalaManagers() {
             <div className="mt-4 space-y-4 overflow-y-auto pr-1 flex-1">
               {/* Highlight Status Banner */}
               <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[12px] text-emerald-800 dark:text-emerald-300 flex items-start gap-2.5">
-                <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                <CheckCircle2
+                  size={16}
+                  className="shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400"
+                />
                 <div>
-                  <span className="font-semibold">Account Authorized Successfully!</span>
+                  <span className="font-semibold">
+                    Account Authorized Successfully!
+                  </span>
                   <p className="text-[11px] text-ink-soft mt-0.5">
-                    The user can immediately log in to the GOMAA platform using the email and password below.
+                    The user can immediately log in to the GOMAA platform using
+                    the email and password below.
                   </p>
                 </div>
               </div>
@@ -3812,13 +4164,19 @@ export default function GosalaManagers() {
 
                 <div className="grid grid-cols-1 gap-2.5 text-[12.5px]">
                   <div>
-                    <div className="text-[11px] text-ink-faint mb-0.5">Account Holder Name</div>
-                    <div className="font-semibold text-ink">{shareCredentials.name}</div>
+                    <div className="text-[11px] text-ink-faint mb-0.5">
+                      Account Holder Name
+                    </div>
+                    <div className="font-semibold text-ink">
+                      {shareCredentials.name}
+                    </div>
                   </div>
 
                   <div>
                     <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-[11px] text-ink-faint">Login Email Address</span>
+                      <span className="text-[11px] text-ink-faint">
+                        Login Email Address
+                      </span>
                       <button
                         type="button"
                         onClick={() => {
@@ -3839,21 +4197,31 @@ export default function GosalaManagers() {
 
                   <div>
                     <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-[11px] text-ink-faint">Account Sign-in Password</span>
+                      <span className="text-[11px] text-ink-faint">
+                        Account Sign-in Password
+                      </span>
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => setShowSharePassword(!showSharePassword)}
+                          onClick={() =>
+                            setShowSharePassword(!showSharePassword)
+                          }
                           className="text-[11px] text-ink-faint hover:text-ink flex items-center gap-1 cursor-pointer"
                         >
-                          {showSharePassword ? <EyeOff size={11} /> : <Eye size={11} />}
+                          {showSharePassword ? (
+                            <EyeOff size={11} />
+                          ) : (
+                            <Eye size={11} />
+                          )}
                           <span>{showSharePassword ? "Hide" : "Reveal"}</span>
                         </button>
                         <span className="text-line-strong">·</span>
                         <button
                           type="button"
                           onClick={() => {
-                            navigator.clipboard.writeText(shareCredentials.password)
+                            navigator.clipboard.writeText(
+                              shareCredentials.password,
+                            )
                             notify("Password copied to clipboard!", "ok")
                           }}
                           className="text-[11px] text-saffron-deep hover:underline flex items-center gap-1 cursor-pointer"
@@ -3864,14 +4232,22 @@ export default function GosalaManagers() {
                       </div>
                     </div>
                     <div className="font-mono bg-card px-3 py-1.5 rounded border border-line text-ink text-[13px] flex items-center justify-between font-semibold">
-                      <span>{showSharePassword ? shareCredentials.password : "•".repeat(Math.max(8, shareCredentials.password.length))}</span>
+                      <span>
+                        {showSharePassword
+                          ? shareCredentials.password
+                          : "•".repeat(
+                              Math.max(8, shareCredentials.password.length),
+                            )}
+                      </span>
                       <Lock size={13} className="text-saffron-deep" />
                     </div>
                   </div>
 
                   {shareCredentials.assignedScope && (
                     <div>
-                      <div className="text-[11px] text-ink-faint mb-0.5">Assigned Facility / Scope</div>
+                      <div className="text-[11px] text-ink-faint mb-0.5">
+                        Assigned Facility / Scope
+                      </div>
                       <div className="font-medium text-ink bg-card px-3 py-1.5 rounded border border-line text-[12px]">
                         {shareCredentials.assignedScope}
                       </div>
@@ -3880,7 +4256,9 @@ export default function GosalaManagers() {
 
                   {shareCredentials.region && (
                     <div>
-                      <div className="text-[11px] text-ink-faint mb-0.5">Operational Region</div>
+                      <div className="text-[11px] text-ink-faint mb-0.5">
+                        Operational Region
+                      </div>
                       <div className="font-medium text-ink bg-card px-3 py-1.5 rounded border border-line text-[12px] flex items-center gap-1.5">
                         <MapPin size={12} className="text-saffron-deep" />
                         <span>{shareCredentials.region}</span>
@@ -3889,7 +4267,9 @@ export default function GosalaManagers() {
                   )}
 
                   <div>
-                    <div className="text-[11px] text-ink-faint mb-0.5">Platform Sign-In Portal</div>
+                    <div className="text-[11px] text-ink-faint mb-0.5">
+                      Platform Sign-In Portal
+                    </div>
                     <div className="font-mono text-[11.5px] text-ink bg-card px-3 py-1.5 rounded border border-line truncate">
                       {window.location.origin}
                     </div>
@@ -3899,9 +4279,14 @@ export default function GosalaManagers() {
 
               {/* Instructions memo */}
               <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[11.5px] text-ink-soft leading-relaxed flex items-start gap-2">
-                <Info size={14} className="text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
+                <Info
+                  size={14}
+                  className="text-amber-700 dark:text-amber-400 shrink-0 mt-0.5"
+                />
                 <span>
-                  Share this info directly with the appointed manager or user via WhatsApp, SMS, or email. They can sign in immediately using this email and password.
+                  Share this info directly with the appointed manager or user
+                  via WhatsApp, SMS, or email. They can sign in immediately
+                  using this email and password.
                 </span>
               </div>
             </div>

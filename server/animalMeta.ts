@@ -1,7 +1,4 @@
-import fs from "fs"
-import path from "path"
-
-const META_FILE_PATH = path.resolve(process.cwd(), "server/data/animals_meta.json")
+import { prisma } from "./prisma.ts"
 
 export interface AnimalRichMeta {
   name?: string
@@ -32,42 +29,30 @@ export interface AnimalRichMeta {
   cooldownMinutes?: number
 }
 
-// In-memory cache backed by server/data/animals_meta.json
+// In-memory cache backed by PostgreSQL `animals.metadata`
 let metaStore: Record<string, AnimalRichMeta> = {}
+let isInitialized = false
 
-// Seed data based on manager registration if file doesn't exist
-const DEFAULT_SEEDS: Record<string, AnimalRichMeta> = {}
-
-
-function loadMetaStore() {
+async function initMetaStore() {
+  if (isInitialized) return
   try {
-    if (fs.existsSync(META_FILE_PATH)) {
-      const raw = fs.readFileSync(META_FILE_PATH, "utf-8")
-      metaStore = JSON.parse(raw)
-    } else {
-      metaStore = { ...DEFAULT_SEEDS }
-      persistMetaStore()
+    const animals = await prisma.animal.findMany({
+      select: { id: true, name: true, metadata: true }
+    })
+    for (const a of animals) {
+      if (a.metadata && typeof a.metadata === "object") {
+        if (a.id) metaStore[a.id] = a.metadata as AnimalRichMeta
+        if (a.name) metaStore[a.name.trim().toLowerCase()] = a.metadata as AnimalRichMeta
+      }
     }
+    isInitialized = true
   } catch (err) {
-    console.warn("Could not load animals_meta.json:", err)
-    metaStore = { ...DEFAULT_SEEDS }
+    console.warn("[animalMeta] Could not preload animals metadata from DB:", (err as any)?.message)
   }
 }
 
-function persistMetaStore() {
-  try {
-    const dir = path.dirname(META_FILE_PATH)
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true })
-    }
-    fs.writeFileSync(META_FILE_PATH, JSON.stringify(metaStore, null, 2), "utf-8")
-  } catch (err) {
-    console.error("Failed to save animals_meta.json:", err)
-  }
-}
-
-// Initial load
-loadMetaStore()
+// Trigger initial load
+initMetaStore().catch(() => {})
 
 export function getAnimalMeta(name: string): AnimalRichMeta {
   if (!name) return {}
@@ -105,12 +90,47 @@ export function saveAnimalMeta(name: string, meta: Partial<AnimalRichMeta>) {
   })
 
   metaStore[normalized] = updated
-  persistMetaStore()
+
+  // Persist to PostgreSQL asynchronously
+  prisma.animal.findFirst({
+    where: {
+      OR: [
+        { name: { equals: name.trim(), mode: "insensitive" } },
+        { id: name.trim() }
+      ]
+    }
+  }).then(async (animal) => {
+    if (animal) {
+      metaStore[animal.id] = updated
+      metaStore[animal.name.trim().toLowerCase()] = updated
+      await prisma.animal.update({
+        where: { id: animal.id },
+        data: { metadata: updated as any }
+      })
+    }
+  }).catch((err) => {
+    console.error(`[animalMeta] Failed to persist metadata to DB for ${name}:`, err.message)
+  })
 }
 
 export function deleteAnimalMeta(name: string) {
   if (!name) return
   const normalized = name.trim().toLowerCase()
   delete metaStore[normalized]
-  persistMetaStore()
+
+  prisma.animal.findFirst({
+    where: {
+      OR: [
+        { name: { equals: name.trim(), mode: "insensitive" } },
+        { id: name.trim() }
+      ]
+    }
+  }).then(async (animal) => {
+    if (animal) {
+      await prisma.animal.update({
+        where: { id: animal.id },
+        data: { metadata: {} }
+      })
+    }
+  }).catch(() => {})
 }

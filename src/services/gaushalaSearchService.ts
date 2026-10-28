@@ -1,6 +1,6 @@
 /**
  * GOMAA Gaushala Geodesic Search Service
- * 
+ *
  * Provides unified, intelligent search across:
  * 1. GOMAA Registered Gaushalas (active database & memory records)
  * 2. Curated Major Sacred Vedic Gaushalas & Ashrams across India
@@ -8,7 +8,11 @@
  * 4. OpenStreetMap Nominatim Geocoding (with India boundary bias & query relaxation)
  */
 
-import { findNearestIndianHub, type OperationalRegionHub, calculateDistanceKm } from "../data/regions.ts"
+import {
+  findNearestIndianHub,
+  type OperationalRegionHub,
+  calculateDistanceKm,
+} from "../data/regions.ts"
 import { api } from "./api.ts"
 
 export interface GaushalaSearchResult {
@@ -478,7 +482,12 @@ export async function searchGaushalaLocations(
     // Compute distance if GPS origin available
     if (options.currentLat && options.currentLng) {
       res.distanceKm = Math.round(
-        calculateDistanceKm(options.currentLat, options.currentLng, res.lat, res.lng),
+        calculateDistanceKm(
+          options.currentLat,
+          options.currentLng,
+          res.lat,
+          res.lng,
+        ),
       )
     }
 
@@ -488,69 +497,83 @@ export async function searchGaushalaLocations(
   const norm = rawQ.toLowerCase()
   const tokens = norm.split(/[\s,.-]+/).filter((t) => t.length >= 2)
 
-// Helper: Local zero-latency Google Maps URL & coordinate extraction
-function extractCoordsAndNameLocally(input: string): { lat: number; lng: number; name?: string; isCoords?: boolean } | null {
-  if (!input) return null
-  const trimmed = input.trim()
+  // Helper: Local zero-latency Google Maps URL & coordinate extraction
+  interface LocalCoordsExtraction {
+    lat: number
+    lng: number
+    name?: string
+    isCoords?: boolean
+  }
 
-  // Direct Decimal coordinates: "18.5204, 73.8567"
-  const decMatch = trimmed.match(/^(-?\d{1,2}(?:\.\d+)?)[,\s]+(-?\d{1,3}(?:\.\d+)?)$/)
-  if (decMatch) {
-    const lat = parseFloat(decMatch[1])
-    const lng = parseFloat(decMatch[2])
-    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-      return { lat, lng, isCoords: true }
+  function extractCoordsAndNameLocally(
+    input: string,
+  ): LocalCoordsExtraction | null {
+    if (!input) return null
+    const trimmed = input.trim()
+
+    // Direct Decimal coordinates: "18.5204, 73.8567"
+    const decMatch = trimmed.match(
+      /^(-?\d{1,2}(?:\.\d+)?)[,\s]+(-?\d{1,3}(?:\.\d+)?)$/,
+    )
+    if (decMatch) {
+      const lat = parseFloat(decMatch[1])
+      const lng = parseFloat(decMatch[2])
+      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        return { lat, lng, isCoords: true }
+      }
     }
-  }
 
-  // Place name in /place/Name+Here/
-  const placeMatch = trimmed.match(/\/place\/([^/@?]+)/)
-  let name: string | undefined
-  if (placeMatch && placeMatch[1]) {
-    try {
-      name = decodeURIComponent(placeMatch[1].replace(/\+/g, " "))
-    } catch {}
-  }
-
-  // @lat,lng
-  const atMatch = trimmed.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/)
-  if (atMatch) {
-    const lat = parseFloat(atMatch[1])
-    const lng = parseFloat(atMatch[2])
-    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-      return { lat, lng, name, isCoords: false }
+    // Place name in /place/Name+Here/
+    const placeMatch = trimmed.match(/\/place\/([^/@?]+)/)
+    let name: string | undefined
+    if (placeMatch && placeMatch[1]) {
+      try {
+        name = decodeURIComponent(placeMatch[1].replace(/\+/g, " "))
+      } catch {}
     }
-  }
 
-  // Protobuf !3dlat!4dlng
-  const protoMatch = trimmed.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/)
-  if (protoMatch) {
-    const lat = parseFloat(protoMatch[1])
-    const lng = parseFloat(protoMatch[2])
-    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-      return { lat, lng, name, isCoords: false }
+    // @lat,lng
+    const atMatch = trimmed.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/)
+    if (atMatch) {
+      const lat = parseFloat(atMatch[1])
+      const lng = parseFloat(atMatch[2])
+      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        return { lat, lng, name, isCoords: false }
+      }
     }
-  }
 
-  // Query param q=lat,lng
-  const qMatch = trimmed.match(/[?&](?:q|query)=(-?\d+\.\d+),(-?\d+\.\d+)/)
-  if (qMatch) {
-    const lat = parseFloat(qMatch[1])
-    const lng = parseFloat(qMatch[2])
-    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-      return { lat, lng, name, isCoords: false }
+    // Protobuf !3dlat!4dlng
+    const protoMatch = trimmed.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/)
+    if (protoMatch) {
+      const lat = parseFloat(protoMatch[1])
+      const lng = parseFloat(protoMatch[2])
+      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        return { lat, lng, name, isCoords: false }
+      }
     }
-  }
 
-  return null
-}
+    // Query param q=lat,lng
+    const qMatch = trimmed.match(/[?&](?:q|query)=(-?\d+\.\d+),(-?\d+\.\d+)/)
+    if (qMatch) {
+      const lat = parseFloat(qMatch[1])
+      const lng = parseFloat(qMatch[2])
+      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        return { lat, lng, name, isCoords: false }
+      }
+    }
+
+    return null
+  }
 
   // -------------------------------------------------------------
   // TIER 0: Direct Google Maps URL or Coordinates Resolution
   // -------------------------------------------------------------
   const directExtract = extractCoordsAndNameLocally(rawQ)
   if (directExtract) {
-    const closestHub = findNearestIndianHub(directExtract.lat, directExtract.lng)
+    const closestHub = findNearestIndianHub(
+      directExtract.lat,
+      directExtract.lng,
+    )
     addResult({
       id: `local-gmaps-${directExtract.lat.toFixed(4)}-${directExtract.lng.toFixed(4)}`,
       name: directExtract.name || "Gaushala Premise (Google Maps)",
@@ -562,7 +585,9 @@ function extractCoordsAndNameLocally(input: string): { lat: number; lng: number;
       lat: directExtract.lat,
       lng: directExtract.lng,
       source: directExtract.isCoords ? "geocoded" : "google_maps_link",
-      badgeText: directExtract.isCoords ? "Exact Coordinates" : "Google Maps Verified",
+      badgeText: directExtract.isCoords
+        ? "Exact Coordinates"
+        : "Google Maps Verified",
       suggestedRegion: `${closestHub.hub.name} (${closestHub.hub.city}, ${closestHub.hub.state})`,
       hubId: closestHub.hub.id,
       hubName: closestHub.hub.name,
@@ -637,8 +662,18 @@ function extractCoordsAndNameLocally(input: string): { lat: number; lng: number;
         (tokens.length > 0 && tokens.every((t) => hay.includes(t)))
 
       if (matches) {
-        const lat = typeof g.latitude === "number" ? g.latitude : typeof g.lat === "number" ? g.lat : 17.4156
-        const lng = typeof g.longitude === "number" ? g.longitude : typeof g.lng === "number" ? g.lng : 78.4358
+        const lat =
+          typeof g.latitude === "number"
+            ? g.latitude
+            : typeof g.lat === "number"
+              ? g.lat
+              : 17.4156
+        const lng =
+          typeof g.longitude === "number"
+            ? g.longitude
+            : typeof g.lng === "number"
+              ? g.lng
+              : 78.4358
         const closestHub = findNearestIndianHub(lat, lng)
 
         addResult({
@@ -666,11 +701,14 @@ function extractCoordsAndNameLocally(input: string): { lat: number; lng: number;
   // TIER 2: Search Curated Major Sacred Indian Gaushalas & Ashrams
   // -------------------------------------------------------------
   for (const cg of CURATED_SACRED_INDIAN_GAUSHALAS) {
-    const hay = `${cg.name} ${cg.trustName} ${cg.address} ${cg.city} ${cg.state}`.toLowerCase()
+    const hay =
+      `${cg.name} ${cg.trustName} ${cg.address} ${cg.city} ${cg.state}`.toLowerCase()
     const matches =
       hay.includes(norm) ||
       (tokens.length > 0 && tokens.every((t) => hay.includes(t))) ||
-      (tokens.length >= 2 && tokens.filter((t) => hay.includes(t)).length >= Math.ceil(tokens.length * 0.7))
+      (tokens.length >= 2 &&
+        tokens.filter((t) => hay.includes(t)).length >=
+          Math.ceil(tokens.length * 0.7))
 
     if (matches) {
       const closestHub = findNearestIndianHub(cg.lat, cg.lng)
@@ -717,9 +755,17 @@ function extractCoordsAndNameLocally(input: string): { lat: number; lng: number;
             // Verify inside India bounds (lat 6-38, lng 68-98)
             if (lat >= 6 && lat <= 38 && lng >= 68 && lng <= 98) {
               const closestHub = findNearestIndianHub(lat, lng)
-              const parts = [props.street, props.district, props.city, props.state, props.countrycode?.toUpperCase()]
-                .filter(Boolean)
-              const address = parts.length > 0 ? parts.join(", ") : `${props.name}, ${closestHub.hub.city}`
+              const parts = [
+                props.street,
+                props.district,
+                props.city,
+                props.state,
+                props.countrycode?.toUpperCase(),
+              ].filter(Boolean)
+              const address =
+                parts.length > 0
+                  ? parts.join(", ")
+                  : `${props.name}, ${closestHub.hub.city}`
 
               addResult({
                 id: `photon-${props.osm_id || Math.random()}`,
@@ -730,9 +776,11 @@ function extractCoordsAndNameLocally(input: string): { lat: number; lng: number;
                 lat,
                 lng,
                 source: "osm_poi",
-                badgeText: props.osm_value === "cow" || props.name.toLowerCase().includes("gaushala")
-                  ? "OpenStreetMap Gaushala"
-                  : "OpenStreetMap Landmark",
+                badgeText:
+                  props.osm_value === "cow" ||
+                  props.name.toLowerCase().includes("gaushala")
+                    ? "OpenStreetMap Gaushala"
+                    : "OpenStreetMap Landmark",
                 suggestedRegion: `${closestHub.hub.name} (${closestHub.hub.city}, ${closestHub.hub.state})`,
                 hubId: closestHub.hub.id,
                 hubName: closestHub.hub.name,
@@ -751,7 +799,9 @@ function extractCoordsAndNameLocally(input: string): { lat: number; lng: number;
   // -------------------------------------------------------------
   if (results.length < 3) {
     try {
-      const nominatimQuery = rawQ.toLowerCase().includes("india") ? rawQ : `${rawQ}, India`
+      const nominatimQuery = rawQ.toLowerCase().includes("india")
+        ? rawQ
+        : `${rawQ}, India`
       const res = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
           nominatimQuery,
@@ -771,14 +821,25 @@ function extractCoordsAndNameLocally(input: string): { lat: number; lng: number;
           for (const item of data) {
             const lat = parseFloat(item.lat)
             const lng = parseFloat(item.lon)
-            if (!isNaN(lat) && !isNaN(lng) && lat >= 6 && lat <= 38 && lng >= 68 && lng <= 98) {
+            if (
+              !isNaN(lat) &&
+              !isNaN(lng) &&
+              lat >= 6 &&
+              lat <= 38 &&
+              lng >= 68 &&
+              lng <= 98
+            ) {
               const closestHub = findNearestIndianHub(lat, lng)
               const title = item.name || item.display_name.split(",")[0]
               addResult({
                 id: `osm-${item.place_id || Math.random()}`,
                 name: title,
                 address: item.display_name,
-                city: item.address?.city || item.address?.town || item.address?.village || closestHub.hub.city,
+                city:
+                  item.address?.city ||
+                  item.address?.town ||
+                  item.address?.village ||
+                  closestHub.hub.city,
                 state: item.address?.state || closestHub.hub.state,
                 lat,
                 lng,

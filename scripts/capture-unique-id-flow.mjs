@@ -32,7 +32,7 @@ async function run() {
       await email.click({ clickCount: 3 })
       await email.type("GMA-DEV-0223")
       await pass.click({ clickCount: 3 })
-      await pass.type("Koushik.git")
+      await pass.type("GomaaAdmin@2026!")
       const btn = await page.$('button[type="submit"]')
       if (btn) await btn.click()
     }
@@ -53,7 +53,7 @@ async function run() {
       await emailMgr.click({ clickCount: 3 })
       await emailMgr.type("GMA-MGR-0101")
       await passMgr.click({ clickCount: 3 })
-      await passMgr.type("Koushik.git")
+      await passMgr.type("GomaaAdmin@2026!")
       const btn = await page.$('button[type="submit"]')
       if (btn) await btn.click()
     }

@@ -68,16 +68,15 @@ export default function CattleAndShelterGallery({
   }, [effectiveGosalaName])
 
   const shelterPhotos = useMemo(() => {
-    if (
-      matchedStoreGosala?.photos &&
-      matchedStoreGosala.photos.length > 0
-    ) {
+    if (matchedStoreGosala?.photos && matchedStoreGosala.photos.length > 0) {
       return matchedStoreGosala.photos
     }
     if (matchedStoreGosala?.photo) {
       return [matchedStoreGosala.photo]
     }
-    const custDetail = matchedCustomerGosala?.id ? gosalaDetails[matchedCustomerGosala.id] : undefined
+    const custDetail = matchedCustomerGosala?.id
+      ? gosalaDetails[matchedCustomerGosala.id]
+      : undefined
     if (custDetail?.gallery && custDetail.gallery.length > 0) {
       return custDetail.gallery
     }
@@ -129,9 +128,7 @@ export default function CattleAndShelterGallery({
             }`}
           >
             <Sparkles size={13} className="text-saffron-deep shrink-0" />
-            <span className="truncate">
-              Sacred Cow ({animalPhotos.length})
-            </span>
+            <span className="truncate">Sacred Cow ({animalPhotos.length})</span>
           </button>
 
           <button
@@ -236,7 +233,8 @@ export default function CattleAndShelterGallery({
           <div className="drop-shadow-sm font-medium truncate">
             {activeCategory === "animal" ? (
               <span>
-                {animal.temperament || "Gentle & Auspicious Ceremonial Demeanour"}
+                {animal.temperament ||
+                  "Gentle & Auspicious Ceremonial Demeanour"}
               </span>
             ) : (
               <span>
@@ -296,8 +294,8 @@ export default function CattleAndShelterGallery({
               </span>
             </div>
             <p className="text-[11px] text-ink-faint truncate">
-              Resident shelter for {animal.name} ·{" "}
-              {shelterPhotos.length} facility photos available
+              Resident shelter for {animal.name} · {shelterPhotos.length}{" "}
+              facility photos available
             </p>
           </div>
         </div>
@@ -376,10 +374,7 @@ export default function CattleAndShelterGallery({
           </div>
 
           {/* Lightbox Footer Thumbnails & Selector */}
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="space-y-3 z-10"
-          >
+          <div onClick={(e) => e.stopPropagation()} className="space-y-3 z-10">
             <div className="flex justify-center gap-2">
               <button
                 type="button"
@@ -416,7 +411,11 @@ export default function CattleAndShelterGallery({
                       : "border-transparent opacity-60 hover:opacity-100"
                   }`}
                 >
-                  <img src={url} alt="" className="w-full h-full object-cover" />
+                  <img
+                    src={url}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
                 </button>
               ))}
             </div>

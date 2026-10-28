@@ -5,23 +5,45 @@
  */
 
 const MONTH_NAMES = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ]
 
 const MONTH_MAP: Record<string, number> = {
-  jan: 0, january: 0,
-  feb: 1, february: 1,
-  mar: 2, march: 2,
-  apr: 3, april: 3,
+  jan: 0,
+  january: 0,
+  feb: 1,
+  february: 1,
+  mar: 2,
+  march: 2,
+  apr: 3,
+  april: 3,
   may: 4,
-  jun: 5, june: 5,
-  jul: 6, july: 6,
-  aug: 7, august: 7,
-  sep: 8, sept: 8, september: 8,
-  oct: 9, october: 9,
-  nov: 10, november: 10,
-  dec: 11, december: 11,
+  jun: 5,
+  june: 5,
+  jul: 6,
+  july: 6,
+  aug: 7,
+  august: 7,
+  sep: 8,
+  sept: 8,
+  september: 8,
+  oct: 9,
+  october: 9,
+  nov: 10,
+  november: 10,
+  dec: 11,
+  december: 11,
 }
 
 /**
@@ -48,7 +70,8 @@ export function normalizeDateStr(d: string | Date | null | undefined): string {
     const day = parseInt(dmyMatch[1], 10)
     const mStr = dmyMatch[2].toLowerCase()
     const monthIndex = MONTH_MAP[mStr]
-    const month = monthIndex !== undefined ? MONTH_NAMES[monthIndex] : dmyMatch[2]
+    const month =
+      monthIndex !== undefined ? MONTH_NAMES[monthIndex] : dmyMatch[2]
     const year = dmyMatch[3]
     return `${day} ${month} ${year}`
   }
@@ -70,7 +93,8 @@ export function normalizeDateStr(d: string | Date | null | undefined): string {
     if (!isNaN(day)) {
       const mStr = parts[1].toLowerCase()
       const monthIndex = MONTH_MAP[mStr]
-      const month = monthIndex !== undefined ? MONTH_NAMES[monthIndex] : parts[1]
+      const month =
+        monthIndex !== undefined ? MONTH_NAMES[monthIndex] : parts[1]
       return `${day} ${month} ${parts[2]}`
     }
   }

@@ -79,7 +79,8 @@ export default function Login({
 
   // Forgot Password Modal States
   const [showForgotModal, setShowForgotModal] = useState(false)
-  const [forgotStep, setForgotStep] = useState<"request" | "verify" | "success">("request")
+  const [forgotStep, setForgotStep] =
+    useState<"request" | "verify" | "success">("request")
   const [forgotChannel, setForgotChannel] = useState<"EMAIL" | "PHONE">("EMAIL")
   const [forgotEmail, setForgotEmail] = useState("")
   const [forgotPhone, setForgotPhone] = useState("")
@@ -127,7 +128,9 @@ export default function Login({
       }
 
       const gMgrId = (g.managerId || "").trim()
-      const gMgrCleanId = gMgrId.startsWith("MGR-") ? gMgrId.replace(/^MGR-/, "") : gMgrId
+      const gMgrCleanId = gMgrId.startsWith("MGR-")
+        ? gMgrId.replace(/^MGR-/, "")
+        : gMgrId
       const gMgrName = (g.managerName || "").trim().toLowerCase()
 
       if (gMgrId || (gMgrName && !gMgrName.includes("none"))) {
@@ -157,11 +160,16 @@ export default function Login({
       if (Array.isArray(g.assignedManagers) && g.assignedManagers.length > 0) {
         return g.assignedManagers.some((am: any) => {
           const amId = (am.id || "").trim()
-          const amCleanId = amId.startsWith("MGR-") ? amId.replace(/^MGR-/, "") : amId
+          const amCleanId = amId.startsWith("MGR-")
+            ? amId.replace(/^MGR-/, "")
+            : amId
           const amName = (am.name || "").trim().toLowerCase()
           const amEmail = (am.email || "").trim().toLowerCase()
           return (
-            (amId && (amId === mId || amId === mCleanId || (mRawId && amId === mRawId))) ||
+            (amId &&
+              (amId === mId ||
+                amId === mCleanId ||
+                (mRawId && amId === mRawId))) ||
             (amName && mName && amName === mName) ||
             (amEmail && mEmail && amEmail === mEmail)
           )
@@ -190,9 +198,9 @@ export default function Login({
       return isManagerForGosala(match)
     })
 
-    return Array.from(new Set([...mappedFromGosalas, ...verifiedDirect])).filter(
-      Boolean,
-    )
+    return Array.from(
+      new Set([...mappedFromGosalas, ...verifiedDirect]),
+    ).filter(Boolean)
   }
 
   // --------------------------------------------------------------------------
@@ -205,31 +213,44 @@ export default function Login({
 
     const cleanEmailOrPhone = emailInput.trim()
     if (!cleanEmailOrPhone) {
-      setAuthError("Please enter your registered email, phone number, or Unique ID.")
+      setAuthError(
+        "Please enter your registered email, phone number, or Unique ID.",
+      )
       setIsSubmitting(false)
       return
     }
 
     try {
-      const authRes = await api.login(cleanEmailOrPhone, undefined, passwordInput)
+      const authRes = await api.login(
+        cleanEmailOrPhone,
+        undefined,
+        passwordInput,
+      )
 
       if (authRes.ok && authRes.token && authRes.user) {
         setAuthSession(authRes.token, authRes.user)
-        const targetRole = (authRes.user.role as RoleId) || "customer"
+        const targetRole = authRes.user.role as RoleId || "customer"
 
         if (targetRole === "manager") {
           const directManager = managers.find(
             (m) =>
               m.id === authRes.user.id ||
-              (m.email && m.email.toLowerCase() === authRes.user.email?.toLowerCase()) ||
-              (m.name && m.name.toLowerCase() === authRes.user.name?.toLowerCase())
+              (m.email &&
+                m.email.toLowerCase() === authRes.user.email?.toLowerCase()) ||
+              (m.name &&
+                m.name.toLowerCase() === authRes.user.name?.toLowerCase()),
           ) || {
             id: authRes.user.id,
             name: authRes.user.name,
             email: authRes.user.email,
             phone: authRes.user.phone,
-            gosala: authRes.user.assignedGosalaNames?.[0] || gosalas[0]?.name || "Surya",
-            gosalas: authRes.user.assignedGosalaNames || [gosalas[0]?.name || "Surya"],
+            gosala:
+              authRes.user.assignedGosalaNames?.[0] ||
+              gosalas[0]?.name ||
+              "Surya",
+            gosalas: authRes.user.assignedGosalaNames || [
+              gosalas[0]?.name || "Surya",
+            ],
             status: "Active",
           }
 
@@ -237,12 +258,16 @@ export default function Login({
             authRes.user.assignedGosalaNames ||
             authRes.user.gosalaNames ||
             (Array.isArray(authRes.user.gosalas)
-              ? authRes.user.gosalas.map((g: any) => (typeof g === "string" ? g : g.name))
+              ? authRes.user.gosalas.map((g: any) =>
+                  typeof g === "string" ? g : g.name,
+                )
               : []) ||
             []
 
           const gList = resolveManagerGosalas(directManager)
-          const combinedList = Array.from(new Set([...serverGosalaNames, ...gList])).filter(Boolean)
+          const combinedList = Array.from(
+            new Set([...serverGosalaNames, ...gList]),
+          ).filter(Boolean)
           const targetGosala =
             combinedList[0] ||
             directManager.gosala ||
@@ -250,17 +275,20 @@ export default function Login({
             "Gaushala_01"
 
           const baseManagerData =
-            profiles.manager?.managerData || initialProfiles.manager.managerData!
+            profiles.manager?.managerData ||
+            initialProfiles.manager.managerData!
 
           await updateProfile("manager", {
             name: authRes.user.name || directManager.name,
-            email: authRes.user.email || directManager.email || cleanEmailOrPhone,
+            email:
+              authRes.user.email || directManager.email || cleanEmailOrPhone,
             phone: authRes.user.phone || directManager.phone,
             managerData: {
               ...baseManagerData,
               managerId: directManager.id || authRes.user.id,
               gosala: targetGosala,
-              assignedGosalas: combinedList.length > 0 ? combinedList : [targetGosala],
+              assignedGosalas:
+                combinedList.length > 0 ? combinedList : [targetGosala],
             },
           })
 
@@ -287,17 +315,26 @@ export default function Login({
           })
         }
 
-        const roleDisplay = targetRole === "super_admin" 
-          ? "SUPER ADMIN (CAPTAIN)" 
-          : targetRole.toUpperCase()
+        const roleDisplay =
+          targetRole === "super_admin"
+            ? "SUPER ADMIN (CAPTAIN)"
+            : targetRole.toUpperCase()
 
-        notify(`Signed in as ${authRes.user.name || cleanEmailOrPhone} [${roleDisplay}]`, "ok")
+        notify(
+          `Signed in as ${authRes.user.name || cleanEmailOrPhone} [${roleDisplay}]`,
+          "ok",
+        )
         onSignIn(targetRole)
       } else {
-        setAuthError("Failed to authenticate session. Please check your credentials.")
+        setAuthError(
+          "Failed to authenticate session. Please check your credentials.",
+        )
       }
     } catch (err: any) {
-      setAuthError(err.message || "Invalid email or password. Please verify your credentials.")
+      setAuthError(
+        err.message ||
+          "Invalid email or password. Please verify your credentials.",
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -352,7 +389,10 @@ export default function Login({
           customerData: regRes.user.customerData,
         })
 
-        notify(`Devotee registration complete! Welcome to GOMAA, ${regRes.user.name}.`, "ok")
+        notify(
+          `Devotee registration complete! Welcome to GOMAA, ${regRes.user.name}.`,
+          "ok",
+        )
         onSignIn("customer")
       } else {
         setAuthError("Registration failed. Please try again.")
@@ -381,7 +421,9 @@ export default function Login({
         return
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        setForgotError("Please enter a valid email address (e.g. name@domain.com).")
+        setForgotError(
+          "Please enter a valid email address (e.g. name@domain.com).",
+        )
         setIsForgotSubmitting(false)
         return
       }
@@ -394,7 +436,9 @@ export default function Login({
         return
       }
       if (digits.length !== 10) {
-        setForgotError("Mobile number must be exactly 10 digits (e.g. 98490 12345).")
+        setForgotError(
+          "Mobile number must be exactly 10 digits (e.g. 98490 12345).",
+        )
         setIsForgotSubmitting(false)
         return
       }
@@ -415,7 +459,9 @@ export default function Login({
         setResendCooldown(45)
         notify(res.message || "Verification code dispatched.", "ok")
       } else {
-        setForgotError("Could not dispatch verification code. Please try again.")
+        setForgotError(
+          "Could not dispatch verification code. Please try again.",
+        )
       }
     } catch (err: any) {
       setForgotError(err.message || "Failed to send verification code.")
@@ -448,7 +494,9 @@ export default function Login({
         setResendCooldown(45)
         notify("A fresh 6-digit verification code has been dispatched.", "ok")
       } else {
-        setForgotError("Could not resend code. Please wait a moment and try again.")
+        setForgotError(
+          "Could not resend code. Please wait a moment and try again.",
+        )
       }
     } catch (err: any) {
       setForgotError(err.message || "Failed to resend verification code.")
@@ -485,7 +533,9 @@ export default function Login({
 
     const targetId =
       forgotIdentifier.trim() ||
-      (forgotChannel === "EMAIL" ? forgotEmail.trim().toLowerCase() : `+91 ${forgotPhone.replace(/\D/g, "")}`)
+      (forgotChannel === "EMAIL"
+        ? forgotEmail.trim().toLowerCase()
+        : `+91 ${forgotPhone.replace(/\D/g, "")}`)
 
     try {
       // 1. Verify OTP and get scoped reset token
@@ -507,17 +557,21 @@ export default function Login({
 
       if (resetRes?.ok) {
         setForgotStep("success")
-        notify("Password updated successfully! Please sign in with your new password.", "ok")
+        notify(
+          "Password updated successfully! Please sign in with your new password.",
+          "ok",
+        )
       } else {
         setForgotError(resetRes?.message || "Failed to update password.")
       }
     } catch (err: any) {
-      setForgotError(err.message || "Verification failed. Please check the code.")
+      setForgotError(
+        err.message || "Verification failed. Please check the code.",
+      )
     } finally {
       setIsForgotSubmitting(false)
     }
   }
-
 
   return (
     <div className="min-h-screen grid lg:grid-cols-[1.05fr_1fr]">
@@ -551,8 +605,9 @@ export default function Login({
               Sacred cattle welfare, altar seva, and trust logistics.
             </h2>
             <p className="text-[14px] text-paper/80 mt-4 leading-relaxed">
-              Every devotee, transit pilot, gaushala custodian, and operations officer
-              accesses their dedicated workspace authenticated by secure credentials.
+              Every devotee, transit pilot, gaushala custodian, and operations
+              officer accesses their dedicated workspace authenticated by secure
+              credentials.
             </p>
             <div className="mt-8 flex flex-wrap gap-x-2 gap-y-2">
               {flow.map((f, i) => (
@@ -569,7 +624,8 @@ export default function Login({
           </div>
 
           <div className="font-mono text-[11px] text-paper/60">
-            Protected with RFC 7519 JWT Cryptographic Tokens · Vercel + PostgreSQL Backend
+            Protected with RFC 7519 JWT Cryptographic Tokens · Vercel +
+            PostgreSQL Backend
           </div>
         </div>
       </div>
@@ -582,7 +638,9 @@ export default function Login({
             <div className="h-9 w-9 rounded-sm bg-saffron grid place-items-center font-serif text-[18px] text-white">
               G
             </div>
-            <span className="font-serif text-[20px] text-ink font-semibold">GOMAA</span>
+            <span className="font-serif text-[20px] text-ink font-semibold">
+              GOMAA
+            </span>
           </div>
 
           {/* Form Header */}
@@ -887,7 +945,8 @@ export default function Login({
                   className="mt-0.5 rounded border-line text-saffron focus:ring-saffron"
                 />
                 <span className="text-[11.5px] text-ink-faint leading-snug">
-                  I agree to the sacred cow welfare guidelines, ethical altar seva principles, and privacy policy.
+                  I agree to the sacred cow welfare guidelines, ethical altar
+                  seva principles, and privacy policy.
                 </span>
               </label>
 
@@ -911,15 +970,20 @@ export default function Login({
               </button>
 
               <div className="mt-3 p-2.5 bg-amber-500/10 border border-amber-500/20 rounded text-[11.5px] text-ink-soft leading-relaxed flex items-start gap-2">
-                <Building2 size={14} className="text-amber-700 shrink-0 mt-0.5" />
+                <Building2
+                  size={14}
+                  className="text-amber-700 shrink-0 mt-0.5"
+                />
                 <div>
-                  <strong>Are you a Gaushala Trust or Caretaker?</strong> Gaushala Managers and Transit Pilots are verified and onboarded by platform operations officers. Contact{" "}
-                  <span className="font-semibold text-ink">trust@gomaa.in</span> to register a sanctuary.
+                  <strong>Are you a Gaushala Trust or Caretaker?</strong>{" "}
+                  Gaushala Managers and Transit Pilots are verified and
+                  onboarded by platform operations officers. Contact{" "}
+                  <span className="font-semibold text-ink">trust@gomaa.in</span>{" "}
+                  to register a sanctuary.
                 </div>
               </div>
             </form>
           )}
-
         </div>
       </div>
 
@@ -952,13 +1016,17 @@ export default function Login({
               </h2>
             </div>
             <p className="text-[12.5px] text-ink-faint leading-relaxed mb-4">
-              Recover access using out-of-band verification delivered to your registered contact.
+              Recover access using out-of-band verification delivered to your
+              registered contact.
             </p>
 
             {/* Error Banner in Modal */}
             {forgotError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-sm text-[12px] text-red-800 flex items-start gap-2">
-                <AlertCircle size={15} className="text-red-600 shrink-0 mt-0.5" />
+                <AlertCircle
+                  size={15}
+                  className="text-red-600 shrink-0 mt-0.5"
+                />
                 <span className="flex-1">{forgotError}</span>
               </div>
             )}
@@ -1025,7 +1093,7 @@ export default function Login({
                           setForgotEmail(e.target.value.trim())
                           setForgotError(null)
                         }}
-                        placeholder="e.g. nanikoushik96@gmail.com"
+                        placeholder="e.g. admin@gomaa.in"
                         className="w-full bg-paper border border-line rounded-sm pl-9 pr-3 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
                       />
                     </div>
@@ -1051,7 +1119,9 @@ export default function Login({
                         autoFocus
                         value={forgotPhone}
                         onChange={(e) => {
-                          const digits = e.target.value.replace(/\D/g, "").slice(0, 10)
+                          const digits = e.target.value
+                            .replace(/\D/g, "")
+                            .slice(0, 10)
                           setForgotPhone(digits)
                           setForgotError(null)
                         }}
@@ -1060,13 +1130,16 @@ export default function Login({
                       />
                     </div>
                     <p className="text-[11px] text-ink-faint mt-1">
-                      Enter your 10-digit Indian mobile number without +91 or leading 0.
+                      Enter your 10-digit Indian mobile number without +91 or
+                      leading 0.
                     </p>
                   </div>
                 )}
 
                 <div className="p-3 bg-stone-100 rounded text-[11.5px] text-ink-faint leading-relaxed">
-                  <strong>Zero-Leakage Security:</strong> The single-use verification code is delivered out-of-band to your private inbox or phone SMS. It is never exposed in browser logs.
+                  <strong>Zero-Leakage Security:</strong> The single-use
+                  verification code is delivered out-of-band to your private
+                  inbox or phone SMS. It is never exposed in browser logs.
                 </div>
 
                 <button
@@ -1096,8 +1169,10 @@ export default function Login({
               <form onSubmit={handleVerifyAndReset} className="space-y-3.5">
                 <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded text-[12px] text-ink-soft">
                   Verification code dispatched to:{" "}
-                  <strong className="text-ink font-semibold">{forgotMaskedTarget}</strong>.
-                  Code expires in 10 minutes.
+                  <strong className="text-ink font-semibold">
+                    {forgotMaskedTarget}
+                  </strong>
+                  . Code expires in 10 minutes.
                 </div>
 
                 <div>
@@ -1111,7 +1186,9 @@ export default function Login({
                       onClick={handleResendOtp}
                       className="text-[11.5px] text-saffron hover:text-saffron-deep font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend Code"}
+                      {resendCooldown > 0
+                        ? `Resend in ${resendCooldown}s`
+                        : "Resend Code"}
                     </button>
                   </div>
                   <input
@@ -1123,7 +1200,11 @@ export default function Login({
                     autoFocus
                     maxLength={6}
                     value={forgotOtp}
-                    onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    onChange={(e) =>
+                      setForgotOtp(
+                        e.target.value.replace(/\D/g, "").slice(0, 6),
+                      )
+                    }
                     placeholder="123456"
                     className="w-full text-center font-mono text-[22px] tracking-[0.3em] font-bold bg-paper border border-line rounded-sm py-2 text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
                   />
@@ -1135,7 +1216,9 @@ export default function Login({
                       onClick={handleResendOtp}
                       className="text-saffron hover:text-saffron-deep font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {resendCooldown > 0 ? `Wait ${resendCooldown}s` : "Resend OTP"}
+                      {resendCooldown > 0
+                        ? `Wait ${resendCooldown}s`
+                        : "Resend OTP"}
                     </button>
                   </div>
                 </div>
@@ -1236,7 +1319,8 @@ export default function Login({
                   Password Reset Successful
                 </h3>
                 <p className="text-[12.5px] text-ink-faint leading-relaxed max-w-xs mx-auto">
-                  Your credentials have been securely updated in the PostgreSQL database. You can now sign in to your workspace.
+                  Your credentials have been securely updated in the PostgreSQL
+                  database. You can now sign in to your workspace.
                 </p>
                 <button
                   type="button"

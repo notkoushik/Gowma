@@ -50,15 +50,20 @@ export default function ManagerWallet() {
   const [withdrawAmount, setWithdrawAmount] = useState<string>("")
   const [withdrawMode, setWithdrawMode] = useState<"IMPS" | "RTGS">("IMPS")
   const [processingWithdrawal, setProcessingWithdrawal] = useState(false)
-  const [completedWithdrawal, setCompletedWithdrawal] = useState<WalletWithdrawal | null>(null)
-  const [activeTab, setActiveTab] = useState<"credits" | "withdrawals" | "policy">("credits")
+  const [completedWithdrawal, setCompletedWithdrawal] =
+    useState<WalletWithdrawal | null>(null)
+  const [activeTab, setActiveTab] =
+    useState<"credits" | "withdrawals" | "policy">("credits")
   const [searchFilter, setSearchFilter] = useState("")
 
   // Identify current manager identity and assigned Gaushala
   const managerProfile = profiles?.manager
-  const managerEmail = authUser?.email || managerProfile?.email || "manager1@gomaa.in"
-  const managerName = authUser?.name || managerProfile?.name || "Shyam Sundar Sharma"
-  const managerUniqueId = authUser?.uniqueId || (managerProfile as any)?.uniqueId || "GMA-MGR-0101"
+  const managerEmail =
+    authUser?.email || managerProfile?.email || "manager1@gomaa.in"
+  const managerName =
+    authUser?.name || managerProfile?.name || "Shyam Sundar Sharma"
+  const managerUniqueId =
+    authUser?.uniqueId || (managerProfile as any)?.uniqueId || "GMA-MGR-0101"
 
   const currentGosalaName = useMemo(() => {
     if (activeManagerGosala && activeManagerGosala !== "Unassigned") {
@@ -67,21 +72,30 @@ export default function ManagerWallet() {
     if (authUser?.gosalaNames && authUser.gosalaNames.length > 0) {
       return authUser.gosalaNames[0]
     }
-    if (managerProfile?.managerData?.gosala && managerProfile.managerData.gosala !== "Unassigned") {
+    if (
+      managerProfile?.managerData?.gosala &&
+      managerProfile.managerData.gosala !== "Unassigned"
+    ) {
       return managerProfile.managerData.gosala
     }
-    return gosalas[0]?.name || "Nandini Goseva Sadan"
+    return gosalas[0]?.name || ""
   }, [activeManagerGosala, authUser, managerProfile, gosalas])
 
   const currentGosalaObj = useMemo(() => {
     return gosalas.find(
-      (g) => g.name.toLowerCase() === currentGosalaName.toLowerCase() || g.id === currentGosalaName,
+      (g) =>
+        g.name.toLowerCase() === currentGosalaName.toLowerCase() ||
+        g.id === currentGosalaName,
     )
   }, [gosalas, currentGosalaName])
 
   // Bank details for the manager / gaushala
   const bankDetails = useMemo(() => {
-    return getGaushalaBankDetails(currentGosalaName, currentGosalaObj, managerProfile)
+    return getGaushalaBankDetails(
+      currentGosalaName,
+      currentGosalaObj,
+      managerProfile,
+    )
   }, [currentGosalaName, currentGosalaObj, managerProfile])
 
   // Compute live wallet state (credits, available balance, withdrawals)
@@ -94,7 +108,14 @@ export default function ManagerWallet() {
       pricingConfig?.commissionPct || 20,
       managerName,
     )
-  }, [managerEmail, currentGosalaName, bookings, pricingConfig, managerName, refreshKey])
+  }, [
+    managerEmail,
+    currentGosalaName,
+    bookings,
+    pricingConfig,
+    managerName,
+    refreshKey,
+  ])
 
   const handleWithdrawSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -132,7 +153,10 @@ export default function ManagerWallet() {
           "ok",
         )
       } catch (err: any) {
-        notify(`Withdrawal failed: ${err?.message || "Internal error"}`, "danger")
+        notify(
+          `Withdrawal failed: ${err?.message || "Internal error"}`,
+          "danger",
+        )
       } finally {
         setProcessingWithdrawal(false)
       }
@@ -191,7 +215,8 @@ export default function ManagerWallet() {
               {managerName}'s Custodian Wallet
             </h1>
             <p className="text-[13px] text-emerald-100 max-w-2xl leading-relaxed">
-              Your personal manager earnings from conducted sacred pujas, direct IMPS bank payout gateway, and regional trust share split.
+              Your personal manager earnings from conducted sacred pujas, direct
+              IMPS bank payout gateway, and regional trust share split.
             </p>
           </div>
 
@@ -321,7 +346,9 @@ export default function ManagerWallet() {
             <div className="text-[12.5px] text-ink-soft flex flex-wrap items-center gap-3 font-mono">
               <span>{bankDetails.bankName}</span>
               <span>•</span>
-              <span className="font-semibold text-ink">{bankDetails.accountMasked}</span>
+              <span className="font-semibold text-ink">
+                {bankDetails.accountMasked}
+              </span>
               <span>•</span>
               <span>IFSC: {bankDetails.ifsc}</span>
             </div>
@@ -360,7 +387,9 @@ export default function ManagerWallet() {
           }`}
         >
           <CreditCard size={16} />
-          <span>Payouts & Bank Withdrawals ({walletSummary.withdrawals.length})</span>
+          <span>
+            Payouts & Bank Withdrawals ({walletSummary.withdrawals.length})
+          </span>
         </button>
         <button
           onClick={() => setActiveTab("policy")}
@@ -384,7 +413,8 @@ export default function ManagerWallet() {
                 Itemized Seva Credits Breakdown
               </h3>
               <p className="text-[12px] text-ink-soft">
-                Showing every seva booking at {currentGosalaName} with net split calculation.
+                Showing every seva booking at {currentGosalaName} with net split
+                calculation.
               </p>
             </div>
             <div className="w-full sm:w-64">
@@ -416,19 +446,31 @@ export default function ManagerWallet() {
                 <tbody className="divide-y divide-line">
                   {filteredCredits.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-ink-faint">
+                      <td
+                        colSpan={8}
+                        className="py-8 text-center text-ink-faint"
+                      >
                         No seva credits match your query.
                       </td>
                     </tr>
                   ) : (
                     filteredCredits.map((item) => (
-                      <tr key={item.bookingId} className="hover:bg-paper/40 transition-colors">
+                      <tr
+                        key={item.bookingId}
+                        className="hover:bg-paper/40 transition-colors"
+                      >
                         <td className="py-3.5 px-4 font-mono">
-                          <div className="font-bold text-ink">{item.bookingId}</div>
-                          <div className="text-[11px] text-ink-faint">{item.date}</div>
+                          <div className="font-bold text-ink">
+                            {item.bookingId}
+                          </div>
+                          <div className="text-[11px] text-ink-faint">
+                            {item.date}
+                          </div>
                         </td>
                         <td className="py-3.5 px-4">
-                          <div className="font-semibold text-ink">{item.customer}</div>
+                          <div className="font-semibold text-ink">
+                            {item.customer}
+                          </div>
                           <div className="text-[11.5px] text-forest font-medium">
                             Cow: {item.animal}
                           </div>
@@ -485,7 +527,8 @@ export default function ManagerWallet() {
                 Bank Withdrawal &amp; Disbursal History
               </h3>
               <p className="text-[12px] text-ink-soft">
-                All payouts disbursed directly to your verified bank account via RBI IMPS/RTGS.
+                All payouts disbursed directly to your verified bank account via
+                RBI IMPS/RTGS.
               </p>
             </div>
             <button
@@ -508,9 +551,13 @@ export default function ManagerWallet() {
                 <div className="w-12 h-12 rounded-full bg-paper-deep text-ink-faint mx-auto flex items-center justify-center">
                   <CreditCard size={24} />
                 </div>
-                <h4 className="font-semibold text-ink text-[15px]">No Withdrawals Yet</h4>
+                <h4 className="font-semibold text-ink text-[15px]">
+                  No Withdrawals Yet
+                </h4>
                 <p className="text-[12.5px] text-ink-soft max-w-sm mx-auto">
-                  You have not initiated any bank withdrawals yet. Click "Withdraw to Bank" above to transfer your available balance of {inr(walletSummary.availableBalance)} instantly.
+                  You have not initiated any bank withdrawals yet. Click
+                  "Withdraw to Bank" above to transfer your available balance of{" "}
+                  {inr(walletSummary.availableBalance)} instantly.
                 </p>
               </div>
             ) : (
@@ -529,13 +576,20 @@ export default function ManagerWallet() {
                   </thead>
                   <tbody className="divide-y divide-line">
                     {walletSummary.withdrawals.map((w) => (
-                      <tr key={w.id} className="hover:bg-paper/40 transition-colors">
+                      <tr
+                        key={w.id}
+                        className="hover:bg-paper/40 transition-colors"
+                      >
                         <td className="py-3.5 px-4 font-mono">
                           <div className="font-bold text-ink">{w.id}</div>
-                          <div className="text-[11px] text-ink-faint">{w.timestamp}</div>
+                          <div className="text-[11px] text-ink-faint">
+                            {w.timestamp}
+                          </div>
                         </td>
                         <td className="py-3.5 px-4">
-                          <div className="font-semibold text-ink">{w.bankName}</div>
+                          <div className="font-semibold text-ink">
+                            {w.bankName}
+                          </div>
                           <div className="font-mono text-[11px] text-ink-soft">
                             {w.accountMasked} • {w.ifsc}
                           </div>
@@ -559,7 +613,10 @@ export default function ManagerWallet() {
                         <td className="py-3.5 px-4 text-right">
                           <button
                             onClick={() => {
-                              notify(`Downloaded payout voucher for ${w.utrNumber}`, "info")
+                              notify(
+                                `Downloaded payout voucher for ${w.utrNumber}`,
+                                "info",
+                              )
                             }}
                             className="inline-flex items-center gap-1 text-[11.5px] text-forest hover:underline font-medium cursor-pointer"
                           >
@@ -585,7 +642,9 @@ export default function ManagerWallet() {
               Revenue Split Policy &amp; Escrow Governance
             </h3>
             <p className="text-[13px] text-ink-soft max-w-3xl leading-relaxed">
-              Every ceremonial booking on GOMAA adheres to the transparent 80/20 platform protocol, with custodian revenue splits configured by your Regional Operations Admin.
+              Every ceremonial booking on GOMAA adheres to the transparent 80/20
+              platform protocol, with custodian revenue splits configured by
+              your Regional Operations Admin.
             </p>
           </div>
 
@@ -594,9 +653,12 @@ export default function ManagerWallet() {
               <div className="text-[11px] font-mono text-ink-faint uppercase font-semibold">
                 Platform Seva Fee (20%)
               </div>
-              <div className="font-serif text-[24px] font-bold text-ink">20%</div>
+              <div className="font-serif text-[24px] font-bold text-ink">
+                20%
+              </div>
               <p className="text-[11.5px] text-ink-soft leading-snug">
-                Covers server infrastructure, live cow GPS tracking, platform KYC verification, and 24x7 helpline.
+                Covers server infrastructure, live cow GPS tracking, platform
+                KYC verification, and 24x7 helpline.
               </p>
             </div>
 
@@ -608,7 +670,8 @@ export default function ManagerWallet() {
                 {walletSummary.policy.gosalaCorpusPct}%
               </div>
               <p className="text-[11.5px] text-ink-soft leading-snug">
-                Dedicated funds directly credited for cattle green fodder, veterinary care, shed maintenance, and cow welfare.
+                Dedicated funds directly credited for cattle green fodder,
+                veterinary care, shed maintenance, and cow welfare.
               </p>
             </div>
 
@@ -620,7 +683,9 @@ export default function ManagerWallet() {
                 {walletSummary.policy.managerSharePct}%
               </div>
               <p className="text-[11.5px] text-ink-soft leading-snug">
-                Direct personal custodian compensation credited into your wallet, plus {inr(walletSummary.policy.bonusPerPuja)} bonus per completed seva.
+                Direct personal custodian compensation credited into your
+                wallet, plus {inr(walletSummary.policy.bonusPerPuja)} bonus per
+                completed seva.
               </p>
             </div>
           </div>
@@ -631,7 +696,14 @@ export default function ManagerWallet() {
               <span>Operations Admin Jurisdiction</span>
             </div>
             <p>
-              Your current revenue split of <strong>{walletSummary.policy.managerSharePct}%</strong> was authorized by your Regional Operations Admin on {new Date(walletSummary.policy.lastUpdated).toLocaleDateString("en-IN")}. If you require changes to your split or seva bonus, please contact your Regional Operations Admin.
+              Your current revenue split of{" "}
+              <strong>{walletSummary.policy.managerSharePct}%</strong> was
+              authorized by your Regional Operations Admin on{" "}
+              {new Date(walletSummary.policy.lastUpdated).toLocaleDateString(
+                "en-IN",
+              )}
+              . If you require changes to your split or seva bonus, please
+              contact your Regional Operations Admin.
             </p>
           </div>
         </div>
@@ -651,25 +723,35 @@ export default function ManagerWallet() {
                   Payout Successfully Disbursed!
                 </h3>
                 <p className="text-[13px] text-ink-soft">
-                  {inr(completedWithdrawal.amount)} has been transferred directly to your bank account via Instant {completedWithdrawal.mode}.
+                  {inr(completedWithdrawal.amount)} has been transferred
+                  directly to your bank account via Instant{" "}
+                  {completedWithdrawal.mode}.
                 </p>
 
                 <div className="p-4 rounded-xl bg-paper border border-line text-left text-[12.5px] space-y-2 font-mono">
                   <div className="flex justify-between">
                     <span className="text-ink-faint">UTR Banking Number:</span>
-                    <span className="font-bold text-forest">{completedWithdrawal.utrNumber}</span>
+                    <span className="font-bold text-forest">
+                      {completedWithdrawal.utrNumber}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-ink-faint">Destination Bank:</span>
-                    <span className="text-ink">{completedWithdrawal.bankName}</span>
+                    <span className="text-ink">
+                      {completedWithdrawal.bankName}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-ink-faint">Account Target:</span>
-                    <span className="text-ink">{completedWithdrawal.accountMasked}</span>
+                    <span className="text-ink">
+                      {completedWithdrawal.accountMasked}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-ink-faint">Disbursed Timestamp:</span>
-                    <span className="text-ink">{completedWithdrawal.timestamp}</span>
+                    <span className="text-ink">
+                      {completedWithdrawal.timestamp}
+                    </span>
                   </div>
                 </div>
 
@@ -685,7 +767,10 @@ export default function ManagerWallet() {
                   </button>
                   <button
                     onClick={() => {
-                      notify(`Payout voucher downloaded for ${completedWithdrawal.utrNumber}`, "info")
+                      notify(
+                        `Payout voucher downloaded for ${completedWithdrawal.utrNumber}`,
+                        "info",
+                      )
                     }}
                     className="px-4 py-2.5 rounded-lg bg-paper-deep text-ink border border-line text-[13px] font-medium hover:bg-paper transition cursor-pointer flex items-center gap-1.5"
                   >
@@ -830,7 +915,9 @@ export default function ManagerWallet() {
                     <div className="text-ink-faint text-[10.5px] uppercase">
                       Destination Bank Account:
                     </div>
-                    <div className="font-bold text-ink">{bankDetails.beneficiary}</div>
+                    <div className="font-bold text-ink">
+                      {bankDetails.beneficiary}
+                    </div>
                     <div className="text-ink-soft">
                       {bankDetails.bankName} • {bankDetails.accountMasked}
                     </div>
@@ -847,7 +934,11 @@ export default function ManagerWallet() {
                   </button>
                   <button
                     type="submit"
-                    disabled={processingWithdrawal || !withdrawAmount || Number(withdrawAmount) <= 0}
+                    disabled={
+                      processingWithdrawal ||
+                      !withdrawAmount ||
+                      Number(withdrawAmount) <= 0
+                    }
                     className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-forest text-white text-[13.5px] font-bold hover:bg-forest-deep disabled:opacity-50 transition cursor-pointer shadow-md"
                   >
                     {processingWithdrawal ? (

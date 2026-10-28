@@ -19,11 +19,17 @@ export interface RoadRoute {
 
 const routeCache = new Map<string, RoadRoute>()
 
-export function getRouteCacheKey(origin: [number, number], destination: [number, number]): string {
+export function getRouteCacheKey(
+  origin: [number, number],
+  destination: [number, number],
+): string {
   return `${origin[0].toFixed(4)},${origin[1].toFixed(4)}->${destination[0].toFixed(4)},${destination[1].toFixed(4)}`
 }
 
-export function getCachedRoadRoute(origin: [number, number], destination: [number, number]): RoadRoute | null {
+export function getCachedRoadRoute(
+  origin: [number, number],
+  destination: [number, number],
+): RoadRoute | null {
   const key = getRouteCacheKey(origin, destination)
   return routeCache.get(key) || null
 }

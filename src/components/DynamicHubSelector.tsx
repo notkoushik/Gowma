@@ -47,7 +47,9 @@ export default function DynamicHubSelector({
 }: DynamicHubSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState("")
-  const [hubsList, setHubsList] = useState<OperationalRegionHub[]>(getActiveHubsRegistry())
+  const [hubsList, setHubsList] = useState<OperationalRegionHub[]>(
+    getActiveHubsRegistry(),
+  )
   const [isLoading, setIsLoading] = useState(false)
   const [isDetectingGps, setIsDetectingGps] = useState(false)
   const [gpsNotice, setGpsNotice] = useState<string | null>(null)
@@ -69,7 +71,8 @@ export default function DynamicHubSelector({
   useEffect(() => {
     let mounted = true
     setIsLoading(true)
-    api.getHubs()
+    api
+      .getHubs()
       .then((res) => {
         if (mounted && res?.ok && Array.isArray(res.hubs)) {
           syncDynamicHubs(res.hubs)
@@ -77,7 +80,10 @@ export default function DynamicHubSelector({
         }
       })
       .catch((err) => {
-        console.warn("[DynamicHubSelector] Could not fetch server hubs, using local registry:", err)
+        console.warn(
+          "[DynamicHubSelector] Could not fetch server hubs, using local registry:",
+          err,
+        )
       })
       .finally(() => {
         if (mounted) setIsLoading(false)
@@ -90,7 +96,10 @@ export default function DynamicHubSelector({
   // Close dropdown on click outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false)
       }
     }
@@ -107,7 +116,7 @@ export default function DynamicHubSelector({
           h.id === value ||
           h.name.toLowerCase() === value.toLowerCase() ||
           value.toLowerCase().includes(h.name.toLowerCase()) ||
-          `${h.city} — ${h.name}`.toLowerCase() === value.toLowerCase()
+          `${h.city} — ${h.name}`.toLowerCase() === value.toLowerCase(),
       ) || null
     )
   }, [value, hubsList])
@@ -121,7 +130,7 @@ export default function DynamicHubSelector({
         h.name.toLowerCase().includes(q) ||
         h.city.toLowerCase().includes(q) ||
         h.state.toLowerCase().includes(q) ||
-        h.zone.toLowerCase().includes(q)
+        h.zone.toLowerCase().includes(q),
     )
   }, [search, hubsList])
 
@@ -171,14 +180,19 @@ export default function DynamicHubSelector({
           if (minDist <= closest.defaultMaxRadiusKm) {
             // Found a nearby serviced hub
             onSelectHub(closest)
-            setGpsNotice(`Matched nearby hub: ${closest.name} (${minDist.toFixed(1)} km away)`)
+            setGpsNotice(
+              `Matched nearby hub: ${closest.name} (${minDist.toFixed(1)} km away)`,
+            )
             setIsOpen(false)
           } else {
             // User is in a new district or unserved cluster
-            setGpsNotice(`Nearest registered hub is ${minDist.toFixed(0)} km away in ${closest.city}.`)
+            setGpsNotice(
+              `Nearest registered hub is ${minDist.toFixed(0)} km away in ${closest.city}.`,
+            )
             setNewHubState(
-              ALL_INDIAN_STATES_AND_UTS.find((s) => s.toLowerCase() === detectedState.toLowerCase()) ||
-                ALL_INDIAN_STATES_AND_UTS[0]
+              ALL_INDIAN_STATES_AND_UTS.find(
+                (s) => s.toLowerCase() === detectedState.toLowerCase(),
+              ) || ALL_INDIAN_STATES_AND_UTS[0],
             )
             setNewHubCity(detectedCity)
             setNewHubName(`${detectedCity} Sanctuary Belt`)
@@ -196,7 +210,7 @@ export default function DynamicHubSelector({
         setGpsNotice(err.message || "Could not retrieve GPS coordinates.")
         setIsDetectingGps(false)
       },
-      { timeout: 8000, enableHighAccuracy: true }
+      { timeout: 8000, enableHighAccuracy: true },
     )
   }
 
@@ -291,11 +305,18 @@ export default function DynamicHubSelector({
                 )}
               </div>
             ) : (
-              <span className="text-ink-faint">{value || "Select Operational Hub / City"}</span>
+              <span className="text-ink-faint">
+                {value || "Select Operational Hub / City"}
+              </span>
             )}
           </div>
         </div>
-        <ChevronDown size={14} className={`text-ink-faint shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+        <ChevronDown
+          size={14}
+          className={`text-ink-faint shrink-0 transition-transform ${
+            isOpen ? "rotate-180" : ""
+          }`}
+        />
       </button>
 
       {/* GPS Status Notice if any */}
@@ -334,7 +355,8 @@ export default function DynamicHubSelector({
           {/* Quick Actions Bar: Add New Hub */}
           <div className="px-3 py-2 bg-saffron-soft/30 border-b border-line flex items-center justify-between text-[11.5px]">
             <span className="text-ink-faint">
-              {filteredHubs.length} operational hub{filteredHubs.length !== 1 ? "s" : ""}
+              {filteredHubs.length} operational hub
+              {filteredHubs.length !== 1 ? "s" : ""}
             </span>
             <button
               type="button"
@@ -377,7 +399,9 @@ export default function DynamicHubSelector({
                 <div key={state} className="p-1.5">
                   <div className="px-2 py-1 text-[10.5px] font-mono uppercase tracking-wider text-ink-faint font-bold flex items-center justify-between">
                     <span>{state}</span>
-                    <span className="text-[9.5px] text-ink-faint font-normal">{hubs.length}</span>
+                    <span className="text-[9.5px] text-ink-faint font-normal">
+                      {hubs.length}
+                    </span>
                   </div>
                   <div className="space-y-0.5">
                     {hubs.map((hub) => {
@@ -420,7 +444,9 @@ export default function DynamicHubSelector({
                                 Custom
                               </span>
                             )}
-                            {isSelected && <Check size={13} className="shrink-0" />}
+                            {isSelected && (
+                              <Check size={13} className="shrink-0" />
+                            )}
                           </div>
                         </button>
                       )
@@ -456,12 +482,17 @@ export default function DynamicHubSelector({
               </h2>
             </div>
             <p className="text-[12px] text-ink-faint mb-4 leading-relaxed">
-              Dynamically add a new city, district, or temple pilgrimage cluster to the GOMAA platform. Once saved, it is immediately available for all Gaushala trusts and devotee discovery.
+              Dynamically add a new city, district, or temple pilgrimage cluster
+              to the GOMAA platform. Once saved, it is immediately available for
+              all Gaushala trusts and devotee discovery.
             </p>
 
             {newHubError && (
               <div className="mb-3.5 p-2.5 bg-red-50 border border-red-200 rounded text-[12px] text-red-800 flex items-start gap-2">
-                <AlertCircle size={14} className="text-red-600 shrink-0 mt-0.5" />
+                <AlertCircle
+                  size={14}
+                  className="text-red-600 shrink-0 mt-0.5"
+                />
                 <span>{newHubError}</span>
               </div>
             )}
@@ -509,7 +540,9 @@ export default function DynamicHubSelector({
                     min={10}
                     max={150}
                     value={newHubRadius}
-                    onChange={(e) => setNewHubRadius(Number(e.target.value) || 35)}
+                    onChange={(e) =>
+                      setNewHubRadius(Number(e.target.value) || 35)
+                    }
                     className="w-full bg-paper border border-line rounded-md px-3 py-2 text-[12.5px] text-ink outline-none focus:border-saffron transition"
                   />
                 </div>
@@ -538,7 +571,9 @@ export default function DynamicHubSelector({
                     type="number"
                     step="any"
                     value={newHubLat}
-                    onChange={(e) => setNewHubLat(parseFloat(e.target.value) || 0)}
+                    onChange={(e) =>
+                      setNewHubLat(parseFloat(e.target.value) || 0)
+                    }
                     className="w-full bg-paper border border-line rounded px-2.5 py-1.5 text-[12px] font-mono text-ink outline-none focus:border-saffron"
                   />
                 </div>
@@ -551,7 +586,9 @@ export default function DynamicHubSelector({
                     type="number"
                     step="any"
                     value={newHubLng}
-                    onChange={(e) => setNewHubLng(parseFloat(e.target.value) || 0)}
+                    onChange={(e) =>
+                      setNewHubLng(parseFloat(e.target.value) || 0)
+                    }
                     className="w-full bg-paper border border-line rounded px-2.5 py-1.5 text-[12px] font-mono text-ink outline-none focus:border-saffron"
                   />
                 </div>

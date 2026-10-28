@@ -33,69 +33,24 @@ export type WalletWithdrawal = {
 const STORAGE_KEY_POLICIES = "gomaa_manager_share_policies"
 const STORAGE_KEY_WITHDRAWALS = "gomaa_manager_withdrawals"
 
-// Seed default policies for initial managers
-export const DEFAULT_MANAGER_POLICIES: Record<string, Partial<ManagerSharePolicy>> = {
-  "manager1@gomaa.in": {
-    managerId: "GMA-MGR-0101",
-    managerEmail: "manager1@gomaa.in",
-    managerName: "Shyam Sundar Sharma",
-    gosalaName: "Nandini Goseva Sadan",
-    managerSharePct: 25,
-    gosalaCorpusPct: 75,
-    bonusPerPuja: 100,
-  },
-  "manager2@gomaa.in": {
-    managerId: "GMA-MGR-0201",
-    managerEmail: "manager2@gomaa.in",
-    managerName: "Radhe Shyam Tiwari",
-    gosalaName: "Kamdhenu Seva Kendra",
-    managerSharePct: 25,
-    gosalaCorpusPct: 75,
-    bonusPerPuja: 100,
-  },
+// In-memory policy and withdrawal stores (no localStorage syncing)
+let inMemoryPolicies: ManagerSharePolicy[] = []
+let inMemoryWithdrawals: WalletWithdrawal[] = []
+
+// Purge any stale legacy localStorage items
+if (typeof window !== "undefined" && window.localStorage) {
+  try {
+    localStorage.removeItem(STORAGE_KEY_POLICIES)
+    localStorage.removeItem(STORAGE_KEY_WITHDRAWALS)
+  } catch {}
 }
 
-export function getAllManagerSharePolicies(): ManagerSharePolicy[] {
-  if (typeof window === "undefined") return []
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_POLICIES)
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed
-    }
-  } catch (e) {
-    console.error("Failed to parse manager share policies", e)
-  }
+// Seed default policies for initial managers
+export const DEFAULT_MANAGER_POLICIES: Record<string, Partial<ManagerSharePolicy>> =
+  {}
 
-  // Fallback defaults
-  const defaults: ManagerSharePolicy[] = [
-    {
-      managerId: "GMA-MGR-0101",
-      managerEmail: "manager1@gomaa.in",
-      managerName: "Shyam Sundar Sharma",
-      gosalaName: "Nandini Goseva Sadan",
-      managerSharePct: 25,
-      gosalaCorpusPct: 75,
-      bonusPerPuja: 100,
-      lastUpdated: new Date().toISOString(),
-      updatedBy: "Operations Admin (GMA-OPS-0101)",
-    },
-    {
-      managerId: "GMA-MGR-0201",
-      managerEmail: "manager2@gomaa.in",
-      managerName: "Radhe Shyam Tiwari",
-      gosalaName: "Kamdhenu Seva Kendra",
-      managerSharePct: 25,
-      gosalaCorpusPct: 75,
-      bonusPerPuja: 100,
-      lastUpdated: new Date().toISOString(),
-      updatedBy: "Operations Admin (GMA-OPS-0101)",
-    },
-  ]
-  try {
-    localStorage.setItem(STORAGE_KEY_POLICIES, JSON.stringify(defaults))
-  } catch {}
-  return defaults
+export function getAllManagerSharePolicies(): ManagerSharePolicy[] {
+  return inMemoryPolicies
 }
 
 export function getManagerSharePolicy(
@@ -109,7 +64,9 @@ export function getManagerSharePolicy(
 
   const found = policies.find(
     (p) =>
-      (q && (p.managerEmail.toLowerCase() === q || p.managerId.toLowerCase() === q)) ||
+      (q &&
+        (p.managerEmail.toLowerCase() === q ||
+          p.managerId.toLowerCase() === q)) ||
       (gq && p.gosalaName.toLowerCase() === gq),
   )
 
@@ -117,10 +74,12 @@ export function getManagerSharePolicy(
 
   // Default policy for newly discovered manager
   const newPolicy: ManagerSharePolicy = {
-    managerId: managerEmailOrId.startsWith("GMA-") ? managerEmailOrId : "GMA-MGR-GEN",
+    managerId: managerEmailOrId.startsWith("GMA-")
+      ? managerEmailOrId
+      : "GMA-MGR-GEN",
     managerEmail: managerEmailOrId || "manager@gomaa.in",
     managerName: managerName || "Gaushala Custodian",
-    gosalaName: gosalaName || "Shri Krishna Gaushala",
+    gosalaName: gosalaName || "Governed Gaushala",
     managerSharePct: 25,
     gosalaCorpusPct: 75,
     bonusPerPuja: 100,
@@ -138,46 +97,44 @@ export function saveManagerSharePolicy(policy: ManagerSharePolicy): void {
     const policies = getAllManagerSharePolicies()
     const index = policies.findIndex(
       (p) =>
-        (p.managerEmail && policy.managerEmail && p.managerEmail.toLowerCase() === policy.managerEmail.toLowerCase()) ||
-        (p.managerId && policy.managerId && p.managerId.toLowerCase() === policy.managerId.toLowerCase()) ||
-        (p.gosalaName && policy.gosalaName && p.gosalaName.toLowerCase() === policy.gosalaName.toLowerCase()),
+        (p.managerEmail &&
+          policy.managerEmail &&
+          p.managerEmail.toLowerCase() === policy.managerEmail.toLowerCase()) ||
+        (p.managerId &&
+          policy.managerId &&
+          p.managerId.toLowerCase() === policy.managerId.toLowerCase()) ||
+        (p.gosalaName &&
+          policy.gosalaName &&
+          p.gosalaName.toLowerCase() === policy.gosalaName.toLowerCase()),
     )
     const sanitized: ManagerSharePolicy = {
       ...policy,
-      managerSharePct: Math.min(50, Math.max(10, Math.round(policy.managerSharePct))),
-      gosalaCorpusPct: 100 - Math.min(50, Math.max(10, Math.round(policy.managerSharePct))),
+      managerSharePct: Math.min(
+        50,
+        Math.max(10, Math.round(policy.managerSharePct)),
+      ),
+      gosalaCorpusPct:
+        100 - Math.min(50, Math.max(10, Math.round(policy.managerSharePct))),
       bonusPerPuja: Math.max(0, Math.round(policy.bonusPerPuja || 0)),
       lastUpdated: new Date().toISOString(),
     }
     if (index >= 0) {
-      policies[index] = sanitized
+      inMemoryPolicies[index] = sanitized
     } else {
-      policies.push(sanitized)
+      inMemoryPolicies.push(sanitized)
     }
-    localStorage.setItem(STORAGE_KEY_POLICIES, JSON.stringify(policies))
   } catch (e) {
     console.error("Failed to save manager share policy", e)
   }
 }
 
 export function getAllWithdrawals(): WalletWithdrawal[] {
-  if (typeof window === "undefined") return []
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_WITHDRAWALS)
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) return parsed
-    }
-  } catch (e) {
-    console.error("Failed to parse withdrawals", e)
-  }
-  return []
+  return inMemoryWithdrawals
 }
 
 export function recordWithdrawal(
   withdrawal: Omit<WalletWithdrawal, "id" | "utrNumber" | "timestamp" | "status">,
 ): WalletWithdrawal {
-  const existing = getAllWithdrawals()
   const randomSuffix = Math.floor(100000 + Math.random() * 900000)
   const prefix = withdrawal.mode === "IMPS" ? "IMPS" : "RTGS"
   const newRecord: WalletWithdrawal = {
@@ -191,12 +148,7 @@ export function recordWithdrawal(
     status: "Completed",
   }
 
-  existing.unshift(newRecord)
-  try {
-    localStorage.setItem(STORAGE_KEY_WITHDRAWALS, JSON.stringify(existing))
-  } catch (e) {
-    console.error("Failed to save withdrawal", e)
-  }
+  inMemoryWithdrawals.unshift(newRecord)
   return newRecord
 }
 
@@ -236,20 +188,33 @@ export function computeManagerWallet(
   commissionPct: number = 20,
   managerName?: string,
 ): ManagerWalletSummary {
-  const policy = getManagerSharePolicy(managerEmailOrId, gosalaName, managerName)
+  const policy = getManagerSharePolicy(
+    managerEmailOrId,
+    gosalaName,
+    managerName,
+  )
   const allWithdrawals = getAllWithdrawals()
   const managerWithdrawals = allWithdrawals.filter(
     (w) =>
-      (w.managerId && policy.managerId && w.managerId.toLowerCase() === policy.managerId.toLowerCase()) ||
-      (w.gosala && policy.gosalaName && w.gosala.toLowerCase() === policy.gosalaName.toLowerCase()),
+      (w.managerId &&
+        policy.managerId &&
+        w.managerId.toLowerCase() === policy.managerId.toLowerCase()) ||
+      (w.gosala &&
+        policy.gosalaName &&
+        w.gosala.toLowerCase() === policy.gosalaName.toLowerCase()),
   )
-  const totalWithdrawn = managerWithdrawals.reduce((sum, w) => sum + w.amount, 0)
+  const totalWithdrawn = managerWithdrawals.reduce(
+    (sum, w) => sum + w.amount,
+    0,
+  )
 
   // Filter bookings for this manager's Gaushala
   const targetGosala = policy.gosalaName.trim().toLowerCase()
   const gaushalaBookings = bookings.filter((b) => {
     const bg = (b.gosala || "").trim().toLowerCase()
-    return bg === targetGosala || (!b.gosala && targetGosala.includes("nandini"))
+    return (
+      bg === targetGosala || (!b.gosala && targetGosala.includes("nandini"))
+    )
   })
 
   let completedEarned = 0
@@ -322,70 +287,6 @@ export function computeManagerWallet(
       })
     }
   })
-
-  // If no completed bookings exist in clean test state, seed a realistic initial completed seva so manager has withdrawable balance
-  if (completedEarned === 0 && gaushalaBookings.length === 0) {
-    const seedCompletedGross = 4000
-    const seedPlatformFee = Math.round(seedCompletedGross * (commissionPct / 100))
-    const seedNet = seedCompletedGross - seedPlatformFee
-    const seedCut = Math.round(seedNet * (policy.managerSharePct / 100))
-    const seedBonus = policy.bonusPerPuja || 100
-    const seedTotalCredit = seedCut + seedBonus
-
-    completedEarned = seedTotalCredit * 3 // 3 completed pujas
-    completedCount = 3
-
-    creditItems.push(
-      {
-        bookingId: "GMA-2026-9041",
-        date: "22 Oct 2026, 09:30 AM",
-        customer: "Rajeshwar Rao",
-        animal: "Surabhi",
-        ritualPurpose: "Griha Pravesh Kamadhenu Puja",
-        grossAmount: 4000,
-        platformFee: 800,
-        gaushalaNet: 3200,
-        managerSharePct: policy.managerSharePct,
-        managerCredit: seedCut,
-        bonus: seedBonus,
-        totalCredit: seedTotalCredit,
-        status: "Completed",
-        isSettled: true,
-      },
-      {
-        bookingId: "GMA-2026-8812",
-        date: "20 Oct 2026, 06:15 AM",
-        customer: "Meenakshi Sundaram",
-        animal: "Gauri",
-        ritualPurpose: "Lakshmi Kubera Gau Seva",
-        grossAmount: 4000,
-        platformFee: 800,
-        gaushalaNet: 3200,
-        managerSharePct: policy.managerSharePct,
-        managerCredit: seedCut,
-        bonus: seedBonus,
-        totalCredit: seedTotalCredit,
-        status: "Completed",
-        isSettled: true,
-      },
-      {
-        bookingId: "GMA-2026-8540",
-        date: "18 Oct 2026, 10:00 AM",
-        customer: "Vikramaditya Varma",
-        animal: "Kamadhenu",
-        ritualPurpose: "Shasti Purti Ayush Homam",
-        grossAmount: 4000,
-        platformFee: 800,
-        gaushalaNet: 3200,
-        managerSharePct: policy.managerSharePct,
-        managerCredit: seedCut,
-        bonus: seedBonus,
-        totalCredit: seedTotalCredit,
-        status: "Completed",
-        isSettled: true,
-      },
-    )
-  }
 
   const availableBalance = Math.max(0, completedEarned - totalWithdrawn)
 

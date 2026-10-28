@@ -39,7 +39,7 @@ async function exportSnapshot() {
 
   const snapshot = {
     timestamp: new Date().toISOString(),
-    description: 'Snapshot archive prior to complete reset & Koushik Super Admin seeding',
+    description: 'Snapshot archive prior to reset & Super Admin seeding',
     counts: {
       users: users.length,
       bookings: bookings.length,

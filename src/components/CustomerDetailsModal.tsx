@@ -55,7 +55,10 @@ export default function CustomerDetailsModal({
         }
       })
       .catch((err) => {
-        console.warn("Could not fetch remote customer dossier, using booking snapshot:", err)
+        console.warn(
+          "Could not fetch remote customer dossier, using booking snapshot:",
+          err,
+        )
       })
       .finally(() => {
         if (isMounted) setLoadingDetails(false)
@@ -83,8 +86,7 @@ export default function CustomerDetailsModal({
     `${b.customer.toLowerCase().replace(/\s+/g, ".")}@gmail.com`
   const memberSince = cData?.memberSince || b.devoteeSince || "Aug 2024"
   const totalBookingsCount = cData?.totalBookingsCount || 1
-  const aadhaarNumber =
-    cData?.idNumber || b.aadhaarNumber || "XXXX-XXXX-4912"
+  const aadhaarNumber = cData?.idNumber || b.aadhaarNumber || "XXXX-XXXX-4912"
   const devoteeGotra = cData?.gotra || b.devoteeGotra || "Kashyapa"
   const familyMembers =
     cData?.familyMembers ||
@@ -100,8 +102,7 @@ export default function CustomerDetailsModal({
     "Ground-floor portico ready, clean water bucket and sacred green grass feeding protocol."
   const serviceAddress = ceremonyData?.serviceAddress || b.address
   const distanceKm = ceremonyData?.distanceKm ?? b.distanceKm
-  const scheduledTime =
-    ceremonyData?.timeSlot || `${b.start} - ${b.end}`
+  const scheduledTime = ceremonyData?.timeSlot || `${b.start} - ${b.end}`
   const scheduledDate = ceremonyData?.date || b.date
   const assignedDriver =
     logisticsData?.driver || b.driver || "Assigned by Gaushala"
@@ -130,7 +131,9 @@ export default function CustomerDetailsModal({
               <p className="text-[12px] text-ink-faint flex items-center gap-1.5 mt-0.5">
                 <span>Devotee Dossier & KYC Audit</span>
                 <span>·</span>
-                <span className="font-mono text-ink-soft font-semibold">{b.id}</span>
+                <span className="font-mono text-ink-soft font-semibold">
+                  {b.id}
+                </span>
               </p>
             </div>
           </div>
@@ -187,10 +190,12 @@ export default function CustomerDetailsModal({
 
               <div className="bg-card p-3 rounded border border-line">
                 <div className="flex items-center gap-1.5 text-ink-faint text-[11px]">
-                  <CheckCircle2 size={12} className="text-forest" /> Seva History
+                  <CheckCircle2 size={12} className="text-forest" /> Seva
+                  History
                 </div>
                 <div className="font-medium text-ink mt-1">
-                  {totalBookingsCount} Sevas Booked · Devotee Since {memberSince}
+                  {totalBookingsCount} Sevas Booked · Devotee Since{" "}
+                  {memberSince}
                 </div>
               </div>
             </div>
@@ -213,7 +218,10 @@ export default function CustomerDetailsModal({
           <div className="bg-emerald-50/80 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 rounded-md p-4">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2 text-emerald-950 dark:text-emerald-300 font-semibold text-[13.5px]">
-                <Fingerprint size={18} className="text-emerald-700 dark:text-emerald-400" />
+                <Fingerprint
+                  size={18}
+                  className="text-emerald-700 dark:text-emerald-400"
+                />
                 <span>Submitted Identity Document (Aadhaar / KYC)</span>
               </div>
               <span className="text-[11px] font-mono bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded font-medium border border-emerald-200/60">
@@ -242,7 +250,10 @@ export default function CustomerDetailsModal({
 
             <div className="mt-2.5 pt-2.5 border-t border-emerald-200/80 dark:border-emerald-800/40 text-[11.5px] text-emerald-900 dark:text-emerald-300 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
-                <FileCheck2 size={13} className="text-emerald-700 dark:text-emerald-400" />
+                <FileCheck2
+                  size={13}
+                  className="text-emerald-700 dark:text-emerald-400"
+                />
                 <span>Identity Match: Confirmed with Online Escrow Payer</span>
               </span>
               <span className="font-mono text-[10.5px] text-emerald-800 dark:text-emerald-400">
@@ -256,7 +267,9 @@ export default function CustomerDetailsModal({
             <Eyebrow>Ceremony Details & Altar Protocol</Eyebrow>
             <div>
               <span className="text-ink-faint">Ceremonial Ritual:</span>{" "}
-              <strong className="text-ink font-semibold">{ritualPurpose}</strong>
+              <strong className="text-ink font-semibold">
+                {ritualPurpose}
+              </strong>
             </div>
             <div>
               <span className="text-ink-faint">Requested Sacred Bovine:</span>{" "}
@@ -266,7 +279,9 @@ export default function CustomerDetailsModal({
             </div>
             <div>
               <span className="text-ink-faint">Ceremony Venue Address:</span>{" "}
-              <strong className="text-ink font-semibold">{serviceAddress}</strong>
+              <strong className="text-ink font-semibold">
+                {serviceAddress}
+              </strong>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-1 text-[12px]">
@@ -285,8 +300,12 @@ export default function CustomerDetailsModal({
             </div>
 
             <div className="text-[11.5px] text-ink-faint pt-2 border-t border-line/60">
-              <span className="font-medium text-ink">Altar Readiness Protocol:</span>{" "}
-              <span className="italic text-ink-soft">{specialInstructions}</span>
+              <span className="font-medium text-ink">
+                Altar Readiness Protocol:
+              </span>{" "}
+              <span className="italic text-ink-soft">
+                {specialInstructions}
+              </span>
             </div>
           </div>
 
@@ -304,7 +323,8 @@ export default function CustomerDetailsModal({
                   </span>
                 </div>
                 <div className="text-[11px] text-ink-faint">
-                  Devotee presents this secret 4-digit code to the driver upon sacred arrival.
+                  Devotee presents this secret 4-digit code to the driver upon
+                  sacred arrival.
                 </div>
               </div>
             </div>
@@ -372,7 +392,8 @@ export default function CustomerDetailsModal({
                   </span>
                 </div>
                 <div className="text-[11px] text-ink-faint">
-                  Dedicated hydraulic cattle transport van with green fodder bedding
+                  Dedicated hydraulic cattle transport van with green fodder
+                  bedding
                 </div>
               </div>
             </div>

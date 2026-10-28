@@ -95,13 +95,13 @@ async function resetToSuperAdminOnly() {
     console.warn("  ⚠ Notice clearing OTPs:", err.message)
   }
 
-  // Step 6: Delete all users except Super Admin (koushik@gmail.com)
-  console.log("[5/6] Deleting all users except Super Admin (koushik@gmail.com)...")
+  // Step 6: Delete all users except Super Admin (superadmin@gomaa.in)
+  console.log("[5/6] Deleting all users except Super Admin (superadmin@gomaa.in)...")
   const nonSuperAdminUsers = await prisma.user.findMany({
     where: {
       AND: [
-        { email: { not: "koushik@gmail.com" } },
-        { id: { not: "USER-SA-KOUSHIK" } },
+        { email: { not: "superadmin@gomaa.in" } },
+        { id: { not: "USER-SA-SUPERADMIN" } },
       ],
     },
     select: { id: true, email: true },
@@ -121,41 +121,41 @@ async function resetToSuperAdminOnly() {
   const existingSuperAdmin = await prisma.user.findFirst({
     where: {
       OR: [
-        { email: "koushik@gmail.com" },
-        { id: "USER-SA-KOUSHIK" },
+        { email: "superadmin@gomaa.in" },
+        { id: "USER-SA-SUPERADMIN" },
       ],
     },
   })
 
-  const superAdminPasswordHash = hashPassword("Koushik.git")
+  const superAdminPasswordHash = hashPassword("SuperAdmin@2026!")
 
   if (existingSuperAdmin) {
     await prisma.user.update({
       where: { id: existingSuperAdmin.id },
       data: {
-        id: "USER-SA-KOUSHIK",
-        name: "Koushik",
-        email: "koushik@gmail.com",
+        id: "USER-SA-SUPERADMIN",
+        name: "Super Admin",
+        email: "superadmin@gomaa.in",
         phone: "+91 98000 00000",
         role: "SUPER_ADMIN",
         password: superAdminPasswordHash,
         isActive: true,
       },
     })
-    console.log(`  ✓ Re-verified Super Admin credentials (koushik@gmail.com / Koushik.git)`)
+    console.log(`  ✓ Re-verified Super Admin credentials (superadmin@gomaa.in / SuperAdmin@2026!)`)
   } else {
     await prisma.user.create({
       data: {
-        id: "USER-SA-KOUSHIK",
-        name: "Koushik",
-        email: "koushik@gmail.com",
+        id: "USER-SA-SUPERADMIN",
+        name: "Super Admin",
+        email: "superadmin@gomaa.in",
         phone: "+91 98000 00000",
         role: "SUPER_ADMIN",
         password: superAdminPasswordHash,
         isActive: true,
       },
     })
-    console.log(`  ✓ Created new Super Admin (koushik@gmail.com / Koushik.git)`)
+    console.log(`  ✓ Created new Super Admin (superadmin@gomaa.in / SuperAdmin@2026!)`)
   }
 
   // Step 7: Reset users_meta.json

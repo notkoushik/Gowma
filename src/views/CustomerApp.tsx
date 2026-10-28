@@ -29,6 +29,7 @@ import { pricing, type Gosala } from "../data/customer"
 import { CURRENT_CUSTOMER, inr, type Booking } from "../data/mock"
 import { tripStages } from "../data/driver"
 import { useStore, useToast } from "../store/store"
+import { Skeleton } from "../components/common/Skeleton"
 import BookingFlow from "./customer/BookingFlow"
 import { MobileGosalaProfile, EnRouteModal } from "./customer/GosalaProfile"
 import { fetchRoadRoute } from "../services/routing"
@@ -112,8 +113,10 @@ export function makeBooking(
   authUser?: any,
 ): Booking {
   const custName = authUser?.name || customerProfile?.name || CURRENT_CUSTOMER
-  const custPhone = authUser?.phone || customerProfile?.phone || "+91 98204 11827"
-  const custEmail = authUser?.email || customerProfile?.email || "devotee@gomaa.in"
+  const custPhone =
+    authUser?.phone || customerProfile?.phone || "+91 98204 11827"
+  const custEmail =
+    authUser?.email || customerProfile?.email || "devotee@gomaa.in"
   const custAadhaar =
     authUser?.customerData?.aadhaarNumber ||
     customerProfile?.customerData?.aadhaarNumber ||
@@ -242,7 +245,9 @@ function Discover({
   const [isEditingAddress, setIsEditingAddress] = useState(false)
   const [locationPickerOpen, setLocationPickerOpen] = useState(false)
   const [routeModalGosala, setRouteModalGosala] = useState<Gosala | null>(null)
-  const [routeModalMode, setRouteModalMode] = useState<"route" | "pinpoint">("route")
+  const [routeModalMode, setRouteModalMode] = useState<"route" | "pinpoint">(
+    "route",
+  )
   const deviceLocation = useDeviceLocation()
 
   const liveAnimals = storeAnimals || []
@@ -252,7 +257,9 @@ function Discover({
       const housedCows = liveAnimals.filter(
         (a) => a.gosala.toLowerCase() === g.name.toLowerCase(),
       )
-      const dynamicRating = (g as any).rating || Number((4.7 + ((g.name.length * 3 + idx) % 4) * 0.1).toFixed(1))
+      const dynamicRating =
+        (g as any).rating ||
+        Number((4.7 + ((g.name.length * 3 + idx) % 4) * 0.1).toFixed(1))
 
       return {
         id: g.id,
@@ -273,7 +280,8 @@ function Discover({
         lng:
           g.lng !== undefined && g.lng !== null
             ? Number(g.lng)
-            : (g as any).longitude !== undefined && (g as any).longitude !== null
+            : (g as any).longitude !== undefined &&
+                (g as any).longitude !== null
               ? Number((g as any).longitude)
               : undefined,
       }
@@ -332,9 +340,7 @@ function Discover({
   const handleDetectLocation = async () => {
     const res = await deviceLocation.requestLocation()
     if (res) {
-      setAddress(
-        res.address || getIndianLocalityFromCoords(res.lat, res.lng),
-      )
+      setAddress(res.address || getIndianLocalityFromCoords(res.lat, res.lng))
       notify(
         `📍 Live Location: ${res.city}, ${res.state} (${res.lat.toFixed(3)}° N, ${res.lng.toFixed(3)}° E) verified!`,
         "ok",
@@ -342,7 +348,9 @@ function Discover({
     }
   }
 
-  const [selectedCategory, setSelectedCategory] = useState<"ALL" | AnimalType>("ALL")
+  const [selectedCategory, setSelectedCategory] = useState<"ALL" | AnimalType>(
+    "ALL",
+  )
 
   const list = liveAnimals.filter((a) => {
     const qLower = q.toLowerCase().trim()
@@ -352,8 +360,7 @@ function Discover({
       a.type.toLowerCase().includes(qLower) ||
       (a.breed && a.breed.toLowerCase().includes(qLower)) ||
       (a.category && a.category.toLowerCase().includes(qLower))
-    const matchesCat =
-      selectedCategory === "ALL" || a.type === selectedCategory
+    const matchesCat = selectedCategory === "ALL" || a.type === selectedCategory
     return matchesSearch && matchesCat
   })
   return (
@@ -371,18 +378,26 @@ function Discover({
           <div className="min-w-0 flex-1">
             <div className="text-[9.5px] uppercase font-mono tracking-wider text-ink-faint flex items-center gap-1">
               <span>Your Location</span>
-              <ChevronDown size={11} className="text-ink-faint group-hover:text-saffron-deep" />
+              <ChevronDown
+                size={11}
+                className="text-ink-faint group-hover:text-saffron-deep"
+              />
             </div>
             <div className="text-[12.5px] text-ink font-semibold truncate group-hover:text-saffron-deep flex items-center gap-1.5">
-              <span>{deviceLocation.city || (deviceLocation.isLoading ? "Locating..." : address)}</span>
+              <span>
+                {deviceLocation.city ||
+                  (deviceLocation.isLoading ? "Locating..." : address)}
+              </span>
               {deviceLocation.source && (
-                <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-medium border ${
-                  deviceLocation.source === "GPS_HARDWARE"
-                    ? "bg-ok-soft text-ok border-ok/30"
-                    : deviceLocation.source === "IP_FALLBACK"
-                      ? "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30"
-                      : "bg-paper-deep text-ink-soft border-line"
-                }`}>
+                <span
+                  className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-medium border ${
+                    deviceLocation.source === "GPS_HARDWARE"
+                      ? "bg-ok-soft text-ok border-ok/30"
+                      : deviceLocation.source === "IP_FALLBACK"
+                        ? "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30"
+                        : "bg-paper-deep text-ink-soft border-line"
+                  }`}
+                >
                   {deviceLocation.source === "GPS_HARDWARE"
                     ? "🛰️ Live GPS"
                     : deviceLocation.source === "IP_FALLBACK"
@@ -393,7 +408,9 @@ function Discover({
             </div>
             {deviceLocation.lat && deviceLocation.lng && (
               <div className="text-[10px] font-mono text-ink-faint truncate">
-                {deviceLocation.lat.toFixed(4)}° N, {deviceLocation.lng.toFixed(4)}° E · {deviceLocation.state || "India"}
+                {deviceLocation.lat.toFixed(4)}° N,{" "}
+                {deviceLocation.lng.toFixed(4)}° E ·{" "}
+                {deviceLocation.state || "India"}
               </div>
             )}
           </div>
@@ -441,24 +458,27 @@ function Discover({
 
       <div>
         <div className="flex items-center justify-between mb-2.5">
-          <h2 className="font-serif text-[16px] text-ink">
-            Nearest Gosalas
-          </h2>
+          <h2 className="font-serif text-[16px] text-ink">Nearest Gosalas</h2>
           <button
             onClick={() => setLocationPickerOpen(true)}
             className="text-[11px] font-mono text-saffron-deep hover:underline cursor-pointer"
           >
-            {deviceLocation.city ? `Near ${deviceLocation.city}` : "All India"} ({sortedGaushalas.length})
+            {deviceLocation.city ? `Near ${deviceLocation.city}` : "All India"}{" "}
+            ({sortedGaushalas.length})
           </button>
         </div>
         {sortedGaushalas.length === 0 ? (
           <div className="p-6 text-center rounded-sm border border-dashed border-line bg-card/60">
-            <Building2 size={26} className="mx-auto text-saffron-deep/70 mb-2" />
+            <Building2
+              size={26}
+              className="mx-auto text-saffron-deep/70 mb-2"
+            />
             <p className="font-serif text-[15px] text-ink font-semibold">
               No Gaushalas registered yet
             </p>
             <p className="text-[12px] text-ink-soft max-w-xs mx-auto mt-1 leading-relaxed">
-              As Gaushalas register their sanctuaries on GOMAA, they will appear here with live darshan timings.
+              As Gaushalas register their sanctuaries on GOMAA, they will appear
+              here with live darshan timings.
             </p>
           </div>
         ) : (
@@ -510,13 +530,19 @@ function Discover({
                       </div>
                       <div className="flex items-center gap-3 mt-2 text-[11px]">
                         <span className="inline-flex items-center gap-1 text-ink-soft">
-                          <Star size={11} className="text-saffron fill-saffron" />{" "}
+                          <Star
+                            size={11}
+                            className="text-saffron fill-saffron"
+                          />{" "}
                           {g.rating}
                         </span>
                         <span className="inline-flex items-center gap-1 text-ink-soft font-mono tabular font-medium">
-                          <Navigation size={11} className="text-forest" /> {roadDistances[g.id] ?? serviceability.distanceKm} km
+                          <Navigation size={11} className="text-forest" />{" "}
+                          {roadDistances[g.id] ?? serviceability.distanceKm} km
                         </span>
-                        <span className="text-ink-faint font-medium">· {cattleLabel}</span>
+                        <span className="text-ink-faint font-medium">
+                          · {cattleLabel}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -583,9 +609,7 @@ function Discover({
 
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h2 className="font-serif text-[16px] text-ink">
-            Available animals
-          </h2>
+          <h2 className="font-serif text-[16px] text-ink">Available animals</h2>
           <span className="font-mono text-[11px] text-ink-faint">
             {list.length} {list.length === 1 ? "bovine" : "bovines"}
           </span>
@@ -619,7 +643,9 @@ function Discover({
                 <span>{cat.label}</span>
                 <span
                   className={`text-[9.5px] font-mono px-1 rounded-full ${
-                    active ? "bg-white/20 text-white" : "bg-paper-deep text-ink-faint"
+                    active
+                      ? "bg-white/20 text-white"
+                      : "bg-paper-deep text-ink-faint"
                   }`}
                 >
                   {count}
@@ -636,7 +662,8 @@ function Discover({
               No sacred cattle found
             </p>
             <p className="text-[12px] text-ink-soft max-w-xs mx-auto mt-1 leading-relaxed">
-              No bovines registered under &ldquo;{selectedCategory}&rdquo; matching your search. Try switching categories or clearing search.
+              No bovines registered under &ldquo;{selectedCategory}&rdquo;
+              matching your search. Try switching categories or clearing search.
             </p>
             {selectedCategory !== "ALL" && (
               <button
@@ -715,7 +742,9 @@ function Discover({
           gosalaName={routeModalGosala.name}
           gosalaAddress={routeModalGosala.area || routeModalGosala.name}
           gosalaLat={routeModalGosala.lat ?? (routeModalGosala as any).latitude}
-          gosalaLng={routeModalGosala.lng ?? (routeModalGosala as any).longitude}
+          gosalaLng={
+            routeModalGosala.lng ?? (routeModalGosala as any).longitude
+          }
           customerLat={deviceLocation.lat || undefined}
           customerLng={deviceLocation.lng || undefined}
           customerAddress={address || deviceLocation.address || undefined}
@@ -747,7 +776,10 @@ function AnimalDetail({
   const effectiveGosala: Gosala = {
     id: matchedStore?.id ?? "GOS-101",
     name: matchedStore?.name ?? animal.gosala,
-    area: matchedStore?.address ?? matchedStore?.region ?? "Operational Vedic Sanctuary",
+    area:
+      matchedStore?.address ??
+      matchedStore?.region ??
+      "Operational Vedic Sanctuary",
     distanceKm: (matchedStore as any)?.distanceKm ?? 6.2,
     rating: (matchedStore as any)?.rating ?? 4.8,
     animals: matchedStore?.capacity ?? 40,
@@ -817,10 +849,16 @@ function AnimalDetail({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
-                <span className="text-[13.5px] font-medium text-ink truncate">{effectiveGosala.name}</span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 font-mono border border-emerald-200 shrink-0">AWBI Verified</span>
+                <span className="text-[13.5px] font-medium text-ink truncate">
+                  {effectiveGosala.name}
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 font-mono border border-emerald-200 shrink-0">
+                  AWBI Verified
+                </span>
               </div>
-              <div className="text-[11.5px] text-ink-faint">{effectiveGosala.area}</div>
+              <div className="text-[11.5px] text-ink-faint">
+                {effectiveGosala.area}
+              </div>
             </div>
             <div className="text-right">
               <div className="inline-flex items-center gap-1 text-[12px] text-ink-soft">
@@ -965,7 +1003,10 @@ function Bookings({
               <div className="px-4 pb-4 pt-2 border-t border-line/60 bg-paper/50 space-y-3 text-[12.5px] animate-fade-in">
                 {b.address && (
                   <div className="flex items-start gap-2 text-ink-soft">
-                    <MapPin size={14} className="text-saffron shrink-0 mt-0.5" />
+                    <MapPin
+                      size={14}
+                      className="text-saffron shrink-0 mt-0.5"
+                    />
                     <div>
                       <div className="text-[10.5px] uppercase font-mono text-ink-faint">
                         Ceremony Address
@@ -998,8 +1039,8 @@ function Bookings({
                   <span className="font-medium text-saffron-deep">
                     Ritual Preparation:
                   </span>{" "}
-                  Ground-floor portico ready, clean water bucket and sacred green
-                  grass feeding protocol.
+                  Ground-floor portico ready, clean water bucket and sacred
+                  green grass feeding protocol.
                 </div>
 
                 <div className="flex items-center justify-between pt-2 border-t border-line/60">
@@ -1102,7 +1143,7 @@ function MobileCustomer({
   myBookings: MyBooking[]
   onCreate: (s: BookingSummary) => void
 }) {
-  const { profiles, refreshAnimals, authUser } = useStore()
+  const { profiles, refreshAnimals, authUser, isLoading } = useStore()
   const [tab, setTab] = useState<Tab>("discover")
 
   useEffect(() => {
@@ -1110,16 +1151,21 @@ function MobileCustomer({
   }, [refreshAnimals])
   const [detail, setDetail] = useState<Animal | null>(null)
   const [gosalaProfileId, setGosalaProfileId] = useState<string | null>(null)
-  const [gosalaProfileDist, setGosalaProfileDist] = useState<number | undefined>(undefined)
-  const [flow, setFlow] = useState<{ animal: Animal; gosala: Gosala } | null>(
+  const [gosalaProfileDist, setGosalaProfileDist] =
+    useState<number | undefined>(undefined)
+  const [flow, setFlow] = useState<{ animal: Animal gosala: Gosala } | null>(
     null,
   )
   const [editProfileOpen, setEditProfileOpen] = useState(false)
-  const [openProfileSection, setOpenProfileSection] = useState<string | null>(null)
-  const [selectedTrackBookingId, setSelectedTrackBookingId] = useState<string | null>(null)
+  const [openProfileSection, setOpenProfileSection] = useState<string | null>(
+    null,
+  )
+  const [selectedTrackBookingId, setSelectedTrackBookingId] =
+    useState<string | null>(null)
 
   const customerProfile = profiles?.customer
-  const devoteeName = authUser?.name || customerProfile?.name || CURRENT_CUSTOMER
+  const devoteeName =
+    authUser?.name || customerProfile?.name || CURRENT_CUSTOMER
 
   const activeTrip =
     (selectedTrackBookingId
@@ -1131,7 +1177,7 @@ function MobileCustomer({
     myBookings.find((b) => b.status === "Under Review") ||
     myBookings[0]
 
-  const tabs: { id: Tab; label: string; icon: typeof Home }[] = [
+  const tabs: { id: Tab label: string icon: typeof Home }[] = [
     { id: "discover", label: "Discover", icon: Compass },
     { id: "bookings", label: "Bookings", icon: Ticket },
     { id: "track", label: "Track", icon: Truck },
@@ -1221,15 +1267,30 @@ function MobileCustomer({
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="h-14 w-14 rounded-full bg-forest text-white grid place-items-center font-serif text-[20px]">
-                        {devoteeName.slice(0, 1)}
+                        {isLoading ? (
+                          <Skeleton variant="circular" className="h-14 w-14" />
+                        ) : (
+                          (authUser?.name || customerProfile?.name || "D").slice(0, 1).toUpperCase()
+                        )}
                       </div>
                       <div>
                         <div className="font-serif text-[19px] text-ink">
-                          {devoteeName}
+                          {isLoading ? (
+                            <Skeleton variant="text" className="h-6 w-36" />
+                          ) : authUser?.name || customerProfile?.name ? (
+                            authUser?.name || customerProfile?.name
+                          ) : (
+                            <span className="text-amber-600 text-sm italic">
+                              Devotee (Configure Profile)
+                            </span>
+                          )}
                         </div>
                         <div className="text-[12px] text-ink-faint">
-                          {customerProfile?.phone || "+91 98204 11827"} ·{" "}
-                          {customerProfile?.email || "ananya@gomaa.in"}
+                          {isLoading ? (
+                            <Skeleton variant="text" className="h-3.5 w-44 mt-1" />
+                          ) : (
+                            `${authUser?.phone || customerProfile?.phone || "No phone configured"} · ${authUser?.email || customerProfile?.email || "No email configured"}`
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1261,14 +1322,18 @@ function MobileCustomer({
                             Devotee Verification & Altar Setup Dossier
                           </div>
                           <div className="text-[11px] text-ink-faint">
-                            Aadhaar verified · {customerProfile?.customerData?.gotra || "Kashyapa"} gotra
+                            Aadhaar verified ·{" "}
+                            {customerProfile?.customerData?.gotra || "Kashyapa"}{" "}
+                            gotra
                           </div>
                         </div>
                       </div>
                       <ChevronDown
                         size={16}
                         className={`text-ink-faint transition-transform duration-200 shrink-0 ${
-                          openProfileSection === "verification" ? "rotate-180 text-forest" : ""
+                          openProfileSection === "verification"
+                            ? "rotate-180 text-forest"
+                            : ""
                         }`}
                       />
                     </button>
@@ -1277,17 +1342,32 @@ function MobileCustomer({
                       <div className="p-3.5 border-t border-line/60 bg-paper/40 space-y-2 text-[12px] animate-fade-in">
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <span className="text-[10.5px] uppercase font-mono text-ink-faint block">Devotee Gotra</span>
-                            <strong className="text-ink font-medium">{customerProfile?.customerData?.gotra || "Kashyapa"}</strong>
+                            <span className="text-[10.5px] uppercase font-mono text-ink-faint block">
+                              Devotee Gotra
+                            </span>
+                            <strong className="text-ink font-medium">
+                              {customerProfile?.customerData?.gotra ||
+                                "Kashyapa"}
+                            </strong>
                           </div>
                           <div>
-                            <span className="text-[10.5px] uppercase font-mono text-ink-faint block">Aadhaar (Verified)</span>
-                            <strong className="font-mono text-ink">{customerProfile?.customerData?.aadhaarNumber || "•••• •••• 4912"}</strong>
+                            <span className="text-[10.5px] uppercase font-mono text-ink-faint block">
+                              Aadhaar (Verified)
+                            </span>
+                            <strong className="font-mono text-ink">
+                              {customerProfile?.customerData?.aadhaarNumber ||
+                                "•••• •••• 4912"}
+                            </strong>
                           </div>
                         </div>
                         <div className="pt-1.5 border-t border-line/40">
-                          <span className="text-[10.5px] uppercase font-mono text-ink-faint block">Default Puja Venue</span>
-                          <span className="text-ink font-medium">{customerProfile?.customerData?.defaultAddress || "Flat 402, Aditya Heights, Kondapur, Hyderabad"}</span>
+                          <span className="text-[10.5px] uppercase font-mono text-ink-faint block">
+                            Default Puja Venue
+                          </span>
+                          <span className="text-ink font-medium">
+                            {customerProfile?.customerData?.defaultAddress ||
+                              "Flat 402, Aditya Heights, Kondapur, Hyderabad"}
+                          </span>
                         </div>
                       </div>
                     )}
@@ -1298,19 +1378,26 @@ function MobileCustomer({
                     {
                       id: "addresses",
                       label: "Saved addresses",
-                      subtitle: customerProfile?.customerData?.defaultAddress || "Flat 402, Aditya Heights, Kondapur, Hyderabad",
+                      subtitle:
+                        customerProfile?.customerData?.defaultAddress ||
+                        "Flat 402, Aditya Heights, Kondapur, Hyderabad",
                       content: (
                         <div className="space-y-2 text-[12px]">
                           <div className="p-2.5 rounded bg-card border border-line flex items-start justify-between">
                             <div>
                               <div className="font-medium text-ink flex items-center gap-1.5">
-                                <MapPin size={12} className="text-saffron" /> Home (Default Altar)
+                                <MapPin size={12} className="text-saffron" />{" "}
+                                Home (Default Altar)
                               </div>
                               <div className="text-ink-soft text-[11.5px] mt-0.5">
-                                {customerProfile?.customerData?.defaultAddress || "Flat 402, Aditya Heights, Kondapur, Hyderabad"}
+                                {customerProfile?.customerData
+                                  ?.defaultAddress ||
+                                  "Flat 402, Aditya Heights, Kondapur, Hyderabad"}
                               </div>
                             </div>
-                            <span className="text-[10px] font-mono bg-forest/10 text-forest px-1.5 py-0.5 rounded">Active</span>
+                            <span className="text-[10px] font-mono bg-forest/10 text-forest px-1.5 py-0.5 rounded">
+                              Active
+                            </span>
                           </div>
                         </div>
                       ),
@@ -1322,9 +1409,15 @@ function MobileCustomer({
                       content: (
                         <div className="space-y-2 text-[12px]">
                           <div className="p-2.5 rounded bg-card border border-line">
-                            <div className="font-medium text-ink">UPI ID (Google Pay / PhonePe)</div>
-                            <div className="font-mono text-ink-soft text-[11.5px]">ananya.deshmukh@okhdfcbank</div>
-                            <div className="text-[10.5px] text-forest mt-1">✓ Verified for Cow Seva Escrow Protection</div>
+                            <div className="font-medium text-ink">
+                              UPI ID (Google Pay / PhonePe)
+                            </div>
+                            <div className="font-mono text-ink-soft text-[11.5px]">
+                              ananya.deshmukh@okhdfcbank
+                            </div>
+                            <div className="text-[10.5px] text-forest mt-1">
+                              ✓ Verified for Cow Seva Escrow Protection
+                            </div>
                           </div>
                         </div>
                       ),
@@ -1337,15 +1430,21 @@ function MobileCustomer({
                         <div className="space-y-1.5 text-[12px] text-ink-soft">
                           <div className="flex items-center justify-between py-1 border-b border-line/40">
                             <span>WhatsApp Trip Tracking</span>
-                            <span className="text-forest font-semibold text-[11px]">Enabled</span>
+                            <span className="text-forest font-semibold text-[11px]">
+                              Enabled
+                            </span>
                           </div>
                           <div className="flex items-center justify-between py-1 border-b border-line/40">
                             <span>SMS Muhurat Updates</span>
-                            <span className="text-forest font-semibold text-[11px]">Enabled</span>
+                            <span className="text-forest font-semibold text-[11px]">
+                              Enabled
+                            </span>
                           </div>
                           <div className="flex items-center justify-between py-1">
                             <span>Gaushala Welfare News</span>
-                            <span className="text-ink-faint text-[11px]">Monthly</span>
+                            <span className="text-ink-faint text-[11px]">
+                              Monthly
+                            </span>
                           </div>
                         </div>
                       ),
@@ -1357,7 +1456,8 @@ function MobileCustomer({
                       content: (
                         <div className="space-y-2 text-[12px]">
                           <div className="text-ink-soft">
-                            Have questions regarding animal welfare, muhurat rescheduling, or cow transport?
+                            Have questions regarding animal welfare, muhurat
+                            rescheduling, or cow transport?
                           </div>
                           <div className="flex items-center gap-2 pt-1">
                             <a
@@ -1385,8 +1485,12 @@ function MobileCustomer({
                           className="w-full flex items-center justify-between px-4 py-3.5 text-[13.5px] text-ink hover:bg-paper-deep/60 transition cursor-pointer select-none"
                         >
                           <div>
-                            <div className="font-medium text-ink">{item.label}</div>
-                            <div className="text-[11px] text-ink-faint">{item.subtitle}</div>
+                            <div className="font-medium text-ink">
+                              {item.label}
+                            </div>
+                            <div className="text-[11px] text-ink-faint">
+                              {item.subtitle}
+                            </div>
                           </div>
                           <ChevronDown
                             size={16}
@@ -1476,16 +1580,23 @@ function useIsDesktop() {
 }
 
 export default function CustomerApp({ onSignOut }: { onSignOut: () => void }) {
-  const { bookings, createBooking, profiles, pricingConfig, authUser } = useStore()
+  const { bookings, createBooking, profiles, pricingConfig, authUser } =
+    useStore()
   const isDesktop = useIsDesktop()
   const customerProfile = profiles?.customer
-  const currentDevotee = authUser?.name || customerProfile?.name || CURRENT_CUSTOMER
+  const currentDevotee =
+    authUser?.name || customerProfile?.name || CURRENT_CUSTOMER
 
   const myBookings = bookings
     .filter((b) => {
-      if (authUser?.name && b.customer?.toLowerCase() === authUser.name.toLowerCase()) return true
+      if (
+        authUser?.name &&
+        b.customer?.toLowerCase() === authUser.name.toLowerCase()
+      )
+        return true
       if (authUser?.phone && b.phone === authUser.phone) return true
-      if (authUser?.email && (b as any).customerEmail === authUser.email) return true
+      if (authUser?.email && (b as any).customerEmail === authUser.email)
+        return true
       if (b.customer === currentDevotee) return true
       if (!authUser && b.customer === CURRENT_CUSTOMER) return true
       return false

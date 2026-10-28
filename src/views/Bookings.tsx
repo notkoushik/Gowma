@@ -18,9 +18,14 @@ import {
 } from "lucide-react"
 import { drivers, inr, type Booking, type BookingStatus } from "../data/mock"
 import { useStore, useToast } from "../store/store"
+import { Skeleton, TableRowSkeleton } from "../components/common/Skeleton"
 import { Eyebrow, Panel, StatusPill, Tag } from "../lib/ui"
 import CustomerDetailsModal from "../components/CustomerDetailsModal"
-import { normalizeDateStr, isSameDate, getDateChipLabel } from "../lib/dateUtils"
+import {
+  normalizeDateStr,
+  isSameDate,
+  getDateChipLabel,
+} from "../lib/dateUtils"
 
 const filters: (BookingStatus | "All")[] = [
   "All",
@@ -74,8 +79,9 @@ function Drawer({
   const { managers } = useStore()
   const b = booking
   const canActAdmin = b.status === "Admin Review"
-  const isAwaitingFeasibility = b.status === "Payment Verified" || b.status === "Manager Review"
-  
+  const isAwaitingFeasibility =
+    b.status === "Payment Verified" || b.status === "Manager Review"
+
   // Check if this gaushala has an active manager
   const assignedActiveManager = managers.find(
     (m) =>
@@ -114,7 +120,9 @@ function Drawer({
                   </span>
                 )}
               </div>
-              <div className="font-mono text-[15px] text-ink mt-0.5">{b.id}</div>
+              <div className="font-mono text-[15px] text-ink mt-0.5">
+                {b.id}
+              </div>
             </div>
             <button
               onClick={onClose}
@@ -139,7 +147,9 @@ function Drawer({
                   <span>Unassigned Shelter · Acting Custodian Required</span>
                 </div>
                 <p className="mt-1 text-[11.5px] text-amber-950/80 dark:text-amber-300/80 leading-relaxed">
-                  {b.gosala} does not have an active custodian manager. As Regional Operations Admin, you can review feasibility directly so the devotee booking is not stalled.
+                  {b.gosala} does not have an active custodian manager. As
+                  Regional Operations Admin, you can review feasibility directly
+                  so the devotee booking is not stalled.
                 </p>
               </div>
             )}
@@ -179,11 +189,7 @@ function Drawer({
 
               {/* Devotee Contact & Lineage */}
               <div className="space-y-1.5 text-[12px]">
-                <Row
-                  label="Devotee Phone"
-                  value={b.phone}
-                  mono
-                />
+                <Row label="Devotee Phone" value={b.phone} mono />
                 <Row
                   label="Devotee Email"
                   value={
@@ -202,16 +208,15 @@ function Drawer({
                 />
                 <Row
                   label="Family Members"
-                  value={b.devoteeFamilyMembers || "Ananya (Self), Rajesh (Husband)"}
+                  value={
+                    b.devoteeFamilyMembers || "Ananya (Self), Rajesh (Husband)"
+                  }
                 />
                 <Row
                   label="Ceremonial Purpose"
                   value={b.ritualPurpose || "Griha Pravesh & Kamadhenu Puja"}
                 />
-                <Row
-                  label="Service Address"
-                  value={b.address}
-                />
+                <Row label="Service Address" value={b.address} />
                 <Row
                   label="Transit Distance"
                   value={`${b.distanceKm} km transit`}
@@ -268,7 +273,11 @@ function Drawer({
                   value={inr(b.transport)}
                   mono
                 />
-                <Row label="Add-ons (mala, flowers)" value={inr(b.addons)} mono />
+                <Row
+                  label="Add-ons (mala, flowers)"
+                  value={inr(b.addons)}
+                  mono
+                />
                 <Row label="Tax" value={inr(b.tax)} mono />
                 {b.discount > 0 && (
                   <Row label="Discount" value={`− ${inr(b.discount)}`} mono />
@@ -301,13 +310,24 @@ function Drawer({
                         <span className="font-mono uppercase tracking-wider font-semibold text-saffron-deep flex items-center gap-1">
                           {isActingManagerAudit ? (
                             <>
-                              <ShieldCheck size={12} className="text-saffron shrink-0" />
-                              <span>Admin Acting as Manager · {b.managerApproval.name}</span>
+                              <ShieldCheck
+                                size={12}
+                                className="text-saffron shrink-0"
+                              />
+                              <span>
+                                Admin Acting as Manager ·{" "}
+                                {b.managerApproval.name}
+                              </span>
                             </>
                           ) : (
                             <>
-                              <UserCheck size={12} className="text-saffron shrink-0" />
-                              <span>Gaushala Manager · {b.managerApproval.name}</span>
+                              <UserCheck
+                                size={12}
+                                className="text-saffron shrink-0"
+                              />
+                              <span>
+                                Gaushala Manager · {b.managerApproval.name}
+                              </span>
                             </>
                           )}
                         </span>
@@ -333,7 +353,10 @@ function Drawer({
                       <div className="flex justify-between items-center text-[10.5px] text-ink-faint">
                         <span className="font-mono uppercase tracking-wider font-semibold text-ok flex items-center gap-1">
                           <Check size={12} className="text-ok shrink-0" />
-                          <span>Admin Confirmed · {b.adminApproval.name} ({b.adminApproval.userId})</span>
+                          <span>
+                            Admin Confirmed · {b.adminApproval.name} (
+                            {b.adminApproval.userId})
+                          </span>
                         </span>
                         <span className="font-mono">
                           {b.adminApproval.timestamp}
@@ -375,7 +398,8 @@ function Drawer({
             <p className="text-[11.5px] text-ink-faint leading-relaxed bg-paper rounded-sm p-3 border border-line">
               Prices shown are the immutable snapshot captured at checkout (Free
               KM: {b.freeKmSnapshot ?? 5} km, Per-KM: ₹{b.perKmSnapshot ?? 50}
-              /km). Later admin pricing changes will not recalculate this booking.
+              /km). Later admin pricing changes will not recalculate this
+              booking.
             </p>
           </div>
         </div>
@@ -454,9 +478,22 @@ function Drawer({
 }
 
 export default function Bookings() {
-  const { bookings: rows, managers, gosalas, adminDecide, managerDecide, assignDriver, profiles, authUser, currentRole, users } = useStore()
+  const {
+    bookings: rows,
+    managers,
+    gosalas,
+    adminDecide,
+    managerDecide,
+    assignDriver,
+    profiles,
+    authUser,
+    currentRole,
+    users,
+    isLoading,
+  } = useStore()
   const { notify } = useToast()
-  const activeAdminName = authUser?.name || profiles?.admin?.name || "Operations Admin"
+  const activeAdminName =
+    authUser?.name || profiles?.admin?.name || ""
   const [filter, setFilter] = useState<typeof filters[number]>("All")
   const [gosalaFilter, setGosalaFilter] = useState<string>("All")
   const [adminFilter, setAdminFilter] = useState<string>("All")
@@ -466,13 +503,18 @@ export default function Bookings() {
     useState<Booking | null>(null)
 
   const registeredOpsAdmins = useMemo(
-    () => users.filter((u) => u.role === "admin" || (u as any).dbRole === "OPERATIONS_ADMIN"),
+    () =>
+      users.filter(
+        (u) => u.role === "admin" || (u as any).dbRole === "OPERATIONS_ADMIN",
+      ),
     [users],
   )
 
   const getBookingAdmin = (b: Booking): string => {
     if (b.governingAdminName) return b.governingAdminName
-    const g = gosalas.find((x) => x.name.toLowerCase() === b.gosala.toLowerCase())
+    const g = gosalas.find(
+      (x) => x.name.toLowerCase() === b.gosala.toLowerCase(),
+    )
     return (g as any)?.governingAdminName || (g as any)?.adminName || ""
   }
 
@@ -489,9 +531,14 @@ export default function Bookings() {
           govAdmin.toLowerCase() === adminFilter.toLowerCase()
         const mQ =
           q === "" ||
-          [b.id, b.customer, b.animal, b.gosala, b.devoteeGotra || "", govAdmin].some((f) =>
-            f.toLowerCase().includes(q.toLowerCase()),
-          )
+          [
+            b.id,
+            b.customer,
+            b.animal,
+            b.gosala,
+            b.devoteeGotra || "",
+            govAdmin,
+          ].some((f) => f.toLowerCase().includes(q.toLowerCase()))
         return mFilter && mGosala && mAdmin && mQ
       }),
     [rows, filter, gosalaFilter, adminFilter, q, gosalas],
@@ -504,7 +551,11 @@ export default function Bookings() {
     setOpenId(null)
   }
 
-  const actingManagerDecide = (b: Booking, confirm: boolean, remark?: string) => {
+  const actingManagerDecide = (
+    b: Booking,
+    confirm: boolean,
+    remark?: string,
+  ) => {
     managerDecide(
       b.id,
       confirm,
@@ -542,7 +593,9 @@ export default function Bookings() {
 
             {/* Gaushala Filter Dropdown */}
             <div className="flex items-center gap-2">
-              <span className="text-[12px] text-ink-faint whitespace-nowrap">Filter Gaushala:</span>
+              <span className="text-[12px] text-ink-faint whitespace-nowrap">
+                Filter Gaushala:
+              </span>
               <select
                 value={gosalaFilter}
                 onChange={(e) => setGosalaFilter(e.target.value)}
@@ -565,15 +618,23 @@ export default function Bookings() {
             {/* Super Admin: Operations Admin Portfolio Filter */}
             {currentRole === "super_admin" && (
               <div className="flex items-center gap-2">
-                <span className="text-[12px] text-ink-faint whitespace-nowrap">Portfolio Admin:</span>
+                <span className="text-[12px] text-ink-faint whitespace-nowrap">
+                  Portfolio Admin:
+                </span>
                 <select
                   value={adminFilter}
                   onChange={(e) => setAdminFilter(e.target.value)}
                   className="bg-paper border border-amber-300 rounded-sm px-2.5 py-1.5 text-[12.5px] text-ink font-medium outline-none focus:border-amber-500 transition shadow-2xs"
                 >
-                  <option value="All">All Operations Portfolios ({rows.length})</option>
+                  <option value="All">
+                    All Operations Portfolios ({rows.length})
+                  </option>
                   {registeredOpsAdmins.map((adm) => {
-                    const count = rows.filter((b) => getBookingAdmin(b).toLowerCase() === adm.name.toLowerCase()).length
+                    const count = rows.filter(
+                      (b) =>
+                        getBookingAdmin(b).toLowerCase() ===
+                        adm.name.toLowerCase(),
+                    ).length
                     return (
                       <option key={adm.id} value={adm.name}>
                         {adm.name} ({count})
@@ -626,7 +687,16 @@ export default function Bookings() {
               </tr>
             </thead>
             <tbody>
-              {visible.map((b) => {
+              {isLoading ? (
+                <>
+                  <TableRowSkeleton cols={7} />
+                  <TableRowSkeleton cols={7} />
+                  <TableRowSkeleton cols={7} />
+                  <TableRowSkeleton cols={7} />
+                  <TableRowSkeleton cols={7} />
+                </>
+              ) : (
+                visible.map((b) => {
                 const assignedManager = managers.find(
                   (m) =>
                     m.gosala.toLowerCase() === b.gosala.toLowerCase() &&
@@ -635,7 +705,8 @@ export default function Bookings() {
                 const isUnassigned = !assignedManager
                 const isNeedsActing =
                   isUnassigned &&
-                  (b.status === "Payment Verified" || b.status === "Manager Review")
+                  (b.status === "Payment Verified" ||
+                    b.status === "Manager Review")
 
                 return (
                   <tr
@@ -648,7 +719,9 @@ export default function Bookings() {
                     </td>
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[13.5px] text-ink font-semibold">{b.customer}</span>
+                        <span className="text-[13.5px] text-ink font-semibold">
+                          {b.customer}
+                        </span>
                         <span className="text-[10px] font-medium text-forest bg-forest-soft px-1.5 py-0.2 rounded flex items-center gap-0.5">
                           <ShieldCheck size={10} /> Verified
                         </span>
@@ -670,7 +743,9 @@ export default function Bookings() {
                     <td className="px-5 py-3.5">
                       <div className="text-[13px] text-ink font-medium">
                         {b.animal}{" "}
-                        <span className="text-ink-faint font-normal">· {b.animalType}</span>
+                        <span className="text-ink-faint font-normal">
+                          · {b.animalType}
+                        </span>
                       </div>
                       <div className="text-[11.5px] text-ink-faint flex items-center gap-1.5 mt-0.5">
                         <span>{b.gosala}</span>
@@ -707,8 +782,8 @@ export default function Bookings() {
                     </td>
                   </tr>
                 )
-              })}
-              {visible.length === 0 && (
+              }))}
+              {!isLoading && visible.length === 0 && (
                 <tr>
                   <td
                     colSpan={7}

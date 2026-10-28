@@ -19,7 +19,7 @@ export type Role = {
   icon: LucideIcon
   summary: string
   duties: string[]
-  workflow?: { label: string; steps: string[] }
+  workflow?: { label: string steps: string[] }
 }
 
 export const roles: Role[] = [
@@ -43,7 +43,7 @@ export const roles: Role[] = [
     id: "super_admin",
     name: "Super Admin (Captain)",
     scope: "Platform Captain & Master Authority",
-    demoEmail: "koushik@gmail.com",
+    demoEmail: "superadmin@gomaa.in",
     icon: Crown,
     summary:
       "The Platform Captain and supreme authority who controls everything in the application. Manages PostgreSQL Master Pricing configurations, distance formulas, commission splits, platform economics, and authorizes all treasury payout disbursements.",

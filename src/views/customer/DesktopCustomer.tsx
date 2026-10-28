@@ -38,6 +38,7 @@ import {
   getIndianLocalityFromCoords,
 } from "../../hooks/useDeviceLocation"
 import { useStore } from "../../store/store"
+import { Skeleton } from "../../components/common/Skeleton"
 import EditProfileModal from "../../components/EditProfileModal"
 import CattleAndShelterGallery from "../../components/CattleAndShelterGallery"
 import LocationPickerModal from "../../components/LocationPickerModal"
@@ -59,7 +60,13 @@ export default function DesktopCustomer({
   myBookings: MyBooking[]
   onCreate: (s: BookingSummary) => void
 }) {
-  const { profiles, gosalas: storeGosalas, animals: storeAnimals, refreshAnimals, authUser } = useStore()
+  const {
+    profiles,
+    gosalas: storeGosalas,
+    animals: storeAnimals,
+    refreshAnimals,
+    authUser,
+  } = useStore()
   const customerProfile = profiles?.customer
   const devoteeName = authUser?.name || customerProfile?.name || "Devotee"
 
@@ -71,8 +78,10 @@ export default function DesktopCustomer({
   const [detail, setDetail] = useState<Animal | null>(null)
   const [gosalaProfileId, setGosalaProfileId] = useState<string | null>(null)
   const [routeModalGosala, setRouteModalGosala] = useState<Gosala | null>(null)
-  const [routeModalMode, setRouteModalMode] = useState<"route" | "pinpoint">("route")
-  const [flow, setFlow] = useState<{ animal: Animal; gosala: Gosala } | null>(
+  const [routeModalMode, setRouteModalMode] = useState<"route" | "pinpoint">(
+    "route",
+  )
+  const [flow, setFlow] = useState<{ animal: Animal gosala: Gosala } | null>(
     null,
   )
   const [q, setQ] = useState("")
@@ -91,7 +100,9 @@ export default function DesktopCustomer({
       const housedCows = liveAnimals.filter(
         (a) => a.gosala.toLowerCase() === g.name.toLowerCase(),
       )
-      const dynamicRating = (g as any).rating || Number((4.7 + ((g.name.length * 3 + idx) % 4) * 0.1).toFixed(1))
+      const dynamicRating =
+        (g as any).rating ||
+        Number((4.7 + ((g.name.length * 3 + idx) % 4) * 0.1).toFixed(1))
 
       return {
         id: g.id,
@@ -112,7 +123,8 @@ export default function DesktopCustomer({
         lng:
           g.lng !== undefined && g.lng !== null
             ? Number(g.lng)
-            : (g as any).longitude !== undefined && (g as any).longitude !== null
+            : (g as any).longitude !== undefined &&
+                (g as any).longitude !== null
               ? Number((g as any).longitude)
               : undefined,
       }
@@ -177,7 +189,8 @@ export default function DesktopCustomer({
     }
   }
 
-  const [selectedTrackBookingId, setSelectedTrackBookingId] = useState<string | null>(null)
+  const [selectedTrackBookingId, setSelectedTrackBookingId] =
+    useState<string | null>(null)
   const activeTrip =
     (selectedTrackBookingId
       ? myBookings.find((b) => b.id === selectedTrackBookingId)
@@ -194,7 +207,7 @@ export default function DesktopCustomer({
       a.type.toLowerCase().includes(q.toLowerCase()),
   )
 
-  const nav: { id: Tab; label: string }[] = [
+  const nav: { id: Tab label: string }[] = [
     { id: "discover", label: "Discover" },
     { id: "bookings", label: "My bookings" },
     { id: "track", label: "Track" },
@@ -264,9 +277,15 @@ export default function DesktopCustomer({
                 </div>
                 <div className="text-[12.5px] text-ink font-semibold group-hover:text-saffron-deep flex items-center gap-1">
                   <span className="truncate">
-                    {deviceLocation.city || (deviceLocation.isLoading ? "Locating..." : "Select Region")}
+                    {deviceLocation.city ||
+                      (deviceLocation.isLoading
+                        ? "Locating..."
+                        : "Select Region")}
                   </span>
-                  <ChevronDown size={12} className="text-ink-faint group-hover:text-saffron-deep shrink-0" />
+                  <ChevronDown
+                    size={12}
+                    className="text-ink-faint group-hover:text-saffron-deep shrink-0"
+                  />
                 </div>
               </div>
             </button>
@@ -320,8 +339,12 @@ export default function DesktopCustomer({
                 {devoteeName.slice(0, 1)}
               </button>
               <div className="text-left hidden lg:block">
-                <div className="text-[12px] font-medium text-ink leading-tight truncate max-w-[120px]">{devoteeName}</div>
-                <div className="text-[10px] font-mono text-saffron font-medium">{authUser?.uniqueId || "GMA-DEV-0223"}</div>
+                <div className="text-[12px] font-medium text-ink leading-tight truncate max-w-[120px]">
+                  {devoteeName}
+                </div>
+                <div className="text-[10px] font-mono text-saffron font-medium">
+                  {authUser?.uniqueId || "GMA-DEV-0223"}
+                </div>
               </div>
             </div>
             <button
@@ -337,21 +360,24 @@ export default function DesktopCustomer({
 
       <main className="max-w-6xl mx-auto px-6 py-8">
         {/* Proactive GPS Permission & Fallback Banner */}
-        {!detail && !gosalaProfileId && tab === "discover" && !deviceLocation.hasPermission && (
-          <div className="mb-6">
-            <LocationPromptBanner
-              role="CUSTOMER"
-              hasPermission={deviceLocation.hasPermission}
-              permissionStatus={deviceLocation.permissionStatus}
-              isLoading={deviceLocation.isLoading}
-              error={deviceLocation.error}
-              accuracy={deviceLocation.accuracy}
-              address={deviceLocation.address}
-              onRequestLocation={handleDetectLocation}
-              onOpenLocationPicker={() => setLocationPickerOpen(true)}
-            />
-          </div>
-        )}
+        {!detail &&
+          !gosalaProfileId &&
+          tab === "discover" &&
+          !deviceLocation.hasPermission && (
+            <div className="mb-6">
+              <LocationPromptBanner
+                role="CUSTOMER"
+                hasPermission={deviceLocation.hasPermission}
+                permissionStatus={deviceLocation.permissionStatus}
+                isLoading={deviceLocation.isLoading}
+                error={deviceLocation.error}
+                accuracy={deviceLocation.accuracy}
+                address={deviceLocation.address}
+                onRequestLocation={handleDetectLocation}
+                onOpenLocationPicker={() => setLocationPickerOpen(true)}
+              />
+            </div>
+          )}
 
         {detail ? (
           <DetailView
@@ -430,12 +456,17 @@ export default function DesktopCustomer({
               </div>
               {sortedGaushalas.length === 0 ? (
                 <div className="p-8 text-center rounded-sm border border-dashed border-line bg-card/60">
-                  <Building2 size={32} className="mx-auto text-saffron-deep/70 mb-2.5" />
+                  <Building2
+                    size={32}
+                    className="mx-auto text-saffron-deep/70 mb-2.5"
+                  />
                   <p className="font-serif text-[18px] text-ink font-semibold">
                     No Gaushalas registered yet
                   </p>
                   <p className="text-[12.5px] text-ink-soft max-w-md mx-auto mt-1 leading-relaxed">
-                    As Gaushalas register their sanctuaries on GOMAA, they will appear here with verified Vedic standards, physical address, and doorstep service.
+                    As Gaushalas register their sanctuaries on GOMAA, they will
+                    appear here with verified Vedic standards, physical address,
+                    and doorstep service.
                   </p>
                 </div>
               ) : (
@@ -477,7 +508,10 @@ export default function DesktopCustomer({
                               {g.name}
                             </div>
                             <div className="text-[12px] text-ink-faint mt-0.5 flex items-center gap-1">
-                              <MapPin size={11} className="shrink-0 text-saffron" />
+                              <MapPin
+                                size={11}
+                                className="shrink-0 text-saffron"
+                              />
                               <span className="truncate">{g.area}</span>
                             </div>
                             <div className="flex items-center gap-3.5 mt-3 text-[12px]">
@@ -489,7 +523,10 @@ export default function DesktopCustomer({
                                 {g.rating}
                               </span>
                               <span className="inline-flex items-center gap-1 text-ink-soft font-mono tabular font-medium">
-                                <Navigation size={12} className="text-forest" /> {roadDistances[g.id] ?? serviceability.distanceKm} km
+                                <Navigation size={12} className="text-forest" />{" "}
+                                {roadDistances[g.id] ??
+                                  serviceability.distanceKm}{" "}
+                                km
                               </span>
                               <span className="text-ink-faint font-medium">
                                 · {cattleLabel}
@@ -556,12 +593,17 @@ export default function DesktopCustomer({
               </div>
               {list.length === 0 ? (
                 <div className="p-8 text-center rounded-sm border border-dashed border-line bg-card/60">
-                  <PawPrint size={32} className="mx-auto text-saffron-deep/70 mb-2.5" />
+                  <PawPrint
+                    size={32}
+                    className="mx-auto text-saffron-deep/70 mb-2.5"
+                  />
                   <p className="font-serif text-[18px] text-ink font-semibold">
                     No sacred cattle onboarded yet
                   </p>
                   <p className="text-[12.5px] text-ink-soft max-w-md mx-auto mt-1 leading-relaxed">
-                    Once sanctuaries onboard their sacred cows, calves, and bulls with veterinary health records, you can book doorstep Gau Seva here.
+                    Once sanctuaries onboard their sacred cows, calves, and
+                    bulls with veterinary health records, you can book doorstep
+                    Gau Seva here.
                   </p>
                 </div>
               ) : (
@@ -669,10 +711,14 @@ export default function DesktopCustomer({
           gosalaName={routeModalGosala.name}
           gosalaAddress={routeModalGosala.area || routeModalGosala.name}
           gosalaLat={routeModalGosala.lat ?? (routeModalGosala as any).latitude}
-          gosalaLng={routeModalGosala.lng ?? (routeModalGosala as any).longitude}
+          gosalaLng={
+            routeModalGosala.lng ?? (routeModalGosala as any).longitude
+          }
           customerLat={deviceLocation.lat || undefined}
           customerLng={deviceLocation.lng || undefined}
-          customerAddress={deliveryAddress || deviceLocation.address || undefined}
+          customerAddress={
+            deliveryAddress || deviceLocation.address || undefined
+          }
           mode={routeModalMode}
         />
       )}
@@ -701,7 +747,10 @@ function DetailView({
   const effectiveGosala: Gosala = {
     id: matchedStore?.id ?? "GOS-101",
     name: matchedStore?.name ?? animal.gosala,
-    area: matchedStore?.address ?? matchedStore?.region ?? "Operational Vedic Sanctuary",
+    area:
+      matchedStore?.address ??
+      matchedStore?.region ??
+      "Operational Vedic Sanctuary",
     distanceKm: (matchedStore as any)?.distanceKm ?? 6.2,
     rating: (matchedStore as any)?.rating ?? 4.8,
     animals: matchedStore?.capacity ?? 40,
@@ -724,10 +773,7 @@ function DetailView({
       <div className="grid lg:grid-cols-[1.1fr_1fr] gap-8">
         {/* Dynamic Sacred Cow & Shelter Multi-Photo Showcase */}
         <div>
-          <CattleAndShelterGallery
-            animal={animal}
-            gosalaName={animal.gosala}
-          />
+          <CattleAndShelterGallery animal={animal} gosalaName={animal.gosala} />
         </div>
 
         {/* Info */}
@@ -778,10 +824,16 @@ function DetailView({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span className="text-[14px] font-medium text-ink truncate">{effectiveGosala.name}</span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 font-mono border border-emerald-200 shrink-0">AWBI Verified</span>
+                <span className="text-[14px] font-medium text-ink truncate">
+                  {effectiveGosala.name}
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 font-mono border border-emerald-200 shrink-0">
+                  AWBI Verified
+                </span>
               </div>
-              <div className="text-[12px] text-ink-faint">{effectiveGosala.area}</div>
+              <div className="text-[12px] text-ink-faint">
+                {effectiveGosala.area}
+              </div>
             </div>
             <div className="text-right">
               <div className="inline-flex items-center gap-1 text-[13px] text-ink-soft">
@@ -825,7 +877,9 @@ function DetailView({
             disabled={animal.status !== "Available"}
             className="w-full mt-7 bg-saffron text-white rounded-sm py-3.5 text-[15px] font-medium hover:bg-saffron-deep disabled:opacity-40 transition-colors"
           >
-            {animal.status !== "Available" ? "Currently unavailable" : "Book now"}
+            {animal.status !== "Available"
+              ? "Currently unavailable"
+              : "Book now"}
           </button>
         </div>
       </div>
@@ -927,7 +981,9 @@ function BookingsView({
                           <div className="text-[11px] uppercase font-mono text-ink-faint">
                             Ceremony Venue
                           </div>
-                          <div className="text-ink font-medium">{b.address}</div>
+                          <div className="text-ink font-medium">
+                            {b.address}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -938,7 +994,9 @@ function BookingsView({
                           Route Distance
                         </div>
                         <div className="text-ink font-medium">
-                          {b.distanceKm ? `${b.distanceKm} km transit` : "Safe Zone"}
+                          {b.distanceKm
+                            ? `${b.distanceKm} km transit`
+                            : "Safe Zone"}
                         </div>
                       </div>
                       <div>
@@ -1054,9 +1112,9 @@ function TrackView({
 
 /* ---------------- Profile ---------------- */
 function ProfileView({ onOpenEditProfile }: { onOpenEditProfile: () => void }) {
-  const { profiles } = useStore()
+  const { profiles, authUser, isLoading } = useStore()
   const customerProfile = profiles?.customer
-  const devoteeName = customerProfile?.name || "Devotee"
+  const devoteeName = authUser?.name || customerProfile?.name || ""
   const [openSection, setOpenSection] = useState<string | null>(null)
 
   return (
@@ -1064,18 +1122,35 @@ function ProfileView({ onOpenEditProfile }: { onOpenEditProfile: () => void }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="h-16 w-16 rounded-full bg-forest text-white grid place-items-center font-serif text-[24px]">
-            {devoteeName.slice(0, 1)}
+            {isLoading ? (
+              <Skeleton variant="circular" className="h-16 w-16" />
+            ) : (
+              (devoteeName || "D").slice(0, 1).toUpperCase()
+            )}
           </div>
           <div>
             <div className="font-serif text-[24px] text-ink flex items-center gap-2">
-              {devoteeName}
-              <span className="inline-flex items-center gap-1 font-mono text-[11px] px-2 py-0.5 rounded bg-saffron-soft text-saffron-deep border border-saffron/30 font-medium">
-                <ShieldCheck size={12} /> {authUser?.uniqueId || "GMA-DEV-0223"}
-              </span>
+              {isLoading ? (
+                <Skeleton variant="text" className="h-7 w-44" />
+              ) : devoteeName ? (
+                devoteeName
+              ) : (
+                <span className="text-amber-600 text-sm italic">
+                  Devotee (Configure Profile)
+                </span>
+              )}
+              {authUser?.uniqueId && (
+                <span className="inline-flex items-center gap-1 font-mono text-[11px] px-2 py-0.5 rounded bg-saffron-soft text-saffron-deep border border-saffron/30 font-medium">
+                  <ShieldCheck size={12} /> {authUser.uniqueId}
+                </span>
+              )}
             </div>
             <div className="text-[13px] text-ink-faint">
-              {authUser?.phone || customerProfile?.phone || "+91 98204 11827"} ·{" "}
-              {authUser?.email || customerProfile?.email || "ananya@gomaa.in"}
+              {isLoading ? (
+                <Skeleton variant="text" className="h-4 w-52 mt-1" />
+              ) : (
+                `${authUser?.phone || customerProfile?.phone || "No phone configured"} · ${authUser?.email || customerProfile?.email || "No email configured"}`
+              )}
             </div>
           </div>
         </div>
@@ -1092,7 +1167,9 @@ function ProfileView({ onOpenEditProfile }: { onOpenEditProfile: () => void }) {
         <button
           type="button"
           onClick={() =>
-            setOpenSection(openSection === "verification" ? null : "verification")
+            setOpenSection(
+              openSection === "verification" ? null : "verification",
+            )
           }
           className="w-full flex items-center justify-between p-5 text-left bg-card hover:bg-paper-deep/60 transition cursor-pointer select-none"
         >
@@ -1103,7 +1180,9 @@ function ProfileView({ onOpenEditProfile }: { onOpenEditProfile: () => void }) {
                 Devotee Verification & Altar Setup Dossier
               </div>
               <div className="text-[12px] text-ink-faint mt-0.5">
-                Gotra: {customerProfile?.customerData?.gotra || "Kashyapa"} · Aadhaar: {customerProfile?.customerData?.aadhaarNumber || "•••• 4912"}
+                Gotra: {customerProfile?.customerData?.gotra || "Kashyapa"} ·
+                Aadhaar:{" "}
+                {customerProfile?.customerData?.aadhaarNumber || "•••• 4912"}
               </div>
             </div>
           </div>
@@ -1129,7 +1208,8 @@ function ProfileView({ onOpenEditProfile }: { onOpenEditProfile: () => void }) {
                   Aadhaar (Masked / Verified)
                 </div>
                 <div className="font-mono font-medium text-ink mt-0.5">
-                  {customerProfile?.customerData?.aadhaarNumber || "•••• •••• 4912"}
+                  {customerProfile?.customerData?.aadhaarNumber ||
+                    "•••• •••• 4912"}
                 </div>
               </div>
               <div>
@@ -1173,13 +1253,17 @@ function ProfileView({ onOpenEditProfile }: { onOpenEditProfile: () => void }) {
                 <div className="p-3 rounded bg-card border border-line flex items-start justify-between">
                   <div>
                     <div className="font-medium text-ink flex items-center gap-1.5">
-                      <MapPin size={13} className="text-saffron" /> Home (Default Altar)
+                      <MapPin size={13} className="text-saffron" /> Home
+                      (Default Altar)
                     </div>
                     <div className="text-ink-soft text-[12px] mt-0.5">
-                      {customerProfile?.customerData?.defaultAddress || "Flat 402, Aditya Heights, Kondapur, Hyderabad"}
+                      {customerProfile?.customerData?.defaultAddress ||
+                        "Flat 402, Aditya Heights, Kondapur, Hyderabad"}
                     </div>
                   </div>
-                  <span className="text-[10.5px] font-mono bg-forest/10 text-forest border border-forest/20 px-2 py-0.5 rounded">Active</span>
+                  <span className="text-[10.5px] font-mono bg-forest/10 text-forest border border-forest/20 px-2 py-0.5 rounded">
+                    Active
+                  </span>
                 </div>
               </div>
             ),
@@ -1191,9 +1275,15 @@ function ProfileView({ onOpenEditProfile }: { onOpenEditProfile: () => void }) {
             content: (
               <div className="space-y-2 text-[13px]">
                 <div className="p-3 rounded bg-card border border-line">
-                  <div className="font-medium text-ink">UPI ID (Google Pay / PhonePe)</div>
-                  <div className="font-mono text-ink-soft text-[12px]">ananya.deshmukh@okhdfcbank</div>
-                  <div className="text-[11px] text-forest mt-1">✓ Escrow Protection active for cow welfare assurance</div>
+                  <div className="font-medium text-ink">
+                    UPI ID (Google Pay / PhonePe)
+                  </div>
+                  <div className="font-mono text-ink-soft text-[12px]">
+                    ananya.deshmukh@okhdfcbank
+                  </div>
+                  <div className="text-[11px] text-forest mt-1">
+                    ✓ Escrow Protection active for cow welfare assurance
+                  </div>
                 </div>
               </div>
             ),
@@ -1206,11 +1296,15 @@ function ProfileView({ onOpenEditProfile }: { onOpenEditProfile: () => void }) {
               <div className="space-y-2 text-[13px] text-ink-soft">
                 <div className="flex items-center justify-between py-1.5 border-b border-line/40">
                   <span>WhatsApp Trip Tracking</span>
-                  <span className="text-forest font-semibold text-[11.5px]">Enabled</span>
+                  <span className="text-forest font-semibold text-[11.5px]">
+                    Enabled
+                  </span>
                 </div>
                 <div className="flex items-center justify-between py-1.5 border-b border-line/40">
                   <span>SMS Muhurat Updates</span>
-                  <span className="text-forest font-semibold text-[11.5px]">Enabled</span>
+                  <span className="text-forest font-semibold text-[11.5px]">
+                    Enabled
+                  </span>
                 </div>
                 <div className="flex items-center justify-between py-1">
                   <span>Gaushala Welfare News</span>
@@ -1226,7 +1320,8 @@ function ProfileView({ onOpenEditProfile }: { onOpenEditProfile: () => void }) {
             content: (
               <div className="space-y-2 text-[13px]">
                 <div className="text-ink-soft">
-                  Have questions regarding animal welfare, muhurat rescheduling, or cow transport?
+                  Have questions regarding animal welfare, muhurat rescheduling,
+                  or cow transport?
                 </div>
                 <div className="flex items-center gap-3 pt-1">
                   <a
@@ -1252,8 +1347,12 @@ function ProfileView({ onOpenEditProfile }: { onOpenEditProfile: () => void }) {
                 className="w-full flex items-center justify-between p-4 text-left hover:bg-paper-deep/60 transition cursor-pointer select-none"
               >
                 <div>
-                  <div className="text-[14px] font-medium text-ink">{item.label}</div>
-                  <div className="text-[12px] text-ink-faint mt-0.5">{item.subtitle}</div>
+                  <div className="text-[14px] font-medium text-ink">
+                    {item.label}
+                  </div>
+                  <div className="text-[12px] text-ink-faint mt-0.5">
+                    {item.subtitle}
+                  </div>
                 </div>
                 <ChevronDown
                   size={18}

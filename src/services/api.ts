@@ -51,9 +51,18 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json()
 }
 
+interface VerifyOtpPayload {
+  emailOrPhone: string
+  otp: string
+}
+
 export const api = {
   async login(emailOrPhone: string, roleHint?: string, password?: string) {
-    const data = await request<{ ok: boolean; token: string; user: any }>("/api/auth/login", {
+    const data = await request<{
+      ok: boolean
+      token: string
+      user: any
+    }>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email: emailOrPhone, roleHint, password }),
     })
@@ -76,7 +85,11 @@ export const api = {
     gosalaId?: string
     gosalaName?: string
   }) {
-    const res = await request<{ ok: boolean; token: string; user: any }>("/api/auth/register", {
+    const res = await request<{
+      ok: boolean
+      token: string
+      user: any
+    }>("/api/auth/register", {
       method: "POST",
       body: JSON.stringify(data),
     })
@@ -86,32 +99,53 @@ export const api = {
     return res
   },
 
-  async forgotPassword(data: { emailOrPhone: string; channel?: "EMAIL" | "PHONE" }) {
-    return request<{ ok: boolean; message: string; channel: string; maskedTarget: string }>(
-      "/api/auth/forgot-password",
-      {
-        method: "POST",
-        body: JSON.stringify(data),
-      }
-    )
-  },
-
-  async verifyOtp(data: { emailOrPhone: string; otp: string }) {
-    return request<{ ok: boolean; resetToken: string; message: string }>("/api/auth/verify-otp", {
+  async forgotPassword(data: {
+    emailOrPhone: string
+    channel?: "EMAIL" | "PHONE"
+  }) {
+    return request<{
+      ok: boolean
+      message: string
+      channel: string
+      maskedTarget: string
+    }>("/api/auth/forgot-password", {
       method: "POST",
       body: JSON.stringify(data),
     })
   },
 
-  async resetPassword(data: { emailOrPhone: string; resetToken: string; newPassword: string }) {
-    return request<{ ok: boolean; message: string; user?: any }>("/api/auth/reset-password", {
+  async verifyOtp(data: VerifyOtpPayload) {
+    return request<{
+      ok: boolean
+      resetToken: string
+      message: string
+    }>("/api/auth/verify-otp", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+  },
+
+  async resetPassword(data: {
+    emailOrPhone: string
+    resetToken: string
+    newPassword: string
+  }) {
+    return request<{
+      ok: boolean
+      message: string
+      user?: any
+    }>("/api/auth/reset-password", {
       method: "POST",
       body: JSON.stringify(data),
     })
   },
 
   async switchContext(targetRole: "super_admin" | "admin") {
-    const res = await request<{ ok: boolean; token: string; user: any }>("/api/auth/switch-context", {
+    const res = await request<{
+      ok: boolean
+      token: string
+      user: any
+    }>("/api/auth/switch-context", {
       method: "POST",
       body: JSON.stringify({ targetRole }),
     })
@@ -122,25 +156,37 @@ export const api = {
   },
 
   async getUsers() {
-    return request<{ ok: boolean; users: any[] }>("/api/users")
+    return request<{
+      ok: boolean
+      users: any[]
+    }>("/api/users")
   },
 
   async createUser(data: any) {
-    return request<{ ok: boolean; user: any }>("/api/users", {
+    return request<{
+      ok: boolean
+      user: any
+    }>("/api/users", {
       method: "POST",
       body: JSON.stringify(data),
     })
   },
 
   async updateUser(id: string, updates: any) {
-    return request<{ ok: boolean; user: any }>(`/api/users/${id}`, {
+    return request<{
+      ok: boolean
+      user: any
+    }>(`/api/users/${id}`, {
       method: "PUT",
       body: JSON.stringify(updates),
     })
   },
 
   async deleteUser(id: string) {
-    return request<{ ok: boolean; deleted: string }>(`/api/users/${id}`, {
+    return request<{
+      ok: boolean
+      deleted: string
+    }>(`/api/users/${id}`, {
       method: "DELETE",
     })
   },
@@ -151,9 +197,15 @@ export const api = {
       return { ok: false, user: null }
     }
     try {
-      return await request<{ ok: boolean; user: any }>("/api/auth/me")
+      return await request<{
+        ok: boolean
+        user: any
+      }>("/api/auth/me")
     } catch (err: any) {
-      if (err.message?.includes("401") || err.message?.toLowerCase().includes("unauthenticated")) {
+      if (
+        err.message?.includes("401") ||
+        err.message?.toLowerCase().includes("unauthenticated")
+      ) {
         setAuthToken(null)
         try {
           localStorage.removeItem("gomaa_auth_user")
@@ -165,7 +217,10 @@ export const api = {
   },
 
   async getAccounts() {
-    return request<{ ok: boolean; accounts: any[] }>("/api/auth/accounts")
+    return request<{
+      ok: boolean
+      accounts: any[]
+    }>("/api/auth/accounts")
   },
 
   logout() {
@@ -173,7 +228,10 @@ export const api = {
   },
 
   async getHealth() {
-    return request<{ ok: boolean; timestamp: string }>("/api/health")
+    return request<{
+      ok: boolean
+      timestamp: string
+    }>("/api/health")
   },
 
   async getAvailability(
@@ -204,13 +262,14 @@ export const api = {
     durationMin: number
     customerName: string
   }) {
-    return request<{ success: boolean; hold?: any; reason?: string }>(
-      "/api/hold",
-      {
-        method: "POST",
-        body: JSON.stringify(params),
-      },
-    )
+    return request<{
+      success: boolean
+      hold?: any
+      reason?: string
+    }>("/api/hold", {
+      method: "POST",
+      body: JSON.stringify(params),
+    })
   },
 
   async releaseHold(holdId: string) {
@@ -305,13 +364,14 @@ export const api = {
   },
 
   async verifyHandoverOtp(id: string, otp: string) {
-    return request<{ success: boolean; message: string; booking: Booking }>(
-      `/api/bookings/${id}/verify-handover-otp`,
-      {
-        method: "POST",
-        body: JSON.stringify({ otp }),
-      },
-    )
+    return request<{
+      success: boolean
+      message: string
+      booking: Booking
+    }>(`/api/bookings/${id}/verify-handover-otp`, {
+      method: "POST",
+      body: JSON.stringify({ otp }),
+    })
   },
 
   async getManagers() {
@@ -370,23 +430,23 @@ export const api = {
   },
 
   async approveSettlementBatch(batch: string) {
-    return request<{ success: boolean; batch: string }>(
-      "/api/settlements/batch-approve",
-      {
-        method: "POST",
-        body: JSON.stringify({ batch }),
-      },
-    )
+    return request<{
+      success: boolean
+      batch: string
+    }>("/api/settlements/batch-approve", {
+      method: "POST",
+      body: JSON.stringify({ batch }),
+    })
   },
 
   async toggleSlotBlock(animal: string, date: string, time: string) {
-    return request<{ key: string; blocked: string[] }>(
-      "/api/slots/toggle-block",
-      {
-        method: "POST",
-        body: JSON.stringify({ animal, date, time }),
-      },
-    )
+    return request<{
+      key: string
+      blocked: string[]
+    }>("/api/slots/toggle-block", {
+      method: "POST",
+      body: JSON.stringify({ animal, date, time }),
+    })
   },
 
   async setTripStage(id: string, stage: number) {
@@ -404,9 +464,10 @@ export const api = {
   },
 
   async getDriverLocation(bookingId: string) {
-    return request<{ ok: boolean; location: any }>(
-      `/api/bookings/${bookingId}/driver-location`,
-    )
+    return request<{
+      ok: boolean
+      location: any
+    }>(`/api/bookings/${bookingId}/driver-location`)
   },
 
   async updateAnimalStatus(
@@ -415,19 +476,21 @@ export const api = {
     reason?: string,
     cooldownMinutes?: number,
   ) {
-    return request<{ success: boolean; animal: string; status: string }>(
-      `/api/animals/${encodeURIComponent(name)}/status`,
-      {
-        method: "POST",
-        body: JSON.stringify({ status, reason, cooldownMinutes }),
-      },
-    )
+    return request<{
+      success: boolean
+      animal: string
+      status: string
+    }>(`/api/animals/${encodeURIComponent(name)}/status`, {
+      method: "POST",
+      body: JSON.stringify({ status, reason, cooldownMinutes }),
+    })
   },
 
   async getCustomerDetails(bookingId: string) {
-    return request<{ ok: boolean; details: any }>(
-      `/api/bookings/${bookingId}/customer-details`,
-    )
+    return request<{
+      ok: boolean
+      details: any
+    }>(`/api/bookings/${bookingId}/customer-details`)
   },
 
   async getProfiles() {
@@ -439,100 +502,121 @@ export const api = {
   },
 
   async updateProfile(role: string, data: any) {
-    return request<{ success: boolean; profile: any }>(`/api/profiles/${role}`, {
+    return request<{
+      success: boolean
+      profile: any
+    }>(`/api/profiles/${role}`, {
       method: "PUT",
       body: JSON.stringify(data),
     })
   },
 
   async getGosalas() {
-    return request<{ ok: boolean; gosalas: any[] }>("/api/gosalas")
+    return request<{
+      ok: boolean
+      gosalas: any[]
+    }>("/api/gosalas")
   },
 
   async createGosala(data: any) {
-    return request<{ ok: boolean; gosala: any }>("/api/gosalas", {
+    return request<{
+      ok: boolean
+      gosala: any
+    }>("/api/gosalas", {
       method: "POST",
       body: JSON.stringify(data),
     })
   },
 
   async updateGosala(id: string, data: any) {
-    return request<{ ok: boolean; gosala: any }>(
-      `/api/gosalas/${encodeURIComponent(id)}`,
-      {
-        method: "PUT",
-        body: JSON.stringify(data),
-      },
-    )
+    return request<{
+      ok: boolean
+      gosala: any
+    }>(`/api/gosalas/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    })
   },
 
   async deleteGosala(id: string) {
-    return request<{ ok: boolean; deleted: string }>(
-      `/api/gosalas/${encodeURIComponent(id)}`,
-      {
-        method: "DELETE",
-      },
-    )
+    return request<{
+      ok: boolean
+      deleted: string
+    }>(`/api/gosalas/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    })
   },
 
   async getAnimals() {
-    return request<{ ok: boolean; animals: any[] }>("/api/animals")
+    return request<{
+      ok: boolean
+      animals: any[]
+    }>("/api/animals")
   },
 
   async createAnimal(animal: any) {
-    return request<{ ok: boolean; animal: any }>("/api/animals", {
+    return request<{
+      ok: boolean
+      animal: any
+    }>("/api/animals", {
       method: "POST",
       body: JSON.stringify(animal),
     })
   },
 
   async updateAnimal(name: string, data: any) {
-    return request<{ ok: boolean; animal: any }>(
-      `/api/animals/${encodeURIComponent(name)}`,
-      {
-        method: "PUT",
-        body: JSON.stringify(data),
-      },
-    )
+    return request<{
+      ok: boolean
+      animal: any
+    }>(`/api/animals/${encodeURIComponent(name)}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    })
   },
 
   async deleteAnimal(name: string) {
-    return request<{ ok: boolean; deleted: string }>(
-      `/api/animals/${encodeURIComponent(name)}`,
-      {
-        method: "DELETE",
-      },
-    )
+    return request<{
+      ok: boolean
+      deleted: string
+    }>(`/api/animals/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    })
   },
 
   async getVets() {
-    return request<{ ok: boolean; vets: any[] }>("/api/vets")
+    return request<{
+      ok: boolean
+      vets: any[]
+    }>("/api/vets")
   },
 
   async createVet(vet: any) {
-    return request<{ ok: boolean; vet: any }>("/api/vets", {
+    return request<{
+      ok: boolean
+      vet: any
+    }>("/api/vets", {
       method: "POST",
       body: JSON.stringify(vet),
     })
   },
 
   async updateVet(id: string, data: any) {
-    return request<{ ok: boolean; vet: any }>(
-      `/api/vets/${encodeURIComponent(id)}`,
-      {
-        method: "PUT",
-        body: JSON.stringify(data),
-      },
-    )
+    return request<{
+      ok: boolean
+      vet: any
+    }>(`/api/vets/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    })
   },
 
   async deleteVet(id: string) {
-    return request<{ ok: boolean; deleted: string }>(
-      `/api/vets/${encodeURIComponent(id)}`,
-      {
-        method: "DELETE",
-      },
-    )
+    return request<{
+      ok: boolean
+      deleted: string
+    }>(`/api/vets/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    })
   },
 
   async executeSettlementSweep(options?: {
@@ -571,17 +655,20 @@ export const api = {
     autoSweepEnabled?: boolean
     disbursementCycle?: "CONTINUOUS_T_PLUS_ONE" | "WEEKLY"
   }) {
-    return request<{ success: boolean; schedule: any }>(
-      "/api/settlements/schedule/configure",
-      {
-        method: "POST",
-        body: JSON.stringify(config),
-      },
-    )
+    return request<{
+      success: boolean
+      schedule: any
+    }>("/api/settlements/schedule/configure", {
+      method: "POST",
+      body: JSON.stringify(config),
+    })
   },
 
   async getHubs() {
-    return request<{ ok: boolean; hubs: any[] }>("/api/hubs")
+    return request<{
+      ok: boolean
+      hubs: any[]
+    }>("/api/hubs")
   },
 
   async createHub(hubData: {
@@ -594,18 +681,27 @@ export const api = {
     defaultMaxRadiusKm?: number
     pincodePrefixes?: string[]
   }) {
-    return request<{ ok: boolean; hub: any }>("/api/hubs", {
+    return request<{
+      ok: boolean
+      hub: any
+    }>("/api/hubs", {
       method: "POST",
       body: JSON.stringify(hubData),
     })
   },
 
   async searchPlaces(q: string) {
-    return request<{ ok: boolean; places: any[] }>(`/api/places/search?q=${encodeURIComponent(q)}`)
+    return request<{
+      ok: boolean
+      places: any[]
+    }>(`/api/places/search?q=${encodeURIComponent(q)}`)
   },
 
   async resolveGoogleMapsLink(input: string) {
-    return request<{ ok: boolean; place: any }>("/api/places/resolve-link", {
+    return request<{
+      ok: boolean
+      place: any
+    }>("/api/places/resolve-link", {
       method: "POST",
       body: JSON.stringify({ input }),
     })

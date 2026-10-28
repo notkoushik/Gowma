@@ -115,7 +115,7 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
     // Listen to Stage Changes
     const unStage = wsClient.on(
       "STAGE_CHANGED",
-      (data: { bookingId: string; stage: number; status?: any }) => {
+      (data: { bookingId: string stage: number status?: any }) => {
         if (data.bookingId && patchBookingFromWs) {
           patchBookingFromWs({
             id: data.bookingId,
@@ -152,7 +152,14 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
       unGosalaUpd()
       subs.forEach((ch) => wsClient.unsubscribe(ch))
     }
-  }, [bookingId, currentRole, gosalaName, channels.join(","), refreshAnimals, refreshGosalas])
+  }, [
+    bookingId,
+    currentRole,
+    gosalaName,
+    channels.join(","),
+    refreshAnimals,
+    refreshGosalas,
+  ])
 
   return {
     isConnected,

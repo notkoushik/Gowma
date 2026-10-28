@@ -1,5 +1,4 @@
 import { prisma } from "../prisma.ts"
-import { db } from "../db.ts"
 import { wsHub } from "../ws/hub.ts"
 import type { Settlement } from "../types.ts"
 
@@ -80,10 +79,10 @@ export function resolveGaushalaBankDetails(
     const rawAcc = superAdminBank.accountNumber || ""
     const masked = rawAcc.length > 4 ? `•••• •••• •••• ${rawAcc.slice(-4)}` : rawAcc
     return {
-      beneficiary: superAdminBank.accountBeneficiary || "Koushik Botcha",
+      beneficiary: superAdminBank.accountBeneficiary || "GOMAA Central Trust",
       bankName: superAdminBank.branchName
         ? `${superAdminBank.bankName} · ${superAdminBank.branchName}`
-        : superAdminBank.bankName || "Andhra Bank · Hitec City",
+        : superAdminBank.bankName || "HDFC Bank · Central Treasury",
       accountMasked: masked,
       ifsc: superAdminBank.ifscCode || "HDFC2342523",
       accountType: superAdminBank.accountType || "NODAL_ESCROW",
@@ -127,19 +126,13 @@ export async function executeAutomatedSweep(options: {
   cycle: string
   message: string
 }> {
-  // 1. Fetch live Master Pricing Config
-  let pricingConfig = db.pricingConfig
-  try {
-    const dbConfig = await prisma.masterPricingConfig.findFirst()
-    if (dbConfig) {
-      pricingConfig = {
-        ...pricingConfig,
-        ...dbConfig,
-        updatedAt: dbConfig.updatedAt ? dbConfig.updatedAt.toISOString() : pricingConfig.updatedAt,
-      } as any
-    }
-  } catch (err) {
-    console.warn("Pricing config DB fallback in payoutEngine:", err)
+  // 1. Fetch live Master Pricing Config directly from PostgreSQL
+  const dbConfig = await prisma.masterPricingConfig.findFirst().catch(() => null)
+  const pricingConfig: any = dbConfig || {
+    commissionPct: 25,
+    samagriGaushalaCutPct: 90,
+    transportPassThroughPct: 100,
+    disbursementCycle: "CONTINUOUS_T_PLUS_ONE",
   }
 
   const defaultCommPct = pricingConfig.commissionPct ?? 25
@@ -147,23 +140,16 @@ export async function executeAutomatedSweep(options: {
   const transportCutPct = (pricingConfig as any).transportPassThroughPct ?? 100
   const cycle = options.cycleType || (pricingConfig as any).disbursementCycle || "CONTINUOUS_T_PLUS_ONE"
 
-  // 2. Fetch live bookings
-  let allBookings = db.bookings
-  try {
-    const dbBookings = await prisma.booking.findMany()
-    if (dbBookings && dbBookings.length > 0) {
-      allBookings = dbBookings.map((b: any) => ({
-        ...b,
-        base: b.baseRate ?? b.base ?? 3500,
-        extraTime: b.extraTime ?? 0,
-        transport: b.transport ?? 0,
-        addons: b.addons ?? 0,
-        total: b.total ?? 3500,
-      }))
-    }
-  } catch (err) {
-    console.warn("Bookings DB fallback in payoutEngine:", err)
-  }
+  // 2. Fetch live bookings directly from PostgreSQL
+  const dbBookings = await prisma.booking.findMany().catch(() => [])
+  const allBookings = dbBookings.map((b: any) => ({
+    ...b,
+    base: b.baseRate ?? b.base ?? 3500,
+    extraTime: b.extraTime ?? 0,
+    transport: b.transport ?? 0,
+    addons: b.addons ?? 0,
+    total: b.total ?? 3500,
+  }))
 
   // 3. Fetch Gaushala registry
   let allGosalas: any[] = []
@@ -323,22 +309,6 @@ export async function executeAutomatedSweep(options: {
       console.warn("Settlement batch DB persist fallback:", err?.message)
     }
 
-    // Update in-memory db.settlements
-    const existingIdx = db.settlements.findIndex((s) => s.gosala === gName)
-    const memEntry: Settlement = {
-      gosala: gName,
-      bookings: summary.sevasCount,
-      gross: grossAmount,
-      commissionPct: defaultCommPct,
-      status: "Paid",
-      batch: batchWeekLabel,
-    }
-    if (existingIdx !== -1) {
-      db.settlements[existingIdx] = memEntry
-    } else {
-      db.settlements.push(memEntry)
-    }
-
     disbursedBatches.push(summary)
     totalDisbursed += payableAmount
     totalRetained += commissionAmount
@@ -377,17 +347,11 @@ export async function executeAutomatedSweep(options: {
  * Returns live schedule status, countdown and stats
  */
 export async function getScheduleStatus(): Promise<AutoSweepScheduleStatus> {
-  let pricingConfig = db.pricingConfig
-  try {
-    const dbConfig = await prisma.masterPricingConfig.findFirst()
-    if (dbConfig) {
-      pricingConfig = {
-        ...pricingConfig,
-        ...dbConfig,
-        updatedAt: dbConfig.updatedAt ? dbConfig.updatedAt.toISOString() : pricingConfig.updatedAt,
-      } as any
-    }
-  } catch {}
+  const dbConfig = await prisma.masterPricingConfig.findFirst().catch(() => null)
+  const pricingConfig: any = dbConfig || {
+    autoSweepEnabled: true,
+    disbursementCycle: "CONTINUOUS_T_PLUS_ONE",
+  }
 
   const autoSweepEnabled = (pricingConfig as any).autoSweepEnabled ?? true
   const disbursementCycle = (pricingConfig as any).disbursementCycle ?? "CONTINUOUS_T_PLUS_ONE"
@@ -407,7 +371,7 @@ export async function getScheduleStatus(): Promise<AutoSweepScheduleStatus> {
     nextRun.setHours(23, 59, 0, 0)
   }
 
-  // Calculate stats from settlements
+  // Calculate stats from settlements directly in PostgreSQL
   let totalBatchesPaid = 0
   let totalDisbursedAmount = 0
   let pendingEscrowAmount = 0
@@ -422,16 +386,8 @@ export async function getScheduleStatus(): Promise<AutoSweepScheduleStatus> {
         pendingEscrowAmount += b.payableAmount
       }
     })
-  } catch {
-    db.settlements.forEach((s) => {
-      const net = Math.round(s.gross * (1 - s.commissionPct / 100))
-      if (s.status === "Paid") {
-        totalBatchesPaid++
-        totalDisbursedAmount += net
-      } else {
-        pendingEscrowAmount += net
-      }
-    })
+  } catch (err: any) {
+    console.warn("Settlement batch stats DB lookup warning:", err?.message)
   }
 
   return {

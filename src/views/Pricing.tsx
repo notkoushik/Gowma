@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react"
 import { inr } from "../data/mock"
 import { useStore, useToast, type CustomDynamicFee } from "../store/store"
 import { Eyebrow, Panel, PanelHead, Tag } from "../lib/ui"
+import { Skeleton } from "../components/common/Skeleton"
 import {
   Crown,
   Database,
@@ -79,11 +80,31 @@ function Field({
 const inputCls =
   "w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] font-mono text-ink tabular outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition disabled:opacity-60 disabled:cursor-not-allowed"
 
-const CATEGORY_COLORS: Record<GosalaOfferingCategory, { bg: string; text: string; label: string }> = {
-  puja: { bg: "bg-purple-100 text-purple-900 border-purple-200", text: "text-purple-800", label: "Pooja & Garland" },
-  feed: { bg: "bg-emerald-100 text-emerald-900 border-emerald-200", text: "text-emerald-800", label: "Grass & Fodder" },
-  prasadam: { bg: "bg-amber-100 text-amber-900 border-amber-200", text: "text-amber-800", label: "Sacred Prasadam" },
-  decoration: { bg: "bg-indigo-100 text-indigo-900 border-indigo-200", text: "text-indigo-800", label: "Chunni & Vastra" },
+const CATEGORY_COLORS: Record<GosalaOfferingCategory, {
+  bg: string
+  text: string
+  label: string
+}> = {
+  puja: {
+    bg: "bg-purple-100 text-purple-900 border-purple-200",
+    text: "text-purple-800",
+    label: "Pooja & Garland",
+  },
+  feed: {
+    bg: "bg-emerald-100 text-emerald-900 border-emerald-200",
+    text: "text-emerald-800",
+    label: "Grass & Fodder",
+  },
+  prasadam: {
+    bg: "bg-amber-100 text-amber-900 border-amber-200",
+    text: "text-amber-800",
+    label: "Sacred Prasadam",
+  },
+  decoration: {
+    bg: "bg-indigo-100 text-indigo-900 border-indigo-200",
+    text: "text-indigo-800",
+    label: "Chunni & Vastra",
+  },
 }
 
 interface PricingProps {
@@ -111,14 +132,17 @@ export default function Pricing({
     updateAnimal,
     managers,
     profiles,
+    authUser,
+    isLoading,
   } = useStore()
   const isSuperAdmin = currentRole === "super_admin"
   // Gaushala offerings and add-ons are strictly managed by the Gaushala-specified Manager and Operations Admin
-  const canManageOfferings = !isSuperAdmin && (currentRole === "admin" || currentRole === "manager")
+  const canManageOfferings =
+    !isSuperAdmin && (currentRole === "admin" || currentRole === "manager")
 
   // Active sector: "global" (Master Pricing) vs "gosalas" (Individual Gaushala Offerings) vs "commissions" (Gaushala Commission & Economics Settlement Module)
   const [sector, setSector] = useState<"global" | "gosalas" | "commissions">(
-    initialSector || "global"
+    initialSector || "global",
   )
 
   useEffect(() => {
@@ -143,8 +167,12 @@ export default function Pricing({
   }
 
   // ---------------- Sector 1: Global Platform State ----------------
-  const [standardMin, setStandardMin] = useState(pricingConfig.standardMin ?? 60)
-  const [maxRadiusKm, setMaxRadiusKm] = useState(pricingConfig.maxRadiusKm ?? 35)
+  const [standardMin, setStandardMin] = useState(
+    pricingConfig.standardMin ?? 60,
+  )
+  const [maxRadiusKm, setMaxRadiusKm] = useState(
+    pricingConfig.maxRadiusKm ?? 35,
+  )
   const [freeKm, setFreeKm] = useState(pricingConfig.freeKm)
   const [perKm, setPerKm] = useState(pricingConfig.perKm)
   const [extraRate, setExtraRate] = useState(pricingConfig.extraUnitRate)
@@ -154,7 +182,9 @@ export default function Pricing({
   const [bufferMin, setBufferMin] = useState(pricingConfig.bufferMin)
   const [maxDuration, setMaxDuration] = useState(pricingConfig.maxDurationMin)
   const [rounding, setRounding] = useState(pricingConfig.rounding)
-  const [customFees, setCustomFees] = useState<CustomDynamicFee[]>(pricingConfig.customFees ?? [])
+  const [customFees, setCustomFees] = useState<CustomDynamicFee[]>(
+    pricingConfig.customFees ?? [],
+  )
   const [isSaving, setIsSaving] = useState(false)
 
   // Custom Dynamic Fee Modal state
@@ -163,7 +193,8 @@ export default function Pricing({
   const [feeName, setFeeName] = useState("")
   const [feeType, setFeeType] = useState<"fixed" | "percentage">("fixed")
   const [feeValue, setFeeValue] = useState<number>(150)
-  const [feeAppliedOn, setFeeAppliedOn] = useState<"base" | "total" | "transport">("total")
+  const [feeAppliedOn, setFeeAppliedOn] =
+    useState<"base" | "total" | "transport">("total")
   const [feeDescription, setFeeDescription] = useState("")
   const [feeEnabled, setFeeEnabled] = useState(true)
 
@@ -198,7 +229,8 @@ export default function Pricing({
     bufferMin !== pricingConfig.bufferMin ||
     maxDuration !== pricingConfig.maxDurationMin ||
     rounding !== pricingConfig.rounding ||
-    JSON.stringify(customFees) !== JSON.stringify(pricingConfig.customFees ?? [])
+    JSON.stringify(customFees) !==
+      JSON.stringify(pricingConfig.customFees ?? [])
 
   const handleReset = () => {
     setStandardMin(pricingConfig.standardMin ?? 60)
@@ -266,7 +298,10 @@ export default function Pricing({
   const handleSaveFee = () => {
     if (!isSuperAdmin) return
     if (!feeName.trim()) {
-      notify("Please provide a name for this dynamic value proportionate", "warn")
+      notify(
+        "Please provide a name for this dynamic value proportionate",
+        "warn",
+      )
       return
     }
     if (editingFeeId) {
@@ -282,8 +317,8 @@ export default function Pricing({
                 description: feeDescription.trim(),
                 enabled: feeEnabled,
               }
-            : f
-        )
+            : f,
+        ),
       )
       notify(`Updated dynamic proportionate '${feeName}'`, "ok")
     } else {
@@ -305,7 +340,7 @@ export default function Pricing({
   const handleToggleFee = (feeId: string) => {
     if (!isSuperAdmin) return
     setCustomFees((prev) =>
-      prev.map((f) => (f.id === feeId ? { ...f, enabled: !f.enabled } : f))
+      prev.map((f) => (f.id === feeId ? { ...f, enabled: !f.enabled } : f)),
     )
   }
 
@@ -331,8 +366,12 @@ export default function Pricing({
   const customFeesTotal = enabledCustomFees.reduce((acc, f) => {
     if (f.type === "fixed") return acc + f.value
     if (f.appliedOn === "base") return acc + Math.round((base * f.value) / 100)
-    if (f.appliedOn === "transport") return acc + Math.round((transport * f.value) / 100)
-    return acc + Math.round(((base + extraCharge + transport + addons) * f.value) / 100)
+    if (f.appliedOn === "transport")
+      return acc + Math.round((transport * f.value) / 100)
+    return (
+      acc +
+      Math.round(((base + extraCharge + transport + addons) * f.value) / 100)
+    )
   }, 0)
 
   const preTax = base + extraCharge + transport + addons + customFeesTotal
@@ -348,7 +387,9 @@ export default function Pricing({
     : "Live System Default"
 
   // ---------------- Sector 2: Individual Gaushala Pricing State ----------------
-  const [selectedGosalaId, setSelectedGosalaId] = useState<string>(gosalas[0]?.id || "")
+  const [selectedGosalaId, setSelectedGosalaId] = useState<string>(
+    gosalas[0]?.id || "",
+  )
   const [gosalaSearch, setGosalaSearch] = useState("")
 
   // Ensure selected gosala is valid
@@ -365,7 +406,7 @@ export default function Pricing({
       (g) =>
         g.name.toLowerCase().includes(q) ||
         g.region.toLowerCase().includes(q) ||
-        g.address.toLowerCase().includes(q)
+        g.address.toLowerCase().includes(q),
     )
   }, [gosalas, gosalaSearch])
 
@@ -396,29 +437,36 @@ export default function Pricing({
         (m) =>
           m.gosala === activeGosala.name ||
           (m.gosalas && m.gosalas.includes(activeGosala.name)) ||
-          m.id === activeGosala.managerId
+          m.id === activeGosala.managerId,
       ) || null
     )
   }, [managers, activeGosala])
 
   // Governing Admin details
   const governingAdmin = {
-    name: profiles?.admin?.name || "Devendra Sharma",
-    role: "Chief of Regional Operations",
-    email: profiles?.admin?.email || "admin@gomaa.in",
-    phone: "+91 94220 18492",
+    name: authUser?.name || profiles?.admin?.name || "",
+    role: isSuperAdmin
+      ? "Sovereign Master Authority"
+      : "Chief of Regional Operations",
+    email: authUser?.email || profiles?.admin?.email || "admin@gomaa.in",
+    phone: authUser?.phone || profiles?.admin?.phone || "+91 94220 18492",
     hub: activeGosala?.region || "Regional Operations Hub",
   }
 
   // Animal Price Quick Edit State
-  const [editingAnimalName, setEditingAnimalName] = useState<string | null>(null)
+  const [editingAnimalName, setEditingAnimalName] = useState<string | null>(
+    null,
+  )
   const [editingAnimalPrice, setEditingAnimalPrice] = useState<number>(3500)
 
   const handleSaveAnimalPrice = (animalName: string) => {
     if (!isSuperAdmin) return
     updateAnimal(animalName, { price: Number(editingAnimalPrice) })
     setEditingAnimalName(null)
-    notify(`Updated darshan price for ${animalName} to ${inr(editingAnimalPrice)}`, "ok")
+    notify(
+      `Updated darshan price for ${animalName} to ${inr(editingAnimalPrice)}`,
+      "ok",
+    )
   }
 
   // Gaushala Category Base Price Matrix State
@@ -448,7 +496,7 @@ export default function Pricing({
       setCustomCommission(
         activeGosala.customCommissionPct !== undefined
           ? activeGosala.customCommissionPct
-          : ""
+          : "",
       )
       setIsEditingBaseRates(false)
     }
@@ -462,10 +510,14 @@ export default function Pricing({
       baseCalfPrice: Number(baseCalf),
       baseBullPrice: Number(baseBull),
       baseBuffaloPrice: Number(baseBuffalo),
-      customCommissionPct: customCommission === "" ? undefined : Number(customCommission),
+      customCommissionPct:
+        customCommission === "" ? undefined : Number(customCommission),
     })
     setIsEditingBaseRates(false)
-    notify(`Saved category base darshan rates & economics for ${activeGosala.name}`, "ok")
+    notify(
+      `Saved category base darshan rates & economics for ${activeGosala.name}`,
+      "ok",
+    )
   }
 
   const handleOpenAddBovine = () => {
@@ -508,7 +560,7 @@ export default function Pricing({
               description: bovineDescription.trim(),
               badgeText: bovineBadgeText.trim() || undefined,
             }
-          : c
+          : c,
       )
       notify(`Updated custom bovine category '${bovineName.trim()}'`, "ok")
     } else {
@@ -520,7 +572,10 @@ export default function Pricing({
         badgeText: bovineBadgeText.trim() || undefined,
       }
       updatedList = [...currentCustom, newCat]
-      notify(`Added custom bovine category '${bovineName.trim()}' to ${activeGosala.name}`, "ok")
+      notify(
+        `Added custom bovine category '${bovineName.trim()}' to ${activeGosala.name}`,
+        "ok",
+      )
     }
 
     updateGosala(activeGosala.id, { customBovineCategories: updatedList })
@@ -539,7 +594,8 @@ export default function Pricing({
   const [itemModalOpen, setItemModalOpen] = useState(false)
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [itemName, setItemName] = useState("")
-  const [itemCategory, setItemCategory] = useState<GosalaOfferingCategory>("puja")
+  const [itemCategory, setItemCategory] =
+    useState<GosalaOfferingCategory>("puja")
   const [itemPrice, setItemPrice] = useState(150)
   const [itemDesc, setItemDesc] = useState("")
   const [itemMaxQty, setItemMaxQty] = useState(5)
@@ -572,7 +628,10 @@ export default function Pricing({
   const handleSaveItem = () => {
     if (!canManageOfferings || !activeGosala) {
       if (isSuperAdmin) {
-        notify("Gaushala offerings & add-ons are managed by the assigned Gaushala Manager and Operations Admin", "info")
+        notify(
+          "Gaushala offerings & add-ons are managed by the assigned Gaushala Manager and Operations Admin",
+          "info",
+        )
       }
       return
     }
@@ -581,9 +640,10 @@ export default function Pricing({
       return
     }
 
-    const currentList = activeGosala.items && activeGosala.items.length > 0
-      ? activeGosala.items
-      : DEFAULT_GOSALA_OFFERINGS
+    const currentList =
+      activeGosala.items && activeGosala.items.length > 0
+        ? activeGosala.items
+        : DEFAULT_GOSALA_OFFERINGS
 
     let updatedList: GosalaOfferingItem[] = []
     if (editingItemId) {
@@ -598,7 +658,7 @@ export default function Pricing({
               maxQty: Number(itemMaxQty) || 5,
               inStock: itemInStock,
             }
-          : it
+          : it,
       )
       notify(`Updated item '${itemName.trim()}' for ${activeGosala.name}`, "ok")
     } else {
@@ -612,7 +672,10 @@ export default function Pricing({
         inStock: itemInStock,
       }
       updatedList = [newItem, ...currentList]
-      notify(`Added offering '${itemName.trim()}' to ${activeGosala.name}`, "ok")
+      notify(
+        `Added offering '${itemName.trim()}' to ${activeGosala.name}`,
+        "ok",
+      )
     }
 
     updateGosala(activeGosala.id, { items: updatedList })
@@ -622,32 +685,43 @@ export default function Pricing({
   const handleToggleStock = (it: GosalaOfferingItem) => {
     if (!canManageOfferings || !activeGosala) {
       if (isSuperAdmin) {
-        notify("Offering restock rights are reserved for the assigned Gaushala Manager and Operations Admin", "info")
+        notify(
+          "Offering restock rights are reserved for the assigned Gaushala Manager and Operations Admin",
+          "info",
+        )
       }
       return
     }
-    const currentList = activeGosala.items && activeGosala.items.length > 0
-      ? activeGosala.items
-      : DEFAULT_GOSALA_OFFERINGS
+    const currentList =
+      activeGosala.items && activeGosala.items.length > 0
+        ? activeGosala.items
+        : DEFAULT_GOSALA_OFFERINGS
 
     const updatedList = currentList.map((item) =>
-      item.id === it.id ? { ...item, inStock: !item.inStock } : item
+      item.id === it.id ? { ...item, inStock: !item.inStock } : item,
     )
     updateGosala(activeGosala.id, { items: updatedList })
     notify(
-      `${it.name} is now ${!it.inStock ? "IN STOCK" : "OUT OF STOCK"} at ${activeGosala.name}`,
-      "ok"
+      `${it.name} is now ${
+        !it.inStock ? "IN STOCK" : "OUT OF STOCK"
+      } at ${activeGosala.name}`,
+      "ok",
     )
   }
 
   // Delete Offering Item Confirmation Modal State
   const [deleteItemModalOpen, setDeleteItemModalOpen] = useState(false)
-  const [itemToDelete, setItemToDelete] = useState<GosalaOfferingItem | null>(null)
+  const [itemToDelete, setItemToDelete] = useState<GosalaOfferingItem | null>(
+    null,
+  )
 
   const handleDeleteItem = (it: GosalaOfferingItem) => {
     if (!canManageOfferings || !activeGosala) {
       if (isSuperAdmin) {
-        notify("Offering deletion rights are reserved for the assigned Gaushala Manager and Operations Admin", "info")
+        notify(
+          "Offering deletion rights are reserved for the assigned Gaushala Manager and Operations Admin",
+          "info",
+        )
       }
       return
     }
@@ -658,11 +732,14 @@ export default function Pricing({
   const handleConfirmDeleteItem = () => {
     if (!canManageOfferings || !activeGosala || !itemToDelete) return
 
-    const currentList = activeGosala.items && activeGosala.items.length > 0
-      ? activeGosala.items
-      : DEFAULT_GOSALA_OFFERINGS
+    const currentList =
+      activeGosala.items && activeGosala.items.length > 0
+        ? activeGosala.items
+        : DEFAULT_GOSALA_OFFERINGS
 
-    const updatedList = currentList.filter((item) => item.id !== itemToDelete.id)
+    const updatedList = currentList.filter(
+      (item) => item.id !== itemToDelete.id,
+    )
     updateGosala(activeGosala.id, { items: updatedList })
     notify(`Removed '${itemToDelete.name}' from ${activeGosala.name}`, "ok")
     setDeleteItemModalOpen(false)
@@ -676,7 +753,10 @@ export default function Pricing({
 
   // ---------------- Sector 3: Gaushala Commission & Economics Settlement Module ----------------
   const [commSearch, setCommSearch] = useState("")
-  const [commTierFilter, setCommTierFilter] = useState<"all" | "preferred" | "charitable" | "standard" | "tax_exempt">("all")
+  const [commTierFilter, setCommTierFilter] =
+    useState<"all" | "preferred" | "charitable" | "standard" | "tax_exempt">(
+      "all",
+    )
 
   // Modal State for Editing Gaushala Economics
   const [econModalOpen, setEconModalOpen] = useState(false)
@@ -684,7 +764,8 @@ export default function Pricing({
   const [econTier, setEconTier] = useState<PartnershipTier>("STANDARD")
   const [econCommType, setEconCommType] = useState<CommissionType>("percentage")
   const [econCommValue, setEconCommValue] = useState<number>(20)
-  const [econTaxTreatment, setEconTaxTreatment] = useState<TaxTreatment>("standard_gst")
+  const [econTaxTreatment, setEconTaxTreatment] =
+    useState<TaxTreatment>("standard_gst")
   const [econCustomTaxPct, setEconCustomTaxPct] = useState<number>(5)
   const [econBufferMin, setEconBufferMin] = useState<number>(30)
   const [econNotes, setEconNotes] = useState<string>("")
@@ -694,15 +775,16 @@ export default function Pricing({
     setEconTargetGosala(g)
     setEconTier(
       g.partnershipTier ||
-        (g.customCommissionPct !== undefined && g.customCommissionPct < commission
+        (g.customCommissionPct !== undefined &&
+        g.customCommissionPct < commission
           ? "PREFERRED"
-          : "STANDARD")
+          : "STANDARD"),
     )
     setEconCommType(g.commissionType || "percentage")
     setEconCommValue(
       g.commissionType === "fixed"
         ? (g.customCommissionFlat ?? 400)
-        : (g.customCommissionPct ?? commission)
+        : (g.customCommissionPct ?? commission),
     )
     setEconTaxTreatment(g.taxTreatment || "standard_gst")
     setEconCustomTaxPct(g.customTaxPct ?? taxPct)
@@ -716,27 +798,32 @@ export default function Pricing({
     updateGosala(econTargetGosala.id, {
       partnershipTier: econTier,
       commissionType: econCommType,
-      customCommissionPct: econCommType === "percentage" ? Number(econCommValue) : undefined,
-      customCommissionFlat: econCommType === "fixed" ? Number(econCommValue) : undefined,
+      customCommissionPct:
+        econCommType === "percentage" ? Number(econCommValue) : undefined,
+      customCommissionFlat:
+        econCommType === "fixed" ? Number(econCommValue) : undefined,
       taxTreatment: econTaxTreatment,
       customTaxPct:
         econTaxTreatment === "section_80g_exempt"
           ? 0
           : econTaxTreatment === "reduced_charity_gst"
-          ? 5
-          : econTaxTreatment === "standard_gst"
-          ? 18
-          : Number(econCustomTaxPct),
+            ? 5
+            : econTaxTreatment === "standard_gst"
+              ? 18
+              : Number(econCustomTaxPct),
       bufferMinutes: Number(econBufferMin),
       partnershipNotes: econNotes.trim(),
     })
     setEconModalOpen(false)
-    notify(`Updated customized settlement economics for ${econTargetGosala.name}`, "ok")
+    notify(
+      `Updated customized settlement economics for ${econTargetGosala.name}`,
+      "ok",
+    )
   }
 
   const handleApplyQuickPreset = (
     g: Gosala,
-    preset: "preferred" | "standard" | "charitable"
+    preset: "preferred" | "standard" | "charitable",
   ) => {
     if (!isSuperAdmin) return
     if (preset === "preferred") {
@@ -747,9 +834,13 @@ export default function Pricing({
         taxTreatment: "section_80g_exempt",
         customTaxPct: 0,
         bufferMinutes: 30,
-        partnershipNotes: "Close Partner Sanctuary - Subsidized 8% preferential commission",
+        partnershipNotes:
+          "Close Partner Sanctuary - Subsidized 8% preferential commission",
       })
-      notify(`Applied Preferred Sanctuary preset (8% comm, 0% tax) to ${g.name}`, "ok")
+      notify(
+        `Applied Preferred Sanctuary preset (8% comm, 0% tax) to ${g.name}`,
+        "ok",
+      )
     } else if (preset === "charitable") {
       updateGosala(g.id, {
         partnershipTier: "CHARITABLE",
@@ -760,7 +851,10 @@ export default function Pricing({
         bufferMinutes: 45,
         partnershipNotes: "Charitable Welfare Trust - Subsidized 5% seva rate",
       })
-      notify(`Applied Charitable Welfare preset (5% comm, 0% tax) to ${g.name}`, "ok")
+      notify(
+        `Applied Charitable Welfare preset (5% comm, 0% tax) to ${g.name}`,
+        "ok",
+      )
     } else {
       updateGosala(g.id, {
         partnershipTier: "STANDARD",
@@ -771,7 +865,10 @@ export default function Pricing({
         bufferMinutes: bufferMin,
         partnershipNotes: "Standard Platform Affiliate",
       })
-      notify(`Reset ${g.name} to Standard Platform defaults (${commission}% comm)`, "info")
+      notify(
+        `Reset ${g.name} to Standard Platform defaults (${commission}% comm)`,
+        "info",
+      )
     }
   }
 
@@ -799,10 +896,10 @@ export default function Pricing({
     simGosala?.taxTreatment === "section_80g_exempt"
       ? 0
       : simGosala?.taxTreatment === "reduced_charity_gst"
-      ? 5
-      : simGosala?.customTaxPct !== undefined
-      ? simGosala.customTaxPct
-      : taxPct
+        ? 5
+        : simGosala?.customTaxPct !== undefined
+          ? simGosala.customTaxPct
+          : taxPct
   const simEffectiveBuffer = simGosala?.bufferMinutes ?? bufferMin
 
   const simExtraMin = Math.max(0, simDurationMin - standardMin)
@@ -817,10 +914,17 @@ export default function Pricing({
   const simGomaaCut =
     simEffectiveCommType === "fixed"
       ? (simGosala?.customCommissionFlat ?? 400)
-      : Math.round(((simBasePrice + simExtraCharge) * simEffectiveCommPct) / 100)
+      : Math.round(
+          ((simBasePrice + simExtraCharge) * simEffectiveCommPct) / 100,
+        )
 
-  const simGosalaPayable = Math.max(0, simBasePrice + simExtraCharge - simGomaaCut + simTransport + simAddons)
-  const simStandardGomaaCut = Math.round(((simBasePrice + simExtraCharge) * commission) / 100)
+  const simGosalaPayable = Math.max(
+    0,
+    simBasePrice + simExtraCharge - simGomaaCut + simTransport + simAddons,
+  )
+  const simStandardGomaaCut = Math.round(
+    ((simBasePrice + simExtraCharge) * commission) / 100,
+  )
   const simSanctuarySavings = Math.max(0, simStandardGomaaCut - simGomaaCut)
 
   const filteredCommGosalas = useMemo(() => {
@@ -838,7 +942,8 @@ export default function Pricing({
       if (commTierFilter === "preferred") {
         return (
           g.partnershipTier === "PREFERRED" ||
-          (g.customCommissionPct !== undefined && g.customCommissionPct < commission)
+          (g.customCommissionPct !== undefined &&
+            g.customCommissionPct < commission)
         )
       }
       if (commTierFilter === "charitable") {
@@ -853,7 +958,8 @@ export default function Pricing({
       if (commTierFilter === "standard") {
         return (
           (!g.partnershipTier || g.partnershipTier === "STANDARD") &&
-          (g.customCommissionPct === undefined || g.customCommissionPct === commission)
+          (g.customCommissionPct === undefined ||
+            g.customCommissionPct === commission)
         )
       }
       return true
@@ -872,15 +978,17 @@ export default function Pricing({
             {sector === "global"
               ? "Sector 1: Global Platform Economics & Formulas"
               : sector === "gosalas"
-              ? "Sector 2: Individual Gaushala Pricing & Offerings"
-              : "Sector 3: Gaushala Commission, Tax & Settlement Governance"}
+                ? "Sector 2: Individual Gaushala Pricing & Offerings"
+                : "Sector 3: Gaushala Commission, Tax & Settlement Governance"}
           </h2>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
           {/* Sector Dropdown Selector */}
           <div className="flex items-center gap-1.5 bg-paper border border-line rounded px-2.5 py-1.5 text-[12px] font-medium text-ink shadow-2xs">
-            <span className="text-ink-faint text-[10.5px] font-mono uppercase">Sector:</span>
+            <span className="text-ink-faint text-[10.5px] font-mono uppercase">
+              Sector:
+            </span>
             <select
               value={sector}
               onChange={(e) => handleSwitchSector(e.target.value as any)}
@@ -888,7 +996,9 @@ export default function Pricing({
               aria-label="Select Pricing Sector"
             >
               <option value="global">1. Global Master Rules</option>
-              <option value="gosalas">2. Gaushala Offerings ({gosalas.length})</option>
+              <option value="gosalas">
+                2. Gaushala Offerings ({gosalas.length})
+              </option>
               <option value="commissions">3. Commission &amp; Slabs</option>
             </select>
           </div>
@@ -905,7 +1015,9 @@ export default function Pricing({
             >
               <SlidersHorizontal
                 size={14}
-                className={sector === "global" ? "text-saffron-deep" : "text-ink-faint"}
+                className={
+                  sector === "global" ? "text-saffron-deep" : "text-ink-faint"
+                }
               />
               <span>Global Master Rules</span>
             </button>
@@ -919,7 +1031,9 @@ export default function Pricing({
             >
               <Building2
                 size={14}
-                className={sector === "gosalas" ? "text-forest" : "text-ink-faint"}
+                className={
+                  sector === "gosalas" ? "text-forest" : "text-ink-faint"
+                }
               />
               <span>Gaushala Offerings</span>
               {gosalas.length > 0 && (
@@ -938,7 +1052,9 @@ export default function Pricing({
             >
               <Percent
                 size={14}
-                className={sector === "commissions" ? "text-white" : "text-amber-700"}
+                className={
+                  sector === "commissions" ? "text-white" : "text-amber-700"
+                }
               />
               <span>Commission &amp; Economics</span>
               <span
@@ -962,8 +1078,16 @@ export default function Pricing({
                   ? "bg-amber-600 text-white border-amber-600 hover:bg-amber-700"
                   : "bg-paper text-ink-soft hover:text-ink hover:bg-paper-deep border-line"
               }`}
-              title={isMaximized ? "Restore standard layout (Minimize)" : "Maximize Pricing Rules dashboard (Full Screen width)"}
-              aria-label={isMaximized ? "Restore standard layout" : "Maximize Pricing Rules dashboard"}
+              title={
+                isMaximized
+                  ? "Restore standard layout (Minimize)"
+                  : "Maximize Pricing Rules dashboard (Full Screen width)"
+              }
+              aria-label={
+                isMaximized
+                  ? "Restore standard layout"
+                  : "Maximize Pricing Rules dashboard"
+              }
             >
               {isMaximized ? (
                 <>
@@ -1003,8 +1127,10 @@ export default function Pricing({
                     </span>
                   </div>
                   <p className="text-[12px] text-amber-900/80 mt-1 max-w-2xl leading-relaxed">
-                    As Super Admin ("Captain"), you hold sovereign control over platform base slabs, extra duration rates,
-                    per-km transit charges, GST taxation brackets, and the 20% platform commission model across all Gaushalas.
+                    As Super Admin ("Captain"), you hold sovereign control over
+                    platform base slabs, extra duration rates, per-km transit
+                    charges, GST taxation brackets, and the 20% platform
+                    commission model across all Gaushalas.
                   </p>
                 </div>
               </div>
@@ -1012,7 +1138,11 @@ export default function Pricing({
               <div className="flex flex-wrap items-center gap-2.5 shrink-0 self-start md:self-center">
                 <div className="flex items-center gap-2 bg-white/90 border border-amber-200/80 rounded px-3 py-1.5 text-[11px] font-mono text-ink shadow-2xs">
                   <Database size={13} className="text-forest shrink-0" />
-                  <span>Table: <strong className="text-forest">MasterPricingConfig</strong> (#1)</span>
+                  <span>
+                    Table:{" "}
+                    <strong className="text-forest">MasterPricingConfig</strong>{" "}
+                    (#1)
+                  </span>
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-forest animate-pulse" />
                 </div>
               </div>
@@ -1021,9 +1151,18 @@ export default function Pricing({
             {/* Database Audit Metadata */}
             <div className="mt-3.5 pt-3 border-t border-amber-200/60 flex flex-wrap items-center justify-between gap-2 text-[11.5px] text-amber-950/70 font-mono">
               <div className="flex items-center gap-3">
-                <span>Last Database Synced: <strong className="text-ink">{formattedUpdatedAt}</strong></span>
+                <span>
+                  Last Database Synced:{" "}
+                  <strong className="text-ink">{formattedUpdatedAt}</strong>
+                </span>
                 <span>•</span>
-                <span>Authorized By: <strong className="text-ink">{pricingConfig.updatedByName || "Koushik"}</strong> ({pricingConfig.updatedByRole || "SUPER_ADMIN"})</span>
+                <span>
+                  Authorized By:{" "}
+                  <strong className="text-ink">
+                    {pricingConfig.updatedByName || "Super Admin"}
+                  </strong>{" "}
+                  ({pricingConfig.updatedByRole || "SUPER_ADMIN"})
+                </span>
               </div>
               <div className="flex items-center gap-1.5 text-forest font-sans font-medium text-[12px]">
                 <CheckCircle2 size={13} />
@@ -1041,8 +1180,10 @@ export default function Pricing({
                       Super Admin (Captain) Authority Required:{" "}
                     </strong>
                     <span>
-                      You are currently logged in as Operations Admin. Platform pricing formulas, distance slabs, and commission
-                      percentages are strictly restricted to the Super Admin Captain.
+                      You are currently logged in as Operations Admin. Platform
+                      pricing formulas, distance slabs, and commission
+                      percentages are strictly restricted to the Super Admin
+                      Captain.
                     </span>
                   </div>
                   <button
@@ -1078,7 +1219,10 @@ export default function Pricing({
                       onChange={(e) => setExtraUnit(Number(e.target.value))}
                     />
                   </Field>
-                  <Field label="Extra-time charge" hint={`per ${extraUnit} min`}>
+                  <Field
+                    label="Extra-time charge"
+                    hint={`per ${extraUnit} min`}
+                  >
                     <input
                       type="number"
                       disabled={!isSuperAdmin}
@@ -1167,10 +1311,17 @@ export default function Pricing({
                 <div className="p-5 space-y-3">
                   {customFees.length === 0 ? (
                     <div className="p-6 text-center bg-paper rounded border border-line text-ink-faint">
-                      <Sparkles size={24} className="mx-auto text-amber-500 mb-2 opacity-60" />
-                      <p className="text-[13px] font-medium text-ink">No Dynamic Proportionates Configured</p>
+                      <Sparkles
+                        size={24}
+                        className="mx-auto text-amber-500 mb-2 opacity-60"
+                      />
+                      <p className="text-[13px] font-medium text-ink">
+                        No Dynamic Proportionates Configured
+                      </p>
                       <p className="text-[11.5px] text-ink-faint mt-1">
-                        Super Admin can add arbitrary surcharges (e.g. Festival Surcharge, Gau Fodder Welfare Levy, Vedic Priest Handling).
+                        Super Admin can add arbitrary surcharges (e.g. Festival
+                        Surcharge, Gau Fodder Welfare Levy, Vedic Priest
+                        Handling).
                       </p>
                       {isSuperAdmin && (
                         <button
@@ -1191,12 +1342,17 @@ export default function Pricing({
                             <th className="pb-2.5">Rule / Applied On</th>
                             <th className="pb-2.5">Value Addition</th>
                             <th className="pb-2.5">Status</th>
-                            {isSuperAdmin && <th className="pb-2.5 text-right">Actions</th>}
+                            {isSuperAdmin && (
+                              <th className="pb-2.5 text-right">Actions</th>
+                            )}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-line/60">
                           {customFees.map((fee) => (
-                            <tr key={fee.id} className="text-[12.5px] hover:bg-paper/50">
+                            <tr
+                              key={fee.id}
+                              className="text-[12.5px] hover:bg-paper/50"
+                            >
                               <td className="py-2.5 pr-3">
                                 <div className="font-medium text-ink flex items-center gap-2">
                                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
@@ -1210,12 +1366,16 @@ export default function Pricing({
                               </td>
                               <td className="py-2.5 pr-3">
                                 <span className="font-mono text-[11px] bg-paper px-2 py-0.5 rounded border border-line capitalize">
-                                  {fee.type === "fixed" ? "Fixed flat levy" : `${fee.value}% of ${fee.appliedOn}`}
+                                  {fee.type === "fixed"
+                                    ? "Fixed flat levy"
+                                    : `${fee.value}% of ${fee.appliedOn}`}
                                 </span>
                               </td>
                               <td className="py-2.5 pr-3">
                                 <span className="font-mono font-semibold text-ink">
-                                  {fee.type === "fixed" ? inr(fee.value) : `+${fee.value}%`}
+                                  {fee.type === "fixed"
+                                    ? inr(fee.value)
+                                    : `+${fee.value}%`}
                                 </span>
                               </td>
                               <td className="py-2.5 pr-3">
@@ -1231,10 +1391,14 @@ export default function Pricing({
                                 >
                                   <span
                                     className={`w-1.5 h-1.5 rounded-full ${
-                                      fee.enabled ? "bg-emerald-500" : "bg-ink-faint"
+                                      fee.enabled
+                                        ? "bg-emerald-500"
+                                        : "bg-ink-faint"
                                     }`}
                                   />
-                                  <span>{fee.enabled ? "Active" : "Inactive"}</span>
+                                  <span>
+                                    {fee.enabled ? "Active" : "Inactive"}
+                                  </span>
                                 </button>
                               </td>
                               {isSuperAdmin && (
@@ -1302,7 +1466,9 @@ export default function Pricing({
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-5 py-4 border-t border-line">
                   <div className="space-y-1">
                     <span className="text-[11.5px] text-ink-faint max-w-md block">
-                      Synchronizes directly with the PostgreSQL database. Live checkout calculations across all consumer apps update automatically.
+                      Synchronizes directly with the PostgreSQL database. Live
+                      checkout calculations across all consumer apps update
+                      automatically.
                     </span>
                     {isDirty && (
                       <span className="text-[11.5px] text-amber-600 font-medium inline-flex items-center gap-1">
@@ -1360,7 +1526,9 @@ export default function Pricing({
                   {[
                     [`Base booking (${standardMin} min incl.)`, base],
                     [
-                      `Extra time (${extraMin} min → ${extraMin > 0 ? Math.ceil(extraMin / extraUnit) : 0} × ${inr(extraRate)})`,
+                      `Extra time (${extraMin} min → ${
+                        extraMin > 0 ? Math.ceil(extraMin / extraUnit) : 0
+                      } × ${inr(extraRate)})`,
                       extraCharge,
                     ],
                     [
@@ -1383,17 +1551,28 @@ export default function Pricing({
                       fee.type === "fixed"
                         ? fee.value
                         : fee.appliedOn === "base"
-                        ? Math.round((base * fee.value) / 100)
-                        : fee.appliedOn === "transport"
-                        ? Math.round((transport * fee.value) / 100)
-                        : Math.round(((base + extraCharge + transport + addons) * fee.value) / 100)
+                          ? Math.round((base * fee.value) / 100)
+                          : fee.appliedOn === "transport"
+                            ? Math.round((transport * fee.value) / 100)
+                            : Math.round(
+                                ((base + extraCharge + transport + addons) *
+                                  fee.value) /
+                                  100,
+                              )
                     return (
-                      <div key={fee.id} className="flex justify-between text-amber-900 bg-amber-50/70 px-2 py-1 rounded">
+                      <div
+                        key={fee.id}
+                        className="flex justify-between text-amber-900 bg-amber-50/70 px-2 py-1 rounded"
+                      >
                         <span className="text-amber-900 pr-3 flex items-center gap-1.5 text-[12px]">
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
                           <span>{fee.name}</span>
                           <span className="text-[10px] font-mono text-amber-700">
-                            ({fee.type === "fixed" ? inr(fee.value) : `${fee.value}% ${fee.appliedOn}`})
+                            (
+                            {fee.type === "fixed"
+                              ? inr(fee.value)
+                              : `${fee.value}% ${fee.appliedOn}`}
+                            )
                           </span>
                         </span>
                         <span className="font-mono text-amber-950 font-semibold tabular whitespace-nowrap text-[12.5px]">
@@ -1460,16 +1639,19 @@ export default function Pricing({
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-serif text-[17px] font-semibold text-amber-950">
-                      Captain's Individual Gaushala Pricing &amp; Offering Control
+                      Captain's Individual Gaushala Pricing &amp; Offering
+                      Control
                     </span>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-amber-600 text-white shadow-2xs">
                       <Crown size={11} /> Captain Exclusive Sector
                     </span>
                   </div>
                   <p className="text-[12px] text-amber-900/80 mt-1 max-w-2xl leading-relaxed">
-                    Configure the sacred cattle ceremonial darshan prices and manage the devotional items, fresh fodder grass,
-                    and Vedic products sold at each individual Gaushala. Every Gaushala is linked with its assigned custodian Manager
-                    and governing Regional Operations Admin.
+                    Configure the sacred cattle ceremonial darshan prices and
+                    manage the devotional items, fresh fodder grass, and Vedic
+                    products sold at each individual Gaushala. Every Gaushala is
+                    linked with its assigned custodian Manager and governing
+                    Regional Operations Admin.
                   </p>
                 </div>
               </div>
@@ -1477,7 +1659,10 @@ export default function Pricing({
               {!isSuperAdmin && (
                 <div className="bg-amber-100 border border-amber-300 rounded px-3 py-2 text-[11.5px] text-amber-950 flex items-center gap-2 self-start md:self-center">
                   <ShieldAlert size={14} className="text-amber-700 shrink-0" />
-                  <span>Read-only preview. Super Admin Captain holds sovereign edit authority.</span>
+                  <span>
+                    Read-only preview. Super Admin Captain holds sovereign edit
+                    authority.
+                  </span>
                 </div>
               )}
             </div>
@@ -1492,7 +1677,9 @@ export default function Pricing({
               <div className="font-serif text-[24px] text-ink font-semibold mt-1">
                 {gosalas.length}
               </div>
-              <span className="text-[11px] text-forest font-medium">In Active Network</span>
+              <span className="text-[11px] text-forest font-medium">
+                In Active Network
+              </span>
             </div>
 
             <div className="bg-card border border-line rounded-sm p-3.5">
@@ -1502,7 +1689,9 @@ export default function Pricing({
               <div className="font-serif text-[24px] text-ink font-semibold mt-1">
                 {animals.length}
               </div>
-              <span className="text-[11px] text-saffron-deep font-medium">Animals Priced</span>
+              <span className="text-[11px] text-saffron-deep font-medium">
+                Animals Priced
+              </span>
             </div>
 
             <div className="bg-card border border-line rounded-sm p-3.5">
@@ -1512,7 +1701,9 @@ export default function Pricing({
               <div className="font-serif text-[24px] text-ink font-semibold mt-1">
                 {gosalaItems.length}
               </div>
-              <span className="text-[11px] text-purple-700 font-medium">Offerings Sold</span>
+              <span className="text-[11px] text-purple-700 font-medium">
+                Offerings Sold
+              </span>
             </div>
 
             <div className="bg-card border border-line rounded-sm p-3.5">
@@ -1523,7 +1714,9 @@ export default function Pricing({
                 <Crown size={16} className="text-amber-600" />
                 <span>Super Admin</span>
               </div>
-              <span className="text-[11px] text-amber-700 font-mono font-medium">Captain Controls</span>
+              <span className="text-[11px] text-amber-700 font-mono font-medium">
+                Captain Controls
+              </span>
             </div>
           </div>
 
@@ -1541,7 +1734,9 @@ export default function Pricing({
                 {/* Direct Gaushala Dropdown Selector */}
                 {filteredGosalas.length > 0 && (
                   <div className="flex items-center gap-1.5 bg-paper border border-line rounded px-2.5 py-1 text-[12px] shadow-2xs">
-                    <span className="text-[10.5px] font-mono text-ink-faint uppercase font-medium">Dropdown:</span>
+                    <span className="text-[10.5px] font-mono text-ink-faint uppercase font-medium">
+                      Dropdown:
+                    </span>
                     <select
                       value={selectedGosalaId}
                       onChange={(e) => setSelectedGosalaId(e.target.value)}
@@ -1550,7 +1745,9 @@ export default function Pricing({
                     >
                       {filteredGosalas.map((g) => (
                         <option key={g.id} value={g.id}>
-                          {g.name} ({animals.filter((a) => a.gosala === g.name).length} cows · {g.region})
+                          {g.name} (
+                          {animals.filter((a) => a.gosala === g.name).length}{" "}
+                          cows · {g.region})
                         </option>
                       ))}
                     </select>
@@ -1559,7 +1756,10 @@ export default function Pricing({
               </div>
 
               <div className="relative w-full sm:w-64">
-                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" />
+                <Search
+                  size={14}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint"
+                />
                 <input
                   value={gosalaSearch}
                   onChange={(e) => setGosalaSearch(e.target.value)}
@@ -1573,7 +1773,9 @@ export default function Pricing({
             <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1">
               {filteredGosalas.map((g) => {
                 const isSelected = g.id === selectedGosalaId
-                const animalCount = animals.filter((a) => a.gosala === g.name).length
+                const animalCount = animals.filter(
+                  (a) => a.gosala === g.name,
+                ).length
                 return (
                   <button
                     key={g.id}
@@ -1584,7 +1786,10 @@ export default function Pricing({
                         : "bg-paper text-ink-soft border-line hover:border-line-strong hover:text-ink"
                     }`}
                   >
-                    <Building2 size={13} className={isSelected ? "text-white" : "text-ink-faint"} />
+                    <Building2
+                      size={13}
+                      className={isSelected ? "text-white" : "text-ink-faint"}
+                    />
                     <span>{g.name}</span>
                     <span
                       className={`font-mono text-[10px] px-1.5 py-0.2 rounded-full ${
@@ -1613,7 +1818,8 @@ export default function Pricing({
                     </span>
                   </div>
                   <span className="font-mono text-[11px] bg-paper-deep text-ink-faint px-2 py-0.5 rounded border border-line">
-                    Registration: {activeGosala.trustRegistrationNo || "AWBI/MH/2018/00492"}
+                    Registration:{" "}
+                    {activeGosala.trustRegistrationNo || "AWBI/MH/2018/00492"}
                   </span>
                 </div>
 
@@ -1627,11 +1833,29 @@ export default function Pricing({
                       <span className="h-2 w-2 rounded-full bg-forest" />
                     </div>
                     <div className="font-serif text-[14.5px] font-semibold text-ink mt-1">
-                      {governingAdmin.name}
+                      {isLoading ? (
+                        <Skeleton variant="text" className="h-5 w-32" />
+                      ) : governingAdmin.name ? (
+                        governingAdmin.name
+                      ) : (
+                        <span className="text-amber-600 dark:text-amber-400 text-xs italic">
+                          Unassigned (Configure Admin)
+                        </span>
+                      )}
                     </div>
-                    <div className="text-[11.5px] text-ink-soft">{governingAdmin.role}</div>
+                    <div className="text-[11.5px] text-ink-soft">
+                      {isLoading ? (
+                        <Skeleton variant="text" className="h-3.5 w-40 mt-1" />
+                      ) : (
+                        governingAdmin.role
+                      )}
+                    </div>
                     <div className="text-[11px] text-ink-faint font-mono mt-1">
-                      {governingAdmin.email} • {governingAdmin.phone}
+                      {isLoading ? (
+                        <Skeleton variant="text" className="h-3 w-48 mt-1" />
+                      ) : (
+                        `${governingAdmin.email} • ${governingAdmin.phone}`
+                      )}
                     </div>
                     <div className="text-[10px] text-ink-faint italic mt-1">
                       Jurisdiction: {governingAdmin.hub}
@@ -1646,19 +1870,30 @@ export default function Pricing({
                       </span>
                       <span
                         className={`h-2 w-2 rounded-full ${
-                          assignedManager?.status === "Active" ? "bg-forest" : "bg-amber-500"
+                          assignedManager?.status === "Active"
+                            ? "bg-forest"
+                            : "bg-amber-500"
                         }`}
                       />
                     </div>
                     <div className="font-serif text-[14.5px] font-semibold text-ink mt-1">
-                      {assignedManager ? assignedManager.name : activeGosala.managerName || "Unassigned"}
+                      {assignedManager
+                        ? assignedManager.name
+                        : activeGosala.managerName || "Unassigned"}
                     </div>
                     <div className="text-[11.5px] text-ink-soft">
-                      {assignedManager ? "Designated On-Site Manager" : "Acting Custodian Pending"}
+                      {assignedManager
+                        ? "Designated On-Site Manager"
+                        : "Acting Custodian Pending"}
                     </div>
                     <div className="text-[11px] text-ink-faint font-mono mt-1">
-                      {assignedManager?.email || activeGosala.email || "manager@gomaa.in"} •{" "}
-                      {assignedManager?.phone || activeGosala.contactPhone || "Not Listed"}
+                      {assignedManager?.email ||
+                        activeGosala.email ||
+                        "manager@gomaa.in"}{" "}
+                      •{" "}
+                      {assignedManager?.phone ||
+                        activeGosala.contactPhone ||
+                        "Not Listed"}
                     </div>
                     <div className="text-[10px] text-ink-faint italic mt-1">
                       Status: {assignedManager?.status || "Active Duty"}
@@ -1676,9 +1911,12 @@ export default function Pricing({
                     <div className="font-serif text-[14.5px] font-semibold text-ink mt-1">
                       {activeGosala.name}
                     </div>
-                    <div className="text-[11.5px] text-ink-soft truncate">{activeGosala.address}</div>
+                    <div className="text-[11.5px] text-ink-soft truncate">
+                      {activeGosala.address}
+                    </div>
                     <div className="text-[11px] text-ink-faint font-mono mt-1">
-                      Region: {activeGosala.region} • Capacity: {activeGosala.capacity} Cattle
+                      Region: {activeGosala.region} • Capacity:{" "}
+                      {activeGosala.capacity} Cattle
                     </div>
                     <div className="text-[10px] text-forest font-medium mt-1">
                       AWBI Certified Trust Facility
@@ -1698,7 +1936,8 @@ export default function Pricing({
                       </h3>
                     </div>
                     <p className="text-[12px] text-ink-soft mt-0.5">
-                      Base 60-min darshan rates per cattle category at this sanctuary (Super Admin exclusive)
+                      Base 60-min darshan rates per cattle category at this
+                      sanctuary (Super Admin exclusive)
                     </p>
                   </div>
                   {isSuperAdmin && (
@@ -1718,11 +1957,13 @@ export default function Pricing({
                               setBasePair(activeGosala.basePairPrice ?? 4800)
                               setBaseCalf(activeGosala.baseCalfPrice ?? 2500)
                               setBaseBull(activeGosala.baseBullPrice ?? 4500)
-                              setBaseBuffalo(activeGosala.baseBuffaloPrice ?? 3200)
+                              setBaseBuffalo(
+                                activeGosala.baseBuffaloPrice ?? 3200,
+                              )
                               setCustomCommission(
                                 activeGosala.customCommissionPct !== undefined
                                   ? activeGosala.customCommissionPct
-                                  : ""
+                                  : "",
                               )
                               setIsEditingBaseRates(false)
                             }}
@@ -1765,16 +2006,22 @@ export default function Pricing({
                     <div className="font-serif text-[13.5px] font-semibold text-ink leading-tight">
                       Cow & Calf Pair (Gau-Vatsa)
                     </div>
-                    <div className="text-[11px] text-ink-faint">Single-time joint seva</div>
+                    <div className="text-[11px] text-ink-faint">
+                      Single-time joint seva
+                    </div>
                     <div className="pt-1 border-t border-amber-200/60 flex items-center justify-between">
-                      <span className="text-[11px] text-ink-faint">Base Rate</span>
+                      <span className="text-[11px] text-ink-faint">
+                        Base Rate
+                      </span>
                       {isEditingBaseRates ? (
                         <div className="flex items-center gap-1">
                           <span className="text-[11px] text-ink-faint">₹</span>
                           <input
                             type="number"
                             value={basePair}
-                            onChange={(e) => setBasePair(Number(e.target.value))}
+                            onChange={(e) =>
+                              setBasePair(Number(e.target.value))
+                            }
                             className="w-20 bg-card border border-amber-400 rounded px-1.5 py-0.5 text-[13px] font-mono font-bold text-ink"
                           />
                         </div>
@@ -1797,9 +2044,13 @@ export default function Pricing({
                     <div className="font-serif text-[13.5px] font-semibold text-ink leading-tight">
                       Sacred Cow (Gau Mata)
                     </div>
-                    <div className="text-[11px] text-ink-faint">Individual mother cow</div>
+                    <div className="text-[11px] text-ink-faint">
+                      Individual mother cow
+                    </div>
                     <div className="pt-1 border-t border-line flex items-center justify-between">
-                      <span className="text-[11px] text-ink-faint">Base Rate</span>
+                      <span className="text-[11px] text-ink-faint">
+                        Base Rate
+                      </span>
                       {isEditingBaseRates ? (
                         <div className="flex items-center gap-1">
                           <span className="text-[11px] text-ink-faint">₹</span>
@@ -1829,16 +2080,22 @@ export default function Pricing({
                     <div className="font-serif text-[13.5px] font-semibold text-ink leading-tight">
                       Calf (Vatsa)
                     </div>
-                    <div className="text-[11px] text-ink-faint">Young calf darshan</div>
+                    <div className="text-[11px] text-ink-faint">
+                      Young calf darshan
+                    </div>
                     <div className="pt-1 border-t border-line flex items-center justify-between">
-                      <span className="text-[11px] text-ink-faint">Base Rate</span>
+                      <span className="text-[11px] text-ink-faint">
+                        Base Rate
+                      </span>
                       {isEditingBaseRates ? (
                         <div className="flex items-center gap-1">
                           <span className="text-[11px] text-ink-faint">₹</span>
                           <input
                             type="number"
                             value={baseCalf}
-                            onChange={(e) => setBaseCalf(Number(e.target.value))}
+                            onChange={(e) =>
+                              setBaseCalf(Number(e.target.value))
+                            }
                             className="w-20 bg-card border border-saffron rounded px-1.5 py-0.5 text-[13px] font-mono font-bold text-ink"
                           />
                         </div>
@@ -1861,16 +2118,22 @@ export default function Pricing({
                     <div className="font-serif text-[13.5px] font-semibold text-ink leading-tight">
                       Bull (Nandi)
                     </div>
-                    <div className="text-[11px] text-ink-faint">Temple pradakshina & puja</div>
+                    <div className="text-[11px] text-ink-faint">
+                      Temple pradakshina & puja
+                    </div>
                     <div className="pt-1 border-t border-line flex items-center justify-between">
-                      <span className="text-[11px] text-ink-faint">Base Rate</span>
+                      <span className="text-[11px] text-ink-faint">
+                        Base Rate
+                      </span>
                       {isEditingBaseRates ? (
                         <div className="flex items-center gap-1">
                           <span className="text-[11px] text-ink-faint">₹</span>
                           <input
                             type="number"
                             value={baseBull}
-                            onChange={(e) => setBaseBull(Number(e.target.value))}
+                            onChange={(e) =>
+                              setBaseBull(Number(e.target.value))
+                            }
                             className="w-20 bg-card border border-line-strong rounded px-1.5 py-0.5 text-[13px] font-mono font-bold text-ink"
                           />
                         </div>
@@ -1893,16 +2156,22 @@ export default function Pricing({
                     <div className="font-serif text-[13.5px] font-semibold text-ink leading-tight">
                       Buffalo (Mahishi)
                     </div>
-                    <div className="text-[11px] text-ink-faint">Indigenous sacred buffalo</div>
+                    <div className="text-[11px] text-ink-faint">
+                      Indigenous sacred buffalo
+                    </div>
                     <div className="pt-1 border-t border-indigo-200/60 flex items-center justify-between">
-                      <span className="text-[11px] text-ink-faint">Base Rate</span>
+                      <span className="text-[11px] text-ink-faint">
+                        Base Rate
+                      </span>
                       {isEditingBaseRates ? (
                         <div className="flex items-center gap-1">
                           <span className="text-[11px] text-ink-faint">₹</span>
                           <input
                             type="number"
                             value={baseBuffalo}
-                            onChange={(e) => setBaseBuffalo(Number(e.target.value))}
+                            onChange={(e) =>
+                              setBaseBuffalo(Number(e.target.value))
+                            }
                             className="w-20 bg-card border border-indigo-400 rounded px-1.5 py-0.5 text-[13px] font-mono font-bold text-ink"
                           />
                         </div>
@@ -1951,7 +2220,9 @@ export default function Pricing({
                           {cat.description || "Custom sacred bovine category"}
                         </div>
                         <div className="pt-1 border-t border-amber-200/60 flex items-center justify-between">
-                          <span className="text-[11px] text-ink-faint">Base Rate</span>
+                          <span className="text-[11px] text-ink-faint">
+                            Base Rate
+                          </span>
                           <span className="font-mono text-[15px] font-bold text-amber-900 tabular">
                             {inr(cat.basePrice)}
                           </span>
@@ -1971,43 +2242,72 @@ export default function Pricing({
                         Sanctuary Commission Override
                       </div>
                       <p className="text-[11px] text-amber-900/80">
-                        Overrides global master commission ({commission}%). Leave blank to inherit global rate.
+                        Overrides global master commission ({commission}%).
+                        Leave blank to inherit global rate.
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 self-end sm:self-center">
-                    <span className="text-[11.5px] text-ink-soft">Override %:</span>
+                    <span className="text-[11.5px] text-ink-soft">
+                      Override %:
+                    </span>
                     <input
                       type="number"
                       disabled={!isSuperAdmin || !isEditingBaseRates}
                       placeholder={`${commission}%`}
                       value={customCommission}
                       onChange={(e) =>
-                        setCustomCommission(e.target.value === "" ? "" : Number(e.target.value))
+                        setCustomCommission(
+                          e.target.value === "" ? "" : Number(e.target.value),
+                        )
                       }
                       className="w-20 bg-card border border-amber-300 rounded px-2 py-1 text-[12.5px] font-mono text-ink text-right disabled:opacity-70"
                     />
-                    <span className="text-[12px] font-mono font-bold text-amber-950">%</span>
+                    <span className="text-[12px] font-mono font-bold text-amber-950">
+                      %
+                    </span>
                   </div>
                 </div>
               </div>
 
               {/* ---------------- SECTION A: Sacred Herd Cattle Darshan Rates ---------------- */}
-              <Panel className={isCattleTableMaximized ? "fixed inset-3 md:inset-6 z-50 overflow-y-auto bg-card shadow-2xl border-2 border-amber-400 rounded-sm" : ""}>
+              <Panel
+                className={
+                  isCattleTableMaximized
+                    ? "fixed inset-3 md:inset-6 z-50 overflow-y-auto bg-card shadow-2xl border-2 border-amber-400 rounded-sm"
+                    : ""
+                }
+              >
                 <PanelHead
                   title={`Sacred Cattle Darshan Pricing · ${activeGosala.name}`}
                   desc="Base 60-min ceremonial darshan booking rate per individual cow, bull, and calf"
                   right={
                     <div className="flex items-center gap-2">
-                      <Tag tone="saffron">{gosalaAnimals.length} Bovines Registered</Tag>
+                      <Tag tone="saffron">
+                        {gosalaAnimals.length} Bovines Registered
+                      </Tag>
                       <button
                         type="button"
-                        onClick={() => setIsCattleTableMaximized((prev) => !prev)}
+                        onClick={() =>
+                          setIsCattleTableMaximized((prev) => !prev)
+                        }
                         className="p-1.5 rounded border border-line bg-paper hover:bg-paper-deep text-ink-soft hover:text-ink transition cursor-pointer"
-                        title={isCattleTableMaximized ? "Restore Table View" : "Maximize Cattle Rates Table"}
-                        aria-label={isCattleTableMaximized ? "Restore Table View" : "Maximize Cattle Rates Table"}
+                        title={
+                          isCattleTableMaximized
+                            ? "Restore Table View"
+                            : "Maximize Cattle Rates Table"
+                        }
+                        aria-label={
+                          isCattleTableMaximized
+                            ? "Restore Table View"
+                            : "Maximize Cattle Rates Table"
+                        }
                       >
-                        {isCattleTableMaximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                        {isCattleTableMaximized ? (
+                          <Minimize2 size={13} />
+                        ) : (
+                          <Maximize2 size={13} />
+                        )}
                       </button>
                     </div>
                   }
@@ -2036,11 +2336,20 @@ export default function Pricing({
                     <tbody>
                       {gosalaAnimals.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="px-5 py-10 text-center text-ink-faint">
-                            <PawPrint size={24} className="mx-auto text-ink-faint mb-2 opacity-50" />
-                            <p className="font-medium text-ink">No animals registered under this Gaushala yet</p>
+                          <td
+                            colSpan={5}
+                            className="px-5 py-10 text-center text-ink-faint"
+                          >
+                            <PawPrint
+                              size={24}
+                              className="mx-auto text-ink-faint mb-2 opacity-50"
+                            />
+                            <p className="font-medium text-ink">
+                              No animals registered under this Gaushala yet
+                            </p>
                             <p className="text-[12px] text-ink-faint mt-1">
-                              Operations Admin can register cows, calves, and bulls in Herd Welfare.
+                              Operations Admin can register cows, calves, and
+                              bulls in Herd Welfare.
                             </p>
                           </td>
                         </tr>
@@ -2056,7 +2365,10 @@ export default function Pricing({
                                 <div className="flex items-center gap-3">
                                   <div className="h-9 w-9 rounded-sm overflow-hidden bg-paper-deep border border-line shrink-0">
                                     <img
-                                      src={animal.photo || "https://images.unsplash.com/photo-1546445317-29f4545e9d53?auto=format&fit=crop&w=300&q=80"}
+                                      src={
+                                        animal.photo ||
+                                        "https://images.unsplash.com/photo-1546445317-29f4545e9d53?auto=format&fit=crop&w=300&q=80"
+                                      }
                                       alt={animal.name}
                                       className="h-full w-full object-cover"
                                     />
@@ -2074,7 +2386,9 @@ export default function Pricing({
 
                               <td className="px-5 py-3.5 text-[13px] text-ink">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="font-medium">{animal.type}</span>
+                                  <span className="font-medium">
+                                    {animal.type}
+                                  </span>
                                   {animal.type === "Cow & Calf" && (
                                     <span className="text-[10px] px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded font-semibold border border-amber-300">
                                       Jodi Seva
@@ -2092,7 +2406,10 @@ export default function Pricing({
                               </td>
 
                               <td className="px-5 py-3.5 text-[12px] text-ink-soft">
-                                <div>{animal.age || `${animal.ageYears || 4} years`}</div>
+                                <div>
+                                  {animal.age ||
+                                    `${animal.ageYears || 4} years`}
+                                </div>
                                 <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 mt-0.5">
                                   {animal.status || "Available"}
                                 </span>
@@ -2101,12 +2418,18 @@ export default function Pricing({
                               <td className="px-5 py-3.5 font-mono text-[14px] text-ink font-semibold tabular">
                                 {isEditing ? (
                                   <div className="flex items-center gap-1.5">
-                                    <span className="text-[12px] text-ink-faint">₹</span>
+                                    <span className="text-[12px] text-ink-faint">
+                                      ₹
+                                    </span>
                                     <input
                                       type="number"
                                       autoFocus
                                       value={editingAnimalPrice}
-                                      onChange={(e) => setEditingAnimalPrice(Number(e.target.value))}
+                                      onChange={(e) =>
+                                        setEditingAnimalPrice(
+                                          Number(e.target.value),
+                                        )
+                                      }
                                       className="w-24 bg-card border border-amber-400 rounded px-2 py-1 text-[13px] font-mono outline-none focus:ring-2 focus:ring-amber-400"
                                     />
                                   </div>
@@ -2120,13 +2443,17 @@ export default function Pricing({
                                   isEditing ? (
                                     <div className="flex items-center gap-1.5">
                                       <button
-                                        onClick={() => handleSaveAnimalPrice(animal.name)}
+                                        onClick={() =>
+                                          handleSaveAnimalPrice(animal.name)
+                                        }
                                         className="inline-flex items-center gap-1 px-2.5 py-1 bg-forest text-white rounded text-[11.5px] font-medium hover:opacity-90 transition cursor-pointer"
                                       >
                                         <Check size={12} /> Save
                                       </button>
                                       <button
-                                        onClick={() => setEditingAnimalName(null)}
+                                        onClick={() =>
+                                          setEditingAnimalName(null)
+                                        }
                                         className="p-1 text-ink-faint hover:text-ink transition cursor-pointer"
                                       >
                                         <X size={14} />
@@ -2136,7 +2463,9 @@ export default function Pricing({
                                     <button
                                       onClick={() => {
                                         setEditingAnimalName(animal.name)
-                                        setEditingAnimalPrice(animal.price || 3500)
+                                        setEditingAnimalPrice(
+                                          animal.price || 3500,
+                                        )
                                       }}
                                       className="inline-flex items-center gap-1 px-2.5 py-1 text-[11.5px] font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded transition cursor-pointer"
                                     >
@@ -2173,7 +2502,8 @@ export default function Pricing({
                       </button>
                     ) : (
                       <span className="font-mono text-[11px] text-amber-900 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded flex items-center gap-1.5 font-medium">
-                        <Lock size={12} className="text-amber-700" /> Managed by Gaushala Manager &amp; Operations Admin (Read-Only)
+                        <Lock size={12} className="text-amber-700" /> Managed by
+                        Gaushala Manager &amp; Operations Admin (Read-Only)
                       </span>
                     )
                   }
@@ -2182,7 +2512,8 @@ export default function Pricing({
                 <div className="p-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {gosalaItems.map((item) => {
-                      const catBadge = CATEGORY_COLORS[item.category] || CATEGORY_COLORS.puja
+                      const catBadge =
+                        CATEGORY_COLORS[item.category] || CATEGORY_COLORS.puja
                       return (
                         <div
                           key={item.id}
@@ -2232,7 +2563,11 @@ export default function Pricing({
                               <div className="flex items-center gap-1.5">
                                 <button
                                   onClick={() => handleToggleStock(item)}
-                                  title={item.inStock ? "Mark as Out of Stock" : "Restock Item (Mark In Stock)"}
+                                  title={
+                                    item.inStock
+                                      ? "Mark as Out of Stock"
+                                      : "Restock Item (Mark In Stock)"
+                                  }
                                   className={`p-1.5 rounded transition cursor-pointer text-[11px] ${
                                     item.inStock
                                       ? "text-emerald-700 hover:bg-emerald-50"
@@ -2271,10 +2606,16 @@ export default function Pricing({
             </div>
           ) : (
             <div className="p-8 text-center text-ink-faint bg-card border border-line rounded-sm">
-              <Building2 size={32} className="mx-auto text-ink-faint mb-2 opacity-50" />
-              <p className="font-serif text-[16px] text-ink font-medium">No Gaushalas Available</p>
+              <Building2
+                size={32}
+                className="mx-auto text-ink-faint mb-2 opacity-50"
+              />
+              <p className="font-serif text-[16px] text-ink font-medium">
+                No Gaushalas Available
+              </p>
               <p className="text-[12px] text-ink-soft mt-1">
-                Please register a Gaushala first in the Gaushalas Network section.
+                Please register a Gaushala first in the Gaushalas Network
+                section.
               </p>
             </div>
           )}
@@ -2296,16 +2637,20 @@ export default function Pricing({
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-serif text-[17px] font-semibold text-amber-950">
-                      Captain's Gaushala Commission, Tax &amp; Settlement Governance
+                      Captain's Gaushala Commission, Tax &amp; Settlement
+                      Governance
                     </span>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-amber-600 text-white shadow-2xs">
                       <Crown size={11} /> Sovereign Settlement Engine
                     </span>
                   </div>
                   <p className="text-[12px] text-amber-900/80 mt-1 max-w-3xl leading-relaxed">
-                    Configure tailored financial parameters per individual Gaushala. Assign preferential low-commission rates
-                    (5%–10%) to close partner sanctuaries, manage Section 80G tax exemptions, adjust animal turnaround rest buffers,
-                    and simulate real-time net direct payouts with an accurate mathematical flow.
+                    Configure tailored financial parameters per individual
+                    Gaushala. Assign preferential low-commission rates (5%–10%)
+                    to close partner sanctuaries, manage Section 80G tax
+                    exemptions, adjust animal turnaround rest buffers, and
+                    simulate real-time net direct payouts with an accurate
+                    mathematical flow.
                   </p>
                 </div>
               </div>
@@ -2313,7 +2658,10 @@ export default function Pricing({
               {!isSuperAdmin && (
                 <div className="bg-amber-100 border border-amber-300 rounded px-3 py-2 text-[11.5px] text-amber-950 flex items-center gap-2 self-start md:self-center">
                   <ShieldAlert size={14} className="text-amber-700 shrink-0" />
-                  <span>Read-only preview. Super Admin Captain holds sovereign edit authority.</span>
+                  <span>
+                    Read-only preview. Super Admin Captain holds sovereign edit
+                    authority.
+                  </span>
                 </div>
               )}
             </div>
@@ -2321,41 +2669,82 @@ export default function Pricing({
             {/* Quick Metrics Strip */}
             <div className="mt-4 pt-3.5 border-t border-amber-200/60 grid grid-cols-2 sm:grid-cols-4 gap-3 text-ink">
               <div className="bg-white/80 border border-amber-200/80 rounded p-2.5">
-                <span className="text-[10.5px] font-mono uppercase text-ink-faint block">Total Network Sanctuaries</span>
-                <span className="font-serif text-[19px] font-bold text-ink">{gosalas.length}</span>
-                <span className="text-[10.5px] text-forest block font-medium">AWBI Verified</span>
+                <span className="text-[10.5px] font-mono uppercase text-ink-faint block">
+                  Total Network Sanctuaries
+                </span>
+                <span className="font-serif text-[19px] font-bold text-ink">
+                  {gosalas.length}
+                </span>
+                <span className="text-[10.5px] text-forest block font-medium">
+                  AWBI Verified
+                </span>
               </div>
               <div className="bg-white/80 border border-amber-200/80 rounded p-2.5">
-                <span className="text-[10.5px] font-mono uppercase text-ink-faint block">Preferential / Subsidized</span>
+                <span className="text-[10.5px] font-mono uppercase text-ink-faint block">
+                  Preferential / Subsidized
+                </span>
                 <span className="font-serif text-[19px] font-bold text-emerald-800">
-                  {gosalas.filter((g) => g.customCommissionPct !== undefined && g.customCommissionPct < commission).length}
+                  {
+                    gosalas.filter(
+                      (g) =>
+                        g.customCommissionPct !== undefined &&
+                        g.customCommissionPct < commission,
+                    ).length
+                  }
                 </span>
-                <span className="text-[10.5px] text-emerald-700 block font-medium">Special Low Comm (&lt;{commission}%)</span>
+                <span className="text-[10.5px] text-emerald-700 block font-medium">
+                  Special Low Comm (&lt;{commission}%)
+                </span>
               </div>
               <div className="bg-white/80 border border-amber-200/80 rounded p-2.5">
-                <span className="text-[10.5px] font-mono uppercase text-ink-faint block">80G Tax-Exempt Trusts</span>
+                <span className="text-[10.5px] font-mono uppercase text-ink-faint block">
+                  80G Tax-Exempt Trusts
+                </span>
                 <span className="font-serif text-[19px] font-bold text-indigo-900">
-                  {gosalas.filter((g) => g.taxTreatment === "section_80g_exempt" || g.customTaxPct === 0).length}
+                  {
+                    gosalas.filter(
+                      (g) =>
+                        g.taxTreatment === "section_80g_exempt" ||
+                        g.customTaxPct === 0,
+                    ).length
+                  }
                 </span>
-                <span className="text-[10.5px] text-indigo-700 block font-medium">0% Tax Exemption</span>
+                <span className="text-[10.5px] text-indigo-700 block font-medium">
+                  0% Tax Exemption
+                </span>
               </div>
               <div className="bg-white/80 border border-amber-200/80 rounded p-2.5">
-                <span className="text-[10.5px] font-mono uppercase text-ink-faint block">Platform Master Default</span>
-                <span className="font-serif text-[19px] font-bold text-amber-950">{commission}%</span>
-                <span className="text-[10.5px] text-amber-800 block font-mono">Baseline Rate</span>
+                <span className="text-[10.5px] font-mono uppercase text-ink-faint block">
+                  Platform Master Default
+                </span>
+                <span className="font-serif text-[19px] font-bold text-amber-950">
+                  {commission}%
+                </span>
+                <span className="text-[10.5px] text-amber-800 block font-mono">
+                  Baseline Rate
+                </span>
               </div>
             </div>
           </div>
 
           {/* Master Gaushala Commission & Economics Ledger */}
-          <Panel className={isLedgerMaximized ? "fixed inset-3 md:inset-6 z-50 overflow-y-auto bg-card shadow-2xl border-2 border-amber-400 rounded-sm" : ""}>
+          <Panel
+            className={
+              isLedgerMaximized
+                ? "fixed inset-3 md:inset-6 z-50 overflow-y-auto bg-card shadow-2xl border-2 border-amber-400 rounded-sm"
+                : ""
+            }
+          >
             <PanelHead
               title="Individual Gaushala Economics Ledger"
               desc="Comprehensive settlement parameters, preferential partnership tiers, and tax profiles per sanctuary"
               right={
                 <div className="flex items-center gap-2">
                   <div className="relative w-48 sm:w-64">
-                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" />
+                    <Search
+                      size={13}
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint"
+                    />
                     <input
                       value={commSearch}
                       onChange={(e) => setCommSearch(e.target.value)}
@@ -2367,10 +2756,22 @@ export default function Pricing({
                     type="button"
                     onClick={() => setIsLedgerMaximized((prev) => !prev)}
                     className="p-1.5 rounded border border-line bg-paper hover:bg-paper-deep text-ink-soft hover:text-ink transition cursor-pointer"
-                    title={isLedgerMaximized ? "Restore Table View" : "Maximize Economics Ledger Fullscreen"}
-                    aria-label={isLedgerMaximized ? "Restore Table View" : "Maximize Economics Ledger Fullscreen"}
+                    title={
+                      isLedgerMaximized
+                        ? "Restore Table View"
+                        : "Maximize Economics Ledger Fullscreen"
+                    }
+                    aria-label={
+                      isLedgerMaximized
+                        ? "Restore Table View"
+                        : "Maximize Economics Ledger Fullscreen"
+                    }
                   >
-                    {isLedgerMaximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                    {isLedgerMaximized ? (
+                      <Minimize2 size={13} />
+                    ) : (
+                      <Maximize2 size={13} />
+                    )}
                   </button>
                 </div>
               }
@@ -2386,25 +2787,45 @@ export default function Pricing({
                 {
                   id: "preferred",
                   label: `★ Preferred Low Comm (${
-                    gosalas.filter((g) => g.partnershipTier === "PREFERRED" || (g.customCommissionPct !== undefined && g.customCommissionPct < commission)).length
+                    gosalas.filter(
+                      (g) =>
+                        g.partnershipTier === "PREFERRED" ||
+                        (g.customCommissionPct !== undefined &&
+                          g.customCommissionPct < commission),
+                    ).length
                   })`,
                 },
                 {
                   id: "charitable",
                   label: `Charitable Seva (≤5%) (${
-                    gosalas.filter((g) => g.partnershipTier === "CHARITABLE" || (g.customCommissionPct !== undefined && g.customCommissionPct <= 5)).length
+                    gosalas.filter(
+                      (g) =>
+                        g.partnershipTier === "CHARITABLE" ||
+                        (g.customCommissionPct !== undefined &&
+                          g.customCommissionPct <= 5),
+                    ).length
                   })`,
                 },
                 {
                   id: "tax_exempt",
                   label: `80G Tax Exempt (${
-                    gosalas.filter((g) => g.taxTreatment === "section_80g_exempt" || g.customTaxPct === 0).length
+                    gosalas.filter(
+                      (g) =>
+                        g.taxTreatment === "section_80g_exempt" ||
+                        g.customTaxPct === 0,
+                    ).length
                   })`,
                 },
                 {
                   id: "standard",
                   label: `Standard Default (${commission}%) (${
-                    gosalas.filter((g) => (!g.partnershipTier || g.partnershipTier === "STANDARD") && (g.customCommissionPct === undefined || g.customCommissionPct === commission)).length
+                    gosalas.filter(
+                      (g) =>
+                        (!g.partnershipTier ||
+                          g.partnershipTier === "STANDARD") &&
+                        (g.customCommissionPct === undefined ||
+                          g.customCommissionPct === commission),
+                    ).length
                   })`,
                 },
               ].map((pill) => (
@@ -2426,52 +2847,86 @@ export default function Pricing({
               <table className="w-full border-collapse min-w-[900px] text-left">
                 <thead>
                   <tr className="bg-paper-deep/40 border-b border-line text-[10.5px] font-mono uppercase tracking-wider text-ink-faint">
-                    <th className="px-5 py-3 font-medium">Gaushala &amp; Region</th>
+                    <th className="px-5 py-3 font-medium">
+                      Gaushala &amp; Region
+                    </th>
                     <th className="px-4 py-3 font-medium">Partnership Tier</th>
                     <th className="px-4 py-3 font-medium">Commission Rate</th>
                     <th className="px-4 py-3 font-medium">Tax Treatment</th>
                     <th className="px-4 py-3 font-medium">Rest Buffer</th>
-                    <th className="px-4 py-3 font-medium">Partnership Rationale</th>
-                    {isSuperAdmin && <th className="px-5 py-3 font-medium text-right">Super Admin Actions</th>}
+                    <th className="px-4 py-3 font-medium">
+                      Partnership Rationale
+                    </th>
+                    {isSuperAdmin && (
+                      <th className="px-5 py-3 font-medium text-right">
+                        Super Admin Actions
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line/60">
                   {filteredCommGosalas.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-5 py-10 text-center text-ink-faint">
-                        <Building2 size={24} className="mx-auto mb-2 opacity-50 text-ink-faint" />
-                        <p className="font-medium text-ink">No Gaushalas match your filter</p>
-                        <p className="text-[12px] mt-0.5">Try searching for another name or clearing the filter.</p>
+                      <td
+                        colSpan={7}
+                        className="px-5 py-10 text-center text-ink-faint"
+                      >
+                        <Building2
+                          size={24}
+                          className="mx-auto mb-2 opacity-50 text-ink-faint"
+                        />
+                        <p className="font-medium text-ink">
+                          No Gaushalas match your filter
+                        </p>
+                        <p className="text-[12px] mt-0.5">
+                          Try searching for another name or clearing the filter.
+                        </p>
                       </td>
                     </tr>
                   ) : (
                     filteredCommGosalas.map((g) => {
                       const commPct = g.customCommissionPct ?? commission
-                      const isSubsidized = g.customCommissionPct !== undefined && g.customCommissionPct < commission
+                      const isSubsidized =
+                        g.customCommissionPct !== undefined &&
+                        g.customCommissionPct < commission
                       const isFlat = g.commissionType === "fixed"
-                      const tier = g.partnershipTier || (isSubsidized ? "PREFERRED" : "STANDARD")
-                      const is80g = g.taxTreatment === "section_80g_exempt" || g.customTaxPct === 0
+                      const tier =
+                        g.partnershipTier ||
+                        (isSubsidized ? "PREFERRED" : "STANDARD")
+                      const is80g =
+                        g.taxTreatment === "section_80g_exempt" ||
+                        g.customTaxPct === 0
                       const buf = g.bufferMinutes ?? bufferMin
 
                       return (
-                        <tr key={g.id} className="hover:bg-paper/50 transition-colors text-[13px]">
+                        <tr
+                          key={g.id}
+                          className="hover:bg-paper/50 transition-colors text-[13px]"
+                        >
                           <td className="px-5 py-3.5">
                             <div className="font-serif font-semibold text-ink flex items-center gap-2">
                               <span>{g.name}</span>
                               {tier === "PREFERRED" && (
-                                <Star size={13} className="text-amber-500 fill-amber-500 shrink-0" />
+                                <Star
+                                  size={13}
+                                  className="text-amber-500 fill-amber-500 shrink-0"
+                                />
                               )}
                             </div>
-                            <div className="text-[11.5px] text-ink-soft">{g.region}</div>
+                            <div className="text-[11.5px] text-ink-soft">
+                              {g.region}
+                            </div>
                             <div className="text-[10px] text-ink-faint font-mono mt-0.5">
-                              Reg: {g.trustRegistrationNo || "AWBI Verified"} • Custodian: {g.managerName || "Designated"}
+                              Reg: {g.trustRegistrationNo || "AWBI Verified"} •
+                              Custodian: {g.managerName || "Designated"}
                             </div>
                           </td>
 
                           <td className="px-4 py-3.5">
                             {tier === "PREFERRED" && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-300">
-                                <Star size={10} className="fill-emerald-700" /> Preferred Partner
+                                <Star size={10} className="fill-emerald-700" />{" "}
+                                Preferred Partner
                               </span>
                             )}
                             {tier === "CHARITABLE" && (
@@ -2502,12 +2957,20 @@ export default function Pricing({
                                 <span className="font-mono font-bold text-ink">
                                   {inr(g.customCommissionFlat || 400)}
                                 </span>
-                                <span className="text-[10px] text-ink-faint block font-mono">Flat / booking</span>
+                                <span className="text-[10px] text-ink-faint block font-mono">
+                                  Flat / booking
+                                </span>
                               </div>
                             ) : (
                               <div>
                                 <div className="flex items-center gap-1.5">
-                                  <span className={`font-mono font-bold text-[14px] ${isSubsidized ? "text-emerald-800" : "text-ink"}`}>
+                                  <span
+                                    className={`font-mono font-bold text-[14px] ${
+                                      isSubsidized
+                                        ? "text-emerald-800"
+                                        : "text-ink"
+                                    }`}
+                                  >
                                     {commPct}%
                                   </span>
                                   {isSubsidized && (
@@ -2517,7 +2980,9 @@ export default function Pricing({
                                   )}
                                 </div>
                                 <span className="text-[10.5px] text-ink-faint block">
-                                  {g.customCommissionPct !== undefined ? "Individual Override" : "Master Default"}
+                                  {g.customCommissionPct !== undefined
+                                    ? "Individual Override"
+                                    : "Master Default"}
                                 </span>
                               </div>
                             )}
@@ -2528,7 +2993,8 @@ export default function Pricing({
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
                                 0% Tax (80G Exempt)
                               </span>
-                            ) : g.taxTreatment === "reduced_charity_gst" || g.customTaxPct === 5 ? (
+                            ) : g.taxTreatment === "reduced_charity_gst" ||
+                              g.customTaxPct === 5 ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono bg-blue-50 text-blue-800 border border-blue-200 font-semibold">
                                 5% Concessional GST
                               </span>
@@ -2600,7 +3066,9 @@ export default function Pricing({
                 desc="Client-side calculation sandbox — test 'what-if' splits in real time (Zero impact on PostgreSQL database until saved)"
                 right={
                   <div className="flex items-center gap-2">
-                    <span className="text-[11.5px] text-ink-faint">Active Sanctuary:</span>
+                    <span className="text-[11.5px] text-ink-faint">
+                      Active Sanctuary:
+                    </span>
                     <select
                       value={simGosalaId}
                       onChange={(e) => setSimGosalaId(e.target.value)}
@@ -2608,7 +3076,11 @@ export default function Pricing({
                     >
                       {gosalas.map((g) => (
                         <option key={g.id} value={g.id}>
-                          {g.name} ({g.customCommissionPct !== undefined ? `${g.customCommissionPct}% comm` : `${commission}% default`})
+                          {g.name} (
+                          {g.customCommissionPct !== undefined
+                            ? `${g.customCommissionPct}% comm`
+                            : `${commission}% default`}
+                          )
                         </option>
                       ))}
                     </select>
@@ -2630,7 +3102,13 @@ export default function Pricing({
                       </span>
                     </div>
                     <p className="text-sky-800/90 leading-relaxed text-[11.5px]">
-                      The inputs below (Base Darshan Rate, Duration, Transit, Offerings) are an <strong>in-memory testing simulator</strong>. Scrolling or adjusting values here calculates financial formulas dynamically on your screen without modifying the database. Live database settings require clicking an explicit <strong>Save</strong> or <strong>Publish</strong> button.
+                      The inputs below (Base Darshan Rate, Duration, Transit,
+                      Offerings) are an{" "}
+                      <strong>in-memory testing simulator</strong>. Scrolling or
+                      adjusting values here calculates financial formulas
+                      dynamically on your screen without modifying the database.
+                      Live database settings require clicking an explicit{" "}
+                      <strong>Save</strong> or <strong>Publish</strong> button.
                     </p>
                   </div>
                 </div>
@@ -2647,10 +3125,22 @@ export default function Pricing({
                           {simGosala.name} · {simGosala.region}
                         </div>
                         <div className="text-ink-soft text-[11.5px]">
-                          Tier: <strong>{simGosala.partnershipTier || "STANDARD"}</strong> •
-                          Commission: <strong className="text-emerald-800 font-mono font-bold">{simEffectiveCommPct}%</strong> •
-                          Tax Status: <strong className="font-mono">{simEffectiveTaxPct}%</strong> •
-                          Buffer: <strong className="font-mono">{simEffectiveBuffer} min</strong>
+                          Tier:{" "}
+                          <strong>
+                            {simGosala.partnershipTier || "STANDARD"}
+                          </strong>{" "}
+                          • Commission:{" "}
+                          <strong className="text-emerald-800 font-mono font-bold">
+                            {simEffectiveCommPct}%
+                          </strong>{" "}
+                          • Tax Status:{" "}
+                          <strong className="font-mono">
+                            {simEffectiveTaxPct}%
+                          </strong>{" "}
+                          • Buffer:{" "}
+                          <strong className="font-mono">
+                            {simEffectiveBuffer} min
+                          </strong>
                         </div>
                       </div>
                     </div>
@@ -2683,12 +3173,17 @@ export default function Pricing({
                       type="number"
                       value={simDurationMin}
                       onWheel={(e) => e.currentTarget.blur()}
-                      onChange={(e) => setSimDurationMin(Number(e.target.value))}
+                      onChange={(e) =>
+                        setSimDurationMin(Number(e.target.value))
+                      }
                       className={inputCls}
                     />
                   </Field>
 
-                  <Field label="Transit Distance (Simulated)" hint="km road distance">
+                  <Field
+                    label="Transit Distance (Simulated)"
+                    hint="km road distance"
+                  >
                     <input
                       type="number"
                       step="0.5"
@@ -2699,7 +3194,10 @@ export default function Pricing({
                     />
                   </Field>
 
-                  <Field label="Consecrated Add-ons (Simulated)" hint="₹ pooja/garland">
+                  <Field
+                    label="Consecrated Add-ons (Simulated)"
+                    hint="₹ pooja/garland"
+                  >
                     <input
                       type="number"
                       value={simAddons}
@@ -2719,7 +3217,10 @@ export default function Pricing({
                       setSimDurationMin(standardMin)
                       setSimDistanceKm(12.5)
                       setSimAddons(750)
-                      notify("Reset simulation values to sanctuary standard defaults", "info")
+                      notify(
+                        "Reset simulation values to sanctuary standard defaults",
+                        "info",
+                      )
                     }}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-medium text-ink-soft hover:text-ink border border-line bg-card rounded hover:bg-paper cursor-pointer transition shadow-2xs"
                   >
@@ -2731,13 +3232,20 @@ export default function Pricing({
                     <button
                       type="button"
                       onClick={() => {
-                        updateGosala(simGosala.id, { baseCowPrice: Number(simBasePrice) })
-                        notify(`Persisted base rate of ${inr(simBasePrice)} to database for ${simGosala.name}`, "ok")
+                        updateGosala(simGosala.id, {
+                          baseCowPrice: Number(simBasePrice),
+                        })
+                        notify(
+                          `Persisted base rate of ${inr(simBasePrice)} to database for ${simGosala.name}`,
+                          "ok",
+                        )
                       }}
                       className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-medium text-white bg-forest hover:bg-forest-deep rounded shadow-2xs cursor-pointer transition"
                     >
                       <Save size={13} />
-                      <span>Save {inr(simBasePrice)} as Sanctuary Base Rate</span>
+                      <span>
+                        Save {inr(simBasePrice)} as Sanctuary Base Rate
+                      </span>
                     </button>
                   )}
                 </div>
@@ -2746,43 +3254,70 @@ export default function Pricing({
                 <div className="rounded border border-line bg-paper p-4 space-y-3">
                   <div className="font-serif text-[14px] font-semibold text-ink flex items-center justify-between border-b border-line pb-2">
                     <span>Accurate Financial Settlement Flow</span>
-                    <span className="font-mono text-[11px] text-ink-faint">Zero-Discrepancy Formula</span>
+                    <span className="font-mono text-[11px] text-ink-faint">
+                      Zero-Discrepancy Formula
+                    </span>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[12.5px]">
                     <div className="space-y-2">
                       <div className="flex justify-between">
-                        <span className="text-ink-soft">1. Base Bovine Seva ({standardMin} min):</span>
-                        <span className="font-mono font-medium text-ink tabular">{inr(simBasePrice)}</span>
+                        <span className="text-ink-soft">
+                          1. Base Bovine Seva ({standardMin} min):
+                        </span>
+                        <span className="font-mono font-medium text-ink tabular">
+                          {inr(simBasePrice)}
+                        </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-ink-soft">2. Extra Time ({simExtraMin} min):</span>
-                        <span className="font-mono font-medium text-ink tabular">{inr(simExtraCharge)}</span>
+                        <span className="text-ink-soft">
+                          2. Extra Time ({simExtraMin} min):
+                        </span>
+                        <span className="font-mono font-medium text-ink tabular">
+                          {inr(simExtraCharge)}
+                        </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-ink-soft">3. Transit ({simChargeableKm.toFixed(1)} km billable):</span>
-                        <span className="font-mono font-medium text-ink tabular">{inr(simTransport)}</span>
+                        <span className="text-ink-soft">
+                          3. Transit ({simChargeableKm.toFixed(1)} km billable):
+                        </span>
+                        <span className="font-mono font-medium text-ink tabular">
+                          {inr(simTransport)}
+                        </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-ink-soft">4. Fodder &amp; Pooja Add-ons:</span>
-                        <span className="font-mono font-medium text-ink tabular">{inr(simAddons)}</span>
+                        <span className="text-ink-soft">
+                          4. Fodder &amp; Pooja Add-ons:
+                        </span>
+                        <span className="font-mono font-medium text-ink tabular">
+                          {inr(simAddons)}
+                        </span>
                       </div>
                     </div>
 
                     <div className="space-y-2 border-t md:border-t-0 md:border-l border-line pt-2 md:pt-0 md:pl-4">
                       <div className="flex justify-between font-semibold">
-                        <span className="text-ink">Gross Booking Subtotal:</span>
-                        <span className="font-mono text-ink tabular">{inr(simSubtotal)}</span>
+                        <span className="text-ink">
+                          Gross Booking Subtotal:
+                        </span>
+                        <span className="font-mono text-ink tabular">
+                          {inr(simSubtotal)}
+                        </span>
                       </div>
                       <div className="flex justify-between text-indigo-900">
                         <span className="text-ink-soft">
-                          Applied Tax ({simEffectiveTaxPct}% {simEffectiveTaxPct === 0 ? "80G Exempt" : "GST"}):
+                          Applied Tax ({simEffectiveTaxPct}%{" "}
+                          {simEffectiveTaxPct === 0 ? "80G Exempt" : "GST"}):
                         </span>
-                        <span className="font-mono font-semibold tabular">{inr(simTax)}</span>
+                        <span className="font-mono font-semibold tabular">
+                          {inr(simTax)}
+                        </span>
                       </div>
                       <div className="flex justify-between font-bold pt-1 border-t border-line text-ink">
                         <span>Devotee Total Paid:</span>
-                        <span className="font-mono text-[15px] tabular">{inr(simCustomerTotal)}</span>
+                        <span className="font-mono text-[15px] tabular">
+                          {inr(simCustomerTotal)}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -2806,7 +3341,9 @@ export default function Pricing({
                   <div className="h-3 w-full rounded-full bg-paper-deep overflow-hidden flex border border-line">
                     <div
                       className="bg-emerald-600 transition-all duration-300"
-                      style={{ width: `${Math.max(5, 100 - simEffectiveCommPct)}%` }}
+                      style={{
+                        width: `${Math.max(5, 100 - simEffectiveCommPct)}%`,
+                      }}
                       title={`Gaushala Net Share: ${100 - simEffectiveCommPct}%`}
                     />
                     <div
@@ -2819,15 +3356,22 @@ export default function Pricing({
 
                 <div className="space-y-2.5 text-[13px] pt-1">
                   <div className="flex justify-between">
-                    <span className="text-ink-soft">Gross Darshan + Transit:</span>
-                    <span className="font-mono text-ink tabular">{inr(simSubtotal)}</span>
+                    <span className="text-ink-soft">
+                      Gross Darshan + Transit:
+                    </span>
+                    <span className="font-mono text-ink tabular">
+                      {inr(simSubtotal)}
+                    </span>
                   </div>
 
                   <div className="flex justify-between text-amber-900 bg-amber-50/70 p-2 rounded">
                     <div>
-                      <span className="font-medium text-amber-950 block">GOMAA Platform Retained</span>
+                      <span className="font-medium text-amber-950 block">
+                        GOMAA Platform Retained
+                      </span>
                       <span className="text-[11px] text-amber-800">
-                        {simEffectiveCommPct}% of seva ({inr(simBasePrice + simExtraCharge)})
+                        {simEffectiveCommPct}% of seva (
+                        {inr(simBasePrice + simExtraCharge)})
                       </span>
                     </div>
                     <span className="font-mono font-bold text-amber-950 tabular self-center text-[14px]">
@@ -2841,7 +3385,8 @@ export default function Pricing({
                         Gaushala Direct Net Settlement
                       </span>
                       <span className="text-[11px] text-forest">
-                        Seva ({100 - simEffectiveCommPct}%) + 100% Transit &amp; Add-ons
+                        Seva ({100 - simEffectiveCommPct}%) + 100% Transit &amp;
+                        Add-ons
                       </span>
                     </div>
                     <span className="font-mono font-bold text-forest-deep tabular self-center text-[16px]">
@@ -2854,24 +3399,36 @@ export default function Pricing({
                 {simSanctuarySavings > 0 ? (
                   <div className="rounded p-3 bg-emerald-100/70 border border-emerald-300 text-emerald-950 text-[12px] space-y-1">
                     <div className="font-semibold flex items-center gap-1.5 text-emerald-900">
-                      <Star size={13} className="fill-emerald-700 text-emerald-700 shrink-0" />
+                      <Star
+                        size={13}
+                        className="fill-emerald-700 text-emerald-700 shrink-0"
+                      />
                       <span>Preferential Sanctuary Advantage</span>
                     </div>
                     <p className="text-emerald-900/90 leading-relaxed">
-                      Compared to the standard {commission}% platform rate ({inr(simStandardGomaaCut)}),
-                      this sanctuary retains an extra <strong>{inr(simSanctuarySavings)}</strong> per booking to fund fodder &amp; cow welfare!
+                      Compared to the standard {commission}% platform rate (
+                      {inr(simStandardGomaaCut)}), this sanctuary retains an
+                      extra <strong>{inr(simSanctuarySavings)}</strong> per
+                      booking to fund fodder &amp; cow welfare!
                     </p>
                   </div>
                 ) : (
                   <div className="rounded p-3 bg-paper border border-line text-ink-soft text-[11.5px]">
-                    <span className="font-medium text-ink block">Standard Affiliate Split</span>
-                    <span>Standard platform {commission}% commission applied to bovine darshan seva.</span>
+                    <span className="font-medium text-ink block">
+                      Standard Affiliate Split
+                    </span>
+                    <span>
+                      Standard platform {commission}% commission applied to
+                      bovine darshan seva.
+                    </span>
                   </div>
                 )}
 
                 <div className="pt-2 border-t border-line text-[11px] text-ink-faint font-mono flex items-center justify-between">
                   <span>Settlement Dispatch Mode:</span>
-                  <span className="text-ink font-semibold">Automated Weekly NACH</span>
+                  <span className="text-ink font-semibold">
+                    Automated Weekly NACH
+                  </span>
                 </div>
               </div>
             </Panel>
@@ -2889,7 +3446,9 @@ export default function Pricing({
               <div className="flex items-center gap-2">
                 <Crown size={18} className="text-amber-600" />
                 <h3 className="font-serif text-[17px] font-semibold text-ink">
-                  {editingItemId ? "Edit Offering Item" : "Add New Offering Item"}
+                  {editingItemId
+                    ? "Edit Offering Item"
+                    : "Add New Offering Item"}
                 </h3>
               </div>
               <button
@@ -2905,7 +3464,10 @@ export default function Pricing({
             </div>
 
             <div className="space-y-3.5">
-              <Field label="Item / Offering Name" hint="e.g. Marigold Garland, A2 Ghee">
+              <Field
+                label="Item / Offering Name"
+                hint="e.g. Marigold Garland, A2 Ghee"
+              >
                 <input
                   value={itemName}
                   onChange={(e) => setItemName(e.target.value)}
@@ -2918,7 +3480,9 @@ export default function Pricing({
                 <Field label="Category">
                   <select
                     value={itemCategory}
-                    onChange={(e) => setItemCategory(e.target.value as GosalaOfferingCategory)}
+                    onChange={(e) =>
+                      setItemCategory(e.target.value as GosalaOfferingCategory)
+                    }
                     className={inputCls}
                   >
                     <option value="puja">Pooja &amp; Garland</option>
@@ -2966,7 +3530,9 @@ export default function Pricing({
                       onChange={(e) => setItemInStock(e.target.checked)}
                       className="accent-amber-600 rounded"
                     />
-                    <span className="text-[12.5px] font-medium text-ink">In Stock / Available</span>
+                    <span className="text-[12.5px] font-medium text-ink">
+                      In Stock / Available
+                    </span>
                   </label>
                 </div>
               </div>
@@ -2996,11 +3562,11 @@ export default function Pricing({
       {/* MODAL: DYNAMIC DELETE DEVOTIONAL OFFERING CONFIRMATION                   */}
       {/* ========================================================================= */}
       {deleteItemModalOpen && itemToDelete && activeGosala && (
-        <div 
+        <div
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
           onClick={handleCancelDeleteItem}
         >
-          <div 
+          <div
             className="bg-card border border-rose-300/90 rounded-md w-full max-w-lg p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
@@ -3015,7 +3581,8 @@ export default function Pricing({
                     Remove Offering Item?
                   </h3>
                   <p className="text-[12px] text-ink-faint mt-0.5">
-                    Review item details below before confirming removal from this shelter
+                    Review item details below before confirming removal from
+                    this shelter
                   </p>
                 </div>
               </div>
@@ -3032,7 +3599,9 @@ export default function Pricing({
             <div className="flex items-center justify-between bg-amber-50/80 border border-amber-200/90 rounded px-3.5 py-2 text-[12px]">
               <div className="flex items-center gap-2 text-amber-950 font-medium truncate">
                 <Building2 size={15} className="text-amber-700 shrink-0" />
-                <span className="truncate">Gaushala: <strong>{activeGosala.name}</strong></span>
+                <span className="truncate">
+                  Gaushala: <strong>{activeGosala.name}</strong>
+                </span>
               </div>
               {activeGosala.region && (
                 <span className="text-[10px] font-mono bg-amber-200/70 text-amber-900 px-2.5 py-0.5 rounded-full font-semibold shrink-0">
@@ -3047,9 +3616,13 @@ export default function Pricing({
                 <div>
                   <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                     {(() => {
-                      const catBadge = CATEGORY_COLORS[itemToDelete.category] || CATEGORY_COLORS.puja
+                      const catBadge =
+                        CATEGORY_COLORS[itemToDelete.category] ||
+                        CATEGORY_COLORS.puja
                       return (
-                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${catBadge.bg}`}>
+                        <span
+                          className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${catBadge.bg}`}
+                        >
                           {catBadge.label}
                         </span>
                       )
@@ -3061,7 +3634,13 @@ export default function Pricing({
                           : "bg-rose-50 text-rose-800 border-rose-200"
                       }`}
                     >
-                      <span className={`h-1.5 w-1.5 rounded-full ${itemToDelete.inStock ? "bg-emerald-600" : "bg-rose-600"}`} />
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          itemToDelete.inStock
+                            ? "bg-emerald-600"
+                            : "bg-rose-600"
+                        }`}
+                      />
                       {itemToDelete.inStock ? "In Stock" : "Out of Stock"}
                     </span>
                   </div>
@@ -3070,7 +3649,9 @@ export default function Pricing({
                   </h4>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="text-[10px] font-mono uppercase text-ink-faint">Seva Price</div>
+                  <div className="text-[10px] font-mono uppercase text-ink-faint">
+                    Seva Price
+                  </div>
                   <div className="font-mono text-[20px] font-bold text-amber-900 tabular">
                     ₹{itemToDelete.price}
                   </div>
@@ -3082,18 +3663,23 @@ export default function Pricing({
                 <span className="font-semibold text-ink text-[10.5px] uppercase tracking-wider block mb-0.5 font-mono text-ink-faint">
                   Devotional Meaning &amp; Details:
                 </span>
-                {itemToDelete.desc || "No special devotional description provided."}
+                {itemToDelete.desc ||
+                  "No special devotional description provided."}
               </div>
 
               {/* Attribute Grid */}
               <div className="grid grid-cols-2 gap-2 pt-0.5 text-[11.5px] font-mono">
                 <div className="bg-card border border-line/70 rounded px-2.5 py-1.5 flex items-center justify-between">
                   <span className="text-ink-faint">Max Allowed / Order:</span>
-                  <span className="font-semibold text-ink">{itemToDelete.maxQty || 5} units</span>
+                  <span className="font-semibold text-ink">
+                    {itemToDelete.maxQty || 5} units
+                  </span>
                 </div>
                 <div className="bg-card border border-line/70 rounded px-2.5 py-1.5 flex items-center justify-between">
                   <span className="text-ink-faint">Item Unique ID:</span>
-                  <span className="font-semibold text-ink truncate max-w-[90px]">{itemToDelete.id}</span>
+                  <span className="font-semibold text-ink truncate max-w-[90px]">
+                    {itemToDelete.id}
+                  </span>
                 </div>
               </div>
             </div>
@@ -3105,7 +3691,9 @@ export default function Pricing({
                 <span>Devotee Catalog Impact</span>
               </div>
               <p className="leading-relaxed text-rose-900/90 pl-5">
-                This item will be immediately delisted from the devotee puja booking tray for <strong>{activeGosala.name}</strong>. Devotees placing new seva requests will not be able to order this item.
+                This item will be immediately delisted from the devotee puja
+                booking tray for <strong>{activeGosala.name}</strong>. Devotees
+                placing new seva requests will not be able to order this item.
               </p>
             </div>
 
@@ -3139,7 +3727,9 @@ export default function Pricing({
               <div className="flex items-center gap-2">
                 <Sparkles size={18} className="text-amber-600" />
                 <h3 className="font-serif text-[17px] font-semibold text-ink">
-                  {editingFeeId ? "Edit Dynamic Proportionate" : "Add Dynamic Proportionate Surcharge"}
+                  {editingFeeId
+                    ? "Edit Dynamic Proportionate"
+                    : "Add Dynamic Proportionate Surcharge"}
                 </h3>
               </div>
               <button
@@ -3151,11 +3741,17 @@ export default function Pricing({
             </div>
 
             <div className="text-[11.5px] text-amber-900 bg-amber-50 border border-amber-200/80 rounded px-3 py-1.5 font-mono">
-              Scope: <strong>Platform Global Master Economics (PostgreSQL Sync)</strong>
+              Scope:{" "}
+              <strong>
+                Platform Global Master Economics (PostgreSQL Sync)
+              </strong>
             </div>
 
             <div className="space-y-3.5">
-              <Field label="Proportionate Surcharge Name" hint="e.g. Festival Surge, Cow Fodder Welfare Levy">
+              <Field
+                label="Proportionate Surcharge Name"
+                hint="e.g. Festival Surge, Cow Fodder Welfare Levy"
+              >
                 <input
                   value={feeName}
                   onChange={(e) => setFeeName(e.target.value)}
@@ -3168,7 +3764,9 @@ export default function Pricing({
                 <Field label="Calculation Mode">
                   <select
                     value={feeType}
-                    onChange={(e) => setFeeType(e.target.value as "fixed" | "percentage")}
+                    onChange={(e) =>
+                      setFeeType(e.target.value as "fixed" | "percentage")
+                    }
                     className={inputCls}
                   >
                     <option value="fixed">Fixed ₹ Flat Amount</option>
@@ -3176,7 +3774,10 @@ export default function Pricing({
                   </select>
                 </Field>
 
-                <Field label="Value" hint={feeType === "fixed" ? "₹ INR" : "% Percent"}>
+                <Field
+                  label="Value"
+                  hint={feeType === "fixed" ? "₹ INR" : "% Percent"}
+                >
                   <input
                     type="number"
                     value={feeValue}
@@ -3187,20 +3788,32 @@ export default function Pricing({
               </div>
 
               {feeType === "percentage" && (
-                <Field label="Proportion Calculation Base" hint="What this percentage is calculated on">
+                <Field
+                  label="Proportion Calculation Base"
+                  hint="What this percentage is calculated on"
+                >
                   <select
                     value={feeAppliedOn}
-                    onChange={(e) => setFeeAppliedOn(e.target.value as "base" | "total" | "transport")}
+                    onChange={(e) =>
+                      setFeeAppliedOn(
+                        e.target.value as "base" | "total" | "transport",
+                      )
+                    }
                     className={inputCls}
                   >
-                    <option value="total">Subtotal (Base + Extra + Transport + Add-ons)</option>
+                    <option value="total">
+                      Subtotal (Base + Extra + Transport + Add-ons)
+                    </option>
                     <option value="base">Base Darshan Seva Only</option>
                     <option value="transport">Transport Distance Only</option>
                   </select>
                 </Field>
               )}
 
-              <Field label="Description & Rationale" hint="Purpose shown to auditors and administrators">
+              <Field
+                label="Description & Rationale"
+                hint="Purpose shown to auditors and administrators"
+              >
                 <textarea
                   rows={2}
                   value={feeDescription}
@@ -3218,7 +3831,9 @@ export default function Pricing({
                     onChange={(e) => setFeeEnabled(e.target.checked)}
                     className="accent-amber-600 rounded"
                   />
-                  <span className="text-[12.5px] font-medium text-ink">Active &amp; Applied Immediately in Live Calculations</span>
+                  <span className="text-[12.5px] font-medium text-ink">
+                    Active &amp; Applied Immediately in Live Calculations
+                  </span>
                 </label>
               </div>
             </div>
@@ -3236,7 +3851,9 @@ export default function Pricing({
                 onClick={handleSaveFee}
                 className="px-4 py-1.5 bg-gradient-to-r from-amber-600 to-amber-700 text-white rounded text-[12.5px] font-medium hover:opacity-90 transition cursor-pointer shadow-2xs"
               >
-                {editingFeeId ? "Save Dynamic Proportionate" : "Add to Platform Config"}
+                {editingFeeId
+                  ? "Save Dynamic Proportionate"
+                  : "Add to Platform Config"}
               </button>
             </div>
           </div>
@@ -3253,7 +3870,9 @@ export default function Pricing({
               <div className="flex items-center gap-2">
                 <Crown size={18} className="text-amber-600" />
                 <h3 className="font-serif text-[17px] font-semibold text-ink">
-                  {editingBovineId ? "Edit Custom Bovine Category" : "Add Custom Bovine Category"}
+                  {editingBovineId
+                    ? "Edit Custom Bovine Category"
+                    : "Add Custom Bovine Category"}
                 </h3>
               </div>
               <button
@@ -3269,7 +3888,10 @@ export default function Pricing({
             </div>
 
             <div className="space-y-3.5">
-              <Field label="Bovine Category Name" hint="e.g. Punganur Miniature Cow, Vedic Homa Pair">
+              <Field
+                label="Bovine Category Name"
+                hint="e.g. Punganur Miniature Cow, Vedic Homa Pair"
+              >
                 <input
                   value={bovineName}
                   onChange={(e) => setBovineName(e.target.value)}
@@ -3279,7 +3901,10 @@ export default function Pricing({
               </Field>
 
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Badge / Breed Tag" hint="e.g. Rare Indigenous, Vedic Seva">
+                <Field
+                  label="Badge / Breed Tag"
+                  hint="e.g. Rare Indigenous, Vedic Seva"
+                >
                   <input
                     value={bovineBadgeText}
                     onChange={(e) => setBovineBadgeText(e.target.value)}
@@ -3298,7 +3923,10 @@ export default function Pricing({
                 </Field>
               </div>
 
-              <Field label="Category Description" hint="Ceremonial context, significance, ritual suitability">
+              <Field
+                label="Category Description"
+                hint="Ceremonial context, significance, ritual suitability"
+              >
                 <textarea
                   rows={2}
                   value={bovineDescription}
@@ -3322,7 +3950,9 @@ export default function Pricing({
                 onClick={handleSaveBovine}
                 className="px-4 py-1.5 bg-gradient-to-r from-amber-600 to-amber-700 text-white rounded text-[12.5px] font-medium hover:opacity-90 transition cursor-pointer shadow-2xs"
               >
-                {editingBovineId ? "Save Category Changes" : "Add to Sanctuary Slabs"}
+                {editingBovineId
+                  ? "Save Category Changes"
+                  : "Add to Sanctuary Slabs"}
               </button>
             </div>
           </div>
@@ -3353,7 +3983,9 @@ export default function Pricing({
             <div className="text-[12px] text-amber-900 bg-amber-50 border border-amber-200/80 rounded px-3 py-2 flex items-center justify-between">
               <div>
                 <strong>{econTargetGosala.name}</strong>
-                <span className="text-ink-faint text-[11px] block">{econTargetGosala.region}</span>
+                <span className="text-ink-faint text-[11px] block">
+                  {econTargetGosala.region}
+                </span>
               </div>
               <span className="font-mono text-[10.5px] bg-white text-amber-950 px-2 py-0.5 rounded border border-amber-200">
                 {econTargetGosala.trustRegistrationNo || "AWBI Trust"}
@@ -3375,7 +4007,9 @@ export default function Pricing({
                     setEconTaxTreatment("section_80g_exempt")
                     setEconCustomTaxPct(0)
                     setEconBufferMin(30)
-                    setEconNotes("Close Partner Sanctuary - Subsidized 8% preferential commission")
+                    setEconNotes(
+                      "Close Partner Sanctuary - Subsidized 8% preferential commission",
+                    )
                   }}
                   className="px-2.5 py-1 text-[11px] bg-emerald-50 text-emerald-800 border border-emerald-300 rounded font-medium hover:bg-emerald-100 transition cursor-pointer flex items-center gap-1"
                 >
@@ -3391,7 +4025,9 @@ export default function Pricing({
                     setEconTaxTreatment("section_80g_exempt")
                     setEconCustomTaxPct(0)
                     setEconBufferMin(45)
-                    setEconNotes("Charitable Welfare Trust - Subsidized 5% seva rate")
+                    setEconNotes(
+                      "Charitable Welfare Trust - Subsidized 5% seva rate",
+                    )
                   }}
                   className="px-2.5 py-1 text-[11px] bg-indigo-50 text-indigo-800 border border-indigo-200 rounded font-medium hover:bg-indigo-100 transition cursor-pointer"
                 >
@@ -3420,12 +4056,20 @@ export default function Pricing({
                 <Field label="Partnership Tier">
                   <select
                     value={econTier}
-                    onChange={(e) => setEconTier(e.target.value as PartnershipTier)}
+                    onChange={(e) =>
+                      setEconTier(e.target.value as PartnershipTier)
+                    }
                     className={inputCls}
                   >
-                    <option value="PREFERRED">★ Preferred Partner (Low Commission)</option>
-                    <option value="CHARITABLE">Charitable Seva Trust (Subsidized)</option>
-                    <option value="STANDARD">Standard Platform Affiliate</option>
+                    <option value="PREFERRED">
+                      ★ Preferred Partner (Low Commission)
+                    </option>
+                    <option value="CHARITABLE">
+                      Charitable Seva Trust (Subsidized)
+                    </option>
+                    <option value="STANDARD">
+                      Standard Platform Affiliate
+                    </option>
                     <option value="COMMERCIAL">Commercial Enterprise</option>
                     <option value="CUSTOM">Bilateral Custom Slab</option>
                   </select>
@@ -3434,7 +4078,9 @@ export default function Pricing({
                 <Field label="Commission Model">
                   <select
                     value={econCommType}
-                    onChange={(e) => setEconCommType(e.target.value as CommissionType)}
+                    onChange={(e) =>
+                      setEconCommType(e.target.value as CommissionType)
+                    }
                     className={inputCls}
                   >
                     <option value="percentage">Percentage % Proportion</option>
@@ -3445,7 +4091,11 @@ export default function Pricing({
 
               <div className="grid grid-cols-2 gap-3">
                 <Field
-                  label={econCommType === "fixed" ? "Flat Commission" : "Commission Percentage"}
+                  label={
+                    econCommType === "fixed"
+                      ? "Flat Commission"
+                      : "Commission Percentage"
+                  }
                   hint={econCommType === "fixed" ? "₹ INR" : "% Cut"}
                 >
                   <input
@@ -3470,12 +4120,20 @@ export default function Pricing({
                 <Field label="Trust Tax Treatment">
                   <select
                     value={econTaxTreatment}
-                    onChange={(e) => setEconTaxTreatment(e.target.value as TaxTreatment)}
+                    onChange={(e) =>
+                      setEconTaxTreatment(e.target.value as TaxTreatment)
+                    }
                     className={inputCls}
                   >
-                    <option value="section_80g_exempt">Section 80G Exempt (0% Tax)</option>
-                    <option value="reduced_charity_gst">Concessional Charity GST (5%)</option>
-                    <option value="standard_gst">Standard Commercial GST (18%)</option>
+                    <option value="section_80g_exempt">
+                      Section 80G Exempt (0% Tax)
+                    </option>
+                    <option value="reduced_charity_gst">
+                      Concessional Charity GST (5%)
+                    </option>
+                    <option value="standard_gst">
+                      Standard Commercial GST (18%)
+                    </option>
                     <option value="custom_rate">Custom Tax Percentage</option>
                   </select>
                 </Field>
@@ -3485,7 +4143,9 @@ export default function Pricing({
                     <input
                       type="number"
                       value={econCustomTaxPct}
-                      onChange={(e) => setEconCustomTaxPct(Number(e.target.value))}
+                      onChange={(e) =>
+                        setEconCustomTaxPct(Number(e.target.value))
+                      }
                       className={inputCls}
                     />
                   </Field>
@@ -3497,15 +4157,18 @@ export default function Pricing({
                         {econTaxTreatment === "section_80g_exempt"
                           ? "0% (Exempt)"
                           : econTaxTreatment === "reduced_charity_gst"
-                          ? "5%"
-                          : "18%"}
+                            ? "5%"
+                            : "18%"}
                       </strong>
                     </span>
                   </div>
                 )}
               </div>
 
-              <Field label="Partnership Notes &amp; Rationale" hint="Visible in Super Admin ledger &amp; audit">
+              <Field
+                label="Partnership Notes &amp; Rationale"
+                hint="Visible in Super Admin ledger &amp; audit"
+              >
                 <textarea
                   rows={2}
                   value={econNotes}
@@ -3557,7 +4220,11 @@ export default function Pricing({
               disabled={isSaving}
               className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-full text-[12px] font-semibold flex items-center gap-1.5 transition shadow-sm cursor-pointer"
             >
-              {isSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+              {isSaving ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Save size={13} />
+              )}
               <span>Publish & Sync to DB</span>
             </button>
           </div>

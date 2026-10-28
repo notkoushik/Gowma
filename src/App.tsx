@@ -39,25 +39,15 @@ import ManagerApp from "./views/ManagerApp"
 import DriverApp from "./views/DriverApp"
 import CustomerApp from "./views/CustomerApp"
 import EditProfileModal from "./components/EditProfileModal"
+import { Skeleton } from "./components/common/Skeleton"
 import { useStore, useToast } from "./store/store"
 import { useRealtime } from "./hooks/useRealtime"
 import type { RoleId } from "./data/roles"
 import { api } from "./services/api"
 
-type View =
-  | "overview"
-  | "gosalas"
-  | "managers"
-  | "bookings"
-  | "tracking"
-  | "animals"
-  | "ledger"
-  | "availability"
-  | "pricing"
-  | "settlements"
-  | "wallet"
+type View = "overview" | "gosalas" | "managers" | "bookings" | "tracking" | "animals" | "ledger" | "availability" | "pricing" | "settlements" | "wallet"
 
-const titles: Record<View, { title: string; desc: string }> = {
+const titles: Record<View, { title: string desc: string }> = {
   overview: {
     title: "Regional Operations & Treasury",
     desc: "Real-time booking pipeline, revenue metrics and network health across regional sanctuaries",
@@ -125,7 +115,11 @@ const VALID_ADMIN_VIEWS: View[] = [
   "settlements",
 ]
 
-function parseHash(): { role: RoleId | null | undefined; subview?: string; sector?: string } {
+function parseHash(): {
+  role: RoleId | null | undefined
+  subview?: string
+  sector?: string
+} {
   if (typeof window === "undefined") return { role: undefined }
   const hash = window.location.hash.replace(/^#\/?/, "").toLowerCase()
   if (!hash) return { role: undefined }
@@ -154,7 +148,10 @@ function getInitialPricingSector(): "global" | "gosalas" | "commissions" {
 }
 
 function getInitialAuth(): RoleId | null {
-  const token = typeof window !== "undefined" ? localStorage.getItem("gomaa_auth_token") : null
+  const token =
+    typeof window !== "undefined"
+      ? localStorage.getItem("gomaa_auth_token")
+      : null
   if (!token) return null
 
   const fromHash = parseHash().role
@@ -203,19 +200,28 @@ function CaptainAccessGate({
           {feature}
         </h2>
         <p className="text-[13px] text-amber-900/80 mt-1.5 max-w-lg mx-auto leading-relaxed">
-          This module configures live PostgreSQL database economics, platform commission splits,
-          and bank treasury disbursements. It is strictly reserved for the <strong>Super Admin ("The Captain")</strong>.
+          This module configures live PostgreSQL database economics, platform
+          commission splits, and bank treasury disbursements. It is strictly
+          reserved for the <strong>Super Admin ("The Captain")</strong>.
         </p>
       </div>
 
       <div className="p-4 bg-white/90 border border-amber-200/80 rounded-sm text-left text-[12.5px] text-ink-soft space-y-2 max-w-md mx-auto font-sans shadow-2xs">
         <div className="flex items-start gap-2">
           <span className="text-forest font-bold shrink-0">✓</span>
-          <span><strong>Operations Admin Scope:</strong> Managing regional Gaushalas, assigning custodians, reviewing devotee bookings, monitoring live GPS fleet, and animal resting schedules.</span>
+          <span>
+            <strong>Operations Admin Scope:</strong> Managing regional
+            Gaushalas, assigning custodians, reviewing devotee bookings,
+            monitoring live GPS fleet, and animal resting schedules.
+          </span>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-amber-600 font-bold shrink-0">★</span>
-          <span><strong>Super Admin Captain Scope:</strong> Database Master Pricing, 80/20 platform-to-Gosala split formulas, NACH batch payout clearances, and overall network governance.</span>
+          <span>
+            <strong>Super Admin Captain Scope:</strong> Database Master Pricing,
+            80/20 platform-to-Gosala split formulas, NACH batch payout
+            clearances, and overall network governance.
+          </span>
         </div>
       </div>
 
@@ -246,12 +252,14 @@ export default function App() {
     profiles,
     pricingConfig,
     authUser,
+    isLoading,
     setAuthSession,
     clearAuthSession,
   } = useStore()
   const [auth, setAuth] = useState<RoleId | null>(getInitialAuth)
   const [view, setView] = useState<View>(getInitialAdminView)
-  const [pricingSector, setPricingSector] = useState<"global" | "gosalas" | "commissions">(getInitialPricingSector)
+  const [pricingSector, setPricingSector] =
+    useState<"global" | "gosalas" | "commissions">(getInitialPricingSector)
   const [isPricingMenuOpen, setIsPricingMenuOpen] = useState(true)
   const [isMaximized, setIsMaximized] = useState(false)
   const [editAdminProfileOpen, setEditAdminProfileOpen] = useState(false)
@@ -280,11 +288,16 @@ export default function App() {
     const next = !isMaximized
     setIsMaximized(next)
     if (next) {
-      notify("Maximized view enabled · Press ESC or click Minimize to restore normal layout", "info")
+      notify(
+        "Maximized view enabled · Press ESC or click Minimize to restore normal layout",
+        "info",
+      )
     }
   }
 
-  const handleSetPricingSector = (sec: "global" | "gosalas" | "commissions") => {
+  const handleSetPricingSector = (
+    sec: "global" | "gosalas" | "commissions",
+  ) => {
     setPricingSector(sec)
     try {
       localStorage.setItem("gomaa_pricing_sector", sec)
@@ -322,7 +335,9 @@ export default function App() {
   const dynamicRegion = useMemo(() => {
     let raw = ""
     if (activeGosalaFilter !== "ALL") {
-      const g = gosalas.find((x) => x.id === activeGosalaFilter || x.name === activeGosalaFilter)
+      const g = gosalas.find(
+        (x) => x.id === activeGosalaFilter || x.name === activeGosalaFilter,
+      )
       if (g?.region) raw = g.region
       else if (g?.address) raw = g.address
     }
@@ -332,7 +347,10 @@ export default function App() {
     }
     if (!raw) return "Regional"
     if (raw.includes(",")) {
-      const parts = raw.split(",").map((s) => s.trim()).filter(Boolean)
+      const parts = raw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
       const last = parts[parts.length - 1]
       if (last && isNaN(Number(last))) return last
     }
@@ -402,13 +420,15 @@ export default function App() {
               role === "super_admin"
                 ? "Switched to Super Admin Captain mode · Global Sovereign Authority"
                 : "Switched to Operations Admin mode · Scoped Gaushala Management",
-              "ok"
+              "ok",
             )
             return
           }
         }
       }
-      throw new Error("Context switching is strictly reserved for Super Admin accounts.")
+      throw new Error(
+        "Context switching is strictly reserved for Super Admin accounts.",
+      )
     } catch (err: any) {
       console.warn("Authentication failed on role switch:", err)
       notify(err.message || "Authentication failed: Invalid credentials", "err")
@@ -423,9 +443,15 @@ export default function App() {
     }
   }
 
-  const handleSetAdminView = (v: View, targetSector?: "global" | "gosalas" | "commissions") => {
+  const handleSetAdminView = (
+    v: View,
+    targetSector?: "global" | "gosalas" | "commissions",
+  ) => {
     if (auth === "super_admin" && v === "tracking") {
-      notify("Live fleet GPS tracking is restricted to Operations Admin to conserve network bandwidth.", "warn")
+      notify(
+        "Live fleet GPS tracking is restricted to Operations Admin to conserve network bandwidth.",
+        "warn",
+      )
       setView("overview")
       window.location.hash = "#super_admin/overview"
       return
@@ -557,12 +583,9 @@ export default function App() {
   }, [])
 
   if (!auth) return <Login onSignIn={(role) => handleLoginSuccess(role)} />
-  if (auth === "customer")
-    return <CustomerApp onSignOut={handleSignOut} />
-  if (auth === "manager")
-    return <ManagerApp onSignOut={handleSignOut} />
-  if (auth === "driver")
-    return <DriverApp onSignOut={handleSignOut} />
+  if (auth === "customer") return <CustomerApp onSignOut={handleSignOut} />
+  if (auth === "manager") return <ManagerApp onSignOut={handleSignOut} />
+  if (auth === "driver") return <DriverApp onSignOut={handleSignOut} />
 
   const isSuperAdmin = auth === "super_admin"
 
@@ -598,7 +621,10 @@ export default function App() {
     },
     {
       id: "gosalas",
-      label: dynamicRegion !== "Regional" ? `${dynamicRegion} Gaushalas` : "Gaushalas Network",
+      label:
+        dynamicRegion !== "Regional"
+          ? `${dynamicRegion} Gaushalas`
+          : "Gaushalas Network",
       icon: Building2,
       badge: `${gosalas.length}`,
     },
@@ -622,7 +648,10 @@ export default function App() {
     { id: "wallet", label: "Treasury & Wallets", icon: Wallet },
     {
       id: "gosalas",
-      label: dynamicRegion !== "Regional" ? `${dynamicRegion} Gaushalas` : "Gaushalas Network",
+      label:
+        dynamicRegion !== "Regional"
+          ? `${dynamicRegion} Gaushalas`
+          : "Gaushalas Network",
       icon: Building2,
       badge: `${gosalas.length}`,
     },
@@ -645,7 +674,8 @@ export default function App() {
       id: "tracking",
       label: "Live Fleet GPS",
       icon: Navigation,
-      badge: activeTransitsCount > 0 ? `${activeTransitsCount} live` : undefined,
+      badge:
+        activeTransitsCount > 0 ? `${activeTransitsCount} live` : undefined,
     },
     {
       id: "animals",
@@ -670,16 +700,20 @@ export default function App() {
           desc: `${dynamicRegion} Gaushala directory, AWBI trust compliance, facility capacities & photo galleries`,
         }
       : view === "ledger"
-      ? {
-          title: `Regional Treasury & ${currentGaushalaPct}/${currentCommPct} Revenue Ledger`,
-          desc: `Network revenue split: ${currentGaushalaPct}% Gaushala net share, 100% transport pass-through & platform escrow`,
-        }
-      : baseTitle
+        ? {
+            title: `Regional Treasury & ${currentGaushalaPct}/${currentCommPct} Revenue Ledger`,
+            desc: `Network revenue split: ${currentGaushalaPct}% Gaushala net share, 100% transport pass-through & platform escrow`,
+          }
+        : baseTitle
 
   return (
     <div className="min-h-screen bg-paper text-ink flex">
       {/* Sidebar */}
-      <aside className={`${isMaximized ? "hidden" : "hidden lg:flex"} w-[240px] shrink-0 flex-col border-r border-line bg-card sticky top-0 h-screen justify-between transition-all duration-200`}>
+      <aside
+        className={`${
+          isMaximized ? "hidden" : "hidden lg:flex"
+        } w-[240px] shrink-0 flex-col border-r border-line bg-card sticky top-0 h-screen justify-between transition-all duration-200`}
+      >
         <div className="flex flex-col min-h-0">
           <div className="px-5 h-16 flex items-center gap-3 border-b border-line shrink-0">
             <div
@@ -689,7 +723,11 @@ export default function App() {
                   : "bg-forest"
               }`}
             >
-              {isSuperAdmin ? <Crown size={18} className="stroke-[2.2]" /> : "OA"}
+              {isSuperAdmin ? (
+                <Crown size={18} className="stroke-[2.2]" />
+              ) : (
+                "OA"
+              )}
             </div>
             <div className="min-w-0">
               <div className="font-serif text-[18px] leading-none text-ink flex items-center gap-1.5">
@@ -705,7 +743,9 @@ export default function App() {
                 )}
               </div>
               <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-ink-faint mt-1 truncate">
-                {isSuperAdmin ? "Platform Captain · Finance Master" : `Operations Admin · ${dynamicRegion.toUpperCase()}`}
+                {isSuperAdmin
+                  ? "Platform Captain · Finance Master"
+                  : `Operations Admin · ${dynamicRegion.toUpperCase()}`}
               </div>
             </div>
           </div>
@@ -749,8 +789,16 @@ export default function App() {
                           setIsPricingMenuOpen((prev) => !prev)
                         }}
                         className="p-2 mr-1 text-ink-faint hover:text-amber-700 hover:bg-amber-100/50 rounded-xs transition cursor-pointer"
-                        title={isOpen ? "Collapse pricing sub-sectors" : "Expand pricing sub-sectors"}
-                        aria-label={isOpen ? "Collapse pricing sub-sectors" : "Expand pricing sub-sectors"}
+                        title={
+                          isOpen
+                            ? "Collapse pricing sub-sectors"
+                            : "Expand pricing sub-sectors"
+                        }
+                        aria-label={
+                          isOpen
+                            ? "Collapse pricing sub-sectors"
+                            : "Expand pricing sub-sectors"
+                        }
                       >
                         <ChevronRight
                           size={13}
@@ -775,8 +823,13 @@ export default function App() {
                               : "text-ink-soft hover:bg-paper-deep hover:text-ink"
                           }`}
                         >
-                          <SlidersHorizontal size={13} className="text-saffron-deep shrink-0" />
-                          <span className="truncate">Global Platform Rules</span>
+                          <SlidersHorizontal
+                            size={13}
+                            className="text-saffron-deep shrink-0"
+                          />
+                          <span className="truncate">
+                            Global Platform Rules
+                          </span>
                         </button>
 
                         <button
@@ -790,8 +843,13 @@ export default function App() {
                               : "text-ink-soft hover:bg-paper-deep hover:text-ink"
                           }`}
                         >
-                          <Building2 size={13} className="text-amber-700 shrink-0" />
-                          <span className="truncate">Individual Gaushala Pricing</span>
+                          <Building2
+                            size={13}
+                            className="text-amber-700 shrink-0"
+                          />
+                          <span className="truncate">
+                            Individual Gaushala Pricing
+                          </span>
                         </button>
 
                         <button
@@ -805,8 +863,13 @@ export default function App() {
                               : "text-ink-soft hover:bg-paper-deep hover:text-ink"
                           }`}
                         >
-                          <Percent size={13} className="text-amber-800 shrink-0" />
-                          <span className="truncate">Commission &amp; Economics</span>
+                          <Percent
+                            size={13}
+                            className="text-amber-800 shrink-0"
+                          />
+                          <span className="truncate">
+                            Commission &amp; Economics
+                          </span>
                         </button>
                       </div>
                     )}
@@ -859,18 +922,36 @@ export default function App() {
                   : "bg-forest"
               }`}
             >
-              {isSuperAdmin ? (
+              {isLoading ? (
+                <Skeleton variant="circular" className="h-8 w-8" />
+              ) : isSuperAdmin ? (
                 <Crown size={14} className="stroke-[2.2]" />
               ) : (
-                (profiles?.[auth]?.name || "DS").slice(0, 2).toUpperCase()
+                (authUser?.name || profiles?.[auth]?.name || "")
+                  .slice(0, 2)
+                  .toUpperCase() || "OP"
               )}
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-[12.5px] text-ink truncate font-medium group-hover:text-saffron-deep flex items-center gap-1.5">
-                <span>{profiles?.[auth]?.name || (isSuperAdmin ? "Koushik" : "Operations Admin")}</span>
+                {isLoading ? (
+                  <Skeleton variant="text" className="h-4 w-28 my-0.5" />
+                ) : authUser?.name || profiles?.[auth]?.name ? (
+                  <span>{authUser?.name || profiles?.[auth]?.name}</span>
+                ) : (
+                  <span className="text-amber-600 dark:text-amber-400 text-[11.5px] italic">
+                    Configure Profile
+                  </span>
+                )}
               </div>
               <div className="text-[10.5px] text-ink-faint truncate font-mono">
-                {isSuperAdmin ? "Platform Captain · Master" : "Operations Lead · Regional Hub"}
+                {isLoading ? (
+                  <Skeleton variant="text" className="h-3 w-32 mt-1" />
+                ) : isSuperAdmin ? (
+                  "Platform Captain · Master"
+                ) : (
+                  "Operations Lead · Regional Hub"
+                )}
               </div>
             </div>
             <button
@@ -909,7 +990,11 @@ export default function App() {
                     <span>Captain Supreme Authority</span>
                   </>
                 ) : (
-                  <span>{dynamicRegion !== "Regional" ? `${dynamicRegion} Hub` : "Operations Hub"}</span>
+                  <span>
+                    {dynamicRegion !== "Regional"
+                      ? `${dynamicRegion} Hub`
+                      : "Operations Hub"}
+                  </span>
                 )}
               </span>
             </div>
@@ -919,7 +1004,9 @@ export default function App() {
           </div>
           <div className="ml-auto flex items-center gap-2">
             {/* Quick Switcher Between Super Admin Captain & Operations Admin - Exclusively for Super Admin */}
-            {(authUser?.role === "super_admin" || authUser?.originalRole === "super_admin" || auth === "super_admin") && (
+            {(authUser?.role === "super_admin" ||
+              authUser?.originalRole === "super_admin" ||
+              auth === "super_admin") && (
               <div className="flex items-center bg-paper-deep border border-line rounded-sm p-0.5 text-[11.5px] font-medium shrink-0">
                 <button
                   onClick={() => handleSetAuth("super_admin")}
@@ -930,7 +1017,10 @@ export default function App() {
                   }`}
                   title="Super Admin Captain: Sovereign Platform Authority, Master Pricing & Economics"
                 >
-                  <Crown size={12} className={isSuperAdmin ? "stroke-[2.5]" : ""} />
+                  <Crown
+                    size={12}
+                    className={isSuperAdmin ? "stroke-[2.5]" : ""}
+                  />
                   <span>Captain</span>
                 </button>
                 <button
@@ -985,8 +1075,14 @@ export default function App() {
                   ? "bg-amber-600 text-white border-amber-600 shadow-2xs hover:bg-amber-700"
                   : "bg-card text-ink-soft hover:text-ink border-line hover:bg-paper-deep"
               }`}
-              title={isMaximized ? "Exit Maximized View (Restore Sidebar)" : "Maximize Workspace (Hide Sidebar & Expand)"}
-              aria-label={isMaximized ? "Exit Maximized View" : "Maximize Workspace"}
+              title={
+                isMaximized
+                  ? "Exit Maximized View (Restore Sidebar)"
+                  : "Maximize Workspace (Hide Sidebar & Expand)"
+              }
+              aria-label={
+                isMaximized ? "Exit Maximized View" : "Maximize Workspace"
+              }
             >
               {isMaximized ? (
                 <>

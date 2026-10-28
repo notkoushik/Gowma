@@ -57,7 +57,8 @@ export function getGaushalaServiceability(
       badgeClass: "bg-warn-soft text-warn border-warn/30",
       isDirectBookingAllowed: true,
       estimatedTransitMin,
-      noticeMessage: "Extended welfare transit requires dedicated resting buffer & hydration stops.",
+      noticeMessage:
+        "Extended welfare transit requires dedicated resting buffer & hydration stops.",
     }
   }
 
@@ -68,7 +69,8 @@ export function getGaushalaServiceability(
     badgeClass: "bg-paper-deep text-ink-soft border-line",
     isDirectBookingAllowed: false,
     estimatedTransitMin,
-    noticeMessage: "Direct doorstep van delivery is outside normal radius. Contact sanctuary for special seva arrangements.",
+    noticeMessage:
+      "Direct doorstep van delivery is outside normal radius. Contact sanctuary for special seva arrangements.",
   }
 }
 
@@ -79,7 +81,7 @@ export function sortGaushalasByProximity<T extends GeoLocationTarget>(
   gaushalas: T[],
   userLat: number | null,
   userLng: number | null,
-): { gosala: T; serviceability: ServiceabilityInfo }[] {
+): { gosala: T serviceability: ServiceabilityInfo }[] {
   return gaushalas
     .map((g) => ({
       gosala: g,

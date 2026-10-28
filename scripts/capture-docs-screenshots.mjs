@@ -53,13 +53,13 @@ async function capture() {
     const emailInput = await page.$('input[type="text"], input[type="email"]')
     if (emailInput) {
       await emailInput.click({ clickCount: 3 })
-      await emailInput.type("koushik@gmail.com")
+      await emailInput.type("superadmin@gomaa.in")
     }
 
     const passInput = await page.$('input[type="password"]')
     if (passInput) {
       await passInput.click({ clickCount: 3 })
-      await passInput.type("Koushik.git")
+      await passInput.type("SuperAdmin@2026!")
     }
 
     const submitBtn = await page.$('button[type="submit"]')
@@ -136,7 +136,7 @@ async function capture() {
     const mPassInput = await page.$('input[type="password"]')
     if (mPassInput) {
       await mPassInput.click({ clickCount: 3 })
-      await mPassInput.type("Koushik.git")
+      await mPassInput.type("GomaaAdmin@2026!")
     }
 
     const mSubmitBtn = await page.$('button[type="submit"]')
@@ -161,7 +161,7 @@ async function capture() {
     const admPassInput = await page.$('input[type="password"]')
     if (admPassInput) {
       await admPassInput.click({ clickCount: 3 })
-      await admPassInput.type("Koushik.git")
+      await admPassInput.type("GomaaAdmin@2026!")
     }
 
     const admSubmitBtn = await page.$('button[type="submit"]')

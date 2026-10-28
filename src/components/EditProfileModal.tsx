@@ -62,24 +62,54 @@ export default function EditProfileModal({
   isOpen?: boolean
   onClose: () => void
 }) {
-  const { profiles, updateProfile, bookings, animals, gosalas, settlements, pricingConfig } = useStore()
+  const {
+    profiles,
+    updateProfile,
+    bookings,
+    animals,
+    gosalas,
+    settlements,
+    pricingConfig,
+    authUser,
+  } = useStore()
   const { notify } = useToast()
 
   // Strict Privacy: Only inspect and edit the active user's own role
   const selectedRole = role
 
   const profile: RoleProfile = useMemo(() => {
-    return profiles?.[selectedRole] || initialProfiles[selectedRole] || initialProfiles.super_admin
-  }, [profiles, selectedRole])
+    const base =
+      profiles?.[selectedRole] ||
+      initialProfiles[selectedRole] ||
+      initialProfiles.super_admin
+    if (
+      authUser &&
+      (authUser.role === selectedRole || authUser.activeRole === selectedRole)
+    ) {
+      return {
+        ...base,
+        name: authUser.name || base.name,
+        email: authUser.email || base.email,
+        phone: authUser.phone || base.phone,
+      }
+    }
+    return base
+  }, [profiles, selectedRole, authUser])
 
   // View vs Edit Mode
   const [isEditing, setIsEditing] = useState(false)
   const [isAddingBank, setIsAddingBank] = useState(false)
-  const [activeTab, setActiveTab] = useState<"credentials" | "banking" | "metrics" | "compliance" | "sharesplit">("credentials")
+  const [activeTab, setActiveTab] =
+    useState<"credentials" | "banking" | "metrics" | "compliance" | "sharesplit">(
+      "credentials",
+    )
 
   // Operations Admin - Manager Share Split State
-  const [sharePolicies, setSharePolicies] = useState<ManagerSharePolicy[]>(() => getAllManagerSharePolicies())
-  const [selectedShareManagerEmail, setSelectedShareManagerEmail] = useState<string>("manager1@gomaa.in")
+  const [sharePolicies, setSharePolicies] = useState<ManagerSharePolicy[]>(() =>
+    getAllManagerSharePolicies(),
+  )
+  const [selectedShareManagerEmail, setSelectedShareManagerEmail] =
+    useState<string>("manager1@gomaa.in")
   const [modalSharePct, setModalSharePct] = useState<number>(25)
   const [modalBonusPerPuja, setModalBonusPerPuja] = useState<number>(100)
   const [savingSharePolicy, setSavingSharePolicy] = useState(false)
@@ -222,19 +252,25 @@ export default function EditProfileModal({
 
   // Active Manager Policy for Operations Admin Governance
   const activePolicy = useMemo(() => {
-    const found = sharePolicies.find((p) => p.managerEmail.toLowerCase() === selectedShareManagerEmail.toLowerCase())
+    const found = sharePolicies.find(
+      (p) =>
+        p.managerEmail.toLowerCase() ===
+        selectedShareManagerEmail.toLowerCase(),
+    )
     if (found) return found
-    return sharePolicies[0] || {
-      managerId: "GMA-MGR-0101",
-      managerEmail: "manager1@gomaa.in",
-      managerName: "Shyam Sundar Sharma",
-      gosalaName: "Nandini Goseva Sadan",
-      managerSharePct: 25,
-      gosalaCorpusPct: 75,
-      bonusPerPuja: 100,
-      lastUpdated: new Date().toISOString(),
-      updatedBy: "Operations Admin",
-    }
+    return (
+      sharePolicies[0] || {
+        managerId: "GMA-MGR-0001",
+        managerEmail: selectedShareManagerEmail || "manager@gomaa.in",
+        managerName: "Gaushala Manager",
+        gosalaName: "Governed Gaushala",
+        managerSharePct: 25,
+        gosalaCorpusPct: 75,
+        bonusPerPuja: 100,
+        lastUpdated: new Date().toISOString(),
+        updatedBy: "Operations Admin",
+      }
+    )
   }, [sharePolicies, selectedShareManagerEmail])
 
   useEffect(() => {
@@ -245,7 +281,12 @@ export default function EditProfileModal({
   }, [activePolicy])
 
   const modalSimulation = useMemo(() => {
-    return simulatePujaSplit(4000, pricingConfig?.commissionPct || 20, modalSharePct, modalBonusPerPuja)
+    return simulatePujaSplit(
+      4000,
+      pricingConfig?.commissionPct || 20,
+      modalSharePct,
+      modalBonusPerPuja,
+    )
   }, [pricingConfig, modalSharePct, modalBonusPerPuja])
 
   const handleSaveSharePolicyModal = () => {
@@ -262,7 +303,10 @@ export default function EditProfileModal({
         }
         saveManagerSharePolicy(updated)
         setSharePolicies(getAllManagerSharePolicies())
-        notify(`Updated share split for ${activePolicy.managerName} to ${modalSharePct}% Manager / ${100 - modalSharePct}% Sanctuary Corpus!`, "ok")
+        notify(
+          `Updated share split for ${activePolicy.managerName} to ${modalSharePct}% Manager / ${100 - modalSharePct}% Sanctuary Corpus!`,
+          "ok",
+        )
       } catch (err: any) {
         notify(`Failed to save policy: ${err?.message}`, "danger")
       } finally {
@@ -307,49 +351,144 @@ export default function EditProfileModal({
   // Role-specific dynamic live metrics computed from store
   const roleMetrics = useMemo(() => {
     if (selectedRole === "manager") {
-      const targetGosala = profile?.managerData?.gosala || gosala || "Shri Krishna Gaushala"
+      const targetGosala =
+        profile?.managerData?.gosala || gosala || "Shri Krishna Gaushala"
       const myBookings = bookings.filter((b) => b.gosala === targetGosala)
       const myAnimals = animals.filter((a) => a.gosala === targetGosala)
       const mySettlements = settlements.filter((s) => s.gosala === targetGosala)
-      const totalEarned = myBookings.reduce((sum, b) => sum + (b.total ? b.total * 0.8 : 0), 0)
+      const totalEarned = myBookings.reduce(
+        (sum, b) => sum + (b.total ? b.total * 0.8 : 0),
+        0,
+      )
 
       return {
-        metric1: { label: "Ceremonial Darshans Hosted", value: myBookings.length, sub: "Verified devotions" },
-        metric2: { label: "Sacred Herd Under Custody", value: myAnimals.length, sub: "Cows, calves & bulls" },
-        metric3: { label: "Gaushala 80% Net Share", value: `₹${Math.round(totalEarned).toLocaleString("en-IN")}`, sub: "Direct Trust Proceeds" },
-        metric4: { label: "Daily Ceremony Ceiling", value: `${dailyCeiling} / day`, sub: `${restingBuffer}m mandatory rest` },
+        metric1: {
+          label: "Ceremonial Darshans Hosted",
+          value: myBookings.length,
+          sub: "Verified devotions",
+        },
+        metric2: {
+          label: "Sacred Herd Under Custody",
+          value: myAnimals.length,
+          sub: "Cows, calves & bulls",
+        },
+        metric3: {
+          label: "Gaushala 80% Net Share",
+          value: `₹${Math.round(totalEarned).toLocaleString("en-IN")}`,
+          sub: "Direct Trust Proceeds",
+        },
+        metric4: {
+          label: "Daily Ceremony Ceiling",
+          value: `${dailyCeiling} / day`,
+          sub: `${restingBuffer}m mandatory rest`,
+        },
       }
     } else if (selectedRole === "admin") {
       return {
-        metric1: { label: "Regional Gaushalas Supervised", value: gosalas.length, sub: "Regional Operational Hub" },
-        metric2: { label: "Booking Lifecycles Audited", value: bookings.length, sub: "100% SLA Adherence" },
-        metric3: { label: "Regional Sacred Cattle Index", value: animals.length, sub: "Empanelled herd" },
-        metric4: { label: "Authority Clearance", value: "Operations Admin", sub: "Disbursement Officer" },
+        metric1: {
+          label: "Regional Gaushalas Supervised",
+          value: gosalas.length,
+          sub: "Regional Operational Hub",
+        },
+        metric2: {
+          label: "Booking Lifecycles Audited",
+          value: bookings.length,
+          sub: "100% SLA Adherence",
+        },
+        metric3: {
+          label: "Regional Sacred Cattle Index",
+          value: animals.length,
+          sub: "Empanelled herd",
+        },
+        metric4: {
+          label: "Authority Clearance",
+          value: "Operations Admin",
+          sub: "Disbursement Officer",
+        },
       }
     } else if (selectedRole === "super_admin") {
       const grossVolume = settlements.reduce((sum, s) => sum + s.gross, 0)
       return {
-        metric1: { label: "Total Platform Volume", value: `₹${grossVolume.toLocaleString("en-IN")}`, sub: "Pan-India Gross Treasury" },
-        metric2: { label: "Governed Gaushalas", value: gosalas.length, sub: "AWBI Compliant Network" },
-        metric3: { label: "Platform Commission Base", value: `${pricingConfig?.commissionPct || 20}%`, sub: `${100 - (pricingConfig?.commissionPct || 20)}/${pricingConfig?.commissionPct || 20} Trust Split Protocol` },
-        metric4: { label: "Treasury Authority", value: "Master Authority", sub: "ICICI Nodal Custody" },
+        metric1: {
+          label: "Total Platform Volume",
+          value: `₹${grossVolume.toLocaleString("en-IN")}`,
+          sub: "Pan-India Gross Treasury",
+        },
+        metric2: {
+          label: "Governed Gaushalas",
+          value: gosalas.length,
+          sub: "AWBI Compliant Network",
+        },
+        metric3: {
+          label: "Platform Commission Base",
+          value: `${pricingConfig?.commissionPct || 20}%`,
+          sub: `${100 - (pricingConfig?.commissionPct || 20)}/${pricingConfig?.commissionPct || 20} Trust Split Protocol`,
+        },
+        metric4: {
+          label: "Treasury Authority",
+          value: "Master Authority",
+          sub: "ICICI Nodal Custody",
+        },
       }
     } else if (selectedRole === "driver") {
       return {
-        metric1: { label: "Cattle Transit Trips", value: 48, sub: "100% Safe Transit" },
-        metric2: { label: "Vehicle Registration", value: profile?.driverData?.vehicleNumber || "MH-12-Q-4491", sub: "Custom Hydraulic Lift" },
-        metric3: { label: "Transit Pass-Through", value: "100% Direct", sub: "Zero Platform Deduction" },
-        metric4: { label: "Transit Status", value: profile?.driverData?.status || "Available", sub: "Active on Fleet GPS" },
+        metric1: {
+          label: "Cattle Transit Trips",
+          value: 48,
+          sub: "100% Safe Transit",
+        },
+        metric2: {
+          label: "Vehicle Registration",
+          value: profile?.driverData?.vehicleNumber || "MH-12-Q-4491",
+          sub: "Custom Hydraulic Lift",
+        },
+        metric3: {
+          label: "Transit Pass-Through",
+          value: "100% Direct",
+          sub: "Zero Platform Deduction",
+        },
+        metric4: {
+          label: "Transit Status",
+          value: profile?.driverData?.status || "Available",
+          sub: "Active on Fleet GPS",
+        },
       }
     } else {
       return {
-        metric1: { label: "Sacred Pujas Booked", value: profile?.customerData?.totalBookings || 4, sub: "Kamadhenu Seva" },
-        metric2: { label: "Patron Gotra", value: profile?.customerData?.gotra || "Kashyapa", sub: "Vedic Lineage" },
-        metric3: { label: "Member Devotee Since", value: profile?.customerData?.memberSince || "Aug 2024", sub: "Verified Devotee" },
-        metric4: { label: "Ceremony Preference", value: "Kamadhenu & Griha Pravesh", sub: "Aadhaar KYC Verified" },
+        metric1: {
+          label: "Sacred Pujas Booked",
+          value: profile?.customerData?.totalBookings || 4,
+          sub: "Kamadhenu Seva",
+        },
+        metric2: {
+          label: "Patron Gotra",
+          value: profile?.customerData?.gotra || "Kashyapa",
+          sub: "Vedic Lineage",
+        },
+        metric3: {
+          label: "Member Devotee Since",
+          value: profile?.customerData?.memberSince || "Aug 2024",
+          sub: "Verified Devotee",
+        },
+        metric4: {
+          label: "Ceremony Preference",
+          value: "Kamadhenu & Griha Pravesh",
+          sub: "Aadhaar KYC Verified",
+        },
       }
     }
-  }, [selectedRole, profile, bookings, animals, gosalas, settlements, pricingConfig, dailyCeiling, restingBuffer, gosala])
+  }, [
+    selectedRole,
+    profile,
+    bookings,
+    animals,
+    gosalas,
+    settlements,
+    pricingConfig,
+    dailyCeiling,
+    restingBuffer,
+    gosala,
+  ])
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -424,9 +563,7 @@ export default function EditProfileModal({
           designation,
           department,
           authorityLevel:
-            selectedRole === "super_admin"
-              ? "SUPER_ADMIN"
-              : "OPERATIONS_ADMIN",
+            selectedRole === "super_admin" ? "SUPER_ADMIN" : "OPERATIONS_ADMIN",
           treasuryClearanceLevel:
             selectedRole === "super_admin"
               ? "Level-3 Master Authority"
@@ -601,7 +738,9 @@ export default function EditProfileModal({
       {/* Main Page Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-8 space-y-6">
         {/* Officer Hero Banner */}
-        <div className={`relative rounded-xl bg-gradient-to-r ${roleTheme.accentBg} text-white p-6 sm:p-8 shadow-lg overflow-hidden`}>
+        <div
+          className={`relative rounded-xl bg-gradient-to-r ${roleTheme.accentBg} text-white p-6 sm:p-8 shadow-lg overflow-hidden`}
+        >
           {/* Subtle background decorative pattern */}
           <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-radial from-white/10 to-transparent pointer-events-none"></div>
 
@@ -623,9 +762,13 @@ export default function EditProfileModal({
                 </div>
 
                 <div className="text-[13.5px] text-white/90 flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <span className="font-medium">{designation || "Officer"}</span>
+                  <span className="font-medium">
+                    {designation || "Officer"}
+                  </span>
                   <span className="text-white/60">•</span>
-                  <span className="text-white/80">{department || "Operations"}</span>
+                  <span className="text-white/80">
+                    {department || "Operations"}
+                  </span>
                   {selectedRole === "manager" && gosala && (
                     <>
                       <span className="text-white/60">•</span>
@@ -638,15 +781,18 @@ export default function EditProfileModal({
 
                 <div className="flex flex-wrap items-center gap-3 text-[12px] text-white/75 pt-1">
                   <span className="flex items-center gap-1">
-                    <Phone size={13} className="text-white/90" /> {phone || "+91 Not set"}
+                    <Phone size={13} className="text-white/90" />{" "}
+                    {phone || "+91 Not set"}
                   </span>
                   <span>•</span>
                   <span className="flex items-center gap-1">
-                    <Mail size={13} className="text-white/90" /> {email || "email@gomaa.in"}
+                    <Mail size={13} className="text-white/90" />{" "}
+                    {email || "email@gomaa.in"}
                   </span>
                   <span>•</span>
                   <span className="flex items-center gap-1">
-                    <MapPin size={13} className="text-white/90" /> {region || "Regional Hub"}
+                    <MapPin size={13} className="text-white/90" />{" "}
+                    {region || "Regional Hub"}
                   </span>
                 </div>
               </div>
@@ -681,7 +827,12 @@ export default function EditProfileModal({
 
         {/* Live Operational Metrics Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[roleMetrics.metric1, roleMetrics.metric2, roleMetrics.metric3, roleMetrics.metric4].map((m, idx) => {
+          {[
+            roleMetrics.metric1,
+            roleMetrics.metric2,
+            roleMetrics.metric3,
+            roleMetrics.metric4,
+          ].map((m, idx) => {
             const valStr = String(m.value)
             const isLong = valStr.length > 14
             const isMedium = valStr.length > 9
@@ -702,8 +853,8 @@ export default function EditProfileModal({
                       isLong
                         ? "text-[16px] sm:text-[18px] leading-snug"
                         : isMedium
-                        ? "text-[18px] sm:text-[21px] leading-tight"
-                        : "text-[22px] sm:text-[26px] leading-tight"
+                          ? "text-[18px] sm:text-[21px] leading-tight"
+                          : "text-[22px] sm:text-[26px] leading-tight"
                     }`}
                     title={valStr}
                   >
@@ -726,13 +877,35 @@ export default function EditProfileModal({
         {/* Tabbed Navigation Bar */}
         <div className="flex flex-wrap items-center gap-2 border-b border-line pb-1">
           {[
-            { id: "credentials" as const, label: "Identity & Operational Scope", icon: User },
-            { id: "banking" as const, label: "Bank Account & Settlement Dossier", icon: Landmark },
+            {
+              id: "credentials" as const,
+              label: "Identity & Operational Scope",
+              icon: User,
+            },
+            {
+              id: "banking" as const,
+              label: "Bank Account & Settlement Dossier",
+              icon: Landmark,
+            },
             ...(selectedRole === "admin" || selectedRole === "super_admin"
-              ? [{ id: "sharesplit" as const, label: "Manager Share Split", icon: Percent }]
+              ? [
+                  {
+                    id: "sharesplit" as const,
+                    label: "Manager Share Split",
+                    icon: Percent,
+                  },
+                ]
               : []),
-            { id: "metrics" as const, label: "Role Ledger & Welfare Matrix", icon: TrendingUp },
-            { id: "compliance" as const, label: "Security & Privacy Protocol", icon: ShieldCheck },
+            {
+              id: "metrics" as const,
+              label: "Role Ledger & Welfare Matrix",
+              icon: TrendingUp,
+            },
+            {
+              id: "compliance" as const,
+              label: "Security & Privacy Protocol",
+              icon: ShieldCheck,
+            },
           ].map(({ id, label, icon: TabIcon }) => (
             <button
               key={id}
@@ -757,14 +930,18 @@ export default function EditProfileModal({
           <div className="space-y-6">
             {isEditing ? (
               /* Editable Form */
-              <form onSubmit={handleSave} className="bg-card border border-line rounded-xl p-6 sm:p-8 space-y-6 shadow-xs">
+              <form
+                onSubmit={handleSave}
+                className="bg-card border border-line rounded-xl p-6 sm:p-8 space-y-6 shadow-xs"
+              >
                 <div className="border-b border-line pb-4 flex items-center justify-between">
                   <div>
                     <h3 className="font-serif text-[18px] font-bold text-ink">
                       Edit Identity &amp; Operational Credentials
                     </h3>
                     <p className="text-[12.5px] text-ink-soft mt-0.5">
-                      Updates are recorded in the immutable platform ledger and synced with your verified profile.
+                      Updates are recorded in the immutable platform ledger and
+                      synced with your verified profile.
                     </p>
                   </div>
                   <span className="text-[11px] font-mono text-ink-faint bg-paper px-2.5 py-1 rounded border border-line">
@@ -853,7 +1030,9 @@ export default function EditProfileModal({
                           min="1"
                           max="10"
                           value={dailyCeiling}
-                          onChange={(e) => setDailyCeiling(Number(e.target.value))}
+                          onChange={(e) =>
+                            setDailyCeiling(Number(e.target.value))
+                          }
                           className="w-full px-4 py-2.5 text-[14px] rounded-lg border border-line bg-paper text-ink focus:outline-none focus:ring-2 focus:ring-forest"
                         />
                       </div>
@@ -867,14 +1046,17 @@ export default function EditProfileModal({
                           min="30"
                           step="15"
                           value={restingBuffer}
-                          onChange={(e) => setRestingBuffer(Number(e.target.value))}
+                          onChange={(e) =>
+                            setRestingBuffer(Number(e.target.value))
+                          }
                           className="w-full px-4 py-2.5 text-[14px] rounded-lg border border-line bg-paper text-ink focus:outline-none focus:ring-2 focus:ring-forest"
                         />
                       </div>
                     </>
                   )}
 
-                  {(selectedRole === "admin" || selectedRole === "super_admin") && (
+                  {(selectedRole === "admin" ||
+                    selectedRole === "super_admin") && (
                     <>
                       <div>
                         <label className="block text-[12.5px] font-semibold text-ink mb-1.5">
@@ -919,7 +1101,9 @@ export default function EditProfileModal({
                     className="inline-flex items-center gap-2 px-6 py-2.5 text-[13.5px] font-semibold rounded-lg bg-forest hover:bg-forest-deep text-white transition shadow-sm cursor-pointer disabled:opacity-50"
                   >
                     <Save size={15} />
-                    <span>{saving ? "Saving Changes..." : "Save Identity Changes"}</span>
+                    <span>
+                      {saving ? "Saving Changes..." : "Save Identity Changes"}
+                    </span>
                   </button>
                 </div>
               </form>
@@ -941,33 +1125,57 @@ export default function EditProfileModal({
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="p-4 rounded-lg bg-paper border border-line space-y-1">
-                        <div className="text-[11px] font-mono text-ink-faint uppercase">Full Legal Name</div>
-                        <div className="text-[15px] font-semibold text-ink">{name || "Not Configured"}</div>
+                        <div className="text-[11px] font-mono text-ink-faint uppercase">
+                          Full Legal Name
+                        </div>
+                        <div className="text-[15px] font-semibold text-ink">
+                          {name || "Not Configured"}
+                        </div>
                       </div>
 
                       <div className="p-4 rounded-lg bg-paper border border-line space-y-1">
-                        <div className="text-[11px] font-mono text-ink-faint uppercase">Official Role Title</div>
-                        <div className="text-[15px] font-semibold text-ink">{roleTheme.badge}</div>
+                        <div className="text-[11px] font-mono text-ink-faint uppercase">
+                          Official Role Title
+                        </div>
+                        <div className="text-[15px] font-semibold text-ink">
+                          {roleTheme.badge}
+                        </div>
                       </div>
 
                       <div className="p-4 rounded-lg bg-paper border border-line space-y-1">
-                        <div className="text-[11px] font-mono text-ink-faint uppercase">Official Phone</div>
-                        <div className="text-[15px] font-mono font-semibold text-ink">{phone || "Not Configured"}</div>
+                        <div className="text-[11px] font-mono text-ink-faint uppercase">
+                          Official Phone
+                        </div>
+                        <div className="text-[15px] font-mono font-semibold text-ink">
+                          {phone || "Not Configured"}
+                        </div>
                       </div>
 
                       <div className="p-4 rounded-lg bg-paper border border-line space-y-1">
-                        <div className="text-[11px] font-mono text-ink-faint uppercase">Official Email</div>
-                        <div className="text-[15px] font-mono font-semibold text-ink">{email || "Not Configured"}</div>
+                        <div className="text-[11px] font-mono text-ink-faint uppercase">
+                          Official Email
+                        </div>
+                        <div className="text-[15px] font-mono font-semibold text-ink">
+                          {email || "Not Configured"}
+                        </div>
                       </div>
 
                       <div className="p-4 rounded-lg bg-paper border border-line space-y-1">
-                        <div className="text-[11px] font-mono text-ink-faint uppercase">Designation</div>
-                        <div className="text-[14px] font-medium text-ink">{designation || "Officer"}</div>
+                        <div className="text-[11px] font-mono text-ink-faint uppercase">
+                          Designation
+                        </div>
+                        <div className="text-[14px] font-medium text-ink">
+                          {designation || "Officer"}
+                        </div>
                       </div>
 
                       <div className="p-4 rounded-lg bg-paper border border-line space-y-1">
-                        <div className="text-[11px] font-mono text-ink-faint uppercase">Department / Hub</div>
-                        <div className="text-[14px] font-medium text-ink">{department || "Platform Operations"}</div>
+                        <div className="text-[11px] font-mono text-ink-faint uppercase">
+                          Department / Hub
+                        </div>
+                        <div className="text-[14px] font-medium text-ink">
+                          {department || "Platform Operations"}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -982,21 +1190,39 @@ export default function EditProfileModal({
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-[13px]">
                         <div className="p-4 rounded-lg bg-paper border border-line space-y-1">
-                          <div className="text-[11px] font-mono text-ink-faint uppercase">Assigned Gaushala</div>
-                          <div className="font-bold text-forest text-[15px]">{gosala || "Shri Krishna Gaushala"}</div>
-                          <div className="text-[11.5px] text-ink-soft">{region || "Regional Operational Zone"}</div>
+                          <div className="text-[11px] font-mono text-ink-faint uppercase">
+                            Assigned Gaushala
+                          </div>
+                          <div className="font-bold text-forest text-[15px]">
+                            {gosala || "Shri Krishna Gaushala"}
+                          </div>
+                          <div className="text-[11.5px] text-ink-soft">
+                            {region || "Regional Operational Zone"}
+                          </div>
                         </div>
 
                         <div className="p-4 rounded-lg bg-paper border border-line space-y-1">
-                          <div className="text-[11px] font-mono text-ink-faint uppercase">Daily Ceremony Ceiling</div>
-                          <div className="font-bold text-ink text-[15px]">{dailyCeiling} Sevas / Day</div>
-                          <div className="text-[11.5px] text-ink-soft">Strict herd welfare cap</div>
+                          <div className="text-[11px] font-mono text-ink-faint uppercase">
+                            Daily Ceremony Ceiling
+                          </div>
+                          <div className="font-bold text-ink text-[15px]">
+                            {dailyCeiling} Sevas / Day
+                          </div>
+                          <div className="text-[11.5px] text-ink-soft">
+                            Strict herd welfare cap
+                          </div>
                         </div>
 
                         <div className="p-4 rounded-lg bg-paper border border-line space-y-1">
-                          <div className="text-[11px] font-mono text-ink-faint uppercase">Mandatory Resting Buffer</div>
-                          <div className="font-bold text-ink text-[15px]">{restingBuffer} Minutes</div>
-                          <div className="text-[11.5px] text-ink-soft">Post-ceremony cooldown</div>
+                          <div className="text-[11px] font-mono text-ink-faint uppercase">
+                            Mandatory Resting Buffer
+                          </div>
+                          <div className="font-bold text-ink text-[15px]">
+                            {restingBuffer} Minutes
+                          </div>
+                          <div className="text-[11.5px] text-ink-soft">
+                            Post-ceremony cooldown
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1013,28 +1239,36 @@ export default function EditProfileModal({
 
                     <div className="space-y-3 text-[12.5px]">
                       <div className="p-3 rounded-lg bg-paper border border-line flex items-center justify-between">
-                        <span className="text-ink-soft">AWBI Trust Verification:</span>
+                        <span className="text-ink-soft">
+                          AWBI Trust Verification:
+                        </span>
                         <span className="font-mono font-semibold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded text-[11px]">
                           AWBI/MH/2024/09
                         </span>
                       </div>
 
                       <div className="p-3 rounded-lg bg-paper border border-line flex items-center justify-between">
-                        <span className="text-ink-soft">80G Tax Exemption:</span>
+                        <span className="text-ink-soft">
+                          80G Tax Exemption:
+                        </span>
                         <span className="font-mono font-semibold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded text-[11px]">
                           Active 80G Certified
                         </span>
                       </div>
 
                       <div className="p-3 rounded-lg bg-paper border border-line flex items-center justify-between">
-                        <span className="text-ink-soft">Escrow Split Protocol:</span>
+                        <span className="text-ink-soft">
+                          Escrow Split Protocol:
+                        </span>
                         <span className="font-mono font-semibold text-forest">
                           80% Trust · 20% Reserve
                         </span>
                       </div>
 
                       <div className="p-3 rounded-lg bg-paper border border-line flex items-center justify-between">
-                        <span className="text-ink-soft">Disbursement Security:</span>
+                        <span className="text-ink-soft">
+                          Disbursement Security:
+                        </span>
                         <span className="font-mono font-semibold text-ink">
                           256-Bit Tokenized
                         </span>
@@ -1054,7 +1288,10 @@ export default function EditProfileModal({
           <div className="space-y-6">
             {/* RBAC Privacy Header */}
             <div className="p-4 rounded-xl border border-emerald-300 bg-emerald-50/70 text-emerald-950 flex items-start gap-3.5">
-              <ShieldCheck size={22} className="text-emerald-700 mt-0.5 shrink-0" />
+              <ShieldCheck
+                size={22}
+                className="text-emerald-700 mt-0.5 shrink-0"
+              />
               <div className="space-y-1">
                 <div className="font-bold text-[14px]">
                   Role-Protected Direct Bank Vault (Zero Super-Admin Peeking)
@@ -1062,24 +1299,33 @@ export default function EditProfileModal({
                 <div className="text-[12.5px] leading-relaxed text-emerald-900">
                   {roleTheme.bankContextNote}
                   <span className="block mt-1 font-medium text-emerald-800">
-                    🔒 Confidentiality Notice: Bank account numbers and IFSC details entered here are restricted solely to this authenticated profile. Super Admin cannot inspect or tamper with your external charity or operational accounts.
+                    🔒 Confidentiality Notice: Bank account numbers and IFSC
+                    details entered here are restricted solely to this
+                    authenticated profile. Super Admin cannot inspect or tamper
+                    with your external charity or operational accounts.
                   </span>
                 </div>
               </div>
             </div>
 
             {/* Form Mode (Add or Edit Bank Account) */}
-            {(isAddingBank || (isEditing && activeTab === "banking")) ? (
-              <form onSubmit={handleSave} className="bg-card border border-line rounded-xl p-6 sm:p-8 space-y-6 shadow-xs">
+            {isAddingBank || (isEditing && activeTab === "banking") ? (
+              <form
+                onSubmit={handleSave}
+                className="bg-card border border-line rounded-xl p-6 sm:p-8 space-y-6 shadow-xs"
+              >
                 <div className="flex items-center justify-between border-b border-line pb-4">
                   <div className="flex items-center gap-2.5">
                     <Landmark size={22} className="text-forest" />
                     <div>
                       <h3 className="font-serif text-[18px] font-bold text-ink">
-                        {hasLinkedBank ? "Update Bank Account Details" : "Connect Official Bank Account"}
+                        {hasLinkedBank
+                          ? "Update Bank Account Details"
+                          : "Connect Official Bank Account"}
                       </h3>
                       <p className="text-[12px] text-ink-soft">
-                        Enter valid IFSC and bank details for direct automated payouts.
+                        Enter valid IFSC and bank details for direct automated
+                        payouts.
                       </p>
                     </div>
                   </div>
@@ -1098,11 +1344,16 @@ export default function EditProfileModal({
                       value={accountBeneficiary}
                       onChange={(e) => setAccountBeneficiary(e.target.value)}
                       required
-                      placeholder={selectedRole === "manager" ? "e.g. Shri Krishna Gaushala Charitable Trust" : "e.g. Full Legal Account Name"}
+                      placeholder={
+                        selectedRole === "manager"
+                          ? "e.g. Shri Krishna Gaushala Charitable Trust"
+                          : "e.g. Full Legal Account Name"
+                      }
                       className="w-full px-4 py-2.5 text-[14px] rounded-lg border border-line bg-paper text-ink focus:outline-none focus:ring-2 focus:ring-forest"
                     />
                     <p className="text-[11.5px] text-ink-faint mt-1">
-                      Must match the official title on bank passbook or charity trust deed.
+                      Must match the official title on bank passbook or charity
+                      trust deed.
                     </p>
                   </div>
 
@@ -1155,7 +1406,9 @@ export default function EditProfileModal({
                       <input
                         type={showAccountNumber ? "text" : "password"}
                         value={accountNumber}
-                        onChange={(e) => setAccountNumber(e.target.value.replace(/\s+/g, ""))}
+                        onChange={(e) =>
+                          setAccountNumber(e.target.value.replace(/\s+/g, ""))
+                        }
                         required
                         placeholder="Enter full account number"
                         className="w-full px-4 py-2.5 pr-10 text-[14px] font-mono rounded-lg border border-line bg-paper text-ink focus:outline-none focus:ring-2 focus:ring-forest"
@@ -1165,7 +1418,11 @@ export default function EditProfileModal({
                         onClick={() => setShowAccountNumber(!showAccountNumber)}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink cursor-pointer"
                       >
-                        {showAccountNumber ? <EyeOff size={16} /> : <Eye size={16} />}
+                        {showAccountNumber ? (
+                          <EyeOff size={16} />
+                        ) : (
+                          <Eye size={16} />
+                        )}
                       </button>
                     </div>
                   </div>
@@ -1177,13 +1434,19 @@ export default function EditProfileModal({
                     <input
                       type={showAccountNumber ? "text" : "password"}
                       value={confirmAccountNumber}
-                      onChange={(e) => setConfirmAccountNumber(e.target.value.replace(/\s+/g, ""))}
+                      onChange={(e) =>
+                        setConfirmAccountNumber(
+                          e.target.value.replace(/\s+/g, ""),
+                        )
+                      }
                       required
                       placeholder="Re-enter to verify"
                       className={`w-full px-4 py-2.5 text-[14px] font-mono rounded-lg border bg-paper text-ink focus:outline-none focus:ring-2 focus:ring-forest ${
-                        confirmAccountNumber && confirmAccountNumber !== accountNumber
+                        confirmAccountNumber &&
+                        confirmAccountNumber !== accountNumber
                           ? "border-red-500 ring-1 ring-red-500"
-                          : confirmAccountNumber && confirmAccountNumber === accountNumber
+                          : confirmAccountNumber &&
+                              confirmAccountNumber === accountNumber
                             ? "border-emerald-500 ring-1 ring-emerald-500"
                             : "border-line"
                       }`}
@@ -1211,7 +1474,13 @@ export default function EditProfileModal({
                       type="text"
                       value={ifscCode}
                       maxLength={11}
-                      onChange={(e) => setIfscCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+                      onChange={(e) =>
+                        setIfscCode(
+                          e.target.value
+                            .toUpperCase()
+                            .replace(/[^A-Z0-9]/g, ""),
+                        )
+                      }
                       required
                       placeholder="e.g. HDFC0001824"
                       className="w-full px-4 py-2.5 text-[14px] font-mono uppercase rounded-lg border border-line bg-paper text-ink focus:outline-none focus:ring-2 focus:ring-forest"
@@ -1227,10 +1496,14 @@ export default function EditProfileModal({
                       onChange={(e) => setAccountType(e.target.value)}
                       className="w-full px-4 py-2.5 text-[14px] rounded-lg border border-line bg-paper text-ink focus:outline-none focus:ring-2 focus:ring-forest"
                     >
-                      <option value="CURRENT_TRUST">Current / Trust Charity Account</option>
+                      <option value="CURRENT_TRUST">
+                        Current / Trust Charity Account
+                      </option>
                       <option value="SAVINGS">Savings Account</option>
                       <option value="SALARY">Corporate Salary Account</option>
-                      <option value="NODAL_ESCROW">Central Nodal Escrow Account</option>
+                      <option value="NODAL_ESCROW">
+                        Central Nodal Escrow Account
+                      </option>
                     </select>
                   </div>
 
@@ -1312,7 +1585,11 @@ export default function EditProfileModal({
                       className="inline-flex items-center gap-2 px-6 py-2.5 text-[13.5px] font-semibold rounded-lg bg-forest hover:bg-forest-deep text-white transition shadow-sm cursor-pointer disabled:opacity-50"
                     >
                       <Save size={15} />
-                      <span>{saving ? "Encrypting & Saving..." : "Save & Verify Bank Account"}</span>
+                      <span>
+                        {saving
+                          ? "Encrypting & Saving..."
+                          : "Save & Verify Bank Account"}
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -1344,51 +1621,81 @@ export default function EditProfileModal({
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                       <div className="p-4 rounded-lg bg-paper border border-line space-y-1">
-                        <div className="text-[11px] font-mono text-ink-faint uppercase">Account Holder / Beneficiary</div>
-                        <div className="text-[15px] font-semibold text-ink">{profile?.bankDetails?.accountBeneficiary}</div>
+                        <div className="text-[11px] font-mono text-ink-faint uppercase">
+                          Account Holder / Beneficiary
+                        </div>
+                        <div className="text-[15px] font-semibold text-ink">
+                          {profile?.bankDetails?.accountBeneficiary}
+                        </div>
                       </div>
 
                       <div className="p-4 rounded-lg bg-paper border border-line space-y-1">
-                        <div className="text-[11px] font-mono text-ink-faint uppercase">Bank Account Number</div>
+                        <div className="text-[11px] font-mono text-ink-faint uppercase">
+                          Bank Account Number
+                        </div>
                         <div className="flex items-center justify-between mt-0.5">
                           <span className="text-[16px] font-mono font-bold text-ink tracking-wider">
                             {maskedAccountNumber}
                           </span>
                           <button
                             type="button"
-                            onClick={() => setShowAccountNumber(!showAccountNumber)}
+                            onClick={() =>
+                              setShowAccountNumber(!showAccountNumber)
+                            }
                             className="p-1.5 rounded-md text-ink-faint hover:text-ink hover:bg-paper-deep transition cursor-pointer"
-                            title={showAccountNumber ? "Mask account number" : "Reveal account number"}
+                            title={
+                              showAccountNumber
+                                ? "Mask account number"
+                                : "Reveal account number"
+                            }
                           >
-                            {showAccountNumber ? <EyeOff size={16} /> : <Eye size={16} />}
+                            {showAccountNumber ? (
+                              <EyeOff size={16} />
+                            ) : (
+                              <Eye size={16} />
+                            )}
                           </button>
                         </div>
                       </div>
 
                       <div className="p-4 rounded-lg bg-paper border border-line space-y-1">
-                        <div className="text-[11px] font-mono text-ink-faint uppercase">IFSC Code</div>
+                        <div className="text-[11px] font-mono text-ink-faint uppercase">
+                          IFSC Code
+                        </div>
                         <div className="flex items-center justify-between mt-0.5">
                           <span className="text-[15px] font-mono font-bold text-ink">
                             {profile?.bankDetails?.ifscCode}
                           </span>
                           <button
                             type="button"
-                            onClick={() => handleCopy(profile?.bankDetails?.ifscCode || "", "IFSC Code")}
+                            onClick={() =>
+                              handleCopy(
+                                profile?.bankDetails?.ifscCode || "",
+                                "IFSC Code",
+                              )
+                            }
                             className="p-1.5 rounded-md text-ink-faint hover:text-ink hover:bg-paper-deep transition cursor-pointer"
                           >
-                            {copiedField === "IFSC Code" ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                            {copiedField === "IFSC Code" ? (
+                              <Check size={14} className="text-emerald-600" />
+                            ) : (
+                              <Copy size={14} />
+                            )}
                           </button>
                         </div>
                       </div>
 
                       <div className="p-4 rounded-lg bg-paper border border-line space-y-1">
-                        <div className="text-[11px] font-mono text-ink-faint uppercase">Account Type</div>
+                        <div className="text-[11px] font-mono text-ink-faint uppercase">
+                          Account Type
+                        </div>
                         <div className="text-[14.5px] font-medium text-ink">
                           {profile?.bankDetails?.accountType === "CURRENT_TRUST"
                             ? "Current / Charity Trust Account"
                             : profile?.bankDetails?.accountType === "SALARY"
                               ? "Operational Salary Account"
-                              : profile?.bankDetails?.accountType === "NODAL_ESCROW"
+                              : profile?.bankDetails?.accountType ===
+                                  "NODAL_ESCROW"
                                 ? "Central Nodal Escrow Pool"
                                 : "Savings Account"}
                         </div>
@@ -1396,17 +1703,28 @@ export default function EditProfileModal({
 
                       {profile?.bankDetails?.upiId && (
                         <div className="sm:col-span-2 p-4 rounded-lg bg-paper border border-line space-y-1">
-                          <div className="text-[11px] font-mono text-ink-faint uppercase">Direct UPI VPA ID</div>
+                          <div className="text-[11px] font-mono text-ink-faint uppercase">
+                            Direct UPI VPA ID
+                          </div>
                           <div className="flex items-center justify-between mt-0.5">
                             <span className="text-[15px] font-mono text-forest font-semibold">
                               {profile?.bankDetails?.upiId}
                             </span>
                             <button
                               type="button"
-                              onClick={() => handleCopy(profile?.bankDetails?.upiId || "", "UPI ID")}
+                              onClick={() =>
+                                handleCopy(
+                                  profile?.bankDetails?.upiId || "",
+                                  "UPI ID",
+                                )
+                              }
                               className="p-1.5 rounded-md text-ink-faint hover:text-ink hover:bg-paper-deep transition cursor-pointer"
                             >
-                              {copiedField === "UPI ID" ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                              {copiedField === "UPI ID" ? (
+                                <Check size={14} className="text-emerald-600" />
+                              ) : (
+                                <Copy size={14} />
+                              )}
                             </button>
                           </div>
                         </div>
@@ -1415,7 +1733,8 @@ export default function EditProfileModal({
 
                     <div className="pt-4 border-t border-line flex items-center justify-between">
                       <div className="text-[11.5px] text-ink-faint font-mono">
-                        Last Verified: {profile?.bankDetails?.lastVerifiedAt || "Live"}
+                        Last Verified:{" "}
+                        {profile?.bankDetails?.lastVerifiedAt || "Live"}
                       </div>
                       <div className="flex items-center gap-3">
                         <button
@@ -1448,36 +1767,49 @@ export default function EditProfileModal({
                         <span>Disbursement Schedule</span>
                       </h4>
                       <span className="text-[11px] font-mono font-medium px-2.5 py-0.5 rounded bg-paper border border-line text-ink-soft">
-                        {profile?.settlementSchedule?.badgeLabel || "Auto-Sweep"}
+                        {profile?.settlementSchedule?.badgeLabel ||
+                          "Auto-Sweep"}
                       </span>
                     </div>
 
                     <div className="space-y-3.5 text-[13px]">
                       <div className="p-3.5 rounded-lg bg-paper border border-line space-y-1">
-                        <div className="text-[11px] font-mono text-ink-faint uppercase">Disbursement Cycle</div>
+                        <div className="text-[11px] font-mono text-ink-faint uppercase">
+                          Disbursement Cycle
+                        </div>
                         <div className="font-bold text-ink">
-                          {profile?.settlementSchedule?.disbursementCycle || "Weekly on Sunday Midnight"}
+                          {profile?.settlementSchedule?.disbursementCycle ||
+                            "Weekly on Sunday Midnight"}
                         </div>
                       </div>
 
                       <div className="p-3.5 rounded-lg bg-paper border border-line space-y-1">
-                        <div className="text-[11px] font-mono text-ink-faint uppercase">Disbursement Protocol</div>
+                        <div className="text-[11px] font-mono text-ink-faint uppercase">
+                          Disbursement Protocol
+                        </div>
                         <div className="font-bold text-ink">
-                          {profile?.settlementSchedule?.disbursementMode || "Direct RBI NEFT / Instant IMPS"}
+                          {profile?.settlementSchedule?.disbursementMode ||
+                            "Direct RBI NEFT / Instant IMPS"}
                         </div>
                       </div>
 
                       <div className="p-3.5 rounded-lg bg-paper border border-line space-y-1">
-                        <div className="text-[11px] font-mono text-ink-faint uppercase">Nodal Escrow Pool</div>
+                        <div className="text-[11px] font-mono text-ink-faint uppercase">
+                          Nodal Escrow Pool
+                        </div>
                         <div className="font-bold text-ink">
-                          {profile?.settlementSchedule?.escrowCustodianPool || "ICICI Nodal Trust Escrow"}
+                          {profile?.settlementSchedule?.escrowCustodianPool ||
+                            "ICICI Nodal Trust Escrow"}
                         </div>
                       </div>
 
                       <div className="p-3.5 rounded-lg bg-paper border border-line space-y-1">
-                        <div className="text-[11px] font-mono text-ink-faint uppercase">Next Scheduled Batch</div>
+                        <div className="text-[11px] font-mono text-ink-faint uppercase">
+                          Next Scheduled Batch
+                        </div>
                         <div className="font-bold text-forest">
-                          {profile?.settlementSchedule?.nextScheduledBatch || "Upcoming Batch Engine"}
+                          {profile?.settlementSchedule?.nextScheduledBatch ||
+                            "Upcoming Batch Engine"}
                         </div>
                       </div>
                     </div>
@@ -1495,7 +1827,10 @@ export default function EditProfileModal({
                     No Official Bank Account Linked Yet
                   </h3>
                   <p className="text-[13.5px] text-ink-soft leading-relaxed max-w-lg mx-auto">
-                    Connect your verified charity trust or operational bank account to receive direct ceremonial payout credits, automated RBI NEFT disbursements, and transparent ledger sweeps.
+                    Connect your verified charity trust or operational bank
+                    account to receive direct ceremonial payout credits,
+                    automated RBI NEFT disbursements, and transparent ledger
+                    sweeps.
                   </p>
                 </div>
 
@@ -1512,11 +1847,13 @@ export default function EditProfileModal({
 
                 <div className="pt-6 border-t border-line/60 flex items-center justify-center gap-6 text-[12px] text-ink-faint">
                   <span className="flex items-center gap-1.5">
-                    <Lock size={14} className="text-emerald-700" /> 256-Bit Encrypted
+                    <Lock size={14} className="text-emerald-700" /> 256-Bit
+                    Encrypted
                   </span>
                   <span>•</span>
                   <span className="flex items-center gap-1.5">
-                    <ShieldCheck size={14} className="text-emerald-700" /> Zero Super-Admin Peeking
+                    <ShieldCheck size={14} className="text-emerald-700" /> Zero
+                    Super-Admin Peeking
                   </span>
                 </div>
               </div>
@@ -1527,202 +1864,272 @@ export default function EditProfileModal({
         {/* ========================================================================= */}
         {/* TAB: MANAGER SHARE SPLIT GOVERNANCE (OPERATIONS ADMIN ONLY)               */}
         {/* ========================================================================= */}
-        {activeTab === "sharesplit" && (selectedRole === "admin" || selectedRole === "super_admin") && (
-          <div className="space-y-6">
-            <div className="bg-card border border-line rounded-xl p-6 sm:p-8 shadow-xs space-y-6">
-              {/* Header */}
-              <div className="border-b border-line pb-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <div>
-                  <h3 className="font-serif text-[19px] font-bold text-ink flex items-center gap-2">
-                    <Percent size={20} className="text-forest" />
-                    <span>Manager Share Split Governance</span>
-                  </h3>
-                  <p className="text-[12.5px] text-ink-soft mt-0.5">
-                    As Operations Admin, set the custodian percentage split and puja bonus for Gaushala managers under your regional jurisdiction.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-[11px] bg-sky-100 text-sky-900 border border-sky-300 px-3 py-1 rounded-full font-bold">
-                    Operations Admin Authority
-                  </span>
-                </div>
-              </div>
-
-              {/* Manager Selector */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-paper rounded-xl border border-line">
-                <div className="space-y-0.5">
-                  <label className="text-[12px] font-semibold text-ink uppercase tracking-wider font-mono">
-                    Select Governed Manager:
-                  </label>
-                  <div className="text-[12px] text-ink-soft">
-                    Choose which Gaushala shed custodian's policy to view or adjust
-                  </div>
-                </div>
-                <select
-                  value={selectedShareManagerEmail}
-                  onChange={(e) => setSelectedShareManagerEmail(e.target.value)}
-                  className="px-4 py-2.5 rounded-lg bg-card border border-line text-[13.5px] font-bold text-ink focus:outline-none focus:ring-2 focus:ring-forest cursor-pointer"
-                >
-                  {sharePolicies.map((p) => (
-                    <option key={p.managerEmail} value={p.managerEmail}>
-                      {p.managerName} · {p.gosalaName} ({p.managerId})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Active Manager Dossier & Adjuster */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Left 7 cols: Controls */}
-                <div className="lg:col-span-7 space-y-5">
-                  <div className="p-4 rounded-xl bg-forest-soft border border-forest/20 flex items-center justify-between">
-                    <div>
-                      <div className="font-semibold text-ink text-[15px]">
-                        {activePolicy.managerName}
-                      </div>
-                      <div className="text-[12px] text-forest font-mono">
-                        {activePolicy.gosalaName} • Unique ID: #{activePolicy.managerId}
-                      </div>
-                    </div>
-                    <span className="font-mono text-[11px] bg-forest text-white px-2.5 py-0.5 rounded font-bold">
-                      Active Custodian
-                    </span>
-                  </div>
-
-                  {/* Share Slider */}
-                  <div className="space-y-2 p-4 bg-paper rounded-xl border border-line">
-                    <div className="flex items-center justify-between text-[13px]">
-                      <span className="font-semibold text-ink">
-                        Manager Custodian Cut: <strong className="text-forest text-[16px]">{modalSharePct}%</strong>
-                      </span>
-                      <span className="font-mono text-[12px] text-ink-faint">
-                        Sanctuary Fodder Corpus: <strong className="text-emerald-800">{100 - modalSharePct}%</strong>
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="10"
-                      max="50"
-                      step="1"
-                      value={modalSharePct}
-                      onChange={(e) => setModalSharePct(Number(e.target.value))}
-                      className="w-full accent-forest cursor-pointer h-2 bg-card rounded-lg"
-                    />
-                    <div className="flex justify-between text-[11px] font-mono text-ink-faint">
-                      <span>10% (Floor)</span>
-                      <span>25% (Recommended Baseline)</span>
-                      <span>50% (Max Ceiling)</span>
-                    </div>
-                  </div>
-
-                  {/* Bonus Per Puja */}
-                  <div className="space-y-2 p-4 bg-paper rounded-xl border border-line">
-                    <div className="flex items-center justify-between text-[13px]">
-                      <span className="font-semibold text-ink">
-                        Bonus Per Verified Puja (₹)
-                      </span>
-                      <span className="font-mono text-forest font-bold text-[15px]">
-                        +₹{modalBonusPerPuja} / Seva
-                      </span>
-                    </div>
-                    <input
-                      type="number"
-                      min="0"
-                      max="1000"
-                      step="50"
-                      value={modalBonusPerPuja}
-                      onChange={(e) => setModalBonusPerPuja(Math.max(0, Number(e.target.value)))}
-                      className="w-full px-4 py-2 bg-card border border-line rounded-lg text-[14px] font-mono font-bold text-ink focus:outline-none focus:ring-2 focus:ring-forest"
-                    />
-                    <p className="text-[11.5px] text-ink-faint">
-                      Incentive credited directly into the manager's wallet for every successfully executed Darshan.
+        {activeTab === "sharesplit" &&
+          (selectedRole === "admin" || selectedRole === "super_admin") && (
+            <div className="space-y-6">
+              <div className="bg-card border border-line rounded-xl p-6 sm:p-8 shadow-xs space-y-6">
+                {/* Header */}
+                <div className="border-b border-line pb-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-serif text-[19px] font-bold text-ink flex items-center gap-2">
+                      <Percent size={20} className="text-forest" />
+                      <span>Manager Share Split Governance</span>
+                    </h3>
+                    <p className="text-[12.5px] text-ink-soft mt-0.5">
+                      As Operations Admin, set the custodian percentage split
+                      and puja bonus for Gaushala managers under your regional
+                      jurisdiction.
                     </p>
                   </div>
-
-                  {/* Save Button */}
-                  <div className="pt-2 flex items-center justify-between">
-                    <span className="text-[11.5px] text-ink-soft font-mono">
-                      Last Updated: {new Date(activePolicy.lastUpdated).toLocaleDateString("en-IN")}
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[11px] bg-sky-100 text-sky-900 border border-sky-300 px-3 py-1 rounded-full font-bold">
+                      Operations Admin Authority
                     </span>
-                    <button
-                      type="button"
-                      onClick={handleSaveSharePolicyModal}
-                      disabled={savingSharePolicy}
-                      className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-forest text-white text-[13.5px] font-bold hover:bg-forest-deep transition cursor-pointer shadow-md"
-                    >
-                      {savingSharePolicy ? (
-                        <>
-                          <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                          <span>Updating Policy...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Save size={16} />
-                          <span>Save Policy Changes</span>
-                        </>
-                      )}
-                    </button>
                   </div>
                 </div>
 
-                {/* Right 5 cols: Live Calculation Preview */}
-                <div className="lg:col-span-5 bg-paper rounded-xl p-5 border border-line space-y-4">
-                  <div className="flex items-center justify-between border-b border-line pb-3">
-                    <span className="text-[12px] font-mono text-forest uppercase font-bold tracking-wider">
-                      Live Seva Calculation Preview
-                    </span>
-                    <span className="font-mono text-[11px] bg-forest/10 text-forest px-2 py-0.5 rounded font-semibold">
-                      ₹4,000 Seva
-                    </span>
+                {/* Manager Selector */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-paper rounded-xl border border-line">
+                  <div className="space-y-0.5">
+                    <label className="text-[12px] font-semibold text-ink uppercase tracking-wider font-mono">
+                      Select Governed Manager:
+                    </label>
+                    <div className="text-[12px] text-ink-soft">
+                      Choose which Gaushala shed custodian's policy to view or
+                      adjust
+                    </div>
                   </div>
+                  <select
+                    value={selectedShareManagerEmail}
+                    onChange={(e) =>
+                      setSelectedShareManagerEmail(e.target.value)
+                    }
+                    className="px-4 py-2.5 rounded-lg bg-card border border-line text-[13.5px] font-bold text-ink focus:outline-none focus:ring-2 focus:ring-forest cursor-pointer"
+                  >
+                    {sharePolicies.map((p) => (
+                      <option key={p.managerEmail} value={p.managerEmail}>
+                        {p.managerName} · {p.gosalaName} ({p.managerId})
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                  <div className="space-y-2.5 text-[12.5px] font-mono">
-                    <div className="flex justify-between py-1 border-b border-line/60">
-                      <span className="text-ink-soft">Gross Devotee Seva:</span>
-                      <span className="font-bold text-ink">₹{modalSimulation.grossDakshina.toLocaleString("en-IN")}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-line/60 text-ink-soft">
-                      <span>Platform Commission ({modalSimulation.platformCommissionPct}%):</span>
-                      <span>-₹{modalSimulation.platformFee.toLocaleString("en-IN")}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-line/60 font-semibold text-emerald-800">
-                      <span>Gaushala Net Seva (80%):</span>
-                      <span>₹{modalSimulation.gaushalaNet.toLocaleString("en-IN")}</span>
-                    </div>
-                    <div className="flex justify-between py-1.5 border-b border-line text-purple-900 bg-purple-50 px-2.5 rounded">
-                      <span>Manager Wallet Credit ({modalSimulation.managerSharePct}%):</span>
-                      <span className="font-bold text-forest">
-                        +₹{modalSimulation.managerBaseCut.toLocaleString("en-IN")}
-                        {modalSimulation.bonusPerPuja > 0 && ` (+₹${modalSimulation.bonusPerPuja} bonus)`}
+                {/* Active Manager Dossier & Adjuster */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  {/* Left 7 cols: Controls */}
+                  <div className="lg:col-span-7 space-y-5">
+                    <div className="p-4 rounded-xl bg-forest-soft border border-forest/20 flex items-center justify-between">
+                      <div>
+                        <div className="font-semibold text-ink text-[15px]">
+                          {activePolicy.managerName}
+                        </div>
+                        <div className="text-[12px] text-forest font-mono">
+                          {activePolicy.gosalaName} • Unique ID: #
+                          {activePolicy.managerId}
+                        </div>
+                      </div>
+                      <span className="font-mono text-[11px] bg-forest text-white px-2.5 py-0.5 rounded font-bold">
+                        Active Custodian
                       </span>
                     </div>
-                    <div className="flex justify-between py-1.5 font-bold text-emerald-900 bg-emerald-50 px-2.5 rounded">
-                      <span>Sanctuary Fodder Corpus ({modalSimulation.shelterCorpusPct}%):</span>
-                      <span>₹{modalSimulation.shelterCorpusNet.toLocaleString("en-IN")}</span>
+
+                    {/* Share Slider */}
+                    <div className="space-y-2 p-4 bg-paper rounded-xl border border-line">
+                      <div className="flex items-center justify-between text-[13px]">
+                        <span className="font-semibold text-ink">
+                          Manager Custodian Cut:{" "}
+                          <strong className="text-forest text-[16px]">
+                            {modalSharePct}%
+                          </strong>
+                        </span>
+                        <span className="font-mono text-[12px] text-ink-faint">
+                          Sanctuary Fodder Corpus:{" "}
+                          <strong className="text-emerald-800">
+                            {100 - modalSharePct}%
+                          </strong>
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="10"
+                        max="50"
+                        step="1"
+                        value={modalSharePct}
+                        onChange={(e) =>
+                          setModalSharePct(Number(e.target.value))
+                        }
+                        className="w-full accent-forest cursor-pointer h-2 bg-card rounded-lg"
+                      />
+                      <div className="flex justify-between text-[11px] font-mono text-ink-faint">
+                        <span>10% (Floor)</span>
+                        <span>25% (Recommended Baseline)</span>
+                        <span>50% (Max Ceiling)</span>
+                      </div>
+                    </div>
+
+                    {/* Bonus Per Puja */}
+                    <div className="space-y-2 p-4 bg-paper rounded-xl border border-line">
+                      <div className="flex items-center justify-between text-[13px]">
+                        <span className="font-semibold text-ink">
+                          Bonus Per Verified Puja (₹)
+                        </span>
+                        <span className="font-mono text-forest font-bold text-[15px]">
+                          +₹{modalBonusPerPuja} / Seva
+                        </span>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        max="1000"
+                        step="50"
+                        value={modalBonusPerPuja}
+                        onChange={(e) =>
+                          setModalBonusPerPuja(
+                            Math.max(0, Number(e.target.value)),
+                          )
+                        }
+                        className="w-full px-4 py-2 bg-card border border-line rounded-lg text-[14px] font-mono font-bold text-ink focus:outline-none focus:ring-2 focus:ring-forest"
+                      />
+                      <p className="text-[11.5px] text-ink-faint">
+                        Incentive credited directly into the manager's wallet
+                        for every successfully executed Darshan.
+                      </p>
+                    </div>
+
+                    {/* Save Button */}
+                    <div className="pt-2 flex items-center justify-between">
+                      <span className="text-[11.5px] text-ink-soft font-mono">
+                        Last Updated:{" "}
+                        {new Date(activePolicy.lastUpdated).toLocaleDateString(
+                          "en-IN",
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleSaveSharePolicyModal}
+                        disabled={savingSharePolicy}
+                        className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-forest text-white text-[13.5px] font-bold hover:bg-forest-deep transition cursor-pointer shadow-md"
+                      >
+                        {savingSharePolicy ? (
+                          <>
+                            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            <span>Updating Policy...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save size={16} />
+                            <span>Save Policy Changes</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-lg bg-card border border-line text-[11.5px] text-ink-soft leading-snug">
-                    ✓ With this configuration, <strong>{activePolicy.managerName}</strong> will earn <strong>₹{modalSimulation.managerTotalEarning.toLocaleString("en-IN")}</strong> in their personal wallet on each completed seva, and the Gaushala will retain <strong>₹{modalSimulation.shelterCorpusNet.toLocaleString("en-IN")}</strong> for fodder and infrastructure.
+                  {/* Right 5 cols: Live Calculation Preview */}
+                  <div className="lg:col-span-5 bg-paper rounded-xl p-5 border border-line space-y-4">
+                    <div className="flex items-center justify-between border-b border-line pb-3">
+                      <span className="text-[12px] font-mono text-forest uppercase font-bold tracking-wider">
+                        Live Seva Calculation Preview
+                      </span>
+                      <span className="font-mono text-[11px] bg-forest/10 text-forest px-2 py-0.5 rounded font-semibold">
+                        ₹4,000 Seva
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5 text-[12.5px] font-mono">
+                      <div className="flex justify-between py-1 border-b border-line/60">
+                        <span className="text-ink-soft">
+                          Gross Devotee Seva:
+                        </span>
+                        <span className="font-bold text-ink">
+                          ₹
+                          {modalSimulation.grossDakshina.toLocaleString(
+                            "en-IN",
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-line/60 text-ink-soft">
+                        <span>
+                          Platform Commission (
+                          {modalSimulation.platformCommissionPct}%):
+                        </span>
+                        <span>
+                          -₹
+                          {modalSimulation.platformFee.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1 border-b border-line/60 font-semibold text-emerald-800">
+                        <span>Gaushala Net Seva (80%):</span>
+                        <span>
+                          ₹{modalSimulation.gaushalaNet.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1.5 border-b border-line text-purple-900 bg-purple-50 px-2.5 rounded">
+                        <span>
+                          Manager Wallet Credit (
+                          {modalSimulation.managerSharePct}%):
+                        </span>
+                        <span className="font-bold text-forest">
+                          +₹
+                          {modalSimulation.managerBaseCut.toLocaleString(
+                            "en-IN",
+                          )}
+                          {modalSimulation.bonusPerPuja > 0 &&
+                            ` (+₹${modalSimulation.bonusPerPuja} bonus)`}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1.5 font-bold text-emerald-900 bg-emerald-50 px-2.5 rounded">
+                        <span>
+                          Sanctuary Fodder Corpus (
+                          {modalSimulation.shelterCorpusPct}%):
+                        </span>
+                        <span>
+                          ₹
+                          {modalSimulation.shelterCorpusNet.toLocaleString(
+                            "en-IN",
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-card border border-line text-[11.5px] text-ink-soft leading-snug">
+                      ✓ With this configuration,{" "}
+                      <strong>{activePolicy.managerName}</strong> will earn{" "}
+                      <strong>
+                        ₹
+                        {modalSimulation.managerTotalEarning.toLocaleString(
+                          "en-IN",
+                        )}
+                      </strong>{" "}
+                      in their personal wallet on each completed seva, and the
+                      Gaushala will retain{" "}
+                      <strong>
+                        ₹
+                        {modalSimulation.shelterCorpusNet.toLocaleString(
+                          "en-IN",
+                        )}
+                      </strong>{" "}
+                      for fodder and infrastructure.
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Legal / Authority Sign-off */}
-              <div className="p-4 rounded-xl bg-paper-deep border border-line flex items-center justify-between text-[12px] text-ink-soft">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck size={16} className="text-forest" />
-                  <span>
-                    Enforced by Operations Admin ({name}) under Regional Sanctuary Jurisdiction.
+                {/* Legal / Authority Sign-off */}
+                <div className="p-4 rounded-xl bg-paper-deep border border-line flex items-center justify-between text-[12px] text-ink-soft">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck size={16} className="text-forest" />
+                    <span>
+                      Enforced by Operations Admin ({name}) under Regional
+                      Sanctuary Jurisdiction.
+                    </span>
+                  </div>
+                  <span className="font-mono text-[10.5px] text-ink-faint">
+                    Protocol: GOMAA-SPLIT-RBAC-v2
                   </span>
                 </div>
-                <span className="font-mono text-[10.5px] text-ink-faint">
-                  Protocol: GOMAA-SPLIT-RBAC-v2
-                </span>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* ========================================================================= */}
         {/* TAB 3: ROLE METRICS & ACTIVITY LEDGER                                      */}
@@ -1737,7 +2144,8 @@ export default function EditProfileModal({
                     <span>Verified Operational &amp; Financial Ledger</span>
                   </h3>
                   <p className="text-[12.5px] text-ink-soft mt-0.5">
-                    Real-time performance metrics and ceremonial welfare logs for {name}.
+                    Real-time performance metrics and ceremonial welfare logs
+                    for {name}.
                   </p>
                 </div>
                 <span className="text-[11px] font-mono text-emerald-800 bg-emerald-100 border border-emerald-300 px-3 py-1 rounded-full">
@@ -1748,27 +2156,37 @@ export default function EditProfileModal({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="p-5 rounded-xl bg-paper border border-line space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-[13.5px] font-semibold text-ink">Ceremonial Seva Activity</span>
-                    <span className="text-[11px] font-mono text-forest">Live</span>
+                    <span className="text-[13.5px] font-semibold text-ink">
+                      Ceremonial Seva Activity
+                    </span>
+                    <span className="text-[11px] font-mono text-forest">
+                      Live
+                    </span>
                   </div>
                   <div className="text-[26px] font-serif font-bold text-ink">
                     {roleMetrics.metric1.value}
                   </div>
                   <p className="text-[12px] text-ink-soft">
-                    Ceremonial visits arranged in accordance with sacred Vedic protocols and animal welfare safeguards.
+                    Ceremonial visits arranged in accordance with sacred Vedic
+                    protocols and animal welfare safeguards.
                   </p>
                 </div>
 
                 <div className="p-5 rounded-xl bg-paper border border-line space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-[13.5px] font-semibold text-ink">Herd Custody &amp; Health</span>
-                    <span className="text-[11px] font-mono text-emerald-700">Protected</span>
+                    <span className="text-[13.5px] font-semibold text-ink">
+                      Herd Custody &amp; Health
+                    </span>
+                    <span className="text-[11px] font-mono text-emerald-700">
+                      Protected
+                    </span>
                   </div>
                   <div className="text-[26px] font-serif font-bold text-ink">
                     {roleMetrics.metric2.value}
                   </div>
                   <p className="text-[12px] text-ink-soft">
-                    Mandatory 90-minute resting intervals enforced between consecutive ceremonial darshans.
+                    Mandatory 90-minute resting intervals enforced between
+                    consecutive ceremonial darshans.
                   </p>
                 </div>
               </div>
@@ -1789,7 +2207,8 @@ export default function EditProfileModal({
                     Privacy Guarantee &amp; Role-Isolated RBAC Boundaries
                   </h3>
                   <p className="text-[12.5px] text-ink-soft mt-0.5">
-                    In compliance with RBI Master Directions on Financial Intermediaries and Platform Escrow Governance.
+                    In compliance with RBI Master Directions on Financial
+                    Intermediaries and Platform Escrow Governance.
                   </p>
                 </div>
               </div>
@@ -1799,9 +2218,14 @@ export default function EditProfileModal({
                   <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
                     <Lock size={18} />
                   </div>
-                  <h4 className="font-bold text-[14px] text-ink">Confidential Bank Vault</h4>
+                  <h4 className="font-bold text-[14px] text-ink">
+                    Confidential Bank Vault
+                  </h4>
                   <p className="text-[12.5px] text-ink-soft leading-relaxed">
-                    Gosala Manager and Operations Admin bank account credentials are encrypted and restricted exclusively to their authenticated login. Super Admin cannot inspect or modify individual external bank accounts.
+                    Gosala Manager and Operations Admin bank account credentials
+                    are encrypted and restricted exclusively to their
+                    authenticated login. Super Admin cannot inspect or modify
+                    individual external bank accounts.
                   </p>
                 </div>
 
@@ -1809,9 +2233,12 @@ export default function EditProfileModal({
                   <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
                     <Landmark size={18} />
                   </div>
-                  <h4 className="font-bold text-[14px] text-ink">Tokenized Direct Routing</h4>
+                  <h4 className="font-bold text-[14px] text-ink">
+                    Tokenized Direct Routing
+                  </h4>
                   <p className="text-[12.5px] text-ink-soft leading-relaxed">
-                    Platform payouts disburse via tokenized RBI payment bridges without raw exposure to unauthorized personnel.
+                    Platform payouts disburse via tokenized RBI payment bridges
+                    without raw exposure to unauthorized personnel.
                   </p>
                 </div>
 
@@ -1819,9 +2246,13 @@ export default function EditProfileModal({
                   <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
                     <FileCheck size={18} />
                   </div>
-                  <h4 className="font-bold text-[14px] text-ink">Immutable Audit Trail</h4>
+                  <h4 className="font-bold text-[14px] text-ink">
+                    Immutable Audit Trail
+                  </h4>
                   <p className="text-[12.5px] text-ink-soft leading-relaxed">
-                    Every profile modification logs timestamp, IP fingerprint, and cryptographic signature to prevent unauthorized tampering.
+                    Every profile modification logs timestamp, IP fingerprint,
+                    and cryptographic signature to prevent unauthorized
+                    tampering.
                   </p>
                 </div>
               </div>
@@ -1834,7 +2265,10 @@ export default function EditProfileModal({
       <footer className="bg-card border-t border-line px-4 sm:px-8 py-4 flex flex-col sm:flex-row items-center justify-between text-[12px] text-ink-faint gap-3 mt-auto">
         <div className="flex items-center gap-2">
           <Lock size={13} className="text-emerald-700" />
-          <span>GOMAA Sovereign Multi-Role Treasury &amp; Identity Protocol v2.6 · End-to-End Encrypted</span>
+          <span>
+            GOMAA Sovereign Multi-Role Treasury &amp; Identity Protocol v2.6 ·
+            End-to-End Encrypted
+          </span>
         </div>
         <button
           onClick={onClose}

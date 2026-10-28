@@ -1,4 +1,4 @@
-import { db } from "../db.ts"
+import { prisma } from "../prisma.ts"
 
 export type PricingCalculationResult = {
   base: number
@@ -17,6 +17,35 @@ export type PricingCalculationResult = {
   chargeableKm: number
 }
 
+let cachedPricingConfig = {
+  standardMin: 60,
+  extraUnitMin: 30,
+  extraUnitRate: 500,
+  freeKm: 5,
+  perKm: 50,
+  taxPct: 12,
+  commissionPct: 20,
+}
+
+// Preload from PostgreSQL master_pricing_config
+prisma.masterPricingConfig.findFirst().then((dbCfg) => {
+  if (dbCfg) {
+    cachedPricingConfig = {
+      standardMin: dbCfg.standardMin,
+      extraUnitMin: dbCfg.extraUnitMin,
+      extraUnitRate: dbCfg.extraUnitRate,
+      freeKm: dbCfg.freeKm,
+      perKm: dbCfg.perKm,
+      taxPct: dbCfg.taxPct,
+      commissionPct: dbCfg.commissionPct,
+    }
+  }
+}).catch(() => {})
+
+export function updateCachedPricingConfig(patch: any) {
+  cachedPricingConfig = { ...cachedPricingConfig, ...patch }
+}
+
 export function calculateBookingPrice(params: {
   baseRate?: number
   durationMin: number
@@ -31,7 +60,7 @@ export function calculateBookingPrice(params: {
   extraUnitMin?: number
   extraUnitRate?: number
 }): PricingCalculationResult {
-  const cfg = db.pricingConfig
+  const cfg = cachedPricingConfig
 
   const base = params.baseRate ?? 3500
   const durationMin = params.durationMin || cfg.standardMin || 60
@@ -58,15 +87,21 @@ export function calculateBookingPrice(params: {
   const tax = Math.round((subtotal * taxPct) / 100)
   const total = subtotal + tax
 
-  const commissionPct = params.commissionPct !== undefined ? params.commissionPct : (cfg.commissionPct || 20)
+  // Platform Commission vs Gosala Payout Split
+  const commissionPct = params.commissionPct !== undefined
+    ? params.commissionPct
+    : (cfg.commissionPct || 20)
   const sevaTotal = base + extraTime
-  const commission =
-    params.commissionFlat !== undefined && params.commissionFlat !== null
-      ? params.commissionFlat
-      : Math.round((sevaTotal * commissionPct) / 100)
 
-  const passThrough = transport + addons
-  const gosalaPayable = Math.max(0, sevaTotal - commission) + passThrough
+  let commission = 0
+  if (params.commissionFlat !== undefined && params.commissionFlat > 0) {
+    commission = params.commissionFlat
+  } else {
+    commission = Math.round((sevaTotal * commissionPct) / 100)
+  }
+
+  // Gosala gets: seva balance + 100% transport + addons
+  const gosalaPayable = Math.max(0, sevaTotal - commission) + transport + addons
 
   return {
     base,

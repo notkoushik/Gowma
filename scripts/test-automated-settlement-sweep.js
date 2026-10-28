@@ -4,7 +4,7 @@
  * 1. Live schedule status and custodian pool discovery
  * 2. Automated sweep execution with dynamic formula calculations
  * 3. Authentic 16-character RBI UTR code generation
- * 4. Beneficiary bank resolution (Andhra Bank / Koushik Botcha)
+ * 4. Beneficiary bank resolution (HDFC Bank / GOMAA Central Trust)
  * 5. Replay protection and database persistence in PostgreSQL
  * 6. Dynamic schedule configuration toggle
  */

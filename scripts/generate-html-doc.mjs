@@ -440,18 +440,10 @@ const html = `<!DOCTYPE html>
       <tbody>
         <tr>
           <td><strong>Super Admin</strong></td>
-          <td>Koushik</td>
-          <td>koushik@gmail.com</td>
+          <td>Super Admin</td>
+          <td>superadmin@gomaa.in</td>
           <td>+91 98000 00000</td>
-          <td>Koushik.git</td>
-          <td>All Platform Sanctuaries</td>
-        </tr>
-        <tr>
-          <td><strong>Super Admin (Alt)</strong></td>
-          <td>Koushik</td>
-          <td>nanikoushik96@gmail.com</td>
-          <td>+91 98000 00000</td>
-          <td>Koushik.git</td>
+          <td>SuperAdmin@2026!</td>
           <td>All Platform Sanctuaries</td>
         </tr>
         <tr>
@@ -459,7 +451,7 @@ const html = `<!DOCTYPE html>
           <td>Admin_1</td>
           <td>alt.yq-fs88dj2@yopmail.com</td>
           <td>+91 98222 33344</td>
-          <td>Koushik.git</td>
+          <td>GomaaAdmin@2026!</td>
           <td>Gaushala_01, 02, 03</td>
         </tr>
         <tr>
@@ -467,7 +459,7 @@ const html = `<!DOCTYPE html>
           <td>Manager 1</td>
           <td>manager1@gomaa.in</td>
           <td>+91 98111 22233</td>
-          <td>Koushik.git</td>
+          <td>GomaaAdmin@2026!</td>
           <td>Gaushala_01 (Custodian)</td>
         </tr>
         <tr>
@@ -475,7 +467,7 @@ const html = `<!DOCTYPE html>
           <td>Manager 2</td>
           <td>manager2@gomaa.in</td>
           <td>+91 98444 55566</td>
-          <td>Koushik.git</td>
+          <td>GomaaAdmin@2026!</td>
           <td>Gaushala_03 (Custodian)</td>
         </tr>
       </tbody>

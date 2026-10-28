@@ -1,9 +1,6 @@
-import fs from "fs"
-import path from "path"
+import { prisma } from "./prisma.ts"
 
-const META_FILE_PATH = path.resolve(process.cwd(), "server/data/gosalas_meta.json")
-
-interface GosalaRichMeta {
+export interface GosalaRichMeta {
   photo?: string
   photos?: string[]
   trustRegistrationNo?: string
@@ -33,40 +30,36 @@ interface GosalaRichMeta {
   managerName?: string
 }
 
-// In-memory cache backed by server/data/gosalas_meta.json
+// In-memory cache backed by PostgreSQL `gosalas.metadata`
 let metaStore: Record<string, GosalaRichMeta> = {}
+let isInitialized = false
 
-function loadMetaStore() {
+async function initMetaStore() {
+  if (isInitialized) return
   try {
-    if (fs.existsSync(META_FILE_PATH)) {
-      const raw = fs.readFileSync(META_FILE_PATH, "utf-8")
-      metaStore = JSON.parse(raw)
+    const gosalas = await prisma.gosala.findMany({
+      select: { id: true, name: true, metadata: true }
+    })
+    for (const g of gosalas) {
+      if (g.metadata && typeof g.metadata === "object") {
+        if (g.id) metaStore[g.id] = g.metadata as GosalaRichMeta
+        if (g.name) metaStore[g.name.trim().toLowerCase()] = g.metadata as GosalaRichMeta
+      }
     }
+    isInitialized = true
   } catch (err) {
-    console.warn("Could not load gosalas_meta.json:", err)
-    metaStore = {}
+    console.warn("[gosalaMeta] Could not preload gosalas metadata from DB:", (err as any)?.message)
   }
 }
 
-function persistMetaStore() {
-  try {
-    const dir = path.dirname(META_FILE_PATH)
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true })
-    }
-    fs.writeFileSync(META_FILE_PATH, JSON.stringify(metaStore, null, 2), "utf-8")
-  } catch (err) {
-    console.error("Failed to save gosalas_meta.json:", err)
-  }
-}
-
-// Initial load
-loadMetaStore()
+// Trigger initial load
+initMetaStore().catch(() => {})
 
 export function getGosalaMeta(id: string, name?: string): GosalaRichMeta {
-  if (metaStore[id]) return metaStore[id]
+  if (id && metaStore[id]) return metaStore[id]
   if (name) {
     const normalizedName = name.trim().toLowerCase()
+    if (metaStore[normalizedName]) return metaStore[normalizedName]
     for (const [key, val] of Object.entries(metaStore)) {
       if (key.toLowerCase() === normalizedName) return val
     }
@@ -85,25 +78,55 @@ export function saveGosalaMeta(
     ...meta,
   }
 
-  // Filter out undefined values to keep clean
+  // Filter out undefined values
   Object.keys(updated).forEach((k) => {
     if ((updated as any)[k] === undefined) {
       delete (updated as any)[k]
     }
   })
 
-  metaStore[id] = updated
-  if (name) {
-    metaStore[name.trim().toLowerCase()] = updated
-  }
+  if (id) metaStore[id] = updated
+  if (name) metaStore[name.trim().toLowerCase()] = updated
 
-  persistMetaStore()
+  // Persist to PostgreSQL asynchronously
+  prisma.gosala.findFirst({
+    where: {
+      OR: [
+        ...(id ? [{ id }] : []),
+        ...(name ? [{ name: { equals: name, mode: "insensitive" as const } }] : [])
+      ]
+    }
+  }).then(async (gosala) => {
+    if (gosala) {
+      metaStore[gosala.id] = updated
+      metaStore[gosala.name.trim().toLowerCase()] = updated
+      await prisma.gosala.update({
+        where: { id: gosala.id },
+        data: { metadata: updated as any }
+      })
+    }
+  }).catch((err) => {
+    console.error(`[gosalaMeta] Failed to persist metadata to DB for ${name || id}:`, err.message)
+  })
 }
 
 export function deleteGosalaMeta(id: string, name?: string) {
-  delete metaStore[id]
-  if (name) {
-    delete metaStore[name.trim().toLowerCase()]
-  }
-  persistMetaStore()
+  if (id) delete metaStore[id]
+  if (name) delete metaStore[name.trim().toLowerCase()]
+
+  prisma.gosala.findFirst({
+    where: {
+      OR: [
+        ...(id ? [{ id }] : []),
+        ...(name ? [{ name: { equals: name, mode: "insensitive" as const } }] : [])
+      ]
+    }
+  }).then(async (gosala) => {
+    if (gosala) {
+      await prisma.gosala.update({
+        where: { id: gosala.id },
+        data: { metadata: {} }
+      })
+    }
+  }).catch(() => {})
 }

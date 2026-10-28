@@ -1,7 +1,5 @@
 import { prisma } from "./prisma.ts"
 import { wsHub } from "./ws/hub.ts"
-import { gpsSimulator } from "./ws/gpsSimulator.ts"
-import { db } from "./db.ts"
 import { getGosalaMeta, saveGosalaMeta, deleteGosalaMeta } from "./gosalaMeta.ts"
 import { getAnimalMeta, saveAnimalMeta, deleteAnimalMeta, getAllAnimalMeta } from "./animalMeta.ts"
 import { getUserMeta, setUserMeta } from "./userMeta.ts"
@@ -14,7 +12,7 @@ import type {
   Settlement,
 } from "./types.ts"
 import { executeAutomatedSweep, getScheduleStatus } from "./services/payoutEngine.ts"
-import { calculateBookingPrice } from "./services/pricingService.ts"
+import { calculateBookingPrice, updateCachedPricingConfig } from "./services/pricingService.ts"
 import { issueQuote, verifyQuote } from "./services/quoteService.ts"
 import crypto from "node:crypto"
 import { createPaymentOrder, verifyCapturedPayment, verifyWebhookSignature } from "./services/razorpayService.ts"
@@ -53,130 +51,72 @@ type HandlerResponse = {
 
 const driverLiveLocations = new Map<string, any>()
 const serverAnimals = new Map<string, any>()
-const defaultEmpanelledVets = [
-  {
-    id: "VET-001",
-    name: "Dr. Anand Kulkarni",
-    qualification: "B.V.Sc & A.H., M.V.Sc (Bovine Surgery)",
-    regNo: "TS-VET-4821",
-    clinic: "Govt. Veterinary Polyclinic & Cattle Hospital",
-    phone: "+91 98220 54321",
-    address: "Road No. 10, Banjara Hills, Hyderabad, Telangana 500034",
-    specialization: "Bovine Health, Vaccination & Ultrasound",
-    emergency24x7: true,
-    assignedGosalas: ["Gaushala_01", "Gaushala_02", "All Gaushalas"],
-  },
-  {
-    id: "VET-002",
-    name: "Dr. Lakshmi Narayana",
-    qualification: "B.V.Sc & A.H. (Gold Medalist)",
-    regNo: "TS-VET-5190",
-    clinic: "Sri Krishna Bovine Welfare Clinic",
-    phone: "+91 98490 11223",
-    address: "Trimulgherry, Secunderabad, Telangana 500015",
-    specialization: "Indigenous Cattle Gynaecology & Lactation Care",
-    emergency24x7: true,
-    assignedGosalas: ["Gaushala_03", "All Gaushalas"],
-  },
-  {
-    id: "VET-003",
-    name: "Dr. Rajeshwar Rao",
-    qualification: "B.V.Sc, Ph.D (Animal Nutrition)",
-    regNo: "TS-VET-6204",
-    clinic: "Deccan Veterinary Emergency Care Center",
-    phone: "+91 98330 99887",
-    address: "Gachibowli Financial District, Hyderabad 500032",
-    specialization: "Emergency Trauma, Hoof Care & Pasture Toxicology",
-    emergency24x7: true,
-    assignedGosalas: ["Gaushala_02", "Gaushala_01", "All Gaushalas"],
-  },
-]
-const serverVets = new Map<string, any>(defaultEmpanelledVets.map(v => [v.id, v]))
 
-const serverProfiles: Record<string, any> = {
-  customer: {
-    id: "USER-CUST-NEW",
-    role: "customer",
-    name: "Devotee",
-    phone: "+91 98000 00000",
-    email: "devotee@gmail.com",
-    customerData: {
-      address: "Devotee Residence",
-      aadhaarNumber: "XXXX-XXXX-0000",
-      memberSince: "Oct 2026",
-      totalBookings: 0,
-      preferredCeremony: "Kamadhenu Puja & Gau Seva",
-    },
-  },
-  manager: {
-    id: "USER-MGR-NEW",
-    role: "manager",
-    name: "Gaushala Manager",
-    phone: "+91 98000 00000",
-    email: "manager@gomaa.in",
-    managerData: {
-      managerId: "MGR-NEW",
-      gosala: "Unassigned",
-      region: "Operational Hub",
-      dailySevaCeiling: 2,
-      restingBufferMin: 90,
-    },
-  },
-  driver: {
-    id: "USER-DRV-NEW",
-    role: "driver",
-    name: "Transit Pilot",
-    phone: "+91 98000 00000",
-    email: "driver@gomaa.in",
-    driverData: {
-      driverId: "DRV-NEW",
-      vehicleNumber: "TS-09-GA-1008",
-      vehicleType: "Tata 407 (Hydraulic Cattle Bed)",
-      licenseNumber: "DL-PENDING",
-      gosalaBase: "Unassigned",
-      status: "Available",
-    },
-  },
-  admin: {
-    id: "USER-ADM-NEW",
-    role: "admin",
-    name: "Operations Admin",
-    phone: "+91 98000 00000",
-    email: "operations@gomaa.in",
-    adminData: {
-      adminId: "ADM-NEW",
-      designation: "Regional Operations Officer",
-      department: "Regional Gaushala Operations Hub",
-      authorityLevel: "OPERATIONS_ADMIN",
-    },
-  },
-  super_admin: {
-    id: "USER-SA-KOUSHIK",
-    role: "super_admin",
-    name: "Koushik",
-    phone: "+91 98000 00000",
-    email: "koushik@gmail.com",
-    adminData: {
-      adminId: "SA-KOUSHIK",
-      designation: "Platform Sovereign & Master Authority",
-      department: "GOMAA Central Platform Governance",
-      authorityLevel: "SUPER_ADMIN",
-      treasuryClearanceLevel: "Master Sovereign Authority",
-    },
-  },
+async function resolveRoleProfilesFromDB(): Promise<Record<string, any>> {
+  try {
+    const users = await prisma.user.findMany({
+      where: { isActive: true },
+      orderBy: { createdAt: "asc" },
+    })
+
+    const roleUsers: Record<string, any> = {
+      customer: users.find((u) => u.role === "CUSTOMER"),
+      manager: users.find((u) => u.role === "GOSALA_MANAGER"),
+      driver: users.find((u) => u.role === "DRIVER"),
+      admin: users.find((u) => u.role === "OPERATIONS_ADMIN"),
+      super_admin: users.find((u) => u.role === "SUPER_ADMIN"),
+    }
+
+    const profiles: Record<string, any> = {}
+    for (const [roleKey, user] of Object.entries(roleUsers)) {
+      const meta = ((user?.metadata as any) || {})
+      profiles[roleKey] = {
+        id: user?.id || `USER-${roleKey.toUpperCase()}`,
+        role: roleKey,
+        name: user?.name || (roleKey === "super_admin" ? "Super Admin" : roleKey === "admin" ? "Operations Admin" : roleKey === "manager" ? "Gaushala Manager" : roleKey === "driver" ? "Transit Pilot" : "Devotee"),
+        phone: user?.phone || "+91 98000 00000",
+        email: user?.email || (roleKey === "super_admin" ? "superadmin@gomaa.in" : `${roleKey}@gomaa.in`),
+        avatar: user?.avatar || undefined,
+        customerData: meta.customerData || (roleKey === "customer" ? {
+          address: "Devotee Residence",
+          aadhaarNumber: "XXXX-XXXX-0000",
+          memberSince: "Oct 2026",
+          totalBookings: 0,
+          preferredCeremony: "Kamadhenu Puja & Gau Seva",
+        } : undefined),
+        managerData: meta.managerData || (roleKey === "manager" ? {
+          managerId: user?.uniqueId || "MGR-0101",
+          gosala: "Gaushala_01",
+          region: "Operational Hub",
+          dailySevaCeiling: 2,
+          restingBufferMin: 90,
+        } : undefined),
+        driverData: meta.driverData || (roleKey === "driver" ? {
+          driverId: user?.uniqueId || "DRV-102",
+          vehicleNumber: "TS-09-GA-1008",
+          vehicleType: "Tata 407 (Hydraulic Cattle Bed)",
+          licenseNumber: "DL-PENDING",
+          gosalaBase: "Unassigned",
+          status: "Available",
+        } : undefined),
+        adminData: meta.adminData || (roleKey === "admin" || roleKey === "super_admin" ? {
+          adminId: user?.uniqueId || (roleKey === "super_admin" ? "SA-0001" : "OPS-0101"),
+          designation: roleKey === "super_admin" ? "Platform Sovereign & Master Authority" : "Regional Operations Officer",
+          department: roleKey === "super_admin" ? "GOMAA Central Platform Governance" : "Regional Gaushala Operations Hub",
+          authorityLevel: roleKey === "super_admin" ? "SUPER_ADMIN" : "OPERATIONS_ADMIN",
+          ...(roleKey === "super_admin" ? { treasuryClearanceLevel: "Master Sovereign Authority" } : {}),
+        } : undefined),
+        bankDetails: meta.bankDetails || undefined,
+        settlementSchedule: meta.settlementSchedule || undefined,
+      }
+    }
+    return profiles
+  } catch (err) {
+    console.warn("[resolveRoleProfilesFromDB] DB lookup fallback:", err)
+    return {}
+  }
 }
 
-
-gpsSimulator.setOnTick((tick) => {
-  driverLiveLocations.set(tick.bookingId, {
-    ...tick,
-    lastUpdated: new Date().toLocaleTimeString("en-IN", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    }),
-  })
-})
 
 function parseUrl(url: string) {
   const [rawPath, search] = (url || "").split("?")
@@ -848,7 +788,7 @@ export async function handleApiRequest(
 
     try {
       const sendResult = await sendOtpEmail({
-        toEmail: "nanikoushik96@gmail.com",
+        toEmail: "diagnostics@gomaa.in",
         userName: "Diagnostic Check",
         otp: "123456",
         expiryMinutes: 10,
@@ -973,34 +913,25 @@ export async function handleApiRequest(
     try {
       hold = await prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM animals WHERE id = ${animal.id} FOR UPDATE`
-        
-        // If current customer has an existing active hold for this animal, release it so they can re-hold or change slots
-        if (authUser?.userId) {
-          await tx.temporarySlotHold.updateMany({
-            where: { animalId: animal.id, customerId: authUser.userId, status: "ACTIVE" },
-            data: { status: "RELEASED", releasedAt: new Date() },
-          })
-        }
 
         const holdStart = toMinutes(body.start)
         const holdEnd = holdStart + (Number(body.durationMin) || 60)
 
-        // Check if another customer currently holds an overlapping time window
-        const otherHolds = await tx.temporarySlotHold.findMany({
+        // Check if another customer or hold currently reserves an overlapping time window
+        const activeHolds = await tx.temporarySlotHold.findMany({
           where: {
             animalId: animal.id,
             date: body.date,
             status: "ACTIVE",
             expiresAt: { gt: new Date() },
-            ...(authUser?.userId ? { customerId: { not: authUser.userId } } : {}),
           },
         })
-        const isSlotHeld = otherHolds.some((h) => {
+        const isSlotHeld = activeHolds.some((h) => {
           const s = toMinutes(h.startTime)
           const e = s + (h.durationMin || 60)
           return holdStart < e && holdEnd > s
         })
-        if (isSlotHeld) throw new Error("This slot is temporarily held by another devotee")
+        if (isSlotHeld) throw new Error("This slot is already held by another devotee")
 
         const bookings = await tx.booking.findMany({
           where: {
@@ -1047,12 +978,23 @@ export async function handleApiRequest(
 
   // POST /api/pricing/calculate
   if (method === "POST" && pathname === "/api/pricing/calculate") {
-    let cfg: any = db.pricingConfig
+    let cfg: any = null
     try {
       const dbCfg = await prisma.masterPricingConfig.findFirst()
       if (dbCfg) cfg = dbCfg
-    } catch {
-      cfg = db.pricingConfig
+    } catch (err: any) {
+      console.warn("Pricing config fetch error:", err?.message)
+    }
+    if (!cfg) {
+      cfg = {
+        standardMin: 60,
+        extraUnitMin: 30,
+        extraUnitRate: 500,
+        freeKm: 5,
+        perKm: 50,
+        taxPct: 12,
+        commissionPct: 20,
+      }
     }
 
     // Dynamic Sanctuary Overrides if gosalaId or gosala name is supplied
@@ -1342,38 +1284,9 @@ export async function handleApiRequest(
         orderBy: { createdAt: "desc" },
       })
       return { status: 200, body: { bookings: bookings.map(formatBooking) } }
-    } catch {
-      // In-Memory Fallback
-      let list = db.bookings
-      if (gosala) list = list.filter((b) => b.gosala.toLowerCase().includes(gosala.toLowerCase()))
-      if (customer) list = list.filter((b) => b.customer.toLowerCase().includes(customer.toLowerCase()))
-      if (status) list = list.filter((b) => b.status.toLowerCase() === status.toLowerCase())
-      if (authUser?.role === "manager" && authUser.gosalaNames?.length > 0) {
-        list = list.filter((b) =>
-          authUser.gosalaNames.some((gn) => b.gosala.toLowerCase().includes(gn.toLowerCase())),
-        )
-      } else if (authUser?.role === "admin") {
-        const adminEmail = (authUser.email || "").toLowerCase()
-        const adminName = (authUser.name || "").toLowerCase()
-        list = list.filter((b) => {
-          if (authUser.gosalaNames?.length > 0) {
-            return authUser.gosalaNames.some((gn: string) => b.gosala.toLowerCase().includes(gn.toLowerCase()))
-          }
-          const govEmail = ((b as any).governingAdminEmail || "").toLowerCase()
-          const govName = ((b as any).governingAdminName || "").toLowerCase()
-          return govEmail === adminEmail || (govName && govName.includes(adminName))
-        })
-      } else if (authUser?.role === "customer") {
-        list = list.filter((b) =>
-          b.customer.toLowerCase() === authUser.name.toLowerCase() ||
-          (authUser.phone && b.phone === authUser.phone),
-        )
-      } else if (authUser?.role === "driver") {
-        list = list.filter((b) =>
-          !b.driver || b.driver.toLowerCase() === authUser.name.toLowerCase(),
-        )
-      }
-      return { status: 200, body: { bookings: list } }
+    } catch (err: any) {
+      console.error("[GET /api/bookings] DB error:", err?.message)
+      return { status: 500, body: { error: "Failed to load bookings from database" } }
     }
   }
 
@@ -1600,7 +1513,6 @@ export async function handleApiRequest(
         specialInstructions: b.specialInstructions,
         devoteeSince: b.devoteeSince,
       }
-      db.bookings = [formatted, ...db.bookings.filter((x) => x.id !== formatted.id)]
 
       // WebSocket real-time alerts
       wsHub.broadcastToChannel(
@@ -1746,9 +1658,6 @@ export async function handleApiRequest(
         formatted.managerApproval.isActingManager = isActingManager
       }
 
-      // Sync to in-memory db as well
-      db.bookings = [formatted, ...db.bookings.filter((x) => x.id !== id)]
-
       wsHub.broadcastToChannel("channel:admin", "ROLE_ALERT", {
         targetRole: "OPERATIONS_ADMIN",
         title: confirm
@@ -1767,38 +1676,8 @@ export async function handleApiRequest(
 
       return { status: 200, body: { booking: formatted } }
     } catch (e: any) {
-      console.warn("manager-decide falling back to in-memory store:", e?.message)
-      // In-Memory Fallback
-      let b = db.bookings.find((x) => x.id === id)
-      if (b) {
-        // Multi-Tenant Isolation Guard: Managers cannot review other Gaushalas
-        if (callerRole === "manager" && callerGosala && b.gosala) {
-          const matches =
-            b.gosala.toLowerCase().includes(callerGosala.toLowerCase()) ||
-            callerGosala.toLowerCase().includes(b.gosala.toLowerCase())
-          if (!matches) {
-            return {
-              status: 403,
-              body: {
-                error: `Forbidden: Manager assigned to ${callerGosala} cannot review bookings for ${b.gosala}`,
-              },
-            }
-          }
-        }
-
-        b.status = confirm ? "Admin Review" : "Rejected"
-        b.managerRemark = remark
-        b.managerApproval = {
-          userId: isActingManager ? "ADM-101" : "MGR-801",
-          name: managerName,
-          timestamp: new Date().toLocaleString("en-IN"),
-          remark,
-          isActingManager,
-          actorRole: isActingManager ? "OPERATIONS_ADMIN" : "GOSALA_MANAGER",
-        }
-        return { status: 200, body: { booking: { ...b } } }
-      }
-      return { status: 404, body: { error: "Booking not found" } }
+      console.error("[manager-decide] DB error:", e?.message)
+      return { status: 500, body: { error: e?.message || "Failed to update booking review" } }
     }
   }
 
@@ -1827,11 +1706,6 @@ export async function handleApiRequest(
       const existing = await prisma.booking.findUnique({ where: { id } })
       if (existing) currentStatus = existing.status
     } catch {}
-
-    if (!currentStatus) {
-      const existing = db.bookings.find((x) => x.id === id)
-      if (existing) currentStatus = existing.status
-    }
 
     const isPaymentVerified =
       currentStatus === "PAYMENT_VERIFIED" || currentStatus === "Payment Verified"
@@ -1916,9 +1790,6 @@ export async function handleApiRequest(
 
       const formatted = formatBooking(refreshed || updated)
 
-      // Sync to in-memory db as well
-      db.bookings = [formatted, ...db.bookings.filter((x) => x.id !== id)]
-
       wsHub.broadcastToChannel(`channel:booking:${id}`, "BOOKING_UPDATED", {
         booking: formatted,
       })
@@ -1934,33 +1805,9 @@ export async function handleApiRequest(
       })
 
       return { status: 200, body: { booking: formatted } }
-    } catch {
-      // In-Memory Fallback
-      const b = db.bookings.find((x) => x.id === id)
-      if (b) {
-        if (isPaymentVerified && body.actAsManager) {
-          b.managerRemark = "Feasibility confirmed by Admin as Acting Manager"
-          b.managerApproval = {
-            userId: "ADM-101",
-            name: `${adminName} (Acting Manager)`,
-            timestamp: new Date().toLocaleString("en-IN"),
-            remark: "Feasibility confirmed by Admin as Acting Manager",
-            isActingManager: true,
-            actorRole: "OPERATIONS_ADMIN",
-          }
-        }
-        b.status = confirm ? "Confirmed" : "Rejected"
-        b.adminRemark = remark
-        b.adminApproval = {
-          userId: "ADM-101",
-          name: adminName,
-          timestamp: new Date().toLocaleString("en-IN"),
-          remark,
-          actorRole: "OPERATIONS_ADMIN",
-        }
-        return { status: 200, body: { booking: { ...b } } }
-      }
-      return { status: 404, body: { error: "Booking not found" } }
+    } catch (e: any) {
+      console.error("[admin-decide] DB error:", e?.message)
+      return { status: 500, body: { error: e?.message || "Failed to update booking approval" } }
     }
   }
 
@@ -2020,22 +1867,9 @@ export async function handleApiRequest(
       }
 
       return { status: 200, body: { booking: formatted } }
-    } catch {
-      // In-Memory Fallback
-      const b = db.bookings.find((x) => x.id === id)
-      if (b) {
-        b.driver = driverName
-        b.driverStage = 1
-        b.status = "Confirmed"
-        b.driverPhone = body.driverPhone || b.driverPhone || "+91 98490 23456"
-        b.driverVehiclePlate = body.driverVehiclePlate || b.driverVehiclePlate || "TS 09 EA 4402"
-        b.driverVehicleModel = body.driverVehicleModel || b.driverVehicleModel || "Force Traveller Cattle Ambulance"
-        b.driverRating = body.driverRating ?? b.driverRating ?? 4.9
-        b.driverTotalTrips = body.driverTotalTrips ?? b.driverTotalTrips ?? 184
-        b.driverAvatar = body.driverAvatar ?? b.driverAvatar ?? null
-        return { status: 200, body: { booking: b } }
-      }
-      return { status: 404, body: { error: "Booking not found" } }
+    } catch (e: any) {
+      console.error("[assign-driver] DB error:", e?.message)
+      return { status: 500, body: { error: e?.message || "Failed to assign driver" } }
     }
   }
 
@@ -2050,25 +1884,7 @@ export async function handleApiRequest(
 
     try {
       const b = await prisma.booking.findUnique({ where: { id } })
-      if (!b) {
-        const memB = db.bookings.find((x) => x.id === id)
-        if (memB) {
-          if (memB.driverStage === 5 && !memB.handoverOtpVerified) {
-            return {
-              status: 403,
-              body: {
-                error:
-                  "Handover OTP Verification required before starting ceremony service at devotee altar.",
-              },
-            }
-          }
-          const stage = Math.min((memB.driverStage ?? 0) + 1, 9)
-          memB.driverStage = stage
-          memB.status = stage >= 9 ? "Completed" : stage >= 6 ? "In Service" : memB.status
-          return { status: 200, body: { booking: memB } }
-        }
-        return { status: 404, body: { error: "Booking not found" } }
-      }
+      if (!b) return { status: 404, body: { error: "Booking not found" } }
 
       if ((b as any).driverStage === 5 && !(b as any).handoverOtpVerified) {
         return {
@@ -2104,28 +1920,10 @@ export async function handleApiRequest(
         booking: formatted,
       })
 
-      if (stage === 4) {
-        gpsSimulator.startSimulation(
-          id,
-          updated.gosalaName,
-          updated.address,
-          updated.distanceKm,
-        )
-      } else if (stage >= 6) {
-        gpsSimulator.stopSimulation(id)
-      }
-
       return { status: 200, body: { booking: formatted } }
-    } catch {
-      // In-Memory Fallback
-      const b = db.bookings.find((x) => x.id === id)
-      if (b) {
-        const stage = Math.min((b.driverStage ?? 0) + 1, 9)
-        b.driverStage = stage
-        b.status = stage >= 9 ? "Completed" : stage >= 6 ? "In Service" : b.status
-        return { status: 200, body: { booking: b } }
-      }
-      return { status: 404, body: { error: "Booking not found" } }
+    } catch (e: any) {
+      console.error("[advance-stage] DB error:", e?.message)
+      return { status: 500, body: { error: e?.message || "Failed to advance stage" } }
     }
   }
 
@@ -2166,17 +1964,6 @@ export async function handleApiRequest(
       booking: formatted,
     })
 
-    if (targetStage === 4) {
-      gpsSimulator.startSimulation(
-        id,
-        updated.gosalaName,
-        updated.address,
-        updated.distanceKm,
-      )
-    } else {
-      gpsSimulator.stopSimulation(id)
-    }
-
     return { status: 200, body: { booking: formatted } }
   }
 
@@ -2196,10 +1983,6 @@ export async function handleApiRequest(
       })
     } catch {
       booking = null
-    }
-
-    if (!booking) {
-      booking = db.bookings.find((b) => b.id === id)
     }
 
     if (!booking) {
@@ -2240,7 +2023,6 @@ export async function handleApiRequest(
       })
 
       const formatted = formatBooking(updated)
-      db.bookings = [formatted, ...db.bookings.filter((x) => x.id !== formatted.id)]
       wsHub.broadcastToChannel(`channel:booking:${id}`, "HANDOVER_VERIFIED", {
         bookingId: id,
         stage: 6,
@@ -2265,38 +2047,7 @@ export async function handleApiRequest(
         },
       }
     } catch (err: any) {
-      // In-Memory Fallback
-      const memBooking = db.bookings.find((b) => b.id === id)
-      if (memBooking) {
-        memBooking.handoverOtpVerified = true
-        memBooking.handoverOtpVerifiedAt = verifiedAt.toISOString()
-        memBooking.driverStage = 6
-        memBooking.status = "In Service"
-
-        wsHub.broadcastToChannel(`channel:booking:${id}`, "HANDOVER_VERIFIED", {
-          bookingId: id,
-          stage: 6,
-          status: "In Service",
-          verifiedAt: verifiedAt.toISOString(),
-        })
-        wsHub.broadcastToChannel(`channel:booking:${id}`, "STAGE_CHANGED", {
-          bookingId: id,
-          stage: 6,
-          status: "In Service",
-        })
-        wsHub.broadcastToChannel(`channel:booking:${id}`, "BOOKING_UPDATED", {
-          booking: memBooking,
-        })
-
-        return {
-          status: 200,
-          body: {
-            success: true,
-            message: "Animal handover verified successfully! Ceremony started.",
-            booking: memBooking,
-          },
-        }
-      }
+      console.error("[verify-handover-otp] DB error:", err?.message)
       return { status: 500, body: { success: false, error: err?.message || "Failed to verify OTP" } }
     }
   }
@@ -2427,10 +2178,6 @@ export async function handleApiRequest(
       })
     } catch {
       b = null
-    }
-
-    if (!b) {
-      b = db.bookings.find((x) => x.id === id)
     }
 
     if (!b) return { status: 404, body: { error: "Booking not found" } }
@@ -2917,11 +2664,30 @@ export async function handleApiRequest(
   // GET /api/pricing-config
   if (method === "GET" && pathname === "/api/pricing-config") {
     try {
-      const cfg = await prisma.masterPricingConfig.findFirst()
-      return { status: 200, body: { config: cfg || db.pricingConfig } }
+      let cfg = await prisma.masterPricingConfig.findFirst()
+      if (!cfg) {
+        cfg = await prisma.masterPricingConfig.create({
+          data: {
+            id: 1,
+            standardMin: 60,
+            extraUnitMin: 30,
+            extraUnitRate: 500,
+            freeKm: 5.0,
+            perKm: 50.0,
+            taxPct: 12.0,
+            commissionPct: 20.0,
+            maxDurationMin: 240,
+            bufferMin: 30,
+            rounding: "Nearest ₹10",
+            updatedByRole: "SUPER_ADMIN",
+            updatedByName: "Super Admin",
+          },
+        })
+      }
+      return { status: 200, body: { config: cfg } }
     } catch (err: any) {
-      console.warn("Falling back to in-memory pricing config:", err?.message)
-      return { status: 200, body: { config: db.pricingConfig } }
+      console.error("[GET /api/pricing-config] DB error:", err?.message)
+      return { status: 500, body: { error: "Failed to fetch pricing config" } }
     }
   }
 
@@ -2946,7 +2712,7 @@ export async function handleApiRequest(
     }
 
     const patch = body.patch || body
-    const callerName = body.updatedByName || body.callerName || "Koushik"
+    const callerName = body.updatedByName || body.callerName || "Super Admin"
     const roleNormalized = (callerRole || "SUPER_ADMIN").toUpperCase()
     try {
       const cfg = await prisma.masterPricingConfig.upsert({
@@ -2982,40 +2748,12 @@ export async function handleApiRequest(
         },
       })
 
-      db.pricingConfig = {
-        id: cfg.id,
-        standardMin: cfg.standardMin,
-        extraUnitMin: cfg.extraUnitMin,
-        extraUnitRate: cfg.extraUnitRate,
-        freeKm: cfg.freeKm,
-        perKm: cfg.perKm,
-        taxPct: cfg.taxPct,
-        commissionPct: cfg.commissionPct,
-        maxDurationMin: cfg.maxDurationMin,
-        bufferMin: cfg.bufferMin,
-        rounding: cfg.rounding,
-        updatedByRole: cfg.updatedByRole,
-        updatedByName: cfg.updatedByName,
-        updatedAt: cfg.updatedAt.toISOString(),
-      }
+      updateCachedPricingConfig(cfg)
 
-      return { status: 200, body: { config: db.pricingConfig } }
-    } catch {
-      // In-Memory Fallback
-      db.pricingConfig = {
-        ...db.pricingConfig,
-        ...(patch.standardMin !== undefined ? { standardMin: Number(patch.standardMin) } : {}),
-        ...(patch.extraUnitMin !== undefined ? { extraUnitMin: Number(patch.extraUnitMin) } : {}),
-        ...(patch.extraUnitRate !== undefined ? { extraUnitRate: Number(patch.extraUnitRate) } : {}),
-        ...(patch.freeKm !== undefined ? { freeKm: Number(patch.freeKm) } : {}),
-        ...(patch.perKm !== undefined ? { perKm: Number(patch.perKm) } : {}),
-        ...(patch.taxPct !== undefined ? { taxPct: Number(patch.taxPct) } : {}),
-        ...(patch.commissionPct !== undefined ? { commissionPct: Number(patch.commissionPct) } : {}),
-        ...(patch.maxDurationMin !== undefined ? { maxDurationMin: Number(patch.maxDurationMin) } : {}),
-        ...(patch.bufferMin !== undefined ? { bufferMin: Number(patch.bufferMin) } : {}),
-        ...(patch.rounding ? { rounding: patch.rounding } : {}),
-      }
-      return { status: 200, body: { config: db.pricingConfig } }
+      return { status: 200, body: { config: cfg } }
+    } catch (err: any) {
+      console.error("[PUT/PATCH /api/pricing-config] DB error:", err?.message)
+      return { status: 500, body: { error: err?.message || "Failed to update pricing config" } }
     }
   }
 
@@ -3025,13 +2763,11 @@ export async function handleApiRequest(
       const batches = await prisma.settlementBatch.findMany({
         orderBy: { createdAt: "desc" },
       })
-      if (batches && batches.length > 0) {
-        return { status: 200, body: { settlements: batches.map(formatSettlement) } }
-      }
+      return { status: 200, body: { settlements: batches.map(formatSettlement) } }
     } catch (err: any) {
-      console.warn("Settlements DB fallback:", err?.message)
+      console.error("[GET /api/settlements] DB error:", err?.message)
+      return { status: 500, body: { error: "Failed to load settlements" } }
     }
-    return { status: 200, body: { settlements: db.settlements } }
   }
 
   // POST /api/settlements/advance
@@ -3044,17 +2780,11 @@ export async function handleApiRequest(
       PAID: "PAID",
       FAILED: "APPROVED",
     }
-    const nextDisplayMap: Record<string, any> = {
-      Pending: "Approved",
-      Approved: "Processing",
-      Processing: "Paid",
-      Paid: "Paid",
-      Failed: "Approved",
-    }
 
     try {
       const batch = await prisma.settlementBatch.findFirst({
         where: { gosalaName: gosala },
+        orderBy: { createdAt: "desc" },
       })
       if (batch) {
         const updated = await prisma.settlementBatch.update({
@@ -3063,16 +2793,11 @@ export async function handleApiRequest(
         })
         return { status: 200, body: { settlement: formatSettlement(updated) } }
       }
+      return { status: 404, body: { error: "Settlement not found" } }
     } catch (err: any) {
-      console.warn("Settlements advance DB fallback:", err?.message)
+      console.error("[POST /api/settlements/advance] DB error:", err?.message)
+      return { status: 500, body: { error: err?.message || "Failed to advance settlement" } }
     }
-
-    const memItem = db.settlements.find((s) => s.gosala === gosala)
-    if (memItem) {
-      memItem.status = nextDisplayMap[memItem.status] || "Approved"
-      return { status: 200, body: { settlement: memItem } }
-    }
-    return { status: 404, body: { error: "Settlement not found" } }
   }
 
   // POST /api/settlements/batch-approve
@@ -3083,24 +2808,21 @@ export async function handleApiRequest(
         where: { batch, status: "PENDING" },
         data: { status: "APPROVED" },
       })
+      return { status: 200, body: { success: true, batch } }
     } catch (err: any) {
-      console.warn("Batch approve DB fallback:", err?.message)
+      console.error("[POST /api/settlements/batch-approve] DB error:", err?.message)
+      return { status: 500, body: { error: err?.message || "Failed to batch approve settlements" } }
     }
-    db.settlements.forEach((s) => {
-      if (s.batch === batch && s.status === "Pending") {
-        s.status = "Approved"
-      }
-    })
-    return { status: 200, body: { success: true, batch } }
   }
 
   // POST /api/settlements/sweep - Automated / On-Demand Payout Sweep Engine
   if (method === "POST" && pathname === "/api/settlements/sweep") {
     try {
+      const profiles = await resolveRoleProfilesFromDB()
       const result = await executeAutomatedSweep({
         targetGosala: body?.gosala,
         cycleType: body?.cycleType,
-        serverProfiles,
+        serverProfiles: profiles,
       })
       return { status: 200, body: result }
     } catch (err: any) {
@@ -3129,28 +2851,25 @@ export async function handleApiRequest(
   if (method === "POST" && pathname === "/api/settlements/schedule/configure") {
     try {
       const { autoSweepEnabled, disbursementCycle } = body
-      try {
-        await prisma.masterPricingConfig.upsert({
-          where: { id: 1 },
-          update: {
-            ...(autoSweepEnabled !== undefined ? { autoSweepEnabled } : {}),
-            ...(disbursementCycle ? { disbursementCycle } : {}),
-            updatedAt: new Date(),
-          },
-          create: {
-            id: 1,
-            autoSweepEnabled: autoSweepEnabled ?? true,
-            disbursementCycle: disbursementCycle || "CONTINUOUS_T_PLUS_ONE",
-          },
-        })
-      } catch (err) {
-        console.warn("Schedule config DB fallback:", err)
-      }
+      await prisma.masterPricingConfig.upsert({
+        where: { id: 1 },
+        update: {
+          ...(autoSweepEnabled !== undefined ? { autoSweepEnabled } : {}),
+          ...(disbursementCycle ? { disbursementCycle } : {}),
+          updatedAt: new Date(),
+        },
+        create: {
+          id: 1,
+          autoSweepEnabled: autoSweepEnabled ?? true,
+          disbursementCycle: disbursementCycle || "CONTINUOUS_T_PLUS_ONE",
+        },
+      })
 
-      db.pricingConfig = {
-        ...db.pricingConfig,
-        ...(autoSweepEnabled !== undefined ? { autoSweepEnabled } : {}),
-        ...(disbursementCycle ? { disbursementCycle } : {}),
+      if (autoSweepEnabled !== undefined || disbursementCycle) {
+        updateCachedPricingConfig({
+          ...(autoSweepEnabled !== undefined ? { autoSweepEnabled } : {}),
+          ...(disbursementCycle ? { disbursementCycle } : {}),
+        })
       }
 
       const schedule = await getScheduleStatus()
@@ -3232,7 +2951,7 @@ export async function handleApiRequest(
 
         const primaryAssigned = filteredAssignedMgrs[0] || (isUnderAdminCustody ? undefined : assignedMgrs[0])
         const govRole = meta.governingAdminRole || (g.adminId?.startsWith("USER-SA") ? "super_admin" : "admin")
-        const govName = g.adminName || meta.governingAdminName || (govRole === "super_admin" ? "Koushik" : "Operations Admin")
+        const govName = g.adminName || meta.governingAdminName || (govRole === "super_admin" ? "Super Admin" : "Operations Admin")
         const govEmail = g.adminEmail || meta.governingAdminEmail || meta.adminEmail || ""
 
         return {
@@ -3916,45 +3635,86 @@ export async function handleApiRequest(
   // ----------------- EMPANELLED VETS API -----------------
   // GET /api/vets
   if (method === "GET" && pathname === "/api/vets") {
-    return { status: 200, body: { ok: true, vets: Array.from(serverVets.values()) } }
+    try {
+      const vets = await prisma.empanelledVet.findMany({ orderBy: { createdAt: "asc" } })
+      return { status: 200, body: { ok: true, vets } }
+    } catch (e: any) {
+      return { status: 500, body: { error: e.message } }
+    }
   }
 
   // POST /api/vets
   if (method === "POST" && pathname === "/api/vets") {
     const vet = body.vet || body
     const id = vet.id || `VET-${Date.now()}`
-    const fullVet = { ...vet, id }
-    serverVets.set(id, fullVet)
+    try {
+      const fullVet = await prisma.empanelledVet.upsert({
+        where: { regNo: vet.regNo || id },
+        update: {
+          name: vet.name,
+          qualification: vet.qualification || "B.V.Sc",
+          clinic: vet.clinic || "Local Veterinary Clinic",
+          phone: vet.phone || "+91 98000 00000",
+          address: vet.address || "Veterinary Center",
+          specialization: vet.specialization || "General Bovine Care",
+          emergency24x7: vet.emergency24x7 ?? true,
+          assignedGosalas: vet.assignedGosalas || ["All Gaushalas"],
+        },
+        create: {
+          id,
+          name: vet.name,
+          qualification: vet.qualification || "B.V.Sc",
+          regNo: vet.regNo || `REG-${Date.now()}`,
+          clinic: vet.clinic || "Local Veterinary Clinic",
+          phone: vet.phone || "+91 98000 00000",
+          address: vet.address || "Veterinary Center",
+          specialization: vet.specialization || "General Bovine Care",
+          emergency24x7: vet.emergency24x7 ?? true,
+          assignedGosalas: vet.assignedGosalas || ["All Gaushalas"],
+        },
+      })
 
-    wsHub.broadcastToChannel("channel:animals", "VET_UPDATED", {
-      vet: fullVet,
-      timestamp: new Date().toISOString(),
-    })
+      wsHub.broadcastToChannel("channel:animals", "VET_UPDATED", {
+        vet: fullVet,
+        timestamp: new Date().toISOString(),
+      })
 
-    return { status: 201, body: { ok: true, vet: fullVet } }
+      return { status: 201, body: { ok: true, vet: fullVet } }
+    } catch (e: any) {
+      return { status: 500, body: { error: e.message } }
+    }
   }
 
   // PUT /api/vets/:id
   const putVetMatch = pathname.match(/^\/api\/vets\/([^/]+)$/)
   if (method === "PUT" && putVetMatch) {
     const id = putVetMatch[1]
-    const existing = serverVets.get(id) || { id }
-    const updated = { ...existing, ...body }
-    serverVets.set(id, updated)
+    try {
+      const updated = await prisma.empanelledVet.update({
+        where: { id },
+        data: { ...body },
+      })
 
-    wsHub.broadcastToChannel("channel:animals", "VET_UPDATED", {
-      vet: updated,
-      timestamp: new Date().toISOString(),
-    })
+      wsHub.broadcastToChannel("channel:animals", "VET_UPDATED", {
+        vet: updated,
+        timestamp: new Date().toISOString(),
+      })
 
-    return { status: 200, body: { ok: true, vet: updated } }
+      return { status: 200, body: { ok: true, vet: updated } }
+    } catch (e: any) {
+      return { status: 500, body: { error: e.message } }
+    }
   }
 
   // DELETE /api/vets/:id
   if (method === "DELETE" && putVetMatch) {
     const id = putVetMatch[1]
-    serverVets.delete(id)
-    return { status: 200, body: { ok: true, deleted: id } }
+    try {
+      await prisma.empanelledVet.delete({ where: { id } })
+      return { status: 200, body: { ok: true, deleted: id } }
+    } catch (e: any) {
+      return { status: 500, body: { error: e.message } }
+    }
   }
   if (method === "POST" && pathname === "/api/slots/toggle-block") {
     const { animal, date, time } = body
@@ -4021,14 +3781,16 @@ export async function handleApiRequest(
   // ----------------- DYNAMIC USER PROFILES -----------------
   // GET /api/profiles
   if (method === "GET" && pathname === "/api/profiles") {
-    return { status: 200, body: { profiles: serverProfiles } }
+    const profiles = await resolveRoleProfilesFromDB()
+    return { status: 200, body: { profiles } }
   }
 
   // GET /api/profiles/:role
   const profileRoleMatch = pathname.match(/^\/api\/profiles\/([^/]+)$/)
   if (method === "GET" && profileRoleMatch) {
     const roleKey = profileRoleMatch[1]
-    const p = serverProfiles[roleKey]
+    const profiles = await resolveRoleProfilesFromDB()
+    const p = profiles[roleKey]
     if (!p)
       return {
         status: 404,
@@ -4040,7 +3802,8 @@ export async function handleApiRequest(
   // PUT / POST /api/profiles/:role
   if ((method === "PUT" || method === "POST") && profileRoleMatch) {
     const roleKey = profileRoleMatch[1]
-    const existing = serverProfiles[roleKey] || {
+    const profiles = await resolveRoleProfilesFromDB()
+    const existing = profiles[roleKey] || {
       id: `USER-${roleKey.toUpperCase()}`,
       role: roleKey,
     }
@@ -4066,36 +3829,61 @@ export async function handleApiRequest(
         ? (body.settlementSchedule ? { ...(existing.settlementSchedule || {}), ...body.settlementSchedule } : undefined)
         : existing.settlementSchedule,
     }
-    serverProfiles[roleKey] = updated
 
-    // Optionally update user in database if matching record exists
+    const roleEnum = (roleKey === "customer"
+      ? "CUSTOMER"
+      : roleKey === "manager"
+        ? "GOSALA_MANAGER"
+        : roleKey === "driver"
+          ? "DRIVER"
+          : roleKey === "super_admin"
+            ? "SUPER_ADMIN"
+            : "OPERATIONS_ADMIN") as any
+
+    const metadataToSave = {
+      customerData: updated.customerData,
+      managerData: updated.managerData,
+      driverData: updated.driverData,
+      adminData: updated.adminData,
+      bankDetails: updated.bankDetails,
+      settlementSchedule: updated.settlementSchedule,
+    }
+
+    // Persist directly to PostgreSQL
     try {
-      if (updated.email) {
-        await prisma.user
-          .upsert({
-            where: { email: updated.email },
-            create: {
-              name: updated.name || "User",
-              email: updated.email,
-              phone: updated.phone || "+91 98000 00000",
-              role: (roleKey === "customer"
-                ? "CUSTOMER"
-                : roleKey === "manager"
-                  ? "GOSALA_MANAGER"
-                  : roleKey === "driver"
-                    ? "DRIVER"
-                    : roleKey === "super_admin"
-                      ? "SUPER_ADMIN"
-                      : "OPERATIONS_ADMIN") as any,
-            },
-            update: {
-              name: updated.name,
-              phone: updated.phone,
-            },
-          })
-          .catch(() => {})
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            ...(updated.email ? [{ email: updated.email }] : []),
+            { role: roleEnum },
+          ],
+        },
+      })
+
+      if (existingUser) {
+        const currentMeta = (existingUser.metadata as any) || {}
+        await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            name: updated.name || existingUser.name,
+            phone: updated.phone || existingUser.phone,
+            metadata: { ...currentMeta, ...metadataToSave },
+          },
+        })
+      } else if (updated.email) {
+        await prisma.user.create({
+          data: {
+            name: updated.name || "User",
+            email: updated.email,
+            phone: updated.phone || "+91 98000 00000",
+            role: roleEnum,
+            metadata: metadataToSave,
+          },
+        })
       }
-    } catch {}
+    } catch (e: any) {
+      console.warn("Profile DB update warning:", e?.message)
+    }
 
     return { status: 200, body: { success: true, profile: updated } }
   }

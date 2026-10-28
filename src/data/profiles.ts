@@ -146,13 +146,13 @@ export const initialProfiles: Record<RoleId, RoleProfile> = {
     // No hardcoded bank details - dynamic user input
   },
   super_admin: {
-    id: "USER-SA-KOUSHIK",
+    id: "USER-SA-SUPERADMIN",
     role: "super_admin",
-    name: "Koushik",
+    name: "Super Admin",
     phone: "+91 98000 00000",
-    email: "koushik@gmail.com",
+    email: "superadmin@gomaa.in",
     adminData: {
-      adminId: "SA-KOUSHIK",
+      adminId: "SA-0001",
       designation: "Platform Sovereign & Master Authority",
       department: "GOMAA Central Platform Governance",
       authorityLevel: "SUPER_ADMIN",

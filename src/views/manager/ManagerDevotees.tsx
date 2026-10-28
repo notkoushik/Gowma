@@ -49,7 +49,9 @@ export default function ManagerDevotees({
 }) {
   const { users, addUser, gosalas, notify } = useStore()
 
-  const [activeTab, setActiveTab] = useState<"all" | "customers" | "drivers">("all")
+  const [activeTab, setActiveTab] = useState<"all" | "customers" | "drivers">(
+    "all",
+  )
   const [searchQuery, setSearchQuery] = useState("")
 
   // Modals
@@ -72,17 +74,21 @@ export default function ManagerDevotees({
   const [driverPhone, setDriverPhone] = useState("+91 ")
   const [driverEmail, setDriverEmail] = useState("")
   const [driverVehiclePlate, setDriverVehiclePlate] = useState("TS-09-UA-")
-  const [driverVehicleType, setDriverVehicleType] = useState("Tata 407 (Hydraulic Cattle Bed)")
+  const [driverVehicleType, setDriverVehicleType] = useState(
+    "Tata 407 (Hydraulic Cattle Bed)",
+  )
   const [driverLicenseNo, setDriverLicenseNo] = useState("DL-")
   const [driverGosalaBase, setDriverGosalaBase] = useState(currentGosalaName)
   const [driverPassword, setDriverPassword] = useState("Pilot@2025")
   const [showDriverPassword, setShowDriverPassword] = useState(true)
 
   // Revealed password toggle map for card items
-  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({})
+  const [revealedPasswords, setRevealedPasswords] =
+    useState<Record<string, boolean>>({})
 
   // Credentials Ready Modal
-  const [shareCredentials, setShareCredentials] = useState<ShareCredentialsData | null>(null)
+  const [shareCredentials, setShareCredentials] =
+    useState<ShareCredentialsData | null>(null)
   const [showSharePassword, setShowSharePassword] = useState(true)
   const [copiedSuccess, setCopiedSuccess] = useState(false)
 
@@ -104,19 +110,23 @@ export default function ManagerDevotees({
         (u as any).dbRole === "CUSTOMER" ||
         (u as any).dbRole === "DRIVER" ||
         u.customerData ||
-        u.driverData
+        u.driverData,
     )
   }, [users])
 
   const customersList = useMemo(() => {
     return allManagedUsers.filter(
-      (u) => u.role === "customer" || (u as any).dbRole === "CUSTOMER" || u.customerData
+      (u) =>
+        u.role === "customer" ||
+        (u as any).dbRole === "CUSTOMER" ||
+        u.customerData,
     )
   }, [allManagedUsers])
 
   const driversList = useMemo(() => {
     return allManagedUsers.filter(
-      (u) => u.role === "driver" || (u as any).dbRole === "DRIVER" || u.driverData
+      (u) =>
+        u.role === "driver" || (u as any).dbRole === "DRIVER" || u.driverData,
     )
   }, [allManagedUsers])
 
@@ -156,8 +166,15 @@ export default function ManagerDevotees({
   // Handle Devotee Registration
   const handleCreateDevotee = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!devoteeName.trim() || !devoteeEmail.trim() || !devoteePassword.trim()) {
-      notify("Please fill in all required fields (Name, Email, Password).", "warn")
+    if (
+      !devoteeName.trim() ||
+      !devoteeEmail.trim() ||
+      !devoteePassword.trim()
+    ) {
+      notify(
+        "Please fill in all required fields (Name, Email, Password).",
+        "warn",
+      )
       return
     }
 
@@ -211,7 +228,10 @@ export default function ManagerDevotees({
   const handleCreateDriver = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!driverName.trim() || !driverEmail.trim() || !driverPassword.trim()) {
-      notify("Please fill in all required fields (Name, Email, Password).", "warn")
+      notify(
+        "Please fill in all required fields (Name, Email, Password).",
+        "warn",
+      )
       return
     }
 
@@ -225,7 +245,8 @@ export default function ManagerDevotees({
         password: driverPassword.trim(),
         driverData: {
           vehicleNumber: driverVehiclePlate.trim() || "TS-09-UA-1088",
-          vehicleType: driverVehicleType.trim() || "Tata 407 (Hydraulic Cattle Bed)",
+          vehicleType:
+            driverVehicleType.trim() || "Tata 407 (Hydraulic Cattle Bed)",
           licenseNumber: driverLicenseNo.trim() || "DL-PENDING",
           gosalaBase: driverGosalaBase || currentGosalaName,
           status: "Available",
@@ -243,7 +264,8 @@ export default function ManagerDevotees({
           roleTitle: "Transit Pilot (Driver)",
           password: driverPassword.trim(),
           vehicleNumber: driverVehiclePlate.trim() || "TS-09-UA-1088",
-          vehicleType: driverVehicleType.trim() || "Tata 407 (Hydraulic Cattle Bed)",
+          vehicleType:
+            driverVehicleType.trim() || "Tata 407 (Hydraulic Cattle Bed)",
           licenseNumber: driverLicenseNo.trim(),
           gosalaBase: driverGosalaBase || currentGosalaName,
         })
@@ -264,7 +286,10 @@ export default function ManagerDevotees({
 
   // Pre-formatted WhatsApp share link
   const getWhatsAppShareUrl = (data: ShareCredentialsData) => {
-    const origin = typeof window !== "undefined" ? window.location.origin : "https://gomaa.in"
+    const origin =
+      typeof window !== "undefined"
+        ? window.location.origin
+        : "https://gomaa.in"
     let text = ""
 
     if (data.role === "driver") {
@@ -279,7 +304,10 @@ export default function ManagerDevotees({
 
   // Copy credentials helper
   const copyCredentialsToClipboard = (data: ShareCredentialsData) => {
-    const origin = typeof window !== "undefined" ? window.location.origin : "https://gomaa.in"
+    const origin =
+      typeof window !== "undefined"
+        ? window.location.origin
+        : "https://gomaa.in"
     let text = ""
     if (data.role === "driver") {
       text = `GOMAA Transit Pilot Credentials:\nName: ${data.name}\nRole: Transit Pilot (Driver)\nSanctuary Base: ${data.gosalaBase || currentGosalaName}\nVehicle: ${data.vehicleNumber || "Fleet Rig"} (${data.vehicleType || ""})\nEmail: ${data.email}\nPhone: ${data.phone}\nPassword: ${data.password}\nPortal: ${origin}`
@@ -307,7 +335,9 @@ export default function ManagerDevotees({
           </div>
           <p className="text-[12.5px] text-ink-soft max-w-2xl leading-relaxed">
             Manage authorized users for <strong>{currentGosalaName}</strong>.
-            Register devotees for sacred ceremonies and transit pilots for bovine logistics. All accounts sign in using their issued credentials.
+            Register devotees for sacred ceremonies and transit pilots for
+            bovine logistics. All accounts sign in using their issued
+            credentials.
           </p>
         </div>
 
@@ -411,7 +441,11 @@ export default function ManagerDevotees({
       {displayedUsers.length === 0 ? (
         <div className="bg-card border border-line rounded-sm p-8 text-center space-y-3">
           <div className="h-12 w-12 rounded-full bg-paper-deep text-ink-faint grid place-items-center mx-auto">
-            {activeTab === "drivers" ? <Truck size={24} /> : <Users size={24} />}
+            {activeTab === "drivers" ? (
+              <Truck size={24} />
+            ) : (
+              <Users size={24} />
+            )}
           </div>
           <h3 className="font-serif text-[17px] text-ink font-medium">
             {searchQuery
@@ -464,7 +498,9 @@ export default function ManagerDevotees({
               Boolean(user.driverData)
 
             const isRevealed = Boolean(revealedPasswords[user.id])
-            const pwd = (user as any).password || (isDriver ? "gomaa-driver" : "gomaa-secure")
+            const pwd =
+              (user as any).password ||
+              (isDriver ? "gomaa-driver" : "gomaa-secure")
 
             // Devotee specifics
             const gotra = user.customerData?.gotra || "Kashyapa"
@@ -472,8 +508,10 @@ export default function ManagerDevotees({
             const city = user.customerData?.city || "Hyderabad"
 
             // Driver specifics
-            const vehicleNumber = user.driverData?.vehicleNumber || "TS-09-UA-1088"
-            const vehicleType = user.driverData?.vehicleType || "Tata 407 (Hydraulic Cattle Bed)"
+            const vehicleNumber =
+              user.driverData?.vehicleNumber || "TS-09-UA-1088"
+            const vehicleType =
+              user.driverData?.vehicleType || "Tata 407 (Hydraulic Cattle Bed)"
             const licenseNo = user.driverData?.licenseNumber || "DL-VERIFIED"
             const base = user.driverData?.gosalaBase || currentGosalaName
 
@@ -526,22 +564,33 @@ export default function ManagerDevotees({
                   <div className="mt-3 space-y-1.5 text-[12px] text-ink-soft">
                     <div className="flex items-center gap-2 text-ink">
                       <Mail size={13} className="text-ink-faint shrink-0" />
-                      <span className="truncate font-mono text-[11.5px]">{user.email}</span>
+                      <span className="truncate font-mono text-[11.5px]">
+                        {user.email}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Phone size={13} className="text-ink-faint shrink-0" />
-                      <span className="font-mono text-[11.5px]">{user.phone || "—"}</span>
+                      <span className="font-mono text-[11.5px]">
+                        {user.phone || "—"}
+                      </span>
                     </div>
 
                     {isDriver ? (
                       <>
                         <div className="flex items-center gap-2 text-ink">
                           <Car size={13} className="text-forest shrink-0" />
-                          <span className="font-mono font-medium text-[11.5px]">{vehicleNumber}</span>
-                          <span className="text-[10.5px] text-ink-faint truncate">({vehicleType})</span>
+                          <span className="font-mono font-medium text-[11.5px]">
+                            {vehicleNumber}
+                          </span>
+                          <span className="text-[10.5px] text-ink-faint truncate">
+                            ({vehicleType})
+                          </span>
                         </div>
                         <div className="flex items-center gap-2 text-ink-faint text-[11px]">
-                          <Building2 size={13} className="text-ink-faint shrink-0" />
+                          <Building2
+                            size={13}
+                            className="text-ink-faint shrink-0"
+                          />
                           <span>Base: {base}</span>
                           <span className="text-line-strong">·</span>
                           <span className="font-mono">{licenseNo}</span>
@@ -550,7 +599,9 @@ export default function ManagerDevotees({
                     ) : (
                       <div className="flex items-center gap-2 text-ink-faint">
                         <MapPin size={13} className="text-saffron shrink-0" />
-                        <span className="truncate text-[11.5px]">{address}, {city}</span>
+                        <span className="truncate text-[11.5px]">
+                          {address}, {city}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -560,7 +611,9 @@ export default function ManagerDevotees({
                     <div className="flex items-center gap-1.5 font-mono text-ink">
                       <Lock
                         size={12}
-                        className={isDriver ? "text-forest" : "text-saffron-deep"}
+                        className={
+                          isDriver ? "text-forest" : "text-saffron-deep"
+                        }
                       />
                       <span className="font-medium">
                         {isRevealed ? pwd : "•".repeat(Math.max(6, pwd.length))}
@@ -671,7 +724,10 @@ export default function ManagerDevotees({
               </button>
             </div>
 
-            <form onSubmit={handleCreateDevotee} className="p-5 space-y-3.5 overflow-y-auto flex-1">
+            <form
+              onSubmit={handleCreateDevotee}
+              className="p-5 space-y-3.5 overflow-y-auto flex-1"
+            >
               <div>
                 <label className="block text-[12px] font-medium text-ink-soft mb-1">
                   Full Name *
@@ -764,7 +820,9 @@ export default function ManagerDevotees({
                   </label>
                   <button
                     type="button"
-                    onClick={() => setDevoteePassword(generateRandomPassword("Devotee"))}
+                    onClick={() =>
+                      setDevoteePassword(generateRandomPassword("Devotee"))
+                    }
                     className="text-[11px] text-saffron-deep hover:underline flex items-center gap-1 font-medium cursor-pointer"
                   >
                     <RefreshCw size={11} />
@@ -784,11 +842,16 @@ export default function ManagerDevotees({
                     onClick={() => setShowDevoteePassword(!showDevoteePassword)}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink cursor-pointer"
                   >
-                    {showDevoteePassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                    {showDevoteePassword ? (
+                      <EyeOff size={14} />
+                    ) : (
+                      <Eye size={14} />
+                    )}
                   </button>
                 </div>
                 <p className="text-[11px] text-ink-faint leading-snug">
-                  Share this password with the devotee so they can log into the GOMAA portal directly.
+                  Share this password with the devotee so they can log into the
+                  GOMAA portal directly.
                 </p>
               </div>
 
@@ -840,7 +903,10 @@ export default function ManagerDevotees({
               </button>
             </div>
 
-            <form onSubmit={handleCreateDriver} className="p-5 space-y-3.5 overflow-y-auto flex-1">
+            <form
+              onSubmit={handleCreateDriver}
+              className="p-5 space-y-3.5 overflow-y-auto flex-1"
+            >
               <div>
                 <label className="block text-[12px] font-medium text-ink-soft mb-1">
                   Pilot Full Name *
@@ -922,10 +988,18 @@ export default function ManagerDevotees({
                   onChange={(e) => setDriverVehicleType(e.target.value)}
                   className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[12.5px] text-ink outline-none focus:border-forest transition"
                 >
-                  <option value="Tata 407 (Hydraulic Cattle Bed)">Tata 407 (Hydraulic Cattle Bed)</option>
-                  <option value="Mahindra Bolero Maxi Truck (Padded Bovine Rig)">Mahindra Bolero Maxi Truck (Padded Bovine Rig)</option>
-                  <option value="Ashok Leyland Dost (Sacred Transit Van)">Ashok Leyland Dost (Sacred Transit Van)</option>
-                  <option value="Eicher Pro 2049 (Low-Floor Bovine Carrier)">Eicher Pro 2049 (Low-Floor Bovine Carrier)</option>
+                  <option value="Tata 407 (Hydraulic Cattle Bed)">
+                    Tata 407 (Hydraulic Cattle Bed)
+                  </option>
+                  <option value="Mahindra Bolero Maxi Truck (Padded Bovine Rig)">
+                    Mahindra Bolero Maxi Truck (Padded Bovine Rig)
+                  </option>
+                  <option value="Ashok Leyland Dost (Sacred Transit Van)">
+                    Ashok Leyland Dost (Sacred Transit Van)
+                  </option>
+                  <option value="Eicher Pro 2049 (Low-Floor Bovine Carrier)">
+                    Eicher Pro 2049 (Low-Floor Bovine Carrier)
+                  </option>
                 </select>
               </div>
 
@@ -950,7 +1024,9 @@ export default function ManagerDevotees({
                   </label>
                   <button
                     type="button"
-                    onClick={() => setDriverPassword(generateRandomPassword("Pilot"))}
+                    onClick={() =>
+                      setDriverPassword(generateRandomPassword("Pilot"))
+                    }
                     className="text-[11px] text-forest hover:underline flex items-center gap-1 font-medium cursor-pointer"
                   >
                     <RefreshCw size={11} />
@@ -970,11 +1046,16 @@ export default function ManagerDevotees({
                     onClick={() => setShowDriverPassword(!showDriverPassword)}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink cursor-pointer"
                   >
-                    {showDriverPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                    {showDriverPassword ? (
+                      <EyeOff size={14} />
+                    ) : (
+                      <Eye size={14} />
+                    )}
                   </button>
                 </div>
                 <p className="text-[11px] text-ink-faint leading-snug">
-                  The pilot will use this password to sign into the GOMAA Transit App on their mobile device.
+                  The pilot will use this password to sign into the GOMAA
+                  Transit App on their mobile device.
                 </p>
               </div>
 
@@ -1010,7 +1091,10 @@ export default function ManagerDevotees({
                 </div>
                 <div>
                   <h3 className="font-serif text-[17px] text-ink font-semibold">
-                    {shareCredentials.role === "driver" ? "Transit Pilot" : "Devotee"} Credentials Ready
+                    {shareCredentials.role === "driver"
+                      ? "Transit Pilot"
+                      : "Devotee"}{" "}
+                    Credentials Ready
                   </h3>
                   <div className="text-[11px] text-ink-faint">
                     Share directly with {shareCredentials.name}
@@ -1029,54 +1113,88 @@ export default function ManagerDevotees({
             <div className="p-5 space-y-4">
               <div className="p-4 bg-paper rounded border border-line space-y-2.5">
                 <div className="flex items-center justify-between pb-2 border-b border-line">
-                  <span className="text-[11.5px] text-ink-faint">Authorized Name:</span>
-                  <span className="font-semibold text-[13px] text-ink">{shareCredentials.name}</span>
+                  <span className="text-[11.5px] text-ink-faint">
+                    Authorized Name:
+                  </span>
+                  <span className="font-semibold text-[13px] text-ink">
+                    {shareCredentials.name}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between pb-2 border-b border-line">
-                  <span className="text-[11.5px] text-ink-faint">Assigned Role:</span>
+                  <span className="text-[11.5px] text-ink-faint">
+                    Assigned Role:
+                  </span>
                   <span className="font-semibold text-[12px] font-mono px-2 py-0.5 rounded bg-card border border-line">
                     {shareCredentials.roleTitle}
                   </span>
                 </div>
                 <div className="flex items-center justify-between pb-2 border-b border-line">
-                  <span className="text-[11.5px] text-ink-faint">Registered Email:</span>
-                  <span className="font-mono text-[12px] text-ink font-medium">{shareCredentials.email}</span>
+                  <span className="text-[11.5px] text-ink-faint">
+                    Registered Email:
+                  </span>
+                  <span className="font-mono text-[12px] text-ink font-medium">
+                    {shareCredentials.email}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between pb-2 border-b border-line">
-                  <span className="text-[11.5px] text-ink-faint">Mobile Phone:</span>
-                  <span className="font-mono text-[12px] text-ink">{shareCredentials.phone}</span>
+                  <span className="text-[11.5px] text-ink-faint">
+                    Mobile Phone:
+                  </span>
+                  <span className="font-mono text-[12px] text-ink">
+                    {shareCredentials.phone}
+                  </span>
                 </div>
 
                 {shareCredentials.role === "driver" ? (
                   <>
                     <div className="flex items-center justify-between pb-2 border-b border-line">
-                      <span className="text-[11.5px] text-ink-faint">Vehicle Plate:</span>
-                      <span className="font-mono font-bold text-[12px] text-forest">{shareCredentials.vehicleNumber}</span>
+                      <span className="text-[11.5px] text-ink-faint">
+                        Vehicle Plate:
+                      </span>
+                      <span className="font-mono font-bold text-[12px] text-forest">
+                        {shareCredentials.vehicleNumber}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between pb-2 border-b border-line">
-                      <span className="text-[11.5px] text-ink-faint">Sanctuary Base:</span>
-                      <span className="font-medium text-[12px] text-ink">{shareCredentials.gosalaBase || currentGosalaName}</span>
+                      <span className="text-[11.5px] text-ink-faint">
+                        Sanctuary Base:
+                      </span>
+                      <span className="font-medium text-[12px] text-ink">
+                        {shareCredentials.gosalaBase || currentGosalaName}
+                      </span>
                     </div>
                   </>
                 ) : (
                   <div className="flex items-center justify-between pb-2 border-b border-line">
-                    <span className="text-[11.5px] text-ink-faint">Family Gotra:</span>
-                    <span className="font-semibold text-[12px] text-saffron-deep">{shareCredentials.gotra || "Kashyapa"}</span>
+                    <span className="text-[11.5px] text-ink-faint">
+                      Family Gotra:
+                    </span>
+                    <span className="font-semibold text-[12px] text-saffron-deep">
+                      {shareCredentials.gotra || "Kashyapa"}
+                    </span>
                   </div>
                 )}
 
                 <div className="flex items-center justify-between pt-1">
-                  <span className="text-[11.5px] font-medium text-ink">Sign-In Password:</span>
+                  <span className="text-[11.5px] font-medium text-ink">
+                    Sign-In Password:
+                  </span>
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-bold text-[13px] text-ink bg-card px-2.5 py-1 rounded border border-line">
-                      {showSharePassword ? shareCredentials.password : "••••••••"}
+                      {showSharePassword
+                        ? shareCredentials.password
+                        : "••••••••"}
                     </span>
                     <button
                       type="button"
                       onClick={() => setShowSharePassword(!showSharePassword)}
                       className="text-ink-faint hover:text-ink p-1"
                     >
-                      {showSharePassword ? <EyeOff size={13} /> : <Eye size={13} />}
+                      {showSharePassword ? (
+                        <EyeOff size={13} />
+                      ) : (
+                        <Eye size={13} />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -1085,7 +1203,8 @@ export default function ManagerDevotees({
               <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded text-[12px] text-ink-soft leading-relaxed flex items-start gap-2">
                 <Info size={14} className="text-saffron-deep shrink-0 mt-0.5" />
                 <span>
-                  The account is active immediately. Share credentials with the user via WhatsApp or Copy so they can sign in directly.
+                  The account is active immediately. Share credentials with the
+                  user via WhatsApp or Copy so they can sign in directly.
                 </span>
               </div>
 

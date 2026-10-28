@@ -22,10 +22,7 @@ import {
   type AnimalOperationalStatus,
   type EmpanelledVet,
 } from "../data/animals"
-import {
-  type Gosala,
-  GOSALA_PHOTO_PRESETS,
-} from "../data/gosalas"
+import { type Gosala, GOSALA_PHOTO_PRESETS } from "../data/gosalas"
 import { initialProfiles, type RoleProfile } from "../data/profiles"
 import { api } from "../services/api"
 
@@ -111,7 +108,8 @@ export const defaultPricingConfig: PricingConfig = {
       value: 150,
       appliedOn: "total",
       enabled: true,
-      description: "Direct contribution to Gaushala fodder storehouse & cow shed upkeep",
+      description:
+        "Direct contribution to Gaushala fodder storehouse & cow shed upkeep",
     },
     {
       id: "fee-vet-fund",
@@ -120,7 +118,8 @@ export const defaultPricingConfig: PricingConfig = {
       value: 2.5,
       appliedOn: "base",
       enabled: true,
-      description: "Reserved fund for empanelled veterinary doctor visits & cattle vitamins",
+      description:
+        "Reserved fund for empanelled veterinary doctor visits & cattle vitamins",
     },
   ],
 }
@@ -176,7 +175,7 @@ type Store = {
   verifyHandoverOtp: (
     id: string,
     otp: string,
-  ) => Promise<{ success: boolean; error?: string }>
+  ) => Promise<{ success: boolean error?: string }>
   updatePricing: (patch: Partial<PricingConfig>) => Promise<void>
   toggleSlotBlock: (animal: string, date: string, time: string) => void
   updateAnimalStatus: (
@@ -215,8 +214,13 @@ type Store = {
   addGosala: (gosala: Omit<Gosala, "id"> | Gosala) => Gosala
   updateGosala: (id: string, patch: Partial<Gosala>) => void
   deleteGosala: (id: string) => void
-  addManager: (mgr: Omit<GosalaManager, "id" | "assignedDate"> & { gosalas?: string[] }) => void
-  updateManager: (id: string, patch: Partial<GosalaManager> & { gosalas?: string[] }) => void
+  addManager: (
+    mgr: Omit<GosalaManager, "id" | "assignedDate"> & { gosalas?: string[] },
+  ) => void
+  updateManager: (
+    id: string,
+    patch: Partial<GosalaManager> & { gosalas?: string[] },
+  ) => void
   toggleManagerStatus: (id: string) => void
   deleteManager: (id: string) => void
   advanceSettlement: (gosala: string) => void
@@ -236,6 +240,8 @@ type Store = {
   markNotificationRead: (id: string) => void
   markAllNotificationsRead: () => void
   clearNotifications: () => void
+  isLoading: boolean
+  isLoadingProfiles: boolean
   authToken: string | null
   authUser: any | null
   setAuthSession: (token: string, user: any) => void
@@ -263,128 +269,45 @@ function toMinutes(t: string): number {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  // One-time client cache purge to align browser with zero-state clean database
+  // Ensure any stale legacy entity caches in localStorage are purged.
+  // Cache ONLY the JWT token in localStorage; treat PostgreSQL as the authoritative store.
   if (typeof window !== "undefined" && window.localStorage) {
     try {
-      if (!localStorage.getItem("gomaa_cleaned_v2")) {
-        localStorage.removeItem("gomaa_gosalas")
-        localStorage.removeItem("gomaa_sacred_animals")
-        localStorage.removeItem("gomaa_empanelled_vets")
-        localStorage.removeItem("gomaa_managers")
-        localStorage.removeItem("gomaa_settlements")
-        localStorage.removeItem("gomaa_bookings")
-        localStorage.setItem("gomaa_cleaned_v2", "true")
-      }
+      localStorage.removeItem("gomaa_gosalas")
+      localStorage.removeItem("gomaa_sacred_animals")
+      localStorage.removeItem("gomaa_empanelled_vets")
+      localStorage.removeItem("gomaa_managers")
+      localStorage.removeItem("gomaa_settlements")
+      localStorage.removeItem("gomaa_bookings")
+      localStorage.removeItem("gomaa_role_profiles")
+      localStorage.removeItem("gomaa_pricing_config")
+      localStorage.removeItem("gomaa_active_manager_gosala")
+      localStorage.removeItem("gomaa_manager_share_policies")
+      localStorage.removeItem("gomaa_manager_withdrawals")
+      localStorage.removeItem("gomaa_animals")
     } catch {}
   }
 
-  const [bookings, setBookings] = useState<Booking[]>(() => {
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        const saved = localStorage.getItem("gomaa_bookings")
-        if (saved) return JSON.parse(saved)
-      }
-    } catch {}
-    return []
-  })
-  const [animals, setAnimals] = useState<Animal[]>(() => {
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        if (localStorage.getItem("gomaa_cache_version") !== "v4") {
-          localStorage.removeItem("gomaa_sacred_animals")
-          localStorage.removeItem("gomaa_gosalas")
-          localStorage.removeItem("gomaa_empanelled_vets")
-          localStorage.setItem("gomaa_cache_version", "v4")
-          return []
-        }
-        const saved = localStorage.getItem("gomaa_sacred_animals")
-        if (saved) return JSON.parse(saved)
-      }
-    } catch {}
-    return []
-  })
-  const [vets, setVets] = useState<EmpanelledVet[]>(() => {
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        const saved = localStorage.getItem("gomaa_empanelled_vets")
-        if (saved) return JSON.parse(saved)
-      }
-    } catch {}
-    return []
-  })
-  const [gosalas, setGosalas] = useState<Gosala[]>(() => {
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        const saved = localStorage.getItem("gomaa_gosalas")
-        if (saved) {
-          const parsed = JSON.parse(saved)
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed
-        }
-      }
-    } catch {}
-    return []
-  })
+  const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [isLoadingProfiles, setIsLoadingProfiles] = useState<boolean>(true)
+
+  const [bookings, setBookings] = useState<Booking[]>([])
+  const [animals, setAnimals] = useState<Animal[]>([])
+  const [vets, setVets] = useState<EmpanelledVet[]>([])
+  const [gosalas, setGosalas] = useState<Gosala[]>([])
   const [activeGosalaFilter, setActiveGosalaFilter] = useState<string>("ALL")
-  const [activeManagerGosala, setActiveManagerGosalaState] = useState<string>(
-    () => {
-      try {
-        if (typeof window !== "undefined" && window.localStorage) {
-          return localStorage.getItem("gomaa_active_manager_gosala") || ""
-        }
-      } catch {}
-      return ""
-    },
-  )
+  const [activeManagerGosala, setActiveManagerGosalaState] = useState<string>("")
 
-  const setActiveManagerGosala = useCallback(
-    (name: string) => {
-      setActiveManagerGosalaState(name)
-      setActiveGosalaFilter(name)
-      try {
-        if (typeof window !== "undefined" && window.localStorage) {
-          localStorage.setItem("gomaa_active_manager_gosala", name)
-        }
-      } catch {}
-    },
-    [],
-  )
+  const setActiveManagerGosala = useCallback((name: string) => {
+    setActiveManagerGosalaState(name)
+    setActiveGosalaFilter(name)
+  }, [])
 
-  useEffect(() => {
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        localStorage.setItem("gomaa_gosalas", JSON.stringify(gosalas))
-      }
-    } catch {}
-  }, [gosalas])
-
-  const [pricingConfig, setPricingConfig] = useState<PricingConfig>(() => {
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        const saved = localStorage.getItem("gomaa_pricing_config")
-        if (saved) return JSON.parse(saved)
-      }
-    } catch {}
-    return defaultPricingConfig
-  })
+  const [pricingConfig, setPricingConfig] =
+    useState<PricingConfig>(defaultPricingConfig)
   const [blockedSlots, setBlockedSlots] = useState<Record<string, string[]>>({})
-  const [managers, setManagers] = useState<GosalaManager[]>(() => {
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        const saved = localStorage.getItem("gomaa_managers")
-        if (saved) return JSON.parse(saved)
-      }
-    } catch {}
-    return []
-  })
-  const [settlements, setSettlements] = useState<Settlement[]>(() => {
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        const saved = localStorage.getItem("gomaa_settlements")
-        if (saved) return JSON.parse(saved)
-      }
-    } catch {}
-    return []
-  })
+  const [managers, setManagers] = useState<GosalaManager[]>([])
+  const [settlements, setSettlements] = useState<Settlement[]>([])
   const [settlementSchedule, setSettlementSchedule] = useState<any>(null)
   const [currentRole, setCurrentRole] = useState<RoleId | null>("customer")
   const [authToken, setAuthTokenState] = useState<string | null>(() => {
@@ -506,13 +429,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [dismiss],
   )
 
-  const [profiles, setProfiles] = useState<Record<RoleId, RoleProfile>>(() => {
-    try {
-      const saved = localStorage.getItem("gomaa_role_profiles")
-      if (saved) return JSON.parse(saved)
-    } catch {}
-    return initialProfiles
-  })
+  const [profiles, setProfiles] =
+    useState<Record<RoleId, RoleProfile>>(() => initialProfiles)
 
   const activeProfile = useMemo(() => {
     return (
@@ -555,18 +473,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 ...updates.adminData,
               }
             : existing.adminData,
-          bankDetails: updates.bankDetails !== undefined
-            ? (updates.bankDetails ? { ...(existing.bankDetails || {}), ...updates.bankDetails } : undefined)
-            : existing.bankDetails,
-          settlementSchedule: updates.settlementSchedule !== undefined
-            ? (updates.settlementSchedule ? { ...(existing.settlementSchedule || {}), ...updates.settlementSchedule } : undefined)
-            : existing.settlementSchedule,
+          bankDetails:
+            updates.bankDetails !== undefined
+              ? updates.bankDetails
+                ? { ...(existing.bankDetails || {}), ...updates.bankDetails }
+                : undefined
+              : existing.bankDetails,
+          settlementSchedule:
+            updates.settlementSchedule !== undefined
+              ? updates.settlementSchedule
+                ? {
+                    ...(existing.settlementSchedule || {}),
+                    ...updates.settlementSchedule,
+                  }
+                : undefined
+              : existing.settlementSchedule,
         }
-        const next = { ...prev, [role]: updated }
-        try {
-          localStorage.setItem("gomaa_role_profiles", JSON.stringify(next))
-        } catch {}
-        return next
+        return { ...prev, [role]: updated }
       })
 
       try {
@@ -581,8 +504,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Sync state from backend on startup and session updates
   const loadBackendState = useCallback(async () => {
+    setIsLoading(true)
+    setIsLoadingProfiles(true)
     try {
-      const [bkRes, prRes, mgRes, stRes, profRes, gosalaRes, animalRes, vetRes, schedRes, meRes, usersRes] = await Promise.all([
+      const [
+        bkRes,
+        prRes,
+        mgRes,
+        stRes,
+        profRes,
+        gosalaRes,
+        animalRes,
+        vetRes,
+        schedRes,
+        meRes,
+        usersRes,
+      ] = await Promise.all([
         api.getBookings().catch(() => null),
         api.getPricingConfig().catch(() => null),
         api.getManagers().catch(() => null),
@@ -611,141 +548,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       if (prRes?.config) {
         setPricingConfig(prRes.config)
-        try {
-          if (typeof window !== "undefined" && window.localStorage) {
-            localStorage.setItem("gomaa_pricing_config", JSON.stringify(prRes.config))
-          }
-        } catch {}
       }
-      if (mgRes?.managers && Array.isArray(mgRes.managers)) setManagers(mgRes.managers)
-      if (stRes?.settlements && Array.isArray(stRes.settlements)) setSettlements(stRes.settlements)
+      if (mgRes?.managers && Array.isArray(mgRes.managers))
+        setManagers(mgRes.managers)
+      if (stRes?.settlements && Array.isArray(stRes.settlements))
+        setSettlements(stRes.settlements)
       if (schedRes?.schedule) setSettlementSchedule(schedRes.schedule)
       if (profRes?.profiles) {
         setProfiles((prev) => ({ ...prev, ...profRes.profiles }))
       }
       if (gosalaRes?.gosalas && Array.isArray(gosalaRes.gosalas)) {
-        if (gosalaRes.gosalas.length === 0) {
-          setGosalas([])
-          try {
-            if (typeof window !== "undefined" && window.localStorage) {
-              localStorage.setItem("gomaa_gosalas", "[]")
-            }
-          } catch {}
-        } else {
-          setGosalas((prevLocal) => {
-            const localMap = new Map<string, Gosala>()
-            prevLocal.forEach((g) => {
-              localMap.set(g.id, g)
-              if (g.name) localMap.set(g.name.trim().toLowerCase(), g)
-            })
-
-          const merged = gosalaRes.gosalas.map((serverG: any) => {
-            const localG =
-              localMap.get(serverG.id) ||
-              (serverG.name ? localMap.get(serverG.name.trim().toLowerCase()) : undefined)
-            const resolvedLat =
-              serverG.lat !== undefined && serverG.lat !== null
-                ? Number(serverG.lat)
-                : serverG.latitude !== undefined && serverG.latitude !== null
-                  ? Number(serverG.latitude)
-                  : localG?.lat
-            const resolvedLng =
-              serverG.lng !== undefined && serverG.lng !== null
-                ? Number(serverG.lng)
-                : serverG.longitude !== undefined && serverG.longitude !== null
-                  ? Number(serverG.longitude)
-                  : localG?.lng
-
-            return {
-              ...(localG || {}),
-              ...serverG,
-              id: serverG.id,
-              name: serverG.name,
-              region: serverG.region,
-              address: serverG.address,
-              contactPhone: serverG.contactPhone || localG?.contactPhone || "+91 98000 00000",
-              email: serverG.contactEmail || serverG.email || localG?.email || "trust@gomaa.in",
-              lat: resolvedLat,
-              lng: resolvedLng,
-              photo:
-                serverG.photo ||
-                localG?.photo ||
-                GOSALA_PHOTO_PRESETS[0].url,
-              photos:
-                serverG.photos && serverG.photos.length > 0
-                  ? serverG.photos
-                  : localG?.photos && localG.photos.length > 0
-                    ? localG.photos
-                    : [serverG.photo || localG?.photo || GOSALA_PHOTO_PRESETS[0].url],
-              capacity:
-                serverG.capacity !== undefined
-                  ? Number(serverG.capacity)
-                  : localG?.capacity || 40,
-              establishedYear:
-                serverG.establishedYear ||
-                localG?.establishedYear ||
-                "2018",
-              trustRegistrationNo:
-                serverG.trustRegistrationNo ||
-                localG?.trustRegistrationNo ||
-                "AWBI/2018/TG/HYD-4912",
-              landAcres:
-                serverG.landAcres !== undefined
-                  ? Number(serverG.landAcres)
-                  : localG?.landAcres || 4.5,
-              visitingHours:
-                serverG.visitingHours ||
-                localG?.visitingHours ||
-                "06:00 AM - 07:30 PM (Daily)",
-              facilities:
-                serverG.facilities && serverG.facilities.length > 0
-                  ? serverG.facilities
-                  : localG?.facilities || [
-                      "24/7 Pure Borewell Water & Trough",
-                      "Certified Veterinary Medical Bay",
-                      "Sacred Vedic Puja & Havan Courtyard",
-                    ],
-              notes: serverG.notes || localG?.notes || "",
-              caretaker:
-                serverG.caretaker ||
-                localG?.caretaker ||
-                serverG.managerName ||
-                "Caretaker In-Charge",
-              caretakerPhone:
-                serverG.caretakerPhone ||
-                localG?.caretakerPhone ||
-                serverG.contactPhone ||
-                "+91 98230 44910",
-            } as Gosala
-          })
-
-          try {
-            if (typeof window !== "undefined" && window.localStorage) {
-              localStorage.setItem("gomaa_gosalas", JSON.stringify(merged))
-            }
-          } catch {}
-          return merged
-        })
-        }
+        setGosalas(gosalaRes.gosalas)
       }
       if (animalRes?.animals && Array.isArray(animalRes.animals)) {
         setAnimals(animalRes.animals)
-        try {
-          if (typeof window !== "undefined" && window.localStorage) {
-            localStorage.setItem("gomaa_sacred_animals", JSON.stringify(animalRes.animals))
-          }
-        } catch {}
       }
       if (vetRes?.vets && Array.isArray(vetRes.vets)) {
         setVets(vetRes.vets)
-        try {
-          if (typeof window !== "undefined" && window.localStorage) {
-            localStorage.setItem("gomaa_empanelled_vets", JSON.stringify(vetRes.vets))
-          }
-        } catch {}
       }
     } catch (e) {
       console.warn("Backend state init fallback:", e)
+    } finally {
+      setIsLoading(false)
+      setIsLoadingProfiles(false)
     }
   }, [])
 
@@ -778,46 +603,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loadBackendState()
   }, [loadBackendState])
 
-  useEffect(() => {
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        localStorage.setItem("gomaa_sacred_animals", JSON.stringify(animals))
-      }
-    } catch {}
-  }, [animals])
-
-  useEffect(() => {
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        localStorage.setItem("gomaa_bookings", JSON.stringify(bookings))
-      }
-    } catch {}
-  }, [bookings])
-
-  useEffect(() => {
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        localStorage.setItem("gomaa_empanelled_vets", JSON.stringify(vets))
-      }
-    } catch {}
-  }, [vets])
-
-  useEffect(() => {
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        localStorage.setItem("gomaa_managers", JSON.stringify(managers))
-      }
-    } catch {}
-  }, [managers])
-
-  useEffect(() => {
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        localStorage.setItem("gomaa_settlements", JSON.stringify(settlements))
-      }
-    } catch {}
-  }, [settlements])
-
   const patch = (id: string, fn: (b: Booking) => Booking) =>
     setBookings((bs) => bs.map((b) => (b.id === id ? fn(b) : b)))
 
@@ -842,30 +627,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updatePricing = useCallback(
     async (patchData: Partial<PricingConfig>) => {
       // Optimistic / fast local update
-      setPricingConfig((prev) => {
-        const next = { ...prev, ...patchData }
-        try {
-          if (typeof window !== "undefined" && window.localStorage) {
-            localStorage.setItem("gomaa_pricing_config", JSON.stringify(next))
-          }
-        } catch {}
-        return next
-      })
+      setPricingConfig((prev) => ({ ...prev, ...patchData }))
 
       try {
         const res = await api.updatePricingConfig(patchData, "super_admin")
         if (res?.config) {
           setPricingConfig(res.config)
-          try {
-            if (typeof window !== "undefined" && window.localStorage) {
-              localStorage.setItem("gomaa_pricing_config", JSON.stringify(res.config))
-            }
-          } catch {}
         }
-        notify("Master Pricing & Platform Economics synchronized to PostgreSQL database", "ok")
+        notify(
+          "Master Pricing & Platform Economics synchronized to PostgreSQL database",
+          "ok",
+        )
       } catch (err: any) {
         console.error("Master pricing DB update error:", err)
-        notify(err?.message || "Failed to sync Master Pricing with database", "danger")
+        notify(
+          err?.message || "Failed to sync Master Pricing with database",
+          "danger",
+        )
       }
     },
     [notify],
@@ -933,11 +711,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const res = await api.getAnimals()
       if (res?.animals && Array.isArray(res.animals)) {
         setAnimals(res.animals)
-        try {
-          if (typeof window !== "undefined" && window.localStorage) {
-            localStorage.setItem("gomaa_sacred_animals", JSON.stringify(res.animals))
-          }
-        } catch {}
         return res.animals
       }
     } catch (err) {
@@ -950,57 +723,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const res = await api.getGosalas()
       if (res?.gosalas && Array.isArray(res.gosalas)) {
-        setGosalas((prevLocal) => {
-          const localMap = new Map<string, Gosala>()
-          prevLocal.forEach((g) => {
-            localMap.set(g.id, g)
-            if (g.name) localMap.set(g.name.trim().toLowerCase(), g)
-          })
-          const merged = res.gosalas.map((serverG: any) => {
-            const localG = localMap.get(serverG.id) || localMap.get(serverG.name?.trim().toLowerCase())
-            return {
-              ...(localG || {}),
-              ...serverG,
-              id: serverG.id,
-              name: serverG.name,
-              region: serverG.region || localG?.region || "Operational Sector",
-              address: serverG.address || localG?.address || "Sanctuary Premises",
-              contactPhone: serverG.contactPhone || localG?.contactPhone || "+91 98230 44910",
-              email: serverG.contactEmail || serverG.email || localG?.email || "trust@gomaa.in",
-              managerId: serverG.managerId || localG?.managerId || "",
-              managerName: serverG.managerName || localG?.managerName || "Gaushala Custodian",
-              caretaker: serverG.caretaker || localG?.caretaker || serverG.managerName || "Caretaker In-Charge",
-              caretakerPhone: serverG.caretakerPhone || localG?.caretakerPhone || serverG.contactPhone || "+91 98230 44910",
-              status: serverG.status || localG?.status || "Active",
-              photo: serverG.photo || localG?.photo || GOSALA_PHOTO_PRESETS[0].url,
-              photos: serverG.photos && serverG.photos.length > 0 ? serverG.photos : localG?.photos && localG.photos.length > 0 ? localG.photos : [serverG.photo || localG?.photo || GOSALA_PHOTO_PRESETS[0].url],
-              capacity: serverG.capacity !== undefined ? Number(serverG.capacity) : localG?.capacity || 40,
-              establishedYear: serverG.establishedYear || localG?.establishedYear || "2018",
-              trustRegistrationNo: serverG.trustRegistrationNo || localG?.trustRegistrationNo || "AWBI/2018/TG/HYD-4912",
-              landAcres: serverG.landAcres !== undefined ? Number(serverG.landAcres) : localG?.landAcres || 4.5,
-              visitingHours: serverG.visitingHours || localG?.visitingHours || "06:00 AM - 07:30 PM (Daily)",
-              facilities: serverG.facilities && serverG.facilities.length > 0 ? serverG.facilities : localG?.facilities || [
-                "24/7 Pure Borewell Water & Trough",
-                "Certified Veterinary Medical Bay",
-                "Sacred Vedic Puja & Havan Courtyard",
-              ],
-              notes: serverG.notes || localG?.notes || "",
-              adminId: serverG.adminId || localG?.adminId || "",
-              adminEmail: serverG.adminEmail || serverG.governingAdminEmail || localG?.adminEmail || "",
-              adminName: serverG.adminName || serverG.governingAdminName || localG?.adminName || "",
-              governingAdminRole: serverG.governingAdminRole || localG?.governingAdminRole || "admin",
-              governingAdminName: serverG.governingAdminName || serverG.adminName || localG?.governingAdminName || "",
-              governingAdminEmail: serverG.governingAdminEmail || serverG.adminEmail || localG?.governingAdminEmail || "",
-              assignedManagers: serverG.assignedManagers || localG?.assignedManagers || [],
-            } as Gosala
-          })
-          try {
-            if (typeof window !== "undefined" && window.localStorage) {
-              localStorage.setItem("gomaa_gosalas", JSON.stringify(merged))
-            }
-          } catch {}
-          return merged
-        })
+        setGosalas(res.gosalas)
+        return res.gosalas
       }
     } catch (err) {
       console.warn("refreshGosalas background check failed:", err)
@@ -1011,20 +735,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addAnimal = useCallback(
     (newAnimal: Animal) => {
       setAnimals((prev) => {
-        const filtered = prev.filter((a) => a.name.toLowerCase() !== newAnimal.name.toLowerCase())
-        const next = [newAnimal, ...filtered]
-        try {
-          if (typeof window !== "undefined" && window.localStorage) {
-            localStorage.setItem("gomaa_sacred_animals", JSON.stringify(next))
-          }
-        } catch {}
-        return next
+        const filtered = prev.filter(
+          (a) => a.name.toLowerCase() !== newAnimal.name.toLowerCase(),
+        )
+        return [newAnimal, ...filtered]
       })
-      api.createAnimal(newAnimal).then(() => {
-        refreshAnimals().catch(() => {})
-      }).catch((err) => {
-        console.warn("api.createAnimal background error (retained locally):", err)
-      })
+      api
+        .createAnimal(newAnimal)
+        .then(() => {
+          refreshAnimals().catch(() => {})
+        })
+        .catch((err) => {
+          console.warn(
+            "api.createAnimal background error (retained locally):",
+            err,
+          )
+        })
       notify(`Added ${newAnimal.name} to ${newAnimal.gosala}!`, "ok")
     },
     [notify, refreshAnimals],
@@ -1035,11 +761,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setAnimals((prev) =>
         prev.map((a) => (a.name === name ? { ...a, ...patch } : a)),
       )
-      api.updateAnimal(name, patch).then(() => {
-        refreshAnimals().catch(() => {})
-      }).catch((err) => {
-        console.warn("api.updateAnimal background error (retained locally):", err)
-      })
+      api
+        .updateAnimal(name, patch)
+        .then(() => {
+          refreshAnimals().catch(() => {})
+        })
+        .catch((err) => {
+          console.warn(
+            "api.updateAnimal background error (retained locally):",
+            err,
+          )
+        })
       notify(`Updated details for ${name}`, "ok")
     },
     [notify, refreshAnimals],
@@ -1048,11 +780,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteAnimal = useCallback(
     (name: string) => {
       setAnimals((prev) => prev.filter((a) => a.name !== name))
-      api.deleteAnimal(name).then(() => {
-        refreshAnimals().catch(() => {})
-      }).catch((err) => {
-        console.warn("api.deleteAnimal background error:", err)
-      })
+      api
+        .deleteAnimal(name)
+        .then(() => {
+          refreshAnimals().catch(() => {})
+        })
+        .catch((err) => {
+          console.warn("api.deleteAnimal background error:", err)
+        })
       notify(`Removed ${name} from sacred cattle roster`, "info")
     },
     [notify, refreshAnimals],
@@ -1093,7 +828,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addGosala = useCallback(
     (data: Omit<Gosala, "id"> | Gosala): Gosala => {
-      const id = "id" in data && data.id ? data.id : `GOS-${100 + gosalas.length + 1}`
+      const id =
+        "id" in data && data.id ? data.id : `GOS-${100 + gosalas.length + 1}`
       const newGosala: Gosala = {
         ...data,
         id,
@@ -1124,7 +860,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       setGosalas((prev) => [newGosala, ...prev])
       api.createGosala(newGosala).catch((err) => {
-        console.warn("api.createGosala background error (using local state):", err)
+        console.warn(
+          "api.createGosala background error (using local state):",
+          err,
+        )
       })
       notify(
         `Gaushala "${newGosala.name}" successfully registered under your management!`,
@@ -1141,7 +880,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         prev.map((g) => (g.id === id ? { ...g, ...patch } : g)),
       )
       api.updateGosala(id, patch).catch((err) => {
-        console.warn("api.updateGosala background error (using local state):", err)
+        console.warn(
+          "api.updateGosala background error (using local state):",
+          err,
+        )
       })
       notify("Gaushala facility details updated successfully", "ok")
     },
@@ -1333,7 +1075,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         minute: "2-digit",
       })
 
-      const effectiveName = managerName || profiles?.manager?.name || "Gaushala Manager"
+      const effectiveName =
+        managerName || profiles?.manager?.name || "Gaushala Manager"
       const managerId = profiles?.manager?.id || "MGR-ACTIVE"
 
       const finalRemark = rejectionCode
@@ -1547,7 +1290,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!b) return { success: false, error: "Booking not found" }
       const expected = (b.handoverOtp || "4819").trim()
       if (otp.trim() !== expected && otp.trim() !== "1234") {
-        notify("Invalid Handover OTP. Please ask devotee for the 4 digits.", "danger")
+        notify(
+          "Invalid Handover OTP. Please ask devotee for the 4 digits.",
+          "danger",
+        )
         return { success: false, error: "Invalid Handover OTP" }
       }
 
@@ -1584,7 +1330,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const addManager = useCallback(
-    (mgr: Omit<GosalaManager, "id" | "assignedDate"> & { gosalas?: string[] }) => {
+    (
+      mgr: Omit<GosalaManager, "id" | "assignedDate"> & { gosalas?: string[] },
+    ) => {
       const id = `MGR-${800 + managers.length + 1}`
       const assignedDate =
         "Today, " +
@@ -1594,7 +1342,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           year: "numeric",
         })
       const primaryGosala =
-        mgr.gosalas && mgr.gosalas.length > 0 ? mgr.gosalas[0] : mgr.gosala || "Unassigned"
+        mgr.gosalas && mgr.gosalas.length > 0
+          ? mgr.gosalas[0]
+          : mgr.gosala || "Unassigned"
       const newMgr: GosalaManager = {
         ...mgr,
         id,
@@ -1619,7 +1369,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   )
 
   const updateManager = useCallback(
-    (id: string, patchData: Partial<GosalaManager> & { gosalas?: string[] }) => {
+    (
+      id: string,
+      patchData: Partial<GosalaManager> & { gosalas?: string[] },
+    ) => {
       setManagers((prev) =>
         prev.map((m) => {
           if (m.id !== id) return m
@@ -1748,7 +1501,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           return res
         }
       } catch (err: any) {
-        notify(err?.message || "Failed to execute automated settlement sweep", "err")
+        notify(
+          err?.message || "Failed to execute automated settlement sweep",
+          "err",
+        )
         throw err
       }
     },
@@ -1891,6 +1647,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       profiles,
       activeProfile,
       updateProfile,
+      isLoading,
+      isLoadingProfiles,
       authToken,
       authUser,
       setAuthSession,
@@ -1957,6 +1715,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markNotificationRead,
       markAllNotificationsRead,
       clearNotifications,
+      isLoading,
+      isLoadingProfiles,
       authToken,
       authUser,
       setAuthSession,

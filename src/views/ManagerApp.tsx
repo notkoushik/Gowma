@@ -43,18 +43,10 @@ import GaushalaProfileView from "./manager/GaushalaProfileView"
 import ManagerDevotees from "./manager/ManagerDevotees"
 import EditProfileModal from "../components/EditProfileModal"
 import { useStore } from "../store/store"
+import { Skeleton } from "../components/common/Skeleton"
 import { initialProfiles } from "../data/profiles"
 
-type MView =
-  | "queue"
-  | "live_tracking"
-  | "schedule"
-  | "availability"
-  | "animals"
-  | "gosalas"
-  | "ledger"
-  | "devotees"
-  | "wallet"
+type MView = "queue" | "live_tracking" | "schedule" | "availability" | "animals" | "gosalas" | "ledger" | "devotees" | "wallet"
 
 const VALID_MANAGER_VIEWS: MView[] = [
   "queue",
@@ -87,7 +79,7 @@ function getInitialManagerView(): MView {
   return "queue"
 }
 
-const titles: Record<MView, { title: string; desc: string }> = {
+const titles: Record<MView, { title: string desc: string }> = {
   queue: {
     title: "Shed Feasibility Queue",
     desc: "4-vector pre-dispatch feasibility check for your assigned Gaushala cows",
@@ -130,7 +122,7 @@ const titles: Record<MView, { title: string; desc: string }> = {
 class ManagerErrorBoundary extends Component<{
   children: ReactNode
   onSignOut: () => void
-}, { hasError: boolean; errorMsg: string }> {
+}, { hasError: boolean errorMsg: string }> {
   state = { hasError: false, errorMsg: "" }
 
   static getDerivedStateFromError(error: Error) {
@@ -205,6 +197,7 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
     updateProfile,
     pricingConfig,
     authUser,
+    isLoading,
   } = useStore()
   const defaultCommPct = pricingConfig?.commissionPct ?? 20
   const defaultGaushalaPct = 100 - defaultCommPct
@@ -240,7 +233,10 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
     if (authUser?.gosalaNames && Array.isArray(authUser.gosalaNames)) {
       list.push(...authUser.gosalaNames)
     }
-    if ((authUser as any)?.assignedGosalaNames && Array.isArray((authUser as any).assignedGosalaNames)) {
+    if (
+      (authUser as any)?.assignedGosalaNames &&
+      Array.isArray((authUser as any).assignedGosalaNames)
+    ) {
       list.push(...(authUser as any).assignedGosalaNames)
     }
 
@@ -268,13 +264,15 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
           (g.managerId === managerProfile.id ||
             g.managerId === authUser?.id ||
             g.managerId === matchedManager?.id ||
-            Boolean((matchedManager as any)?.rawUserId && g.managerId === (matchedManager as any).rawUserId))) ||
+            Boolean(
+              (matchedManager as any)?.rawUserId &&
+                g.managerId === (matchedManager as any).rawUserId,
+            ))) ||
         (g.managerName &&
-          g.managerName.toLowerCase() ===
-            managerProfile.name.toLowerCase()) ||
-        (g.managerName && Boolean(matchedManager?.name) &&
-          g.managerName.toLowerCase() ===
-            matchedManager!.name.toLowerCase()) ||
+          g.managerName.toLowerCase() === managerProfile.name.toLowerCase()) ||
+        (g.managerName &&
+          Boolean(matchedManager?.name) &&
+          g.managerName.toLowerCase() === matchedManager!.name.toLowerCase()) ||
         (Boolean((g as any).manager) &&
           (g as any).manager.toLowerCase() ===
             managerProfile.name.toLowerCase()) ||
@@ -289,9 +287,15 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
             am.id === managerProfile.id ||
             am.id === authUser?.id ||
             am.id === matchedManager?.id ||
-            (am.name && managerProfile.name && am.name.toLowerCase() === managerProfile.name.toLowerCase()) ||
-            (am.email && managerProfile.email && am.email.toLowerCase() === managerProfile.email.toLowerCase()) ||
-            (am.email && authUser?.email && am.email.toLowerCase() === authUser.email.toLowerCase()),
+            (am.name &&
+              managerProfile.name &&
+              am.name.toLowerCase() === managerProfile.name.toLowerCase()) ||
+            (am.email &&
+              managerProfile.email &&
+              am.email.toLowerCase() === managerProfile.email.toLowerCase()) ||
+            (am.email &&
+              authUser?.email &&
+              am.email.toLowerCase() === authUser.email.toLowerCase()),
         )
       if (
         isDirectManager &&
@@ -332,7 +336,9 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
     if (activeManagerGosala && activeManagerGosala !== selectedGosala) {
       if (
         assignedGosalaNames.length === 0 ||
-        assignedGosalaNames.some((gn) => gn.toLowerCase() === activeManagerGosala.toLowerCase())
+        assignedGosalaNames.some(
+          (gn) => gn.toLowerCase() === activeManagerGosala.toLowerCase(),
+        )
       ) {
         setSelectedGosalaState(activeManagerGosala)
       }
@@ -345,7 +351,10 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
       setSelectedGosalaState(assignedGosalaNames[0])
       setActiveManagerGosala(assignedGosalaNames[0])
       try {
-        localStorage.setItem("gomaa_active_manager_gosala", assignedGosalaNames[0])
+        localStorage.setItem(
+          "gomaa_active_manager_gosala",
+          assignedGosalaNames[0],
+        )
       } catch {}
     }
   }, [assignedGosalaNames, selectedGosala, setActiveManagerGosala])
@@ -535,10 +544,14 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
             No Gaushala Assigned to Your Profile
           </h2>
           <p className="text-[13px] text-ink-soft leading-relaxed max-w-md mx-auto">
-            Welcome, <strong>{managerProfile.name}</strong>. Your manager account is active, but an Operations Admin has not assigned any physical Gaushala to your custody yet.
+            Welcome, <strong>{managerProfile.name}</strong>. Your manager
+            account is active, but an Operations Admin has not assigned any
+            physical Gaushala to your custody yet.
           </p>
           <div className="p-3.5 bg-paper rounded border border-line text-[12px] text-ink-faint">
-            Once your Regional Operations Admin assigns one or more Gaushalas to your profile, you will be able to manage their cattle, feasibility queue, live tracking, and net revenue here.
+            Once your Regional Operations Admin assigns one or more Gaushalas to
+            your profile, you will be able to manage their cattle, feasibility
+            queue, live tracking, and net revenue here.
           </div>
           <div className="pt-2 flex justify-center gap-3">
             <button
@@ -625,17 +638,37 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
             title="Click to edit manager profile"
           >
             <div className="h-8 w-8 rounded-full bg-saffron text-white flex items-center justify-center text-[12px] font-medium shrink-0">
-              {managerProfile?.name?.slice(0, 2).toUpperCase() || "GC"}
+              {isLoading ? (
+                <Skeleton variant="circular" className="h-8 w-8" />
+              ) : (
+                (authUser?.name || managerProfile?.name || "")
+                  .slice(0, 2)
+                  .toUpperCase() || "GC"
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-[12.5px] text-ink truncate font-medium flex items-center justify-between">
-                <span className="truncate">{managerProfile?.name || "Gaushala Custodian"}</span>
-                <span className="font-mono text-[10px] text-saffron bg-saffron/10 px-1.5 py-0.2 rounded font-medium shrink-0 ml-1">
-                  {authUser?.uniqueId || "GMA-MGR-0101"}
+                <span className="truncate">
+                  {isLoading ? (
+                    <Skeleton variant="text" className="h-4 w-28 my-0.5" />
+                  ) : authUser?.name || managerProfile?.name ? (
+                    authUser?.name || managerProfile?.name
+                  ) : (
+                    <span className="text-amber-600 dark:text-amber-400 text-xs italic">
+                      Configure Manager Profile
+                    </span>
+                  )}
                 </span>
+                {authUser?.uniqueId && (
+                  <span className="font-mono text-[10px] text-saffron bg-saffron/10 px-1.5 py-0.2 rounded font-medium shrink-0 ml-1">
+                    {authUser.uniqueId}
+                  </span>
+                )}
               </div>
               <div className="text-[11px] text-ink-faint truncate">
-                {currentGosala || managerProfile?.managerData?.gosala || "Shri Krishna Gaushala"}
+                {currentGosala ||
+                  managerProfile?.managerData?.gosala ||
+                  "Shri Krishna Gaushala"}
               </div>
             </div>
             <button
@@ -726,7 +759,11 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
                   <span className="text-[10px] font-mono font-semibold bg-forest-soft text-forest border border-forest/20 px-1.5 py-0.5 rounded">
                     {
                       bookings.filter((b) => {
-                        if (!b.gosala.toLowerCase().includes(currentGosala.toLowerCase())) {
+                        if (
+                          !b.gosala
+                            .toLowerCase()
+                            .includes(currentGosala.toLowerCase())
+                        ) {
                           return false
                         }
                         const q = searchQuery.trim().toLowerCase()
@@ -1153,15 +1190,32 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
               <div className="px-5 pb-3 border-b border-line flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="h-8 w-8 rounded-full bg-saffron text-white flex items-center justify-center text-[11px] font-medium">
-                    {managerProfile?.name?.slice(0, 2).toUpperCase() || "GC"}
+                    {isLoading ? (
+                      <Skeleton variant="circular" className="h-8 w-8" />
+                    ) : (
+                      (authUser?.name || managerProfile?.name || "")
+                        .slice(0, 2)
+                        .toUpperCase() || "GC"
+                    )}
                   </div>
                   <div>
                     <div className="text-[13px] font-semibold text-ink">
-                      {managerProfile?.name || "Gaushala Custodian"}
+                      {isLoading ? (
+                        <Skeleton variant="text" className="h-4 w-28 my-0.5" />
+                      ) : authUser?.name || managerProfile?.name ? (
+                        authUser?.name || managerProfile?.name
+                      ) : (
+                        <span className="text-amber-600 text-xs italic">
+                          Configure Manager Profile
+                        </span>
+                      )}
                     </div>
                     <div className="text-[11px] text-ink-faint">
-                      {managerProfile?.managerData?.gosala ||
-                        "Shri Krishna Gaushala"}
+                      {isLoading ? (
+                        <Skeleton variant="text" className="h-3 w-32 mt-0.5" />
+                      ) : (
+                        managerProfile?.managerData?.gosala || "Assigned Gaushala"
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1285,7 +1339,8 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
                   <div>
                     <div className="text-[13px]">Earnings &amp; Ledger</div>
                     <div className="text-[11px] text-ink-faint">
-                      {defaultGaushalaPct}/{defaultCommPct} Gaushala Trust revenue split
+                      {defaultGaushalaPct}/{defaultCommPct} Gaushala Trust
+                      revenue split
                     </div>
                   </div>
                 </button>
@@ -1387,7 +1442,9 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
                       Select Gaushala to Manage
                     </h3>
                     <p className="text-[12.5px] text-ink-faint mt-0.5">
-                      You are authorized as Manager for multiple facilities. Select the Gaushala you want to oversee. Details and cattle records between Gaushalas are strictly isolated.
+                      You are authorized as Manager for multiple facilities.
+                      Select the Gaushala you want to oversee. Details and
+                      cattle records between Gaushalas are strictly isolated.
                     </p>
                   </div>
                 </div>
@@ -1446,7 +1503,10 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
                             )}
                           </div>
                           <div className="text-[12px] text-ink-faint flex items-center gap-1.5 mt-1">
-                            <MapPin size={11} className="text-saffron shrink-0" />
+                            <MapPin
+                              size={11}
+                              className="text-saffron shrink-0"
+                            />
                             <span className="truncate">
                               {gObj?.region || "Operational Hub"}
                             </span>
@@ -1503,7 +1563,8 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
               <div className="p-4 border-t border-line bg-paper text-[11.5px] text-ink-faint flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <ShieldCheck size={14} className="text-forest shrink-0" />
-                  Zero cross-shelter leakage · Each Gaushala is an isolated workspace
+                  Zero cross-shelter leakage · Each Gaushala is an isolated
+                  workspace
                 </span>
                 <span className="font-mono text-[11px] text-ink-soft">
                   {assignedGosalaNames.length} facilities authorized

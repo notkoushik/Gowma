@@ -188,209 +188,33 @@ var WebSocketHub = class {
 };
 var wsHub = new WebSocketHub();
 
-// server/ws/gpsSimulator.ts
-var GOSALA_COORDS = {
-  "RamNath Gaushala": { lat: 17.4647, lng: 78.3662 },
-  "Surya": { lat: 17.4401, lng: 78.3489 },
-  "Suryavanchi Gaushala": { lat: 17.3826, lng: 78.3976 },
-  "Shri Krishna Gaushala": { lat: 17.4401, lng: 78.3489 },
-  "Nandini Goseva Sadan": { lat: 17.4647, lng: 78.3662 },
-  "Gopal Gaushala Trust": { lat: 17.4447, lng: 78.3762 },
-  "Vrindavan Goshala": { lat: 17.3826, lng: 78.3976 },
-  "Kamdhenu Seva Kendra": { lat: 17.42, lng: 78.33 }
-};
-function calculateBearing(p1, p2) {
-  const rad = Math.PI / 180;
-  const lat1 = p1.lat * rad;
-  const lat2 = p2.lat * rad;
-  const dLng = (p2.lng - p1.lng) * rad;
-  const y = Math.sin(dLng) * Math.cos(lat2);
-  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
-  let brng = Math.atan2(y, x) / rad;
-  return Math.round((brng + 360) % 360);
-}
-function generateFallbackWaypoints(start, end, count = 25) {
-  const points = [];
-  for (let i = 0; i <= count; i++) {
-    const t = i / count;
-    points.push({
-      lat: start.lat + (end.lat - start.lat) * t,
-      lng: start.lng + (end.lng - start.lng) * t
-    });
-  }
-  return points;
-}
-async function fetchRealRoadWaypoints(start, end) {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4e3);
-    const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeout);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.code === "Ok" && data.routes?.[0]?.geometry?.coordinates?.length > 1) {
-        const coords = data.routes[0].geometry.coordinates;
-        const step = Math.max(1, Math.floor(coords.length / 30));
-        const sampled = [];
-        for (let i = 0; i < coords.length; i += step) {
-          sampled.push({ lat: coords[i][1], lng: coords[i][0] });
-        }
-        const last = coords[coords.length - 1];
-        sampled.push({ lat: last[1], lng: last[0] });
-        return sampled;
-      }
-    }
-  } catch (err) {
-    console.warn("OSRM simulator fetch fallback:", err);
-  }
-  return generateFallbackWaypoints(start, end, 25);
-}
-var GpsSimulatorManager = class {
-  activeSimulations = /* @__PURE__ */ new Map();
-  onTickListener;
-  setOnTick(cb) {
-    this.onTickListener = cb;
-  }
-  async startSimulation(bookingId, gosalaName, destinationAddress, totalDistanceKm = 10) {
-    this.stopSimulation(bookingId);
-    const startPoint = GOSALA_COORDS[gosalaName] || {
-      lat: 17.4401,
-      lng: 78.3489
-    };
-    const endPoint = {
-      lat: startPoint.lat + 0.024,
-      lng: startPoint.lng + 0.038
-    };
-    const waypoints = await fetchRealRoadWaypoints(startPoint, endPoint);
-    let currentIndex = 0;
-    const channel = `channel:booking:${bookingId}`;
-    const interval = setInterval(() => {
-      if (currentIndex >= waypoints.length - 1) {
-        const finalPoint = waypoints[waypoints.length - 1];
-        const tick2 = {
-          bookingId,
-          lat: finalPoint.lat,
-          lng: finalPoint.lng,
-          bearing: 0,
-          speedKmh: 0,
-          etaMinutes: 0,
-          distanceRemainingKm: 0,
-          stage: 5,
-          stageLabel: "Arrived at Customer",
-          timestamp: Date.now()
-        };
-        wsHub.broadcastToChannel(channel, "GPS_TICK", tick2);
-        wsHub.broadcastToChannel(channel, "STAGE_CHANGED", {
-          bookingId,
-          stage: 5,
-          stageLabel: "Arrived at Customer"
-        });
-        this.onTickListener?.(tick2);
-        this.stopSimulation(bookingId);
-        return;
-      }
-      const current = waypoints[currentIndex];
-      const next = waypoints[currentIndex + 1];
-      const bearing = calculateBearing(current, next);
-      const progressRatio = currentIndex / waypoints.length;
-      const distanceRemainingKm = Math.round(totalDistanceKm * (1 - progressRatio) * 10) / 10;
-      const speedKmh = 26 + Math.floor(Math.random() * 10);
-      const etaMinutes = Math.max(
-        1,
-        Math.round(distanceRemainingKm / speedKmh * 60)
-      );
-      const tick = {
-        bookingId,
-        lat: current.lat,
-        lng: current.lng,
-        bearing,
-        speedKmh,
-        etaMinutes,
-        distanceRemainingKm,
-        stage: 4,
-        stageLabel: "Start Transport",
-        timestamp: Date.now()
-      };
-      wsHub.broadcastToChannel(channel, "GPS_TICK", tick);
-      this.onTickListener?.(tick);
-      currentIndex++;
-    }, 1500);
-    this.activeSimulations.set(bookingId, interval);
-  }
-  stopSimulation(bookingId) {
-    const existing = this.activeSimulations.get(bookingId);
-    if (existing) {
-      clearInterval(existing);
-      this.activeSimulations.delete(bookingId);
-    }
-  }
-};
-var gpsSimulator = new GpsSimulatorManager();
-
-// server/db.ts
-var defaultPricing = {
-  standardMin: 60,
-  extraUnitMin: 30,
-  extraUnitRate: 500,
-  freeKm: 5,
-  perKm: 50,
-  taxPct: 12,
-  commissionPct: 20,
-  maxDurationMin: 240,
-  bufferMin: 30,
-  rounding: "Nearest \u20B910"
-};
-var initialBookings = [];
-var initialManagers = [];
-var initialSettlements = [];
-var InMemoryDB = class {
-  bookings = [...initialBookings];
-  managers = [...initialManagers];
-  settlements = [...initialSettlements];
-  pricingConfig = { ...defaultPricing };
-  slotHolds = [];
-  blockedSlots = {};
-  // Helpers
-  cleanExpiredHolds() {
-    const now = Date.now();
-    this.slotHolds = this.slotHolds.filter((h) => h.expiresAt > now);
-  }
-};
-var db = new InMemoryDB();
-
 // server/gosalaMeta.ts
-import fs from "fs";
-import path from "path";
-var META_FILE_PATH = path.resolve(process.cwd(), "server/data/gosalas_meta.json");
 var metaStore = {};
-function loadMetaStore() {
+var isInitialized = false;
+async function initMetaStore() {
+  if (isInitialized) return;
   try {
-    if (fs.existsSync(META_FILE_PATH)) {
-      const raw = fs.readFileSync(META_FILE_PATH, "utf-8");
-      metaStore = JSON.parse(raw);
+    const gosalas = await prisma.gosala.findMany({
+      select: { id: true, name: true, metadata: true }
+    });
+    for (const g of gosalas) {
+      if (g.metadata && typeof g.metadata === "object") {
+        if (g.id) metaStore[g.id] = g.metadata;
+        if (g.name) metaStore[g.name.trim().toLowerCase()] = g.metadata;
+      }
     }
+    isInitialized = true;
   } catch (err) {
-    console.warn("Could not load gosalas_meta.json:", err);
-    metaStore = {};
+    console.warn("[gosalaMeta] Could not preload gosalas metadata from DB:", err?.message);
   }
 }
-function persistMetaStore() {
-  try {
-    const dir = path.dirname(META_FILE_PATH);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(META_FILE_PATH, JSON.stringify(metaStore, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Failed to save gosalas_meta.json:", err);
-  }
-}
-loadMetaStore();
+initMetaStore().catch(() => {
+});
 function getGosalaMeta(id, name) {
-  if (metaStore[id]) return metaStore[id];
+  if (id && metaStore[id]) return metaStore[id];
   if (name) {
     const normalizedName = name.trim().toLowerCase();
+    if (metaStore[normalizedName]) return metaStore[normalizedName];
     for (const [key, val] of Object.entries(metaStore)) {
       if (key.toLowerCase() === normalizedName) return val;
     }
@@ -408,52 +232,71 @@ function saveGosalaMeta(id, name, meta) {
       delete updated[k];
     }
   });
-  metaStore[id] = updated;
-  if (name) {
-    metaStore[name.trim().toLowerCase()] = updated;
-  }
-  persistMetaStore();
+  if (id) metaStore[id] = updated;
+  if (name) metaStore[name.trim().toLowerCase()] = updated;
+  prisma.gosala.findFirst({
+    where: {
+      OR: [
+        ...id ? [{ id }] : [],
+        ...name ? [{ name: { equals: name, mode: "insensitive" } }] : []
+      ]
+    }
+  }).then(async (gosala) => {
+    if (gosala) {
+      metaStore[gosala.id] = updated;
+      metaStore[gosala.name.trim().toLowerCase()] = updated;
+      await prisma.gosala.update({
+        where: { id: gosala.id },
+        data: { metadata: updated }
+      });
+    }
+  }).catch((err) => {
+    console.error(`[gosalaMeta] Failed to persist metadata to DB for ${name || id}:`, err.message);
+  });
 }
 function deleteGosalaMeta(id, name) {
-  delete metaStore[id];
-  if (name) {
-    delete metaStore[name.trim().toLowerCase()];
-  }
-  persistMetaStore();
+  if (id) delete metaStore[id];
+  if (name) delete metaStore[name.trim().toLowerCase()];
+  prisma.gosala.findFirst({
+    where: {
+      OR: [
+        ...id ? [{ id }] : [],
+        ...name ? [{ name: { equals: name, mode: "insensitive" } }] : []
+      ]
+    }
+  }).then(async (gosala) => {
+    if (gosala) {
+      await prisma.gosala.update({
+        where: { id: gosala.id },
+        data: { metadata: {} }
+      });
+    }
+  }).catch(() => {
+  });
 }
 
 // server/animalMeta.ts
-import fs2 from "fs";
-import path2 from "path";
-var META_FILE_PATH2 = path2.resolve(process.cwd(), "server/data/animals_meta.json");
 var metaStore2 = {};
-var DEFAULT_SEEDS = {};
-function loadMetaStore2() {
+var isInitialized2 = false;
+async function initMetaStore2() {
+  if (isInitialized2) return;
   try {
-    if (fs2.existsSync(META_FILE_PATH2)) {
-      const raw = fs2.readFileSync(META_FILE_PATH2, "utf-8");
-      metaStore2 = JSON.parse(raw);
-    } else {
-      metaStore2 = { ...DEFAULT_SEEDS };
-      persistMetaStore2();
+    const animals = await prisma.animal.findMany({
+      select: { id: true, name: true, metadata: true }
+    });
+    for (const a of animals) {
+      if (a.metadata && typeof a.metadata === "object") {
+        if (a.id) metaStore2[a.id] = a.metadata;
+        if (a.name) metaStore2[a.name.trim().toLowerCase()] = a.metadata;
+      }
     }
+    isInitialized2 = true;
   } catch (err) {
-    console.warn("Could not load animals_meta.json:", err);
-    metaStore2 = { ...DEFAULT_SEEDS };
+    console.warn("[animalMeta] Could not preload animals metadata from DB:", err?.message);
   }
 }
-function persistMetaStore2() {
-  try {
-    const dir = path2.dirname(META_FILE_PATH2);
-    if (!fs2.existsSync(dir)) {
-      fs2.mkdirSync(dir, { recursive: true });
-    }
-    fs2.writeFileSync(META_FILE_PATH2, JSON.stringify(metaStore2, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Failed to save animals_meta.json:", err);
-  }
-}
-loadMetaStore2();
+initMetaStore2().catch(() => {
+});
 function getAnimalMeta(name) {
   if (!name) return {};
   const normalized = name.trim().toLowerCase();
@@ -483,76 +326,80 @@ function saveAnimalMeta(name, meta) {
     }
   });
   metaStore2[normalized] = updated;
-  persistMetaStore2();
+  prisma.animal.findFirst({
+    where: {
+      OR: [
+        { name: { equals: name.trim(), mode: "insensitive" } },
+        { id: name.trim() }
+      ]
+    }
+  }).then(async (animal) => {
+    if (animal) {
+      metaStore2[animal.id] = updated;
+      metaStore2[animal.name.trim().toLowerCase()] = updated;
+      await prisma.animal.update({
+        where: { id: animal.id },
+        data: { metadata: updated }
+      });
+    }
+  }).catch((err) => {
+    console.error(`[animalMeta] Failed to persist metadata to DB for ${name}:`, err.message);
+  });
 }
 function deleteAnimalMeta(name) {
   if (!name) return;
   const normalized = name.trim().toLowerCase();
   delete metaStore2[normalized];
-  persistMetaStore2();
+  prisma.animal.findFirst({
+    where: {
+      OR: [
+        { name: { equals: name.trim(), mode: "insensitive" } },
+        { id: name.trim() }
+      ]
+    }
+  }).then(async (animal) => {
+    if (animal) {
+      await prisma.animal.update({
+        where: { id: animal.id },
+        data: { metadata: {} }
+      });
+    }
+  }).catch(() => {
+  });
 }
 
 // server/userMeta.ts
-import fs3 from "fs";
-import path3 from "path";
-var META_FILE_PATH3 = path3.resolve(process.cwd(), "server/data/users_meta.json");
 var metaStore3 = {};
-function loadMetaStore3() {
+var isInitialized3 = false;
+async function initMetaStore3() {
+  if (isInitialized3) return;
   try {
-    if (fs3.existsSync(META_FILE_PATH3)) {
-      const raw = fs3.readFileSync(META_FILE_PATH3, "utf-8");
-      metaStore3 = JSON.parse(raw);
+    const users = await prisma.user.findMany({
+      select: { id: true, email: true, metadata: true }
+    });
+    for (const u of users) {
+      if (u.metadata && typeof u.metadata === "object") {
+        if (u.id) metaStore3[u.id.toLowerCase()] = u.metadata;
+        if (u.email) metaStore3[u.email.toLowerCase()] = u.metadata;
+      }
     }
+    isInitialized3 = true;
   } catch (err) {
-    console.warn("Could not load users_meta.json:", err);
-    metaStore3 = {};
+    console.warn("[userMeta] Could not preload users metadata from DB:", err?.message);
   }
 }
-function persistMetaStore3() {
-  try {
-    const dir = path3.dirname(META_FILE_PATH3);
-    if (!fs3.existsSync(dir)) {
-      fs3.mkdirSync(dir, { recursive: true });
-    }
-    fs3.writeFileSync(META_FILE_PATH3, JSON.stringify(metaStore3, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Failed to save users_meta.json:", err);
-  }
-}
-loadMetaStore3();
-if (Object.keys(metaStore3).length === 0) {
-  metaStore3["ananya.deshmukh@gmail.com"] = {
-    customerData: {
-      address: "14 Tulsi Nagar, Kondapur, Hyderabad",
-      city: "Hyderabad",
-      aadhaarNumber: "XXXX-XXXX-4819",
-      memberSince: "Aug 2024",
-      totalBookings: 4,
-      preferredCeremony: "Griha Pravesh & Kamadhenu Puja"
-    }
-  };
-  metaStore3["sunil.pawar@gomaa.in"] = {
-    driverData: {
-      driverId: "DRV-102",
-      vehicleNumber: "MH-12-Q-4491",
-      vehicleType: "Tata 407 (8ft Open Bed)",
-      licenseNumber: "DL-142011009823",
-      gosalaBase: "Surya",
-      status: "Available",
-      rating: 4.92,
-      totalTrips: 1280
-    }
-  };
-  persistMetaStore3();
-}
+initMetaStore3().catch(() => {
+});
 function getUserMeta(identifier) {
+  if (!identifier) return {};
   const key = identifier.trim().toLowerCase();
   return metaStore3[key] || {};
 }
 function saveUserMeta(identifier, patch) {
+  if (!identifier) return;
   const key = identifier.trim().toLowerCase();
   const existing = metaStore3[key] || {};
-  metaStore3[key] = {
+  const updated = {
     ...existing,
     ...patch,
     customerData: patch.customerData ? { ...existing.customerData || {}, ...patch.customerData } : existing.customerData,
@@ -560,12 +407,49 @@ function saveUserMeta(identifier, patch) {
     managerData: patch.managerData ? { ...existing.managerData || {}, ...patch.managerData } : existing.managerData,
     adminData: patch.adminData ? { ...existing.adminData || {}, ...patch.adminData } : existing.adminData
   };
-  persistMetaStore3();
+  metaStore3[key] = updated;
+  prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: { equals: identifier, mode: "insensitive" } },
+        { id: identifier }
+      ]
+    }
+  }).then(async (user) => {
+    if (user) {
+      metaStore3[user.id.toLowerCase()] = updated;
+      if (user.email) metaStore3[user.email.toLowerCase()] = updated;
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { metadata: updated }
+      });
+    }
+  }).catch((err) => {
+    console.error(`[userMeta] Failed to persist metadata to DB for ${identifier}:`, err.message);
+  });
 }
 function deleteUserMeta(identifier) {
+  if (!identifier) return;
   const key = identifier.trim().toLowerCase();
   delete metaStore3[key];
-  persistMetaStore3();
+  prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: { equals: identifier, mode: "insensitive" } },
+        { id: identifier }
+      ]
+    }
+  }).then(async (user) => {
+    if (user) {
+      delete metaStore3[user.id.toLowerCase()];
+      if (user.email) delete metaStore3[user.email.toLowerCase()];
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { metadata: {} }
+      });
+    }
+  }).catch(() => {
+  });
 }
 var setUserMeta = saveUserMeta;
 
@@ -577,9 +461,9 @@ function generateRbiUtr(ifscCode = "HDFC0001824") {
   const randNum = Math.floor(1e5 + Math.random() * 9e5);
   return `${prefix}N${yearCode}${randNum}`;
 }
-function resolveGaushalaBankDetails(gosalaName, serverProfiles2, gosalaRecord) {
-  const superAdminBank = serverProfiles2?.super_admin?.bankDetails;
-  const managerBank = serverProfiles2?.manager?.bankDetails;
+function resolveGaushalaBankDetails(gosalaName, serverProfiles, gosalaRecord) {
+  const superAdminBank = serverProfiles?.super_admin?.bankDetails;
+  const managerBank = serverProfiles?.manager?.bankDetails;
   if (managerBank && managerBank.accountNumber) {
     const rawAcc = managerBank.accountNumber || "";
     const masked = rawAcc.length > 4 ? `\u2022\u2022\u2022\u2022 \u2022\u2022\u2022\u2022 \u2022\u2022\u2022\u2022 ${rawAcc.slice(-4)}` : rawAcc;
@@ -596,8 +480,8 @@ function resolveGaushalaBankDetails(gosalaName, serverProfiles2, gosalaRecord) {
     const rawAcc = superAdminBank.accountNumber || "";
     const masked = rawAcc.length > 4 ? `\u2022\u2022\u2022\u2022 \u2022\u2022\u2022\u2022 \u2022\u2022\u2022\u2022 ${rawAcc.slice(-4)}` : rawAcc;
     return {
-      beneficiary: superAdminBank.accountBeneficiary || "Koushik Botcha",
-      bankName: superAdminBank.branchName ? `${superAdminBank.bankName} \xB7 ${superAdminBank.branchName}` : superAdminBank.bankName || "Andhra Bank \xB7 Hitec City",
+      beneficiary: superAdminBank.accountBeneficiary || "GOMAA Central Trust",
+      bankName: superAdminBank.branchName ? `${superAdminBank.bankName} \xB7 ${superAdminBank.branchName}` : superAdminBank.bankName || "HDFC Bank \xB7 Central Treasury",
       accountMasked: masked,
       ifsc: superAdminBank.ifscCode || "HDFC2342523",
       accountType: superAdminBank.accountType || "NODAL_ESCROW",
@@ -623,39 +507,26 @@ function resolveGaushalaBankDetails(gosalaName, serverProfiles2, gosalaRecord) {
   };
 }
 async function executeAutomatedSweep(options) {
-  let pricingConfig = db.pricingConfig;
-  try {
-    const dbConfig = await prisma.masterPricingConfig.findFirst();
-    if (dbConfig) {
-      pricingConfig = {
-        ...pricingConfig,
-        ...dbConfig,
-        updatedAt: dbConfig.updatedAt ? dbConfig.updatedAt.toISOString() : pricingConfig.updatedAt
-      };
-    }
-  } catch (err) {
-    console.warn("Pricing config DB fallback in payoutEngine:", err);
-  }
+  const dbConfig = await prisma.masterPricingConfig.findFirst().catch(() => null);
+  const pricingConfig = dbConfig || {
+    commissionPct: 25,
+    samagriGaushalaCutPct: 90,
+    transportPassThroughPct: 100,
+    disbursementCycle: "CONTINUOUS_T_PLUS_ONE"
+  };
   const defaultCommPct = pricingConfig.commissionPct ?? 25;
   const samagriCutPct = pricingConfig.samagriGaushalaCutPct ?? 90;
   const transportCutPct = pricingConfig.transportPassThroughPct ?? 100;
   const cycle = options.cycleType || pricingConfig.disbursementCycle || "CONTINUOUS_T_PLUS_ONE";
-  let allBookings = db.bookings;
-  try {
-    const dbBookings = await prisma.booking.findMany();
-    if (dbBookings && dbBookings.length > 0) {
-      allBookings = dbBookings.map((b) => ({
-        ...b,
-        base: b.baseRate ?? b.base ?? 3500,
-        extraTime: b.extraTime ?? 0,
-        transport: b.transport ?? 0,
-        addons: b.addons ?? 0,
-        total: b.total ?? 3500
-      }));
-    }
-  } catch (err) {
-    console.warn("Bookings DB fallback in payoutEngine:", err);
-  }
+  const dbBookings = await prisma.booking.findMany().catch(() => []);
+  const allBookings = dbBookings.map((b) => ({
+    ...b,
+    base: b.baseRate ?? b.base ?? 3500,
+    extraTime: b.extraTime ?? 0,
+    transport: b.transport ?? 0,
+    addons: b.addons ?? 0,
+    total: b.total ?? 3500
+  }));
   let allGosalas = [];
   try {
     allGosalas = await prisma.gosala.findMany({ where: { isActive: true } });
@@ -779,20 +650,6 @@ async function executeAutomatedSweep(options) {
     } catch (err) {
       console.warn("Settlement batch DB persist fallback:", err?.message);
     }
-    const existingIdx = db.settlements.findIndex((s) => s.gosala === gName);
-    const memEntry = {
-      gosala: gName,
-      bookings: summary.sevasCount,
-      gross: grossAmount,
-      commissionPct: defaultCommPct,
-      status: "Paid",
-      batch: batchWeekLabel
-    };
-    if (existingIdx !== -1) {
-      db.settlements[existingIdx] = memEntry;
-    } else {
-      db.settlements.push(memEntry);
-    }
     disbursedBatches.push(summary);
     totalDisbursed += payableAmount;
     totalRetained += commissionAmount;
@@ -822,18 +679,11 @@ async function executeAutomatedSweep(options) {
   };
 }
 async function getScheduleStatus() {
-  let pricingConfig = db.pricingConfig;
-  try {
-    const dbConfig = await prisma.masterPricingConfig.findFirst();
-    if (dbConfig) {
-      pricingConfig = {
-        ...pricingConfig,
-        ...dbConfig,
-        updatedAt: dbConfig.updatedAt ? dbConfig.updatedAt.toISOString() : pricingConfig.updatedAt
-      };
-    }
-  } catch {
-  }
+  const dbConfig = await prisma.masterPricingConfig.findFirst().catch(() => null);
+  const pricingConfig = dbConfig || {
+    autoSweepEnabled: true,
+    disbursementCycle: "CONTINUOUS_T_PLUS_ONE"
+  };
   const autoSweepEnabled = pricingConfig.autoSweepEnabled ?? true;
   const disbursementCycle = pricingConfig.disbursementCycle ?? "CONTINUOUS_T_PLUS_ONE";
   const now = /* @__PURE__ */ new Date();
@@ -860,16 +710,8 @@ async function getScheduleStatus() {
         pendingEscrowAmount += b.payableAmount;
       }
     });
-  } catch {
-    db.settlements.forEach((s) => {
-      const net = Math.round(s.gross * (1 - s.commissionPct / 100));
-      if (s.status === "Paid") {
-        totalBatchesPaid++;
-        totalDisbursedAmount += net;
-      } else {
-        pendingEscrowAmount += net;
-      }
-    });
+  } catch (err) {
+    console.warn("Settlement batch stats DB lookup warning:", err?.message);
   }
   return {
     autoSweepEnabled,
@@ -884,8 +726,34 @@ async function getScheduleStatus() {
 }
 
 // server/services/pricingService.ts
+var cachedPricingConfig = {
+  standardMin: 60,
+  extraUnitMin: 30,
+  extraUnitRate: 500,
+  freeKm: 5,
+  perKm: 50,
+  taxPct: 12,
+  commissionPct: 20
+};
+prisma.masterPricingConfig.findFirst().then((dbCfg) => {
+  if (dbCfg) {
+    cachedPricingConfig = {
+      standardMin: dbCfg.standardMin,
+      extraUnitMin: dbCfg.extraUnitMin,
+      extraUnitRate: dbCfg.extraUnitRate,
+      freeKm: dbCfg.freeKm,
+      perKm: dbCfg.perKm,
+      taxPct: dbCfg.taxPct,
+      commissionPct: dbCfg.commissionPct
+    };
+  }
+}).catch(() => {
+});
+function updateCachedPricingConfig(patch) {
+  cachedPricingConfig = { ...cachedPricingConfig, ...patch };
+}
 function calculateBookingPrice(params) {
-  const cfg = db.pricingConfig;
+  const cfg = cachedPricingConfig;
   const base = params.baseRate ?? 3500;
   const durationMin = params.durationMin || cfg.standardMin || 60;
   const standardMin = cfg.standardMin || 60;
@@ -907,9 +775,13 @@ function calculateBookingPrice(params) {
   const total = subtotal + tax;
   const commissionPct = params.commissionPct !== void 0 ? params.commissionPct : cfg.commissionPct || 20;
   const sevaTotal = base + extraTime;
-  const commission = params.commissionFlat !== void 0 && params.commissionFlat !== null ? params.commissionFlat : Math.round(sevaTotal * commissionPct / 100);
-  const passThrough = transport + addons;
-  const gosalaPayable = Math.max(0, sevaTotal - commission) + passThrough;
+  let commission = 0;
+  if (params.commissionFlat !== void 0 && params.commissionFlat > 0) {
+    commission = params.commissionFlat;
+  } else {
+    commission = Math.round(sevaTotal * commissionPct / 100);
+  }
+  const gosalaPayable = Math.max(0, sevaTotal - commission) + transport + addons;
   return {
     base,
     extraTime,
@@ -1092,12 +964,12 @@ function equalHex(actual, expected) {
   if (typeof actual !== "string" || actual.length !== expected.length || !HEX.test(actual)) return false;
   return crypto3.timingSafeEqual(Buffer.from(actual, "hex"), Buffer.from(expected, "hex"));
 }
-async function request(path5, options, method = "GET", body) {
+async function request(path2, options, method = "GET", body) {
   const c = config(options);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), c.timeoutMs);
   try {
-    const response = await c.fetch(`${API}${path5}`, { method, signal: controller.signal, headers: { Authorization: `Basic ${Buffer.from(`${c.keyId}:${c.keySecret}`).toString("base64")}`, ...body ? { "Content-Type": "application/json" } : {} }, ...body ? { body: JSON.stringify(body) } : {} });
+    const response = await c.fetch(`${API}${path2}`, { method, signal: controller.signal, headers: { Authorization: `Basic ${Buffer.from(`${c.keyId}:${c.keySecret}`).toString("base64")}`, ...body ? { "Content-Type": "application/json" } : {} }, ...body ? { body: JSON.stringify(body) } : {} });
     if (!response.ok) throw new Error("Razorpay provider request failed");
     return await response.json();
   } catch {
@@ -2407,9 +2279,9 @@ function canUseLiveTracking(user) {
 }
 
 // server/services/hubService.ts
-import fs4 from "fs";
-import path4 from "path";
-var CUSTOM_HUBS_FILE = path4.resolve(process.cwd(), "server/data/custom_hubs.json");
+import fs from "fs";
+import path from "path";
+var CUSTOM_HUBS_FILE = path.resolve(process.cwd(), "server/data/custom_hubs.json");
 var BASELINE_INDIAN_HUBS = [
   // --- TELANGANA ---
   {
@@ -2684,8 +2556,8 @@ var isLoaded = false;
 function ensureCustomHubsLoaded() {
   if (isLoaded) return;
   try {
-    if (fs4.existsSync(CUSTOM_HUBS_FILE)) {
-      const raw = fs4.readFileSync(CUSTOM_HUBS_FILE, "utf-8");
+    if (fs.existsSync(CUSTOM_HUBS_FILE)) {
+      const raw = fs.readFileSync(CUSTOM_HUBS_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         customHubsCache = parsed;
@@ -2700,11 +2572,11 @@ function ensureCustomHubsLoaded() {
 }
 function persistCustomHubs() {
   try {
-    const dir = path4.dirname(CUSTOM_HUBS_FILE);
-    if (!fs4.existsSync(dir)) {
-      fs4.mkdirSync(dir, { recursive: true });
+    const dir = path.dirname(CUSTOM_HUBS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
-    fs4.writeFileSync(CUSTOM_HUBS_FILE, JSON.stringify(customHubsCache, null, 2), "utf-8");
+    fs.writeFileSync(CUSTOM_HUBS_FILE, JSON.stringify(customHubsCache, null, 2), "utf-8");
   } catch (err) {
     console.error("[HubService] Failed to write custom_hubs.json:", err);
   }
@@ -2959,127 +2831,68 @@ async function searchGooglePlacesApi(query, apiKey) {
 // server/router.ts
 var driverLiveLocations = /* @__PURE__ */ new Map();
 var serverAnimals = /* @__PURE__ */ new Map();
-var defaultEmpanelledVets = [
-  {
-    id: "VET-001",
-    name: "Dr. Anand Kulkarni",
-    qualification: "B.V.Sc & A.H., M.V.Sc (Bovine Surgery)",
-    regNo: "TS-VET-4821",
-    clinic: "Govt. Veterinary Polyclinic & Cattle Hospital",
-    phone: "+91 98220 54321",
-    address: "Road No. 10, Banjara Hills, Hyderabad, Telangana 500034",
-    specialization: "Bovine Health, Vaccination & Ultrasound",
-    emergency24x7: true,
-    assignedGosalas: ["Gaushala_01", "Gaushala_02", "All Gaushalas"]
-  },
-  {
-    id: "VET-002",
-    name: "Dr. Lakshmi Narayana",
-    qualification: "B.V.Sc & A.H. (Gold Medalist)",
-    regNo: "TS-VET-5190",
-    clinic: "Sri Krishna Bovine Welfare Clinic",
-    phone: "+91 98490 11223",
-    address: "Trimulgherry, Secunderabad, Telangana 500015",
-    specialization: "Indigenous Cattle Gynaecology & Lactation Care",
-    emergency24x7: true,
-    assignedGosalas: ["Gaushala_03", "All Gaushalas"]
-  },
-  {
-    id: "VET-003",
-    name: "Dr. Rajeshwar Rao",
-    qualification: "B.V.Sc, Ph.D (Animal Nutrition)",
-    regNo: "TS-VET-6204",
-    clinic: "Deccan Veterinary Emergency Care Center",
-    phone: "+91 98330 99887",
-    address: "Gachibowli Financial District, Hyderabad 500032",
-    specialization: "Emergency Trauma, Hoof Care & Pasture Toxicology",
-    emergency24x7: true,
-    assignedGosalas: ["Gaushala_02", "Gaushala_01", "All Gaushalas"]
+async function resolveRoleProfilesFromDB() {
+  try {
+    const users = await prisma.user.findMany({
+      where: { isActive: true },
+      orderBy: { createdAt: "asc" }
+    });
+    const roleUsers = {
+      customer: users.find((u) => u.role === "CUSTOMER"),
+      manager: users.find((u) => u.role === "GOSALA_MANAGER"),
+      driver: users.find((u) => u.role === "DRIVER"),
+      admin: users.find((u) => u.role === "OPERATIONS_ADMIN"),
+      super_admin: users.find((u) => u.role === "SUPER_ADMIN")
+    };
+    const profiles = {};
+    for (const [roleKey, user] of Object.entries(roleUsers)) {
+      const meta = user?.metadata || {};
+      profiles[roleKey] = {
+        id: user?.id || `USER-${roleKey.toUpperCase()}`,
+        role: roleKey,
+        name: user?.name || (roleKey === "super_admin" ? "Super Admin" : roleKey === "admin" ? "Operations Admin" : roleKey === "manager" ? "Gaushala Manager" : roleKey === "driver" ? "Transit Pilot" : "Devotee"),
+        phone: user?.phone || "+91 98000 00000",
+        email: user?.email || (roleKey === "super_admin" ? "superadmin@gomaa.in" : `${roleKey}@gomaa.in`),
+        avatar: user?.avatar || void 0,
+        customerData: meta.customerData || (roleKey === "customer" ? {
+          address: "Devotee Residence",
+          aadhaarNumber: "XXXX-XXXX-0000",
+          memberSince: "Oct 2026",
+          totalBookings: 0,
+          preferredCeremony: "Kamadhenu Puja & Gau Seva"
+        } : void 0),
+        managerData: meta.managerData || (roleKey === "manager" ? {
+          managerId: user?.uniqueId || "MGR-0101",
+          gosala: "Gaushala_01",
+          region: "Operational Hub",
+          dailySevaCeiling: 2,
+          restingBufferMin: 90
+        } : void 0),
+        driverData: meta.driverData || (roleKey === "driver" ? {
+          driverId: user?.uniqueId || "DRV-102",
+          vehicleNumber: "TS-09-GA-1008",
+          vehicleType: "Tata 407 (Hydraulic Cattle Bed)",
+          licenseNumber: "DL-PENDING",
+          gosalaBase: "Unassigned",
+          status: "Available"
+        } : void 0),
+        adminData: meta.adminData || (roleKey === "admin" || roleKey === "super_admin" ? {
+          adminId: user?.uniqueId || (roleKey === "super_admin" ? "SA-0001" : "OPS-0101"),
+          designation: roleKey === "super_admin" ? "Platform Sovereign & Master Authority" : "Regional Operations Officer",
+          department: roleKey === "super_admin" ? "GOMAA Central Platform Governance" : "Regional Gaushala Operations Hub",
+          authorityLevel: roleKey === "super_admin" ? "SUPER_ADMIN" : "OPERATIONS_ADMIN",
+          ...roleKey === "super_admin" ? { treasuryClearanceLevel: "Master Sovereign Authority" } : {}
+        } : void 0),
+        bankDetails: meta.bankDetails || void 0,
+        settlementSchedule: meta.settlementSchedule || void 0
+      };
+    }
+    return profiles;
+  } catch (err) {
+    console.warn("[resolveRoleProfilesFromDB] DB lookup fallback:", err);
+    return {};
   }
-];
-var serverVets = new Map(defaultEmpanelledVets.map((v) => [v.id, v]));
-var serverProfiles = {
-  customer: {
-    id: "USER-CUST-NEW",
-    role: "customer",
-    name: "Devotee",
-    phone: "+91 98000 00000",
-    email: "devotee@gmail.com",
-    customerData: {
-      address: "Devotee Residence",
-      aadhaarNumber: "XXXX-XXXX-0000",
-      memberSince: "Oct 2026",
-      totalBookings: 0,
-      preferredCeremony: "Kamadhenu Puja & Gau Seva"
-    }
-  },
-  manager: {
-    id: "USER-MGR-NEW",
-    role: "manager",
-    name: "Gaushala Manager",
-    phone: "+91 98000 00000",
-    email: "manager@gomaa.in",
-    managerData: {
-      managerId: "MGR-NEW",
-      gosala: "Unassigned",
-      region: "Operational Hub",
-      dailySevaCeiling: 2,
-      restingBufferMin: 90
-    }
-  },
-  driver: {
-    id: "USER-DRV-NEW",
-    role: "driver",
-    name: "Transit Pilot",
-    phone: "+91 98000 00000",
-    email: "driver@gomaa.in",
-    driverData: {
-      driverId: "DRV-NEW",
-      vehicleNumber: "TS-09-GA-1008",
-      vehicleType: "Tata 407 (Hydraulic Cattle Bed)",
-      licenseNumber: "DL-PENDING",
-      gosalaBase: "Unassigned",
-      status: "Available"
-    }
-  },
-  admin: {
-    id: "USER-ADM-NEW",
-    role: "admin",
-    name: "Operations Admin",
-    phone: "+91 98000 00000",
-    email: "operations@gomaa.in",
-    adminData: {
-      adminId: "ADM-NEW",
-      designation: "Regional Operations Officer",
-      department: "Regional Gaushala Operations Hub",
-      authorityLevel: "OPERATIONS_ADMIN"
-    }
-  },
-  super_admin: {
-    id: "USER-SA-KOUSHIK",
-    role: "super_admin",
-    name: "Koushik",
-    phone: "+91 98000 00000",
-    email: "koushik@gmail.com",
-    adminData: {
-      adminId: "SA-KOUSHIK",
-      designation: "Platform Sovereign & Master Authority",
-      department: "GOMAA Central Platform Governance",
-      authorityLevel: "SUPER_ADMIN",
-      treasuryClearanceLevel: "Master Sovereign Authority"
-    }
-  }
-};
-gpsSimulator.setOnTick((tick) => {
-  driverLiveLocations.set(tick.bookingId, {
-    ...tick,
-    lastUpdated: (/* @__PURE__ */ new Date()).toLocaleTimeString("en-IN", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit"
-    })
-  });
-});
+}
 function parseUrl(url) {
   const [rawPath, search] = (url || "").split("?");
   let pathname = rawPath || "/";
@@ -3570,7 +3383,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     };
     try {
       const sendResult = await sendOtpEmail({
-        toEmail: "nanikoushik96@gmail.com",
+        toEmail: "diagnostics@gomaa.in",
         userName: "Diagnostic Check",
         otp: "123456",
         expiryMinutes: 10
@@ -3675,29 +3488,22 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     try {
       hold = await prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM animals WHERE id = ${animal.id} FOR UPDATE`;
-        if (authUser?.userId) {
-          await tx.temporarySlotHold.updateMany({
-            where: { animalId: animal.id, customerId: authUser.userId, status: "ACTIVE" },
-            data: { status: "RELEASED", releasedAt: /* @__PURE__ */ new Date() }
-          });
-        }
         const holdStart = toMinutes(body.start);
         const holdEnd = holdStart + (Number(body.durationMin) || 60);
-        const otherHolds = await tx.temporarySlotHold.findMany({
+        const activeHolds = await tx.temporarySlotHold.findMany({
           where: {
             animalId: animal.id,
             date: body.date,
             status: "ACTIVE",
-            expiresAt: { gt: /* @__PURE__ */ new Date() },
-            ...authUser?.userId ? { customerId: { not: authUser.userId } } : {}
+            expiresAt: { gt: /* @__PURE__ */ new Date() }
           }
         });
-        const isSlotHeld = otherHolds.some((h) => {
+        const isSlotHeld = activeHolds.some((h) => {
           const s = toMinutes(h.startTime);
           const e = s + (h.durationMin || 60);
           return holdStart < e && holdEnd > s;
         });
-        if (isSlotHeld) throw new Error("This slot is temporarily held by another devotee");
+        if (isSlotHeld) throw new Error("This slot is already held by another devotee");
         const bookings = await tx.booking.findMany({
           where: {
             animalId: animal.id,
@@ -3739,12 +3545,23 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     return { status: 200, body: { released: true } };
   }
   if (method === "POST" && pathname === "/api/pricing/calculate") {
-    let cfg = db.pricingConfig;
+    let cfg = null;
     try {
       const dbCfg = await prisma.masterPricingConfig.findFirst();
       if (dbCfg) cfg = dbCfg;
-    } catch {
-      cfg = db.pricingConfig;
+    } catch (err) {
+      console.warn("Pricing config fetch error:", err?.message);
+    }
+    if (!cfg) {
+      cfg = {
+        standardMin: 60,
+        extraUnitMin: 30,
+        extraUnitRate: 500,
+        freeKm: 5,
+        perKm: 50,
+        taxPct: 12,
+        commissionPct: 20
+      };
     }
     let sanctuaryTaxPct = body.taxPct !== void 0 ? Number(body.taxPct) : void 0;
     let sanctuaryCommPct = body.commissionPct !== void 0 ? Number(body.commissionPct) : void 0;
@@ -3997,36 +3814,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         orderBy: { createdAt: "desc" }
       });
       return { status: 200, body: { bookings: bookings.map(formatBooking) } };
-    } catch {
-      let list = db.bookings;
-      if (gosala) list = list.filter((b) => b.gosala.toLowerCase().includes(gosala.toLowerCase()));
-      if (customer) list = list.filter((b) => b.customer.toLowerCase().includes(customer.toLowerCase()));
-      if (status) list = list.filter((b) => b.status.toLowerCase() === status.toLowerCase());
-      if (authUser?.role === "manager" && authUser.gosalaNames?.length > 0) {
-        list = list.filter(
-          (b) => authUser.gosalaNames.some((gn) => b.gosala.toLowerCase().includes(gn.toLowerCase()))
-        );
-      } else if (authUser?.role === "admin") {
-        const adminEmail = (authUser.email || "").toLowerCase();
-        const adminName = (authUser.name || "").toLowerCase();
-        list = list.filter((b) => {
-          if (authUser.gosalaNames?.length > 0) {
-            return authUser.gosalaNames.some((gn) => b.gosala.toLowerCase().includes(gn.toLowerCase()));
-          }
-          const govEmail = (b.governingAdminEmail || "").toLowerCase();
-          const govName = (b.governingAdminName || "").toLowerCase();
-          return govEmail === adminEmail || govName && govName.includes(adminName);
-        });
-      } else if (authUser?.role === "customer") {
-        list = list.filter(
-          (b) => b.customer.toLowerCase() === authUser.name.toLowerCase() || authUser.phone && b.phone === authUser.phone
-        );
-      } else if (authUser?.role === "driver") {
-        list = list.filter(
-          (b) => !b.driver || b.driver.toLowerCase() === authUser.name.toLowerCase()
-        );
-      }
-      return { status: 200, body: { bookings: list } };
+    } catch (err) {
+      console.error("[GET /api/bookings] DB error:", err?.message);
+      return { status: 500, body: { error: "Failed to load bookings from database" } };
     }
   }
   if (method === "POST" && pathname === "/api/bookings") {
@@ -4213,7 +4003,6 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         specialInstructions: b.specialInstructions,
         devoteeSince: b.devoteeSince
       };
-      db.bookings = [formatted, ...db.bookings.filter((x) => x.id !== formatted.id)];
       wsHub.broadcastToChannel(
         `channel:gosala:${created.gosalaName}`,
         "ROLE_ALERT",
@@ -4331,7 +4120,6 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       if (formatted.managerApproval) {
         formatted.managerApproval.isActingManager = isActingManager;
       }
-      db.bookings = [formatted, ...db.bookings.filter((x) => x.id !== id)];
       wsHub.broadcastToChannel("channel:admin", "ROLE_ALERT", {
         targetRole: "OPERATIONS_ADMIN",
         title: confirm ? isActingManager ? "Admin Approved Feasibility as Acting Manager" : "Manager Confirmed Feasibility" : "Feasibility Review Rejected",
@@ -4345,33 +4133,8 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       });
       return { status: 200, body: { booking: formatted } };
     } catch (e) {
-      console.warn("manager-decide falling back to in-memory store:", e?.message);
-      let b = db.bookings.find((x) => x.id === id);
-      if (b) {
-        if (callerRole === "manager" && callerGosala && b.gosala) {
-          const matches = b.gosala.toLowerCase().includes(callerGosala.toLowerCase()) || callerGosala.toLowerCase().includes(b.gosala.toLowerCase());
-          if (!matches) {
-            return {
-              status: 403,
-              body: {
-                error: `Forbidden: Manager assigned to ${callerGosala} cannot review bookings for ${b.gosala}`
-              }
-            };
-          }
-        }
-        b.status = confirm ? "Admin Review" : "Rejected";
-        b.managerRemark = remark;
-        b.managerApproval = {
-          userId: isActingManager ? "ADM-101" : "MGR-801",
-          name: managerName,
-          timestamp: (/* @__PURE__ */ new Date()).toLocaleString("en-IN"),
-          remark,
-          isActingManager,
-          actorRole: isActingManager ? "OPERATIONS_ADMIN" : "GOSALA_MANAGER"
-        };
-        return { status: 200, body: { booking: { ...b } } };
-      }
-      return { status: 404, body: { error: "Booking not found" } };
+      console.error("[manager-decide] DB error:", e?.message);
+      return { status: 500, body: { error: e?.message || "Failed to update booking review" } };
     }
   }
   const admDecideMatch = pathname.match(
@@ -4389,10 +4152,6 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       const existing = await prisma.booking.findUnique({ where: { id } });
       if (existing) currentStatus = existing.status;
     } catch {
-    }
-    if (!currentStatus) {
-      const existing = db.bookings.find((x) => x.id === id);
-      if (existing) currentStatus = existing.status;
     }
     const isPaymentVerified = currentStatus === "PAYMENT_VERIFIED" || currentStatus === "Payment Verified";
     if (isPaymentVerified && !body.actAsManager && !body.allowPremature) {
@@ -4465,7 +4224,6 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         include: { driver: true, auditTrails: true }
       });
       const formatted = formatBooking(refreshed || updated);
-      db.bookings = [formatted, ...db.bookings.filter((x) => x.id !== id)];
       wsHub.broadcastToChannel(`channel:booking:${id}`, "BOOKING_UPDATED", {
         booking: formatted
       });
@@ -4478,32 +4236,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         timestamp: (/* @__PURE__ */ new Date()).toISOString()
       });
       return { status: 200, body: { booking: formatted } };
-    } catch {
-      const b = db.bookings.find((x) => x.id === id);
-      if (b) {
-        if (isPaymentVerified && body.actAsManager) {
-          b.managerRemark = "Feasibility confirmed by Admin as Acting Manager";
-          b.managerApproval = {
-            userId: "ADM-101",
-            name: `${adminName} (Acting Manager)`,
-            timestamp: (/* @__PURE__ */ new Date()).toLocaleString("en-IN"),
-            remark: "Feasibility confirmed by Admin as Acting Manager",
-            isActingManager: true,
-            actorRole: "OPERATIONS_ADMIN"
-          };
-        }
-        b.status = confirm ? "Confirmed" : "Rejected";
-        b.adminRemark = remark;
-        b.adminApproval = {
-          userId: "ADM-101",
-          name: adminName,
-          timestamp: (/* @__PURE__ */ new Date()).toLocaleString("en-IN"),
-          remark,
-          actorRole: "OPERATIONS_ADMIN"
-        };
-        return { status: 200, body: { booking: { ...b } } };
-      }
-      return { status: 404, body: { error: "Booking not found" } };
+    } catch (e) {
+      console.error("[admin-decide] DB error:", e?.message);
+      return { status: 500, body: { error: e?.message || "Failed to update booking approval" } };
     }
   }
   const assignDriverMatch = pathname.match(
@@ -4556,21 +4291,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         });
       }
       return { status: 200, body: { booking: formatted } };
-    } catch {
-      const b = db.bookings.find((x) => x.id === id);
-      if (b) {
-        b.driver = driverName;
-        b.driverStage = 1;
-        b.status = "Confirmed";
-        b.driverPhone = body.driverPhone || b.driverPhone || "+91 98490 23456";
-        b.driverVehiclePlate = body.driverVehiclePlate || b.driverVehiclePlate || "TS 09 EA 4402";
-        b.driverVehicleModel = body.driverVehicleModel || b.driverVehicleModel || "Force Traveller Cattle Ambulance";
-        b.driverRating = body.driverRating ?? b.driverRating ?? 4.9;
-        b.driverTotalTrips = body.driverTotalTrips ?? b.driverTotalTrips ?? 184;
-        b.driverAvatar = body.driverAvatar ?? b.driverAvatar ?? null;
-        return { status: 200, body: { booking: b } };
-      }
-      return { status: 404, body: { error: "Booking not found" } };
+    } catch (e) {
+      console.error("[assign-driver] DB error:", e?.message);
+      return { status: 500, body: { error: e?.message || "Failed to assign driver" } };
     }
   }
   const advanceStageMatch = pathname.match(
@@ -4582,24 +4305,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     const id = advanceStageMatch[1];
     try {
       const b = await prisma.booking.findUnique({ where: { id } });
-      if (!b) {
-        const memB = db.bookings.find((x) => x.id === id);
-        if (memB) {
-          if (memB.driverStage === 5 && !memB.handoverOtpVerified) {
-            return {
-              status: 403,
-              body: {
-                error: "Handover OTP Verification required before starting ceremony service at devotee altar."
-              }
-            };
-          }
-          const stage2 = Math.min((memB.driverStage ?? 0) + 1, 9);
-          memB.driverStage = stage2;
-          memB.status = stage2 >= 9 ? "Completed" : stage2 >= 6 ? "In Service" : memB.status;
-          return { status: 200, body: { booking: memB } };
-        }
-        return { status: 404, body: { error: "Booking not found" } };
-      }
+      if (!b) return { status: 404, body: { error: "Booking not found" } };
       if (b.driverStage === 5 && !b.handoverOtpVerified) {
         return {
           status: 403,
@@ -4627,26 +4333,10 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       wsHub.broadcastToChannel(`channel:booking:${id}`, "BOOKING_UPDATED", {
         booking: formatted
       });
-      if (stage === 4) {
-        gpsSimulator.startSimulation(
-          id,
-          updated.gosalaName,
-          updated.address,
-          updated.distanceKm
-        );
-      } else if (stage >= 6) {
-        gpsSimulator.stopSimulation(id);
-      }
       return { status: 200, body: { booking: formatted } };
-    } catch {
-      const b = db.bookings.find((x) => x.id === id);
-      if (b) {
-        const stage = Math.min((b.driverStage ?? 0) + 1, 9);
-        b.driverStage = stage;
-        b.status = stage >= 9 ? "Completed" : stage >= 6 ? "In Service" : b.status;
-        return { status: 200, body: { booking: b } };
-      }
-      return { status: 404, body: { error: "Booking not found" } };
+    } catch (e) {
+      console.error("[advance-stage] DB error:", e?.message);
+      return { status: 500, body: { error: e?.message || "Failed to advance stage" } };
     }
   }
   const setStageMatch = pathname.match(
@@ -4677,16 +4367,6 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     wsHub.broadcastToChannel(`channel:booking:${id}`, "BOOKING_UPDATED", {
       booking: formatted
     });
-    if (targetStage === 4) {
-      gpsSimulator.startSimulation(
-        id,
-        updated.gosalaName,
-        updated.address,
-        updated.distanceKm
-      );
-    } else {
-      gpsSimulator.stopSimulation(id);
-    }
     return { status: 200, body: { booking: formatted } };
   }
   const verifyOtpMatch = pathname.match(/^\/api\/bookings\/([^/]+)\/verify-handover-otp$/);
@@ -4703,9 +4383,6 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       });
     } catch {
       booking = null;
-    }
-    if (!booking) {
-      booking = db.bookings.find((b) => b.id === id);
     }
     if (!booking) {
       return { status: 404, body: { success: false, error: "Booking not found" } };
@@ -4743,7 +4420,6 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         include: { driver: true, auditTrails: true }
       });
       const formatted = formatBooking(updated);
-      db.bookings = [formatted, ...db.bookings.filter((x) => x.id !== formatted.id)];
       wsHub.broadcastToChannel(`channel:booking:${id}`, "HANDOVER_VERIFIED", {
         bookingId: id,
         stage: 6,
@@ -4767,35 +4443,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         }
       };
     } catch (err) {
-      const memBooking = db.bookings.find((b) => b.id === id);
-      if (memBooking) {
-        memBooking.handoverOtpVerified = true;
-        memBooking.handoverOtpVerifiedAt = verifiedAt.toISOString();
-        memBooking.driverStage = 6;
-        memBooking.status = "In Service";
-        wsHub.broadcastToChannel(`channel:booking:${id}`, "HANDOVER_VERIFIED", {
-          bookingId: id,
-          stage: 6,
-          status: "In Service",
-          verifiedAt: verifiedAt.toISOString()
-        });
-        wsHub.broadcastToChannel(`channel:booking:${id}`, "STAGE_CHANGED", {
-          bookingId: id,
-          stage: 6,
-          status: "In Service"
-        });
-        wsHub.broadcastToChannel(`channel:booking:${id}`, "BOOKING_UPDATED", {
-          booking: memBooking
-        });
-        return {
-          status: 200,
-          body: {
-            success: true,
-            message: "Animal handover verified successfully! Ceremony started.",
-            booking: memBooking
-          }
-        };
-      }
+      console.error("[verify-handover-otp] DB error:", err?.message);
       return { status: 500, body: { success: false, error: err?.message || "Failed to verify OTP" } };
     }
   }
@@ -4897,9 +4545,6 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       });
     } catch {
       b = null;
-    }
-    if (!b) {
-      b = db.bookings.find((x) => x.id === id);
     }
     if (!b) return { status: 404, body: { error: "Booking not found" } };
     if (!authUser || !canAccessBooking(authUser, b)) {
@@ -5312,11 +4957,30 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   }
   if (method === "GET" && pathname === "/api/pricing-config") {
     try {
-      const cfg = await prisma.masterPricingConfig.findFirst();
-      return { status: 200, body: { config: cfg || db.pricingConfig } };
+      let cfg = await prisma.masterPricingConfig.findFirst();
+      if (!cfg) {
+        cfg = await prisma.masterPricingConfig.create({
+          data: {
+            id: 1,
+            standardMin: 60,
+            extraUnitMin: 30,
+            extraUnitRate: 500,
+            freeKm: 5,
+            perKm: 50,
+            taxPct: 12,
+            commissionPct: 20,
+            maxDurationMin: 240,
+            bufferMin: 30,
+            rounding: "Nearest \u20B910",
+            updatedByRole: "SUPER_ADMIN",
+            updatedByName: "Super Admin"
+          }
+        });
+      }
+      return { status: 200, body: { config: cfg } };
     } catch (err) {
-      console.warn("Falling back to in-memory pricing config:", err?.message);
-      return { status: 200, body: { config: db.pricingConfig } };
+      console.error("[GET /api/pricing-config] DB error:", err?.message);
+      return { status: 500, body: { error: "Failed to fetch pricing config" } };
     }
   }
   if ((method === "PUT" || method === "PATCH") && (pathname === "/api/pricing-config" || pathname === "/api/pricing/config")) {
@@ -5330,7 +4994,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       };
     }
     const patch = body.patch || body;
-    const callerName = body.updatedByName || body.callerName || "Koushik";
+    const callerName = body.updatedByName || body.callerName || "Super Admin";
     const roleNormalized = (callerRole || "SUPER_ADMIN").toUpperCase();
     try {
       const cfg = await prisma.masterPricingConfig.upsert({
@@ -5365,38 +5029,11 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           updatedByName: callerName
         }
       });
-      db.pricingConfig = {
-        id: cfg.id,
-        standardMin: cfg.standardMin,
-        extraUnitMin: cfg.extraUnitMin,
-        extraUnitRate: cfg.extraUnitRate,
-        freeKm: cfg.freeKm,
-        perKm: cfg.perKm,
-        taxPct: cfg.taxPct,
-        commissionPct: cfg.commissionPct,
-        maxDurationMin: cfg.maxDurationMin,
-        bufferMin: cfg.bufferMin,
-        rounding: cfg.rounding,
-        updatedByRole: cfg.updatedByRole,
-        updatedByName: cfg.updatedByName,
-        updatedAt: cfg.updatedAt.toISOString()
-      };
-      return { status: 200, body: { config: db.pricingConfig } };
-    } catch {
-      db.pricingConfig = {
-        ...db.pricingConfig,
-        ...patch.standardMin !== void 0 ? { standardMin: Number(patch.standardMin) } : {},
-        ...patch.extraUnitMin !== void 0 ? { extraUnitMin: Number(patch.extraUnitMin) } : {},
-        ...patch.extraUnitRate !== void 0 ? { extraUnitRate: Number(patch.extraUnitRate) } : {},
-        ...patch.freeKm !== void 0 ? { freeKm: Number(patch.freeKm) } : {},
-        ...patch.perKm !== void 0 ? { perKm: Number(patch.perKm) } : {},
-        ...patch.taxPct !== void 0 ? { taxPct: Number(patch.taxPct) } : {},
-        ...patch.commissionPct !== void 0 ? { commissionPct: Number(patch.commissionPct) } : {},
-        ...patch.maxDurationMin !== void 0 ? { maxDurationMin: Number(patch.maxDurationMin) } : {},
-        ...patch.bufferMin !== void 0 ? { bufferMin: Number(patch.bufferMin) } : {},
-        ...patch.rounding ? { rounding: patch.rounding } : {}
-      };
-      return { status: 200, body: { config: db.pricingConfig } };
+      updateCachedPricingConfig(cfg);
+      return { status: 200, body: { config: cfg } };
+    } catch (err) {
+      console.error("[PUT/PATCH /api/pricing-config] DB error:", err?.message);
+      return { status: 500, body: { error: err?.message || "Failed to update pricing config" } };
     }
   }
   if (method === "GET" && pathname === "/api/settlements") {
@@ -5404,13 +5041,11 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       const batches = await prisma.settlementBatch.findMany({
         orderBy: { createdAt: "desc" }
       });
-      if (batches && batches.length > 0) {
-        return { status: 200, body: { settlements: batches.map(formatSettlement) } };
-      }
+      return { status: 200, body: { settlements: batches.map(formatSettlement) } };
     } catch (err) {
-      console.warn("Settlements DB fallback:", err?.message);
+      console.error("[GET /api/settlements] DB error:", err?.message);
+      return { status: 500, body: { error: "Failed to load settlements" } };
     }
-    return { status: 200, body: { settlements: db.settlements } };
   }
   if (method === "POST" && pathname === "/api/settlements/advance") {
     const gosala = body.gosala;
@@ -5421,16 +5056,10 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       PAID: "PAID",
       FAILED: "APPROVED"
     };
-    const nextDisplayMap = {
-      Pending: "Approved",
-      Approved: "Processing",
-      Processing: "Paid",
-      Paid: "Paid",
-      Failed: "Approved"
-    };
     try {
       const batch = await prisma.settlementBatch.findFirst({
-        where: { gosalaName: gosala }
+        where: { gosalaName: gosala },
+        orderBy: { createdAt: "desc" }
       });
       if (batch) {
         const updated = await prisma.settlementBatch.update({
@@ -5439,15 +5068,11 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         });
         return { status: 200, body: { settlement: formatSettlement(updated) } };
       }
+      return { status: 404, body: { error: "Settlement not found" } };
     } catch (err) {
-      console.warn("Settlements advance DB fallback:", err?.message);
+      console.error("[POST /api/settlements/advance] DB error:", err?.message);
+      return { status: 500, body: { error: err?.message || "Failed to advance settlement" } };
     }
-    const memItem = db.settlements.find((s) => s.gosala === gosala);
-    if (memItem) {
-      memItem.status = nextDisplayMap[memItem.status] || "Approved";
-      return { status: 200, body: { settlement: memItem } };
-    }
-    return { status: 404, body: { error: "Settlement not found" } };
   }
   if (method === "POST" && pathname === "/api/settlements/batch-approve") {
     const batch = body.batch || "SEP-W4";
@@ -5456,22 +5081,19 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         where: { batch, status: "PENDING" },
         data: { status: "APPROVED" }
       });
+      return { status: 200, body: { success: true, batch } };
     } catch (err) {
-      console.warn("Batch approve DB fallback:", err?.message);
+      console.error("[POST /api/settlements/batch-approve] DB error:", err?.message);
+      return { status: 500, body: { error: err?.message || "Failed to batch approve settlements" } };
     }
-    db.settlements.forEach((s) => {
-      if (s.batch === batch && s.status === "Pending") {
-        s.status = "Approved";
-      }
-    });
-    return { status: 200, body: { success: true, batch } };
   }
   if (method === "POST" && pathname === "/api/settlements/sweep") {
     try {
+      const profiles = await resolveRoleProfilesFromDB();
       const result = await executeAutomatedSweep({
         targetGosala: body?.gosala,
         cycleType: body?.cycleType,
-        serverProfiles
+        serverProfiles: profiles
       });
       return { status: 200, body: result };
     } catch (err) {
@@ -5496,28 +5118,25 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   if (method === "POST" && pathname === "/api/settlements/schedule/configure") {
     try {
       const { autoSweepEnabled, disbursementCycle } = body;
-      try {
-        await prisma.masterPricingConfig.upsert({
-          where: { id: 1 },
-          update: {
-            ...autoSweepEnabled !== void 0 ? { autoSweepEnabled } : {},
-            ...disbursementCycle ? { disbursementCycle } : {},
-            updatedAt: /* @__PURE__ */ new Date()
-          },
-          create: {
-            id: 1,
-            autoSweepEnabled: autoSweepEnabled ?? true,
-            disbursementCycle: disbursementCycle || "CONTINUOUS_T_PLUS_ONE"
-          }
+      await prisma.masterPricingConfig.upsert({
+        where: { id: 1 },
+        update: {
+          ...autoSweepEnabled !== void 0 ? { autoSweepEnabled } : {},
+          ...disbursementCycle ? { disbursementCycle } : {},
+          updatedAt: /* @__PURE__ */ new Date()
+        },
+        create: {
+          id: 1,
+          autoSweepEnabled: autoSweepEnabled ?? true,
+          disbursementCycle: disbursementCycle || "CONTINUOUS_T_PLUS_ONE"
+        }
+      });
+      if (autoSweepEnabled !== void 0 || disbursementCycle) {
+        updateCachedPricingConfig({
+          ...autoSweepEnabled !== void 0 ? { autoSweepEnabled } : {},
+          ...disbursementCycle ? { disbursementCycle } : {}
         });
-      } catch (err) {
-        console.warn("Schedule config DB fallback:", err);
       }
-      db.pricingConfig = {
-        ...db.pricingConfig,
-        ...autoSweepEnabled !== void 0 ? { autoSweepEnabled } : {},
-        ...disbursementCycle ? { disbursementCycle } : {}
-      };
       const schedule = await getScheduleStatus();
       return { status: 200, body: { success: true, schedule } };
     } catch (err) {
@@ -5560,7 +5179,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         ) : activeMgrName && !activeMgrName.includes("none") && !activeMgrName.includes("acting") ? assignedMgrs.filter((m) => m.name.toLowerCase() === activeMgrName) : assignedMgrs;
         const primaryAssigned = filteredAssignedMgrs[0] || (isUnderAdminCustody ? void 0 : assignedMgrs[0]);
         const govRole = meta.governingAdminRole || (g.adminId?.startsWith("USER-SA") ? "super_admin" : "admin");
-        const govName = g.adminName || meta.governingAdminName || (govRole === "super_admin" ? "Koushik" : "Operations Admin");
+        const govName = g.adminName || meta.governingAdminName || (govRole === "super_admin" ? "Super Admin" : "Operations Admin");
         const govEmail = g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "";
         return {
           ...g,
@@ -6157,35 +5776,76 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     return { status: 200, body: { ok: true, deleted: name } };
   }
   if (method === "GET" && pathname === "/api/vets") {
-    return { status: 200, body: { ok: true, vets: Array.from(serverVets.values()) } };
+    try {
+      const vets = await prisma.empanelledVet.findMany({ orderBy: { createdAt: "asc" } });
+      return { status: 200, body: { ok: true, vets } };
+    } catch (e) {
+      return { status: 500, body: { error: e.message } };
+    }
   }
   if (method === "POST" && pathname === "/api/vets") {
     const vet = body.vet || body;
     const id = vet.id || `VET-${Date.now()}`;
-    const fullVet = { ...vet, id };
-    serverVets.set(id, fullVet);
-    wsHub.broadcastToChannel("channel:animals", "VET_UPDATED", {
-      vet: fullVet,
-      timestamp: (/* @__PURE__ */ new Date()).toISOString()
-    });
-    return { status: 201, body: { ok: true, vet: fullVet } };
+    try {
+      const fullVet = await prisma.empanelledVet.upsert({
+        where: { regNo: vet.regNo || id },
+        update: {
+          name: vet.name,
+          qualification: vet.qualification || "B.V.Sc",
+          clinic: vet.clinic || "Local Veterinary Clinic",
+          phone: vet.phone || "+91 98000 00000",
+          address: vet.address || "Veterinary Center",
+          specialization: vet.specialization || "General Bovine Care",
+          emergency24x7: vet.emergency24x7 ?? true,
+          assignedGosalas: vet.assignedGosalas || ["All Gaushalas"]
+        },
+        create: {
+          id,
+          name: vet.name,
+          qualification: vet.qualification || "B.V.Sc",
+          regNo: vet.regNo || `REG-${Date.now()}`,
+          clinic: vet.clinic || "Local Veterinary Clinic",
+          phone: vet.phone || "+91 98000 00000",
+          address: vet.address || "Veterinary Center",
+          specialization: vet.specialization || "General Bovine Care",
+          emergency24x7: vet.emergency24x7 ?? true,
+          assignedGosalas: vet.assignedGosalas || ["All Gaushalas"]
+        }
+      });
+      wsHub.broadcastToChannel("channel:animals", "VET_UPDATED", {
+        vet: fullVet,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      });
+      return { status: 201, body: { ok: true, vet: fullVet } };
+    } catch (e) {
+      return { status: 500, body: { error: e.message } };
+    }
   }
   const putVetMatch = pathname.match(/^\/api\/vets\/([^/]+)$/);
   if (method === "PUT" && putVetMatch) {
     const id = putVetMatch[1];
-    const existing = serverVets.get(id) || { id };
-    const updated = { ...existing, ...body };
-    serverVets.set(id, updated);
-    wsHub.broadcastToChannel("channel:animals", "VET_UPDATED", {
-      vet: updated,
-      timestamp: (/* @__PURE__ */ new Date()).toISOString()
-    });
-    return { status: 200, body: { ok: true, vet: updated } };
+    try {
+      const updated = await prisma.empanelledVet.update({
+        where: { id },
+        data: { ...body }
+      });
+      wsHub.broadcastToChannel("channel:animals", "VET_UPDATED", {
+        vet: updated,
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      });
+      return { status: 200, body: { ok: true, vet: updated } };
+    } catch (e) {
+      return { status: 500, body: { error: e.message } };
+    }
   }
   if (method === "DELETE" && putVetMatch) {
     const id = putVetMatch[1];
-    serverVets.delete(id);
-    return { status: 200, body: { ok: true, deleted: id } };
+    try {
+      await prisma.empanelledVet.delete({ where: { id } });
+      return { status: 200, body: { ok: true, deleted: id } };
+    } catch (e) {
+      return { status: 500, body: { error: e.message } };
+    }
   }
   if (method === "POST" && pathname === "/api/slots/toggle-block") {
     const { animal, date, time } = body;
@@ -6239,12 +5899,14 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     };
   }
   if (method === "GET" && pathname === "/api/profiles") {
-    return { status: 200, body: { profiles: serverProfiles } };
+    const profiles = await resolveRoleProfilesFromDB();
+    return { status: 200, body: { profiles } };
   }
   const profileRoleMatch = pathname.match(/^\/api\/profiles\/([^/]+)$/);
   if (method === "GET" && profileRoleMatch) {
     const roleKey = profileRoleMatch[1];
-    const p = serverProfiles[roleKey];
+    const profiles = await resolveRoleProfilesFromDB();
+    const p = profiles[roleKey];
     if (!p)
       return {
         status: 404,
@@ -6254,7 +5916,8 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   }
   if ((method === "PUT" || method === "POST") && profileRoleMatch) {
     const roleKey = profileRoleMatch[1];
-    const existing = serverProfiles[roleKey] || {
+    const profiles = await resolveRoleProfilesFromDB();
+    const existing = profiles[roleKey] || {
       id: `USER-${roleKey.toUpperCase()}`,
       role: roleKey
     };
@@ -6268,25 +5931,47 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       bankDetails: body.bankDetails !== void 0 ? body.bankDetails ? { ...existing.bankDetails || {}, ...body.bankDetails } : void 0 : existing.bankDetails,
       settlementSchedule: body.settlementSchedule !== void 0 ? body.settlementSchedule ? { ...existing.settlementSchedule || {}, ...body.settlementSchedule } : void 0 : existing.settlementSchedule
     };
-    serverProfiles[roleKey] = updated;
+    const roleEnum = roleKey === "customer" ? "CUSTOMER" : roleKey === "manager" ? "GOSALA_MANAGER" : roleKey === "driver" ? "DRIVER" : roleKey === "super_admin" ? "SUPER_ADMIN" : "OPERATIONS_ADMIN";
+    const metadataToSave = {
+      customerData: updated.customerData,
+      managerData: updated.managerData,
+      driverData: updated.driverData,
+      adminData: updated.adminData,
+      bankDetails: updated.bankDetails,
+      settlementSchedule: updated.settlementSchedule
+    };
     try {
-      if (updated.email) {
-        await prisma.user.upsert({
-          where: { email: updated.email },
-          create: {
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            ...updated.email ? [{ email: updated.email }] : [],
+            { role: roleEnum }
+          ]
+        }
+      });
+      if (existingUser) {
+        const currentMeta = existingUser.metadata || {};
+        await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            name: updated.name || existingUser.name,
+            phone: updated.phone || existingUser.phone,
+            metadata: { ...currentMeta, ...metadataToSave }
+          }
+        });
+      } else if (updated.email) {
+        await prisma.user.create({
+          data: {
             name: updated.name || "User",
             email: updated.email,
             phone: updated.phone || "+91 98000 00000",
-            role: roleKey === "customer" ? "CUSTOMER" : roleKey === "manager" ? "GOSALA_MANAGER" : roleKey === "driver" ? "DRIVER" : roleKey === "super_admin" ? "SUPER_ADMIN" : "OPERATIONS_ADMIN"
-          },
-          update: {
-            name: updated.name,
-            phone: updated.phone
+            role: roleEnum,
+            metadata: metadataToSave
           }
-        }).catch(() => {
         });
       }
-    } catch {
+    } catch (e) {
+      console.warn("Profile DB update warning:", e?.message);
     }
     return { status: 200, body: { success: true, profile: updated } };
   }

@@ -25,7 +25,6 @@ async function purgeJunkAccounts() {
     // Test personas created during earlier manual experiments
     "ramraj@gmail.com",
     "suryavardhan@gmail.com",
-    "koushikprime89@gmail.com",
     "aruna@gmail.com",
     "hari@gmail.com",
   ]
@@ -154,7 +153,7 @@ async function purgeJunkAccounts() {
         email: driverEmail,
         phone: "+91 98440 55667",
         role: "DRIVER",
-        password: hashPassword("koushik.git"),
+        password: hashPassword("Driver@2026!"),
         isActive: true,
       },
     })

@@ -13,7 +13,7 @@ const checks = [
   ["Payout provider is required before settlement", payout.includes("GOMAA_PAYOUT_PROVIDER_ENABLED")],
   ["Production migration is non-destructive", deploy.includes("prisma migrate deploy") && !deploy.includes("--accept-data-loss")],
   ["JWT secret is not hard-coded", auth.includes("process.env.GOMAA_JWT_SECRET") && !auth.includes("gomaa_sacred_enterprise_jwt_secret")],
-  ["Frontend contains no role-switch password", !app.includes("Koushik.git") && !app.includes("OpsAdmin@2026!")],
+  ["Frontend contains no role-switch password", !app.includes("SuperAdmin@2026!") && !app.includes("OpsAdmin@2026!")],
   ["Booking requires Razorpay payment proof", router.includes("Verified Razorpay payment is required before booking")],
   ["Payment amount is quote-bound", router.includes("Payment amount does not match the server quote")],
   ["Razorpay order endpoint exists", router.includes("/api/payments/razorpay/order")],

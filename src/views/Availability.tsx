@@ -83,12 +83,13 @@ export default function Availability() {
       ? activeGosalaFilter
       : "") ||
     profiles?.manager?.managerData?.gosala ||
-    (gosalas[0]?.name || "")
+    gosalas[0]?.name ||
+    ""
 
   const [selectedDate, setSelectedDate] = useState<string>(TODAY_REFERENCE)
   const [animalCategory, setAnimalCategory] = useState<string>("ALL")
-  const [selectedGosala, setSelectedGosala] = useState<string>(
-    () => (currentRole === "manager" ? assignedGosala : "ALL"),
+  const [selectedGosala, setSelectedGosala] = useState<string>(() =>
+    currentRole === "manager" ? assignedGosala : "ALL",
   )
 
   useEffect(() => {
@@ -105,7 +106,7 @@ export default function Availability() {
     check: ReturnType<typeof checkAnimalAvailability>
     booking?: Booking
   } | null>(null)
-  const [hoverPos, setHoverPos] = useState<{ top: number; left: number }>({
+  const [hoverPos, setHoverPos] = useState<{ top: number left: number }>({
     top: 0,
     left: 0,
   })
@@ -145,7 +146,9 @@ export default function Availability() {
     })
   }, [bookings])
 
-  const dateObj = availableDates.find((d) => isSameDate(d.value, selectedDate)) || {
+  const dateObj = availableDates.find((d) =>
+    isSameDate(d.value, selectedDate),
+  ) || {
     label: selectedDate,
     value: selectedDate,
     tag: "Upcoming" as const,
@@ -172,7 +175,14 @@ export default function Availability() {
 
       return matchesCategory && matchesGosala && matchesSearch
     })
-  }, [animals, animalCategory, selectedGosala, searchQuery, currentRole, assignedGosala])
+  }, [
+    animals,
+    animalCategory,
+    selectedGosala,
+    searchQuery,
+    currentRole,
+    assignedGosala,
+  ])
 
   // 3. Grid Metrics for Selected Date
   const metrics = useMemo(() => {

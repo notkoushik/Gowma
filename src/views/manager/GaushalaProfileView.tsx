@@ -65,10 +65,12 @@ interface GaushalaProfileViewProps {
 
 type ProfileTab = "overview" | "offerings" | "herd" | "gallery" | "team" | "bookings"
 
-const OFFERING_CATEGORY_THEMES: Record<
-  GosalaOfferingCategory,
-  { label: string; bg: string; border: string; text: string }
-> = {
+const OFFERING_CATEGORY_THEMES: Record<GosalaOfferingCategory, {
+  label: string
+  bg: string
+  border: string
+  text: string
+}> = {
   puja: {
     label: "Puja Samagri",
     bg: "bg-amber-50",
@@ -131,7 +133,16 @@ export default function GaushalaProfileView({
   onRegisterCow,
   onViewAnimalWelfare,
 }: GaushalaProfileViewProps) {
-  const { authUser, currentRole, animals, vets, bookings, updateGosala, addAnimal, updateVet } = useStore()
+  const {
+    authUser,
+    currentRole,
+    animals,
+    vets,
+    bookings,
+    updateGosala,
+    addAnimal,
+    updateVet,
+  } = useStore()
   const { notify } = useToast()
 
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview")
@@ -150,34 +161,50 @@ export default function GaushalaProfileView({
 
   // Permissions: Gaushala-Specified Manager OR Operations Admin can manage offerings.
   // Super Admin is strictly Read-Only.
-  const isSuperAdmin = currentRole === "super_admin" || authUser?.role === "super_admin"
-  const isOperationsAdmin = currentRole === "admin" || authUser?.role === "admin" || (authUser as any)?.dbRole === "OPERATIONS_ADMIN"
-  const isAssignedManager = 
+  const isSuperAdmin =
+    currentRole === "super_admin" || authUser?.role === "super_admin"
+  const isOperationsAdmin =
+    currentRole === "admin" ||
+    authUser?.role === "admin" ||
+    (authUser as any)?.dbRole === "OPERATIONS_ADMIN"
+  const isAssignedManager =
     currentRole === "manager" ||
     authUser?.role === "manager" ||
     (authUser as any)?.dbRole === "GOSALA_MANAGER" ||
     gosala.managerId === authUser?.id ||
     gosala.managerName?.toLowerCase() === authUser?.name?.toLowerCase() ||
-    Boolean(gosala.assignedManagers?.some((m) => m.id === authUser?.id || m.email === authUser?.email))
+    Boolean(
+      gosala.assignedManagers?.some(
+        (m) => m.id === authUser?.id || m.email === authUser?.email,
+      ),
+    )
 
-  const canManageOfferings = !isSuperAdmin && (isAssignedManager || isOperationsAdmin)
+  const canManageOfferings =
+    !isSuperAdmin && (isAssignedManager || isOperationsAdmin)
 
   // --- Modal States for Offerings & Add-ons (Manager & Ops Admin Governance) ---
   const [showOfferingModal, setShowOfferingModal] = useState(false)
-  const [editingOfferingId, setEditingOfferingId] = useState<string | null>(null)
+  const [editingOfferingId, setEditingOfferingId] = useState<string | null>(
+    null,
+  )
   const [offeringName, setOfferingName] = useState("")
-  const [offeringCategory, setOfferingCategory] = useState<GosalaOfferingCategory>("puja")
+  const [offeringCategory, setOfferingCategory] =
+    useState<GosalaOfferingCategory>("puja")
   const [offeringPrice, setOfferingPrice] = useState<number>(150)
   const [offeringDesc, setOfferingDesc] = useState("")
   const [offeringMaxQty, setOfferingMaxQty] = useState<number>(5)
   const [offeringInStock, setOfferingInStock] = useState<boolean>(true)
 
   const [showDeleteOfferingModal, setShowDeleteOfferingModal] = useState(false)
-  const [offeringToDelete, setOfferingToDelete] = useState<GosalaOfferingItem | null>(null)
+  const [offeringToDelete, setOfferingToDelete] =
+    useState<GosalaOfferingItem | null>(null)
 
   const handleOpenAddOffering = () => {
     if (!canManageOfferings) {
-      notify("Offerings can only be added by the assigned Gaushala Manager or Operations Admin", "warn")
+      notify(
+        "Offerings can only be added by the assigned Gaushala Manager or Operations Admin",
+        "warn",
+      )
       return
     }
     setEditingOfferingId(null)
@@ -192,7 +219,10 @@ export default function GaushalaProfileView({
 
   const handleOpenEditOffering = (it: GosalaOfferingItem) => {
     if (!canManageOfferings) {
-      notify("Offerings can only be edited by the assigned Gaushala Manager or Operations Admin", "warn")
+      notify(
+        "Offerings can only be edited by the assigned Gaushala Manager or Operations Admin",
+        "warn",
+      )
       return
     }
     setEditingOfferingId(it.id)
@@ -213,9 +243,10 @@ export default function GaushalaProfileView({
       return
     }
 
-    const currentList = gosala.items && gosala.items.length > 0
-      ? gosala.items
-      : DEFAULT_GOSALA_OFFERINGS
+    const currentList =
+      gosala.items && gosala.items.length > 0
+        ? gosala.items
+        : DEFAULT_GOSALA_OFFERINGS
 
     let updatedList: GosalaOfferingItem[] = []
     if (editingOfferingId) {
@@ -232,7 +263,10 @@ export default function GaushalaProfileView({
             }
           : it,
       )
-      notify(`Updated offering "${offeringName.trim()}" for ${gosala.name}`, "ok")
+      notify(
+        `Updated offering "${offeringName.trim()}" for ${gosala.name}`,
+        "ok",
+      )
     } else {
       const newItem: GosalaOfferingItem = {
         id: `item-${Date.now()}`,
@@ -253,19 +287,25 @@ export default function GaushalaProfileView({
 
   const handleToggleOfferingStock = (it: GosalaOfferingItem) => {
     if (!canManageOfferings) {
-      notify("Stock restock rights are reserved for the Gaushala Manager & Operations Admin", "warn")
+      notify(
+        "Stock restock rights are reserved for the Gaushala Manager & Operations Admin",
+        "warn",
+      )
       return
     }
-    const currentList = gosala.items && gosala.items.length > 0
-      ? gosala.items
-      : DEFAULT_GOSALA_OFFERINGS
+    const currentList =
+      gosala.items && gosala.items.length > 0
+        ? gosala.items
+        : DEFAULT_GOSALA_OFFERINGS
 
     const updatedList = currentList.map((item) =>
       item.id === it.id ? { ...item, inStock: !item.inStock } : item,
     )
     updateGosala(gosala.id, { items: updatedList })
     notify(
-      `${it.name} is now ${!it.inStock ? "IN STOCK" : "OUT OF STOCK"} at ${gosala.name}`,
+      `${it.name} is now ${
+        !it.inStock ? "IN STOCK" : "OUT OF STOCK"
+      } at ${gosala.name}`,
       "ok",
     )
   }
@@ -278,11 +318,14 @@ export default function GaushalaProfileView({
 
   const handleConfirmDeleteOffering = () => {
     if (!canManageOfferings || !offeringToDelete) return
-    const currentList = gosala.items && gosala.items.length > 0
-      ? gosala.items
-      : DEFAULT_GOSALA_OFFERINGS
+    const currentList =
+      gosala.items && gosala.items.length > 0
+        ? gosala.items
+        : DEFAULT_GOSALA_OFFERINGS
 
-    const updatedList = currentList.filter((item) => item.id !== offeringToDelete.id)
+    const updatedList = currentList.filter(
+      (item) => item.id !== offeringToDelete.id,
+    )
     updateGosala(gosala.id, { items: updatedList })
     notify(`Removed "${offeringToDelete.name}" from ${gosala.name}`, "ok")
     setShowDeleteOfferingModal(false)
@@ -290,22 +333,34 @@ export default function GaushalaProfileView({
   }
 
   // --- Modal States for Adding / Editing Details ---
-  const [showAddCustomDetailModal, setShowAddCustomDetailModal] = useState(false)
-  const [customDetailKeyPreset, setCustomDetailKeyPreset] = useState(GOSALA_CUSTOM_DETAIL_SUGGESTIONS[0])
-  const [isCustomDetailCustomMode, setIsCustomDetailCustomMode] = useState(false)
+  const [showAddCustomDetailModal, setShowAddCustomDetailModal] =
+    useState(false)
+  const [customDetailKeyPreset, setCustomDetailKeyPreset] = useState(
+    GOSALA_CUSTOM_DETAIL_SUGGESTIONS[0],
+  )
+  const [isCustomDetailCustomMode, setIsCustomDetailCustomMode] =
+    useState(false)
   const [customDetailCustomKey, setCustomDetailCustomKey] = useState("")
   const [customDetailValue, setCustomDetailValue] = useState("")
 
   const [showAddFacilityModal, setShowAddFacilityModal] = useState(false)
-  const [facilityPreset, setFacilityPreset] = useState(GOSALA_FACILITY_OPTIONS[0])
+  const [facilityPreset, setFacilityPreset] = useState(
+    GOSALA_FACILITY_OPTIONS[0],
+  )
   const [isCustomFacilityMode, setIsCustomFacilityMode] = useState(false)
   const [customFacilityText, setCustomFacilityText] = useState("")
 
   const [showEditCaretakerModal, setShowEditCaretakerModal] = useState(false)
   const [caretakerName, setCaretakerName] = useState(gosala.caretaker || "")
-  const [caretakerPhone, setCaretakerPhone] = useState(gosala.caretakerPhone || gosala.contactPhone || "")
-  const [caretakerShift, setCaretakerShift] = useState(gosala.caretakerShift || "05:30 AM & 04:30 PM")
-  const [caretakerQuarters, setCaretakerQuarters] = useState(gosala.caretakerQuarters || "On-Site Quarter A")
+  const [caretakerPhone, setCaretakerPhone] = useState(
+    gosala.caretakerPhone || gosala.contactPhone || "",
+  )
+  const [caretakerShift, setCaretakerShift] = useState(
+    gosala.caretakerShift || "05:30 AM & 04:30 PM",
+  )
+  const [caretakerQuarters, setCaretakerQuarters] = useState(
+    gosala.caretakerQuarters || "On-Site Quarter A",
+  )
 
   const [showAddStaffModal, setShowAddStaffModal] = useState(false)
   const [staffName, setStaffName] = useState("")
@@ -324,10 +379,14 @@ export default function GaushalaProfileView({
   const [newCowWeight, setNewCowWeight] = useState("380")
   const [newCowStatus, setNewCowStatus] = useState("Available")
   const [newCowHandler, setNewCowHandler] = useState(gosala.caretaker || "")
-  const [newCowPhoto, setNewCowPhoto] = useState("https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=600&fit=crop&auto=format")
+  const [newCowPhoto, setNewCowPhoto] = useState(
+    "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=800&h=600&fit=crop&auto=format",
+  )
 
   const [showEditCapacityModal, setShowEditCapacityModal] = useState(false)
-  const [capacityInput, setCapacityInput] = useState(String(gosala.capacity || 40))
+  const [capacityInput, setCapacityInput] = useState(
+    String(gosala.capacity || 40),
+  )
 
   // Normalize photos list
   const photos = useMemo(() => {
@@ -427,8 +486,7 @@ export default function GaushalaProfileView({
       if (!b) return false
       if (b.gosala && b.gosala.toLowerCase().trim() === targetName) return true
       const aName = b.animal || (b as any).animalName
-      if (aName && residentNames.has(aName.toLowerCase().trim()))
-        return true
+      if (aName && residentNames.has(aName.toLowerCase().trim())) return true
       return false
     })
   }, [bookings, gosala?.name, residentCattle])
@@ -501,7 +559,9 @@ export default function GaushalaProfileView({
     }
 
     const currentFacilities = gosala.facilities || []
-    if (currentFacilities.some((f) => f.toLowerCase() === finalFac.toLowerCase())) {
+    if (
+      currentFacilities.some((f) => f.toLowerCase() === finalFac.toLowerCase())
+    ) {
       notify("Facility amenity already registered", "warn")
       return
     }
@@ -621,7 +681,8 @@ export default function GaushalaProfileView({
       dietInfo: {
         greenFodder: "18-20 kg fresh Napier & Lucerne grass daily",
         dryRoughage: "6-8 kg dried Sorghum / Wheat straw",
-        concentrateMix: "3-4 kg crushed grain mix (cottonseed, maize, wheat bran)",
+        concentrateMix:
+          "3-4 kg crushed grain mix (cottonseed, maize, wheat bran)",
         waterIntakeLiters: "55-65 liters clean fresh mineral water",
         feedingTimes: "Morning 06:30 AM · Evening 05:30 PM",
         postTripCare: "Warm electrolyte jaggery water within 30 min of arrival",
@@ -789,7 +850,9 @@ export default function GaushalaProfileView({
               <div>
                 <div className="flex items-center gap-1.5 text-saffron-light text-[11px] tracking-wider uppercase font-mono">
                   <Sparkles size={13} className="text-amber-300" />
-                  <span>गावो विश्वस्य मातरः • Vedic Cow Sanctuary & Seva Trust</span>
+                  <span>
+                    गावो विश्वस्य मातरः • Vedic Cow Sanctuary & Seva Trust
+                  </span>
                 </div>
                 <h2 className="font-serif text-[20px] sm:text-[28px] text-white font-bold leading-tight drop-shadow-sm mt-0.5">
                   {gosala.name}
@@ -959,9 +1022,15 @@ export default function GaushalaProfileView({
               type="button"
               onClick={() => {
                 setCaretakerName(gosala.caretaker || "")
-                setCaretakerPhone(gosala.caretakerPhone || gosala.contactPhone || "")
-                setCaretakerShift(gosala.caretakerShift || "05:30 AM & 04:30 PM")
-                setCaretakerQuarters(gosala.caretakerQuarters || "On-Site Quarter A")
+                setCaretakerPhone(
+                  gosala.caretakerPhone || gosala.contactPhone || "",
+                )
+                setCaretakerShift(
+                  gosala.caretakerShift || "05:30 AM & 04:30 PM",
+                )
+                setCaretakerQuarters(
+                  gosala.caretakerQuarters || "On-Site Quarter A",
+                )
                 setShowEditCaretakerModal(true)
               }}
               className="text-[10px] text-forest hover:underline font-medium inline-flex items-center gap-0.5 cursor-pointer"
@@ -1025,25 +1094,35 @@ export default function GaushalaProfileView({
               Public Devotee Profile View
             </span>
             <span className="text-[11px] text-ink-faint">
-              What devotees see on the customer sanctuary page & road navigation route
+              What devotees see on the customer sanctuary page & road navigation
+              route
             </span>
           </div>
           <div className="flex items-center gap-3.5 text-[12.5px] text-ink pt-1 flex-wrap">
             <span className="inline-flex items-center gap-1.5 font-medium bg-card px-2.5 py-1 rounded border border-line shadow-xs">
               <span className="text-forest">🌾 Land Area:</span>
-              <strong className="font-semibold text-ink font-mono">{gosala.landAcres ?? 5.5} Acres</strong>
+              <strong className="font-semibold text-ink font-mono">
+                {gosala.landAcres ?? 5.5} Acres
+              </strong>
             </span>
             <span className="inline-flex items-center gap-1.5 font-medium bg-card px-2.5 py-1 rounded border border-line shadow-xs">
               <span className="text-saffron-deep">⏰ Darshan Hours:</span>
-              <strong className="font-semibold text-ink font-mono">{gosala.visitingHours || "6:00 AM – 7:30 PM (All 7 Days)"}</strong>
+              <strong className="font-semibold text-ink font-mono">
+                {gosala.visitingHours || "6:00 AM – 7:30 PM (All 7 Days)"}
+              </strong>
             </span>
             <span className="inline-flex items-center gap-1.5 font-medium bg-card px-2.5 py-1 rounded border border-line shadow-xs">
               <span className="text-forest">📍 Geodesics:</span>
-              <span className="font-mono text-[11.5px] text-ink-soft">{(gosala.lat ?? 17.4401).toFixed(4)}, {(gosala.lng ?? 78.3489).toFixed(4)}</span>
+              <span className="font-mono text-[11.5px] text-ink-soft">
+                {(gosala.lat ?? 17.4401).toFixed(4)},{" "}
+                {(gosala.lng ?? 78.3489).toFixed(4)}
+              </span>
             </span>
             <span className="inline-flex items-center gap-1.5 font-medium bg-card px-2.5 py-1 rounded border border-line shadow-xs">
               <span className="text-ink-soft">🛡️ Geofence:</span>
-              <span className="font-mono text-[11.5px] text-forest font-semibold">35 km Radius</span>
+              <span className="font-mono text-[11.5px] text-forest font-semibold">
+                35 km Radius
+              </span>
             </span>
           </div>
         </div>
@@ -1101,7 +1180,10 @@ export default function GaushalaProfileView({
                   : "border-transparent text-ink-soft hover:text-ink hover:bg-paper-deep/60"
               }`}
             >
-              <Icon size={14} className={isActive ? "text-forest" : "text-ink-faint"} />
+              <Icon
+                size={14}
+                className={isActive ? "text-forest" : "text-ink-faint"}
+              />
               <span>{tab.label}</span>
             </button>
           )
@@ -1144,7 +1226,8 @@ export default function GaushalaProfileView({
                     <span>Devotee Timings & Sanctuary Grounds Scale</span>
                   </h3>
                   <p className="text-[11px] text-ink-faint">
-                    These parameters are rendered live on the Customer Portal and mobile route directions
+                    These parameters are rendered live on the Customer Portal
+                    and mobile route directions
                   </p>
                 </div>
                 <button
@@ -1159,19 +1242,37 @@ export default function GaushalaProfileView({
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="bg-card border border-line rounded-lg p-3">
-                  <div className="text-[11px] font-mono text-ink-faint uppercase">Total Land Area</div>
-                  <div className="font-serif text-[18px] font-bold text-ink mt-0.5">{gosala.landAcres ?? 5.5} Acres</div>
-                  <div className="text-[10.5px] text-forest font-medium mt-1">Free-roam grazing & cow paddocks</div>
+                  <div className="text-[11px] font-mono text-ink-faint uppercase">
+                    Total Land Area
+                  </div>
+                  <div className="font-serif text-[18px] font-bold text-ink mt-0.5">
+                    {gosala.landAcres ?? 5.5} Acres
+                  </div>
+                  <div className="text-[10.5px] text-forest font-medium mt-1">
+                    Free-roam grazing & cow paddocks
+                  </div>
                 </div>
                 <div className="bg-card border border-line rounded-lg p-3">
-                  <div className="text-[11px] font-mono text-ink-faint uppercase">Visiting & Darshan Hours</div>
-                  <div className="font-serif text-[15px] font-semibold text-ink mt-0.5">{gosala.visitingHours || "6:00 AM – 7:30 PM (All 7 Days)"}</div>
-                  <div className="text-[10.5px] text-saffron-deep font-medium mt-1">Open for public seva & aarti</div>
+                  <div className="text-[11px] font-mono text-ink-faint uppercase">
+                    Visiting & Darshan Hours
+                  </div>
+                  <div className="font-serif text-[15px] font-semibold text-ink mt-0.5">
+                    {gosala.visitingHours || "6:00 AM – 7:30 PM (All 7 Days)"}
+                  </div>
+                  <div className="text-[10.5px] text-saffron-deep font-medium mt-1">
+                    Open for public seva & aarti
+                  </div>
                 </div>
                 <div className="bg-card border border-line rounded-lg p-3">
-                  <div className="text-[11px] font-mono text-ink-faint uppercase">Operational Service Geofence</div>
-                  <div className="font-serif text-[18px] font-bold text-ink mt-0.5">35 km Radius</div>
-                  <div className="text-[10.5px] text-ok font-medium mt-1">Automated dispatch & emergency transit</div>
+                  <div className="text-[11px] font-mono text-ink-faint uppercase">
+                    Operational Service Geofence
+                  </div>
+                  <div className="font-serif text-[18px] font-bold text-ink mt-0.5">
+                    35 km Radius
+                  </div>
+                  <div className="text-[10.5px] text-ok font-medium mt-1">
+                    Automated dispatch & emergency transit
+                  </div>
                 </div>
               </div>
             </div>
@@ -1182,7 +1283,10 @@ export default function GaushalaProfileView({
                 <div>
                   <h3 className="font-serif text-[16px] text-ink font-semibold flex items-center gap-2">
                     <ShieldCheck size={16} className="text-forest" />
-                    <span>Verified Bovine Infrastructure & Amenities ({gosala.facilities?.length || 0})</span>
+                    <span>
+                      Verified Bovine Infrastructure & Amenities (
+                      {gosala.facilities?.length || 0})
+                    </span>
                   </h3>
                   <span className="text-[11px] text-ink-faint font-mono">
                     Inspected & AWBI Certified Facilities
@@ -1231,7 +1335,8 @@ export default function GaushalaProfileView({
                 </div>
               ) : (
                 <div className="p-5 rounded border border-dashed border-line text-center text-ink-faint text-[12px]">
-                  No facilities listed. Click "+ Add Facility / Amenity" to configure amenities.
+                  No facilities listed. Click "+ Add Facility / Amenity" to
+                  configure amenities.
                 </div>
               )}
             </div>
@@ -1242,10 +1347,14 @@ export default function GaushalaProfileView({
                 <div>
                   <h3 className="font-serif text-[16px] text-ink font-semibold flex items-center gap-2">
                     <Sliders size={16} className="text-saffron-deep" />
-                    <span>Custom Sanctuary Details & Specifications ({gosala.customDetails?.length || 0})</span>
+                    <span>
+                      Custom Sanctuary Details & Specifications (
+                      {gosala.customDetails?.length || 0})
+                    </span>
                   </h3>
                   <span className="text-[11px] text-ink-faint">
-                    Manager-defined attributes (pasture acreage, solar capacity, darshan hours, 80G certificate)
+                    Manager-defined attributes (pasture acreage, solar capacity,
+                    darshan hours, 80G certificate)
                   </span>
                 </div>
                 <button
@@ -1286,10 +1395,16 @@ export default function GaushalaProfileView({
                 </div>
               ) : (
                 <div className="p-5 rounded-lg border border-dashed border-line text-center bg-paper/20">
-                  <Sliders size={20} className="text-ink-faint mx-auto mb-1.5" />
-                  <p className="text-[12.5px] font-medium text-ink">No Custom Details Added Yet</p>
+                  <Sliders
+                    size={20}
+                    className="text-ink-faint mx-auto mb-1.5"
+                  />
+                  <p className="text-[12.5px] font-medium text-ink">
+                    No Custom Details Added Yet
+                  </p>
                   <p className="text-[11px] text-ink-faint mt-0.5 max-w-sm mx-auto">
-                    Add custom attributes like Total Land Area, Fodder Silo Capacity, Solar Grid, or Visitor Darshan Timings.
+                    Add custom attributes like Total Land Area, Fodder Silo
+                    Capacity, Solar Grid, or Visitor Darshan Timings.
                   </p>
                   <button
                     type="button"
@@ -1323,7 +1438,9 @@ export default function GaushalaProfileView({
                     className="text-[11px] text-forest hover:underline inline-flex items-center gap-1 cursor-pointer font-medium"
                   >
                     <Copy size={11} />
-                    <span>{copiedField === "Address" ? "Copied!" : "Copy Address"}</span>
+                    <span>
+                      {copiedField === "Address" ? "Copied!" : "Copy Address"}
+                    </span>
                   </button>
                   <span className="text-line-strong">•</span>
                   <a
@@ -1391,11 +1508,14 @@ export default function GaushalaProfileView({
                     <Tag size={15} />
                   </span>
                   <h4 className="font-serif text-[15px] font-semibold text-ink">
-                    Sacred Offerings & Seva Store ({gosalaOfferings.length} Add-ons)
+                    Sacred Offerings & Seva Store ({gosalaOfferings.length}{" "}
+                    Add-ons)
                   </h4>
                 </div>
                 <p className="text-[12px] text-ink-soft">
-                  {gosalaOfferings.filter((o) => o.inStock).length} of {gosalaOfferings.length} items currently in stock. Devotees select these add-ons when booking cattle pujas.
+                  {gosalaOfferings.filter((o) => o.inStock).length} of{" "}
+                  {gosalaOfferings.length} items currently in stock. Devotees
+                  select these add-ons when booking cattle pujas.
                 </p>
               </div>
               <button
@@ -1420,14 +1540,18 @@ export default function GaushalaProfileView({
                 <div className="flex items-center gap-2">
                   <h3 className="font-serif text-[17px] text-ink font-semibold flex items-center gap-2">
                     <Tag size={18} className="text-forest" />
-                    <span>Sacred Offerings & Devotional Add-ons ({gosalaOfferings.length})</span>
+                    <span>
+                      Sacred Offerings & Devotional Add-ons (
+                      {gosalaOfferings.length})
+                    </span>
                   </h3>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-forest-soft text-forest font-semibold uppercase">
                     Gaushala Store
                   </span>
                 </div>
                 <p className="text-[11.5px] text-ink-faint mt-1">
-                  Manage puja samagri, cattle fodder, A2 ghee, and sacred vastra that devotees can add to their bookings for {gosala.name}.
+                  Manage puja samagri, cattle fodder, A2 ghee, and sacred vastra
+                  that devotees can add to their bookings for {gosala.name}.
                 </p>
               </div>
 
@@ -1444,7 +1568,9 @@ export default function GaushalaProfileView({
                 ) : (
                   <span className="px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11.5px] font-medium border border-amber-500/20 inline-flex items-center gap-1.5 shadow-xs">
                     <Lock size={13} />
-                    <span>Managed by Gaushala Manager & Operations Admin (Read-Only)</span>
+                    <span>
+                      Managed by Gaushala Manager & Operations Admin (Read-Only)
+                    </span>
                   </span>
                 )}
               </div>
@@ -1453,32 +1579,48 @@ export default function GaushalaProfileView({
             {/* Quick Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="bg-paper border border-line rounded-lg p-3">
-                <span className="text-[11px] font-mono text-ink-faint uppercase">Total Add-ons</span>
+                <span className="text-[11px] font-mono text-ink-faint uppercase">
+                  Total Add-ons
+                </span>
                 <div className="font-serif text-[18px] font-bold text-ink mt-0.5">
                   {gosalaOfferings.length}
                 </div>
-                <div className="text-[10.5px] text-ink-soft">Configured catalog</div>
+                <div className="text-[10.5px] text-ink-soft">
+                  Configured catalog
+                </div>
               </div>
               <div className="bg-paper border border-line rounded-lg p-3">
-                <span className="text-[11px] font-mono text-ink-faint uppercase">In Stock (Active)</span>
+                <span className="text-[11px] font-mono text-ink-faint uppercase">
+                  In Stock (Active)
+                </span>
                 <div className="font-serif text-[18px] font-bold text-ok mt-0.5">
                   {gosalaOfferings.filter((o) => o.inStock).length}
                 </div>
-                <div className="text-[10.5px] text-ok font-medium">Ready for bookings</div>
+                <div className="text-[10.5px] text-ok font-medium">
+                  Ready for bookings
+                </div>
               </div>
               <div className="bg-paper border border-line rounded-lg p-3">
-                <span className="text-[11px] font-mono text-ink-faint uppercase">Out of Stock</span>
+                <span className="text-[11px] font-mono text-ink-faint uppercase">
+                  Out of Stock
+                </span>
                 <div className="font-serif text-[18px] font-bold text-ink-faint mt-0.5">
                   {gosalaOfferings.filter((o) => !o.inStock).length}
                 </div>
-                <div className="text-[10.5px] text-ink-faint">Needs restock toggle</div>
+                <div className="text-[10.5px] text-ink-faint">
+                  Needs restock toggle
+                </div>
               </div>
               <div className="bg-paper border border-line rounded-lg p-3">
-                <span className="text-[11px] font-mono text-ink-faint uppercase">Sanctuary Steward</span>
+                <span className="text-[11px] font-mono text-ink-faint uppercase">
+                  Sanctuary Steward
+                </span>
                 <div className="font-serif text-[14px] font-bold text-forest truncate mt-0.5">
                   {gosala.managerName || "Assigned Manager"}
                 </div>
-                <div className="text-[10.5px] text-ink-faint truncate">Inventory Rights Assigned</div>
+                <div className="text-[10.5px] text-ink-faint truncate">
+                  Inventory Rights Assigned
+                </div>
               </div>
             </div>
 
@@ -1486,9 +1628,12 @@ export default function GaushalaProfileView({
             {gosalaOfferings.length === 0 ? (
               <div className="p-8 rounded-lg border border-dashed border-line text-center bg-paper/20">
                 <Tag size={28} className="text-ink-faint mx-auto mb-2" />
-                <h4 className="font-serif text-[15px] font-semibold text-ink">No Offerings Added Yet</h4>
+                <h4 className="font-serif text-[15px] font-semibold text-ink">
+                  No Offerings Added Yet
+                </h4>
                 <p className="text-[12px] text-ink-faint mt-1 max-w-md mx-auto">
-                  Add sacred puja samagri, green fodder bundles, or pure A2 ghee jars for devotees booking visits to this gaushala.
+                  Add sacred puja samagri, green fodder bundles, or pure A2 ghee
+                  jars for devotees booking visits to this gaushala.
                 </p>
                 {canManageOfferings && (
                   <button
@@ -1504,7 +1649,9 @@ export default function GaushalaProfileView({
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
                 {gosalaOfferings.map((it) => {
-                  const theme = OFFERING_CATEGORY_THEMES[it.category] || OFFERING_CATEGORY_THEMES.puja
+                  const theme =
+                    OFFERING_CATEGORY_THEMES[it.category] ||
+                    OFFERING_CATEGORY_THEMES.puja
                   return (
                     <div
                       key={it.id}
@@ -1543,7 +1690,8 @@ export default function GaushalaProfileView({
                           {it.name}
                         </h4>
                         <p className="text-[12px] text-ink-soft mt-1 leading-snug line-clamp-2">
-                          {it.desc || "Devotional offering item for cattle seva"}
+                          {it.desc ||
+                            "Devotional offering item for cattle seva"}
                         </p>
                       </div>
 
@@ -1551,13 +1699,17 @@ export default function GaushalaProfileView({
                       <div className="mt-4 pt-3 border-t border-line/60">
                         <div className="flex items-center justify-between mb-3">
                           <div>
-                            <span className="text-[10.5px] text-ink-faint block uppercase font-mono">Devotee Price</span>
+                            <span className="text-[10.5px] text-ink-faint block uppercase font-mono">
+                              Devotee Price
+                            </span>
                             <span className="font-serif text-[17px] font-bold text-ink font-mono">
                               {inr(it.price)}
                             </span>
                           </div>
                           <div className="text-right">
-                            <span className="text-[10.5px] text-ink-faint block font-mono">Order Limit</span>
+                            <span className="text-[10.5px] text-ink-faint block font-mono">
+                              Order Limit
+                            </span>
                             <span className="text-[11.5px] font-medium text-ink font-mono">
                               Max {it.maxQty || 5} per booking
                             </span>
@@ -1576,7 +1728,11 @@ export default function GaushalaProfileView({
                               }`}
                             >
                               <PackageCheck size={12} />
-                              <span>{it.inStock ? "Mark Out of Stock" : "Restock (Mark In-Stock)"}</span>
+                              <span>
+                                {it.inStock
+                                  ? "Mark Out of Stock"
+                                  : "Restock (Mark In-Stock)"}
+                              </span>
                             </button>
                             <button
                               type="button"
@@ -1598,7 +1754,8 @@ export default function GaushalaProfileView({
                           </div>
                         ) : (
                           <div className="text-[10.5px] text-ink-faint italic text-center py-1 bg-paper/50 rounded border border-line/40">
-                            🔒 Restocking & edits reserved for Gaushala Manager & Ops Admin
+                            🔒 Restocking & edits reserved for Gaushala Manager
+                            & Ops Admin
                           </div>
                         )}
                       </div>
@@ -1620,7 +1777,8 @@ export default function GaushalaProfileView({
                   <span>Resident Sacred Cattle ({residentCattle.length})</span>
                 </h3>
                 <p className="text-[11.5px] text-ink-faint mt-0.5">
-                  Cattle housed at {gosala.name} available for devotee pujas & rituals
+                  Cattle housed at {gosala.name} available for devotee pujas &
+                  rituals
                 </p>
               </div>
 
@@ -1704,7 +1862,9 @@ export default function GaushalaProfileView({
                       </div>
                       <div className="text-[11px] text-ink-faint mt-1 flex items-center justify-between">
                         <span>Age: {cow.ageYears || 4} yrs</span>
-                        <span>Handler: {cow.assignedHandler || gosala.caretaker}</span>
+                        <span>
+                          Handler: {cow.assignedHandler || gosala.caretaker}
+                        </span>
                       </div>
                       {onViewAnimalWelfare && (
                         <button
@@ -1734,7 +1894,8 @@ export default function GaushalaProfileView({
                   <span>Sanctum & Facility Photographs ({photos.length})</span>
                 </h3>
                 <p className="text-[11.5px] text-ink-faint mt-0.5">
-                  High-resolution premises photos shown to devotees during booking
+                  High-resolution premises photos shown to devotees during
+                  booking
                 </p>
               </div>
               <button
@@ -1795,7 +1956,8 @@ export default function GaushalaProfileView({
                   <span>Dedicated Bovine Welfare & Veterinary Personnel</span>
                 </h3>
                 <p className="text-[11.5px] text-ink-faint">
-                  Personnel responsible for cattle feeding, healthcare and sanctuary maintenance
+                  Personnel responsible for cattle feeding, healthcare and
+                  sanctuary maintenance
                 </p>
               </div>
 
@@ -1843,9 +2005,15 @@ export default function GaushalaProfileView({
                     type="button"
                     onClick={() => {
                       setCaretakerName(gosala.caretaker || "")
-                      setCaretakerPhone(gosala.caretakerPhone || gosala.contactPhone || "")
-                      setCaretakerShift(gosala.caretakerShift || "05:30 AM & 04:30 PM")
-                      setCaretakerQuarters(gosala.caretakerQuarters || "On-Site Quarter A")
+                      setCaretakerPhone(
+                        gosala.caretakerPhone || gosala.contactPhone || "",
+                      )
+                      setCaretakerShift(
+                        gosala.caretakerShift || "05:30 AM & 04:30 PM",
+                      )
+                      setCaretakerQuarters(
+                        gosala.caretakerQuarters || "On-Site Quarter A",
+                      )
                       setShowEditCaretakerModal(true)
                     }}
                     className="p-1 rounded text-ink-faint hover:text-forest hover:bg-paper transition cursor-pointer"
@@ -1897,7 +2065,9 @@ export default function GaushalaProfileView({
                             {assignedVets[0].name}
                           </h4>
                           <p className="text-[11.5px] text-ink-faint">
-                            {assignedVets[0].clinic || (assignedVets[0] as any).clinicName || "Veterinary Polyclinic"}
+                            {assignedVets[0].clinic ||
+                              (assignedVets[0] as any).clinicName ||
+                              "Veterinary Polyclinic"}
                           </p>
                         </div>
                       </div>
@@ -1942,7 +2112,8 @@ export default function GaushalaProfileView({
                       No Specific Doctor Assigned
                     </p>
                     <p className="text-[11px]">
-                      Sanctum is currently serviced by Central Regional Medical Panel.
+                      Sanctum is currently serviced by Central Regional Medical
+                      Panel.
                     </p>
                     <button
                       type="button"
@@ -1962,7 +2133,10 @@ export default function GaushalaProfileView({
               <div className="flex items-center justify-between mb-3">
                 <h4 className="text-[13px] font-semibold text-ink flex items-center gap-1.5">
                   <Users size={14} className="text-forest" />
-                  <span>Sanctum Caretaking Team & Staff ({gosala.additionalStaff?.length || 0})</span>
+                  <span>
+                    Sanctum Caretaking Team & Staff (
+                    {gosala.additionalStaff?.length || 0})
+                  </span>
                 </h4>
                 <button
                   type="button"
@@ -1999,7 +2173,10 @@ export default function GaushalaProfileView({
                           {staff.name}
                         </h5>
                         <div className="text-[11px] text-ink-faint mt-1">
-                          Shift: <span className="text-ink-soft">{staff.shift || "Day Shift"}</span>
+                          Shift:{" "}
+                          <span className="text-ink-soft">
+                            {staff.shift || "Day Shift"}
+                          </span>
                         </div>
                       </div>
                       <div className="pt-2 mt-2 border-t border-line/60">
@@ -2016,7 +2193,11 @@ export default function GaushalaProfileView({
                 </div>
               ) : (
                 <div className="p-4 rounded border border-dashed border-line text-center text-ink-faint text-[12px] bg-paper/20">
-                  <p>No additional staff members listed. Click "+ Add Staff Member" to add assistant gosevaks, feed handlers, or van drivers.</p>
+                  <p>
+                    No additional staff members listed. Click "+ Add Staff
+                    Member" to add assistant gosevaks, feed handlers, or van
+                    drivers.
+                  </p>
                 </div>
               )}
             </div>
@@ -2028,7 +2209,10 @@ export default function GaushalaProfileView({
           <div className="space-y-4 animate-fade-in">
             <h3 className="font-serif text-[16px] text-ink font-semibold flex items-center gap-2">
               <Calendar size={16} className="text-forest" />
-              <span>Sacred Seva Dispatches & Puja Schedule ({relatedBookings.length})</span>
+              <span>
+                Sacred Seva Dispatches & Puja Schedule ({relatedBookings.length}
+                )
+              </span>
             </h3>
 
             {relatedBookings.length === 0 ? (
@@ -2038,7 +2222,8 @@ export default function GaushalaProfileView({
                   No Home Visit Pujas Scheduled
                 </p>
                 <p className="text-[12px] text-ink-faint mt-1">
-                  All cattle residing at {gosala.name} are currently resting peacefully in the shed.
+                  All cattle residing at {gosala.name} are currently resting
+                  peacefully in the shed.
                 </p>
               </div>
             ) : (
@@ -2058,13 +2243,16 @@ export default function GaushalaProfileView({
                         </span>
                       </div>
                       <div className="text-[11.5px] text-ink-faint mt-0.5">
-                        Devotee: <span className="text-ink">{b.customer}</span> •
-                        Cattle: <span className="text-ink font-medium">{b.animal}</span>
+                        Devotee: <span className="text-ink">{b.customer}</span>{" "}
+                        • Cattle:{" "}
+                        <span className="text-ink font-medium">{b.animal}</span>
                       </div>
                     </div>
 
                     <div className="text-left sm:text-right text-[11px] text-ink-faint">
-                      <div className="font-medium text-ink">{b.date} • {b.start} - {b.end}</div>
+                      <div className="font-medium text-ink">
+                        {b.date} • {b.start} - {b.end}
+                      </div>
                       <div className="text-[10.5px]">{b.address}</div>
                     </div>
                   </div>
@@ -2105,7 +2293,11 @@ export default function GaushalaProfileView({
                   Specification Field
                 </label>
                 <select
-                  value={isCustomDetailCustomMode ? "__CUSTOM__" : customDetailKeyPreset}
+                  value={
+                    isCustomDetailCustomMode
+                      ? "__CUSTOM__"
+                      : customDetailKeyPreset
+                  }
                   onChange={(e) => {
                     if (e.target.value === "__CUSTOM__") {
                       setIsCustomDetailCustomMode(true)
@@ -2121,7 +2313,9 @@ export default function GaushalaProfileView({
                       {sug}
                     </option>
                   ))}
-                  <option value="__CUSTOM__">+ Enter Custom Specification...</option>
+                  <option value="__CUSTOM__">
+                    + Enter Custom Specification...
+                  </option>
                 </select>
 
                 {isCustomDetailCustomMode && (
@@ -2214,7 +2408,9 @@ export default function GaushalaProfileView({
                       {fac}
                     </option>
                   ))}
-                  <option value="__CUSTOM__">+ Enter Custom Amenity / Infrastructure...</option>
+                  <option value="__CUSTOM__">
+                    + Enter Custom Amenity / Infrastructure...
+                  </option>
                 </select>
 
                 {isCustomFacilityMode && (
@@ -2472,14 +2668,18 @@ export default function GaushalaProfileView({
 
             <form onSubmit={handleAssignVet} className="p-5 space-y-4">
               <p className="text-[12px] text-ink-soft">
-                Choose a certified veterinarian from your empanelled panel to oversee health inspections and emergency medical care at <strong>{gosala.name}</strong>:
+                Choose a certified veterinarian from your empanelled panel to
+                oversee health inspections and emergency medical care at{" "}
+                <strong>{gosala.name}</strong>:
               </p>
 
               <div className="space-y-2 max-h-60 overflow-y-auto">
                 {vets.map((v) => {
                   const isAssigned =
-                    (v.assignedGosalas && v.assignedGosalas.includes(gosala.name)) ||
-                    (v.assignedGosalas && v.assignedGosalas.includes("All Gaushalas"))
+                    (v.assignedGosalas &&
+                      v.assignedGosalas.includes(gosala.name)) ||
+                    (v.assignedGosalas &&
+                      v.assignedGosalas.includes("All Gaushalas"))
                   return (
                     <label
                       key={v.id}
@@ -2789,7 +2989,9 @@ export default function GaushalaProfileView({
             <div className="text-white text-center mt-3 text-[12px] font-medium flex items-center gap-3">
               <span>{gosala.name}</span>
               <span>•</span>
-              <span>Photo {activePhotoIdx + 1} of {photos.length}</span>
+              <span>
+                Photo {activePhotoIdx + 1} of {photos.length}
+              </span>
             </div>
           </div>
         </div>
@@ -2805,7 +3007,9 @@ export default function GaushalaProfileView({
                   <Tag size={16} />
                 </div>
                 <h3 className="font-serif text-[16px] text-ink font-bold">
-                  {editingOfferingId ? "Edit Sacred Offering" : "Add Sacred Offering / Add-on"}
+                  {editingOfferingId
+                    ? "Edit Sacred Offering"
+                    : "Add Sacred Offering / Add-on"}
                 </h3>
               </div>
               <button
@@ -2839,7 +3043,11 @@ export default function GaushalaProfileView({
                   </label>
                   <select
                     value={offeringCategory}
-                    onChange={(e) => setOfferingCategory(e.target.value as GosalaOfferingCategory)}
+                    onChange={(e) =>
+                      setOfferingCategory(
+                        e.target.value as GosalaOfferingCategory,
+                      )
+                    }
                     className="w-full bg-paper border border-line focus:border-forest rounded px-2.5 py-2 text-[12px] text-ink outline-none"
                   >
                     <option value="puja">Puja Samagri & Rituals</option>
@@ -2922,7 +3130,9 @@ export default function GaushalaProfileView({
                   className="px-4 py-1.5 rounded bg-forest text-white hover:bg-forest-deep text-[12px] font-medium cursor-pointer shadow-xs inline-flex items-center gap-1.5"
                 >
                   <CheckCircle2 size={13} />
-                  <span>{editingOfferingId ? "Save Changes" : "Create Offering"}</span>
+                  <span>
+                    {editingOfferingId ? "Save Changes" : "Create Offering"}
+                  </span>
                 </button>
               </div>
             </form>
@@ -2944,7 +3154,10 @@ export default function GaushalaProfileView({
                 </h3>
               </div>
               <p className="text-[12.5px] text-ink-soft">
-                Are you sure you want to remove <strong className="text-ink">"{offeringToDelete.name}"</strong> from <strong className="text-ink">{gosala.name}</strong>? Devotees will no longer be able to select this add-on.
+                Are you sure you want to remove{" "}
+                <strong className="text-ink">"{offeringToDelete.name}"</strong>{" "}
+                from <strong className="text-ink">{gosala.name}</strong>?
+                Devotees will no longer be able to select this add-on.
               </p>
               <div className="flex justify-end gap-2 pt-2 border-t border-line">
                 <button
