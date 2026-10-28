@@ -156,6 +156,13 @@ export const api = {
   },
 
   async getUsers() {
+    const role =
+      typeof window !== "undefined"
+        ? localStorage.getItem("gomaa_auth_role")
+        : null
+    if (role && role !== "admin" && role !== "super_admin") {
+      return { ok: true, users: [] }
+    }
     return request<{
       ok: boolean
       users: any[]

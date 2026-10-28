@@ -349,11 +349,21 @@ function ReviewCard({
                       Ceremony Venue Address
                     </span>
                     <span
-                      className="text-ink font-medium truncate block"
+                      className="text-ink font-medium block"
                       title={b.address}
                     >
-                      {b.address}
+                      {b.address || "Ceremony Venue Address"}
                     </span>
+                    {b.address && (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.address)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10.5px] text-forest hover:underline font-medium inline-flex items-center gap-1 mt-0.5"
+                      >
+                        📍 Open in Google Maps ↗
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>

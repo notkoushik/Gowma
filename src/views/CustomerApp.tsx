@@ -191,9 +191,12 @@ export function toMyBooking(b: Booking): MyBooking {
       ? "Rejected"
       : b.status === "Completed"
         ? "Completed"
-        : b.status === "In Service"
+        : b.status === "In Service" ||
+            (typeof b.driverStage === "number" && b.driverStage > 0)
           ? "In Service"
-          : b.status === "Confirmed"
+          : b.status === "Confirmed" ||
+              b.status === "Admin Review" ||
+              Boolean((b as any).managerApproval?.confirmed)
             ? "Confirmed"
             : "Under Review"
   return {
@@ -1270,7 +1273,9 @@ function MobileCustomer({
                         {isLoading ? (
                           <Skeleton variant="circular" className="h-14 w-14" />
                         ) : (
-                          (authUser?.name || customerProfile?.name || "D").slice(0, 1).toUpperCase()
+                          (authUser?.name || customerProfile?.name || "D")
+                            .slice(0, 1)
+                            .toUpperCase()
                         )}
                       </div>
                       <div>
@@ -1287,7 +1292,10 @@ function MobileCustomer({
                         </div>
                         <div className="text-[12px] text-ink-faint">
                           {isLoading ? (
-                            <Skeleton variant="text" className="h-3.5 w-44 mt-1" />
+                            <Skeleton
+                              variant="text"
+                              className="h-3.5 w-44 mt-1"
+                            />
                           ) : (
                             `${authUser?.phone || customerProfile?.phone || "No phone configured"} · ${authUser?.email || customerProfile?.email || "No email configured"}`
                           )}

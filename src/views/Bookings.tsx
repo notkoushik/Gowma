@@ -42,21 +42,36 @@ function Row({
   label,
   value,
   mono,
+  link,
 }: {
   label: string
   value: string
   mono?: boolean
+  link?: string
 }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-2 border-b border-line/70 last:border-0">
-      <span className="text-[12px] text-ink-faint">{label}</span>
-      <span
-        className={`text-[13px] text-ink text-right ${
-          mono ? "font-mono tabular" : ""
-        }`}
-      >
-        {value}
-      </span>
+      <span className="text-[12px] text-ink-faint shrink-0">{label}</span>
+      <div className="text-right min-w-0">
+        <span
+          className={`text-[13px] text-ink block truncate ${
+            mono ? "font-mono tabular" : ""
+          }`}
+          title={value}
+        >
+          {value}
+        </span>
+        {link && (
+          <a
+            href={link}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[11px] text-forest hover:underline font-medium inline-flex items-center gap-1 mt-0.5"
+          >
+            📍 Google Maps ↗
+          </a>
+        )}
+      </div>
     </div>
   )
 }
@@ -216,7 +231,15 @@ function Drawer({
                   label="Ceremonial Purpose"
                   value={b.ritualPurpose || "Griha Pravesh & Kamadhenu Puja"}
                 />
-                <Row label="Service Address" value={b.address} />
+                <Row
+                  label="Service Address"
+                  value={b.address || "Devotee Altar Venue"}
+                  link={
+                    b.address
+                      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.address)}`
+                      : undefined
+                  }
+                />
                 <Row
                   label="Transit Distance"
                   value={`${b.distanceKm} km transit`}
@@ -492,8 +515,7 @@ export default function Bookings() {
     isLoading,
   } = useStore()
   const { notify } = useToast()
-  const activeAdminName =
-    authUser?.name || profiles?.admin?.name || ""
+  const activeAdminName = authUser?.name || profiles?.admin?.name || ""
   const [filter, setFilter] = useState<typeof filters[number]>("All")
   const [gosalaFilter, setGosalaFilter] = useState<string>("All")
   const [adminFilter, setAdminFilter] = useState<string>("All")
@@ -697,92 +719,93 @@ export default function Bookings() {
                 </>
               ) : (
                 visible.map((b) => {
-                const assignedManager = managers.find(
-                  (m) =>
-                    m.gosala.toLowerCase() === b.gosala.toLowerCase() &&
-                    m.status === "Active",
-                )
-                const isUnassigned = !assignedManager
-                const isNeedsActing =
-                  isUnassigned &&
-                  (b.status === "Payment Verified" ||
-                    b.status === "Manager Review")
+                  const assignedManager = managers.find(
+                    (m) =>
+                      m.gosala.toLowerCase() === b.gosala.toLowerCase() &&
+                      m.status === "Active",
+                  )
+                  const isUnassigned = !assignedManager
+                  const isNeedsActing =
+                    isUnassigned &&
+                    (b.status === "Payment Verified" ||
+                      b.status === "Manager Review")
 
-                return (
-                  <tr
-                    key={b.id}
-                    onClick={() => setOpenId(b.id)}
-                    className="cursor-pointer border-b border-line/70 hover:bg-paper/70 transition-colors"
-                  >
-                    <td className="px-5 py-3.5 font-mono text-[12.5px] text-ink whitespace-nowrap">
-                      {b.id}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[13.5px] text-ink font-semibold">
-                          {b.customer}
-                        </span>
-                        <span className="text-[10px] font-medium text-forest bg-forest-soft px-1.5 py-0.2 rounded flex items-center gap-0.5">
-                          <ShieldCheck size={10} /> Verified
-                        </span>
-                      </div>
-                      <div className="text-[11.5px] text-ink-faint font-mono flex items-center gap-2 mt-0.5 flex-wrap">
-                        <a
-                          href={`tel:${b.phone}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="hover:text-forest"
-                        >
-                          {b.phone}
-                        </a>
-                        <span>·</span>
-                        <span className="text-[10.5px] font-sans text-saffron-deep font-semibold">
-                          Gotra: {b.devoteeGotra || "Kashyapa"}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <div className="text-[13px] text-ink font-medium">
-                        {b.animal}{" "}
-                        <span className="text-ink-faint font-normal">
-                          · {b.animalType}
-                        </span>
-                      </div>
-                      <div className="text-[11.5px] text-ink-faint flex items-center gap-1.5 mt-0.5">
-                        <span>{b.gosala}</span>
-                        {isUnassigned && (
-                          <span className="font-mono text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
-                            (Admin Scope)
+                  return (
+                    <tr
+                      key={b.id}
+                      onClick={() => setOpenId(b.id)}
+                      className="cursor-pointer border-b border-line/70 hover:bg-paper/70 transition-colors"
+                    >
+                      <td className="px-5 py-3.5 font-mono text-[12.5px] text-ink whitespace-nowrap">
+                        {b.id}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[13.5px] text-ink font-semibold">
+                            {b.customer}
                           </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-5 py-3.5 font-mono text-[12.5px] text-ink-soft tabular whitespace-nowrap">
-                      {getDateChipLabel(b.date)}
-                      <span className="text-ink-faint"> · </span>
-                      {b.start}–{b.end}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <span className="inline-flex items-center gap-1 font-mono text-[12.5px] text-ink-soft tabular">
-                        <MapPin size={12} className="text-ink-faint" />
-                        {b.distanceKm} km
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5 font-mono text-[13px] text-ink tabular whitespace-nowrap font-medium">
-                      {inr(b.total)}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-2">
-                        <StatusPill status={b.status} />
-                        {isNeedsActing && (
-                          <span className="inline-flex items-center gap-1 font-mono text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 font-semibold border border-amber-500/30">
-                            <ShieldAlert size={11} /> Acting Review
+                          <span className="text-[10px] font-medium text-forest bg-forest-soft px-1.5 py-0.2 rounded flex items-center gap-0.5">
+                            <ShieldCheck size={10} /> Verified
                           </span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              }))}
+                        </div>
+                        <div className="text-[11.5px] text-ink-faint font-mono flex items-center gap-2 mt-0.5 flex-wrap">
+                          <a
+                            href={`tel:${b.phone}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="hover:text-forest"
+                          >
+                            {b.phone}
+                          </a>
+                          <span>·</span>
+                          <span className="text-[10.5px] font-sans text-saffron-deep font-semibold">
+                            Gotra: {b.devoteeGotra || "Kashyapa"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="text-[13px] text-ink font-medium">
+                          {b.animal}{" "}
+                          <span className="text-ink-faint font-normal">
+                            · {b.animalType}
+                          </span>
+                        </div>
+                        <div className="text-[11.5px] text-ink-faint flex items-center gap-1.5 mt-0.5">
+                          <span>{b.gosala}</span>
+                          {isUnassigned && (
+                            <span className="font-mono text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
+                              (Admin Scope)
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 font-mono text-[12.5px] text-ink-soft tabular whitespace-nowrap">
+                        {getDateChipLabel(b.date)}
+                        <span className="text-ink-faint"> · </span>
+                        {b.start}–{b.end}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className="inline-flex items-center gap-1 font-mono text-[12.5px] text-ink-soft tabular">
+                          <MapPin size={12} className="text-ink-faint" />
+                          {b.distanceKm} km
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 font-mono text-[13px] text-ink tabular whitespace-nowrap font-medium">
+                        {inr(b.total)}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <StatusPill status={b.status} />
+                          {isNeedsActing && (
+                            <span className="inline-flex items-center gap-1 font-mono text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 font-semibold border border-amber-500/30">
+                              <ShieldAlert size={11} /> Acting Review
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
               {!isLoading && visible.length === 0 && (
                 <tr>
                   <td

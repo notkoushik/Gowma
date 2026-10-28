@@ -1121,9 +1121,11 @@ export default function GosalaManagers() {
                 {isLoading ? (
                   <Skeleton variant="text" className="h-5 w-48 inline-block" />
                 ) : currentRole === "super_admin" ? (
-                  adminPortfolioFilter === "All"
-                    ? "Consolidated Platform Governance (All Portfolios)"
-                    : `${adminPortfolioFilter} Portfolio`
+                  adminPortfolioFilter === "All" ? (
+                    "Consolidated Platform Governance (All Portfolios)"
+                  ) : (
+                    `${adminPortfolioFilter} Portfolio`
+                  )
                 ) : activeAdminName ? (
                   `${activeAdminName} (Operations Admin Hub)`
                 ) : (

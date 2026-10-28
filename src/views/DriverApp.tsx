@@ -700,7 +700,10 @@ function DriverAppContent({ onSignOut }: { onSignOut: () => void }) {
                   </div>
                   <h1 className="font-serif text-[24px] text-ink leading-tight mt-1">
                     {isLoading ? (
-                      <Skeleton variant="text" className="h-7 w-40 inline-block" />
+                      <Skeleton
+                        variant="text"
+                        className="h-7 w-40 inline-block"
+                      />
                     ) : (
                       `Namaste, ${firstName}`
                     )}

@@ -118,11 +118,7 @@ export default function Overview() {
       actingCount: 0,
     }))
 
-    const findPortfolio = (
-      name?: string,
-      email?: string,
-      id?: string,
-    ) => {
+    const findPortfolio = (name?: string, email?: string, id?: string) => {
       const normName = name?.trim().toLowerCase()
       const normEmail = email?.trim().toLowerCase()
       const normId = id?.trim().toLowerCase()
@@ -167,8 +163,12 @@ export default function Overview() {
         (x) => x.name.toLowerCase() === (b.gosala || "").toLowerCase(),
       )
       const p = findPortfolio(
-        b.governingAdminName || (g as any)?.governingAdminName || (g as any)?.adminName,
-        b.governingAdminEmail || (g as any)?.governingAdminEmail || (g as any)?.adminEmail,
+        b.governingAdminName ||
+          (g as any)?.governingAdminName ||
+          (g as any)?.adminName,
+        b.governingAdminEmail ||
+          (g as any)?.governingAdminEmail ||
+          (g as any)?.adminEmail,
         b.governingAdminId || (g as any)?.adminId,
       )
 

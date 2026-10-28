@@ -255,6 +255,10 @@ export default function App() {
     isLoading,
     setAuthSession,
     clearAuthSession,
+    notifications,
+    markNotificationRead,
+    markAllNotificationsRead,
+    clearNotifications,
   } = useStore()
   const [auth, setAuth] = useState<RoleId | null>(getInitialAuth)
   const [view, setView] = useState<View>(getInitialAdminView)
@@ -263,6 +267,10 @@ export default function App() {
   const [isPricingMenuOpen, setIsPricingMenuOpen] = useState(true)
   const [isMaximized, setIsMaximized] = useState(false)
   const [editAdminProfileOpen, setEditAdminProfileOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [notifFilter, setNotifFilter] =
+    useState<"all" | "unread" | "booking" | "welfare">("all")
+  const unreadNotifCount = notifications.filter((n) => !n.read).length
 
   // Listen for Escape key to exit maximized mode
   useEffect(() => {
@@ -1051,21 +1059,151 @@ export default function App() {
                 className="w-56 bg-card border border-line rounded-sm pl-9 pr-3 py-2 text-[12.5px] text-ink placeholder:text-ink-faint outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 transition"
               />
             </div>
-            <button
-              onClick={() =>
-                notify(
-                  isSuperAdmin
-                    ? "Settlement batch SEP-W4 ready for disbursement"
-                    : "3 bookings awaiting operational approval",
-                  "info",
-                )
-              }
-              className="relative h-9 w-9 grid place-items-center rounded-sm border border-line bg-card text-ink-soft hover:text-ink transition-colors"
-              aria-label="Notifications"
-            >
-              <Bell size={16} />
-              <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-saffron" />
-            </button>
+            {/* Notification Center Trigger & Flyout */}
+            <div className="relative">
+              <button
+                onClick={() => setNotificationsOpen((prev) => !prev)}
+                className="relative h-9 w-9 grid place-items-center rounded-sm border border-line bg-card text-ink-soft hover:text-ink transition-colors cursor-pointer"
+                aria-label="Notifications"
+                title="Notifications"
+              >
+                <Bell size={16} />
+                {unreadNotifCount > 0 ? (
+                  <span className="absolute -top-1 -right-1 min-w-[17px] h-[17px] rounded-full bg-saffron text-white text-[10px] font-mono font-bold flex items-center justify-center px-1 shadow-xs animate-pulse">
+                    {unreadNotifCount > 9 ? "9+" : unreadNotifCount}
+                  </span>
+                ) : (
+                  <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-forest" />
+                )}
+              </button>
+
+              {notificationsOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40 bg-ink/20 sm:bg-transparent"
+                    onClick={() => setNotificationsOpen(false)}
+                  />
+                  <div className="fixed inset-x-3 top-16 sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 w-auto sm:w-96 bg-card border border-line rounded-lg shadow-2xl z-50 overflow-hidden text-ink flex flex-col max-h-[80vh]">
+                    {/* Flyout Header */}
+                    <div className="px-4 py-3 border-b border-line bg-paper flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-serif text-[15px] font-semibold text-ink">
+                          {isSuperAdmin
+                            ? "Governance Alerts"
+                            : "Operations Notifications"}
+                        </span>
+                        {unreadNotifCount > 0 && (
+                          <span className="text-[10.5px] font-mono px-2 py-0.5 rounded-full bg-saffron/15 text-saffron-deep font-semibold">
+                            {unreadNotifCount} unread
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px]">
+                        {unreadNotifCount > 0 && (
+                          <button
+                            onClick={() => markAllNotificationsRead()}
+                            className="text-forest hover:underline font-medium cursor-pointer"
+                          >
+                            Mark all read
+                          </button>
+                        )}
+                        {notifications.length > 0 && (
+                          <button
+                            onClick={() => clearNotifications()}
+                            className="text-ink-faint hover:text-ink transition-colors cursor-pointer"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Filter Pills */}
+                    <div className="px-3 py-2 border-b border-line/60 bg-card flex gap-1.5 text-[11px] overflow-x-auto">
+                      {[
+                        { id: "all", label: "All" },
+                        { id: "unread", label: `Unread (${unreadNotifCount})` },
+                        { id: "booking", label: "Bookings" },
+                        { id: "welfare", label: "Welfare" },
+                      ].map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setNotifFilter(tab.id as any)}
+                          className={`px-2.5 py-1 rounded-full font-medium transition cursor-pointer ${
+                            notifFilter === tab.id
+                              ? "bg-forest text-white shadow-2xs"
+                              : "bg-paper text-ink-soft hover:bg-paper-deep"
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Notification List */}
+                    <div className="overflow-y-auto divide-y divide-line/60 max-h-[50vh]">
+                      {notifications.length === 0 ? (
+                        <div className="p-8 text-center text-ink-faint text-[12.5px]">
+                          <Bell size={24} className="mx-auto mb-2 opacity-30" />
+                          No new notifications
+                        </div>
+                      ) : (
+                        notifications
+                          .filter((n) => {
+                            if (notifFilter === "unread") return !n.read
+                            if (notifFilter === "booking")
+                              return n.category === "booking" || !!n.bookingId
+                            if (notifFilter === "welfare")
+                              return n.category === "welfare"
+                            return true
+                          })
+                          .map((n) => (
+                            <div
+                              key={n.id}
+                              onClick={() => {
+                                markNotificationRead(n.id)
+                                if (n.bookingId) {
+                                  setView("bookings")
+                                  setNotificationsOpen(false)
+                                }
+                              }}
+                              className={`p-3 text-[12px] hover:bg-paper-deep/60 transition cursor-pointer flex gap-3 ${
+                                !n.read ? "bg-saffron-soft/20 font-medium" : ""
+                              }`}
+                            >
+                              <div
+                                className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                                  n.tone === "err"
+                                    ? "bg-danger"
+                                    : n.tone === "warn"
+                                      ? "bg-warn"
+                                      : "bg-forest"
+                                }`}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-ink font-medium leading-tight">
+                                  {n.title}
+                                </div>
+                                <div className="text-ink-soft text-[11.5px] mt-0.5 line-clamp-2">
+                                  {n.message}
+                                </div>
+                                <div className="flex items-center justify-between mt-1 text-[10.5px] text-ink-faint">
+                                  <span>{n.timestamp}</span>
+                                  {n.bookingId && (
+                                    <span className="text-forest font-semibold hover:underline">
+                                      View Booking →
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
 
             {/* Maximize / Minimize Workspace Toggle */}
             <button

@@ -296,7 +296,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [vets, setVets] = useState<EmpanelledVet[]>([])
   const [gosalas, setGosalas] = useState<Gosala[]>([])
   const [activeGosalaFilter, setActiveGosalaFilter] = useState<string>("ALL")
-  const [activeManagerGosala, setActiveManagerGosalaState] = useState<string>("")
+  const [activeManagerGosala, setActiveManagerGosalaState] =
+    useState<string>("")
 
   const setActiveManagerGosala = useCallback((name: string) => {
     setActiveManagerGosalaState(name)
@@ -429,8 +430,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [dismiss],
   )
 
-  const [profiles, setProfiles] =
-    useState<Record<RoleId, RoleProfile>>(() => initialProfiles)
+  const [profiles, setProfiles] = useState<Record<RoleId, RoleProfile>>(
+    () => initialProfiles,
+  )
 
   const activeProfile = useMemo(() => {
     return (
@@ -516,6 +518,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         api.getSettlements().catch(() => null),
       ])
 
+      if (meRes?.ok && meRes.user) {
+        setAuthUser(meRes.user)
+      }
+
+      const role = meRes?.user?.role
+      const isAdminOrSuper = role === "admin" || role === "super_admin"
+
       // Step 2: Auxiliary rosters & directory (staggered to protect database connection pool)
       const [animalRes, mgRes, vetRes, profRes, usersRes, schedRes] =
         await Promise.all([
@@ -523,12 +532,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           api.getManagers().catch(() => null),
           api.getVets().catch(() => null),
           api.getProfiles().catch(() => null),
-          api.getUsers().catch(() => null),
+          isAdminOrSuper
+            ? api.getUsers().catch(() => null)
+            : Promise.resolve(null),
           api.getSettlementSchedule().catch(() => null),
         ])
-      if (meRes?.ok && meRes.user) {
-        setAuthUser(meRes.user)
-      }
       if (usersRes?.ok && Array.isArray(usersRes.users)) {
         setUsers(usersRes.users)
       }
@@ -1049,6 +1057,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         `Booking ${b.id} placed · Payment verified server-side · Sent to manager review`,
         "ok",
       )
+      setNotifications((prev) => [
+        {
+          id: `notif-booking-${b.id}-${Date.now()}`,
+          title: "New Booking Request",
+          message: `${b.customer || "Devotee"} requested ${b.animal} at ${b.address || "Ceremony Venue"}. Feasibility check required.`,
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          category: "booking",
+          tone: "ok",
+          read: false,
+          bookingId: b.id,
+        },
+        ...prev,
+      ])
     },
     [notify],
   )
@@ -1100,12 +1124,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       notify(
         confirm
-          ? `${id} confirmed by Manager (${managerName}) · forwarded to Admin`
+          ? `${id} confirmed by Manager (${effectiveName}) · forwarded to Admin`
           : `${id} rejected by Manager · slot released`,
         confirm ? "ok" : "danger",
       )
+
+      setNotifications((prev) => [
+        {
+          id: `notif-mgr-${id}-${Date.now()}`,
+          title: confirm
+            ? "Manager Confirmed Feasibility"
+            : "Manager Feasibility Declined",
+          message: `${effectiveName} ${
+            confirm ? "verified feasibility & transit readiness" : "declined"
+          } for booking ${id}: "${finalRemark}"`,
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          category: "booking",
+          tone: confirm ? "ok" : "err",
+          read: false,
+          bookingId: id,
+        },
+        ...prev,
+      ])
     },
-    [notify],
+    [notify, profiles?.manager?.name, profiles?.manager?.id],
   )
 
   const adminDecide = useCallback(
@@ -1151,6 +1196,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
           : `${id} rejected · refund initiated`,
         confirm ? "ok" : "danger",
       )
+
+      setNotifications((prev) => [
+        {
+          id: `notif-adm-${id}-${Date.now()}`,
+          title: confirm
+            ? "Operations Confirmed Booking"
+            : "Operations Declined Booking",
+          message: `${adminName} ${
+            confirm
+              ? "granted final confirmation for driver dispatch"
+              : "declined"
+          } for booking ${id}: "${remark || "Approved"}"`,
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          category: "booking",
+          tone: confirm ? "ok" : "err",
+          read: false,
+          bookingId: id,
+        },
+        ...prev,
+      ])
     },
     [notify],
   )
@@ -1351,15 +1419,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .addManager(newMgr)
         .then(() => {
           refreshUsers()
+          loadBackendState()
         })
-        .catch(console.error)
+        .catch((err: any) => {
+          console.error("Failed to add manager:", err)
+          notify(
+            `Failed to save manager ${mgr.name}: ${err?.message || "Session expired or unauthorized"}`,
+            "error",
+          )
+          setManagers((prev) => prev.filter((m) => m.id !== id))
+        })
       const targetList =
         newMgr.gosalas && newMgr.gosalas.length > 0
           ? newMgr.gosalas.join(", ")
           : primaryGosala
       notify(`Manager ${mgr.name} assigned to ${targetList}`, "ok")
     },
-    [managers.length, notify, refreshUsers],
+    [managers.length, notify, refreshUsers, loadBackendState],
   )
 
   const updateManager = useCallback(
@@ -1415,10 +1491,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteManager = useCallback(
     (id: string) => {
       setManagers((prev) => prev.filter((m) => m.id !== id))
-      api.deleteManager(id).catch(console.error)
+      api
+        .deleteManager(id)
+        .then(() => {
+          refreshUsers()
+          loadBackendState()
+        })
+        .catch(console.error)
       notify("Manager assignment removed", "info")
     },
-    [notify],
+    [notify, refreshUsers, loadBackendState],
   )
 
   const advanceSettlement = useCallback(

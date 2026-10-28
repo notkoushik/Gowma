@@ -1214,7 +1214,8 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
                       {isLoading ? (
                         <Skeleton variant="text" className="h-3 w-32 mt-0.5" />
                       ) : (
-                        managerProfile?.managerData?.gosala || "Assigned Gaushala"
+                        managerProfile?.managerData?.gosala ||
+                        "Assigned Gaushala"
                       )}
                     </div>
                   </div>

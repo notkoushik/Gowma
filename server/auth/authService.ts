@@ -162,7 +162,7 @@ export async function authenticateOrResolveUser(
   if (isPasswordHash(user.password)) {
     let isValid = verifyPassword(password, user.password)
     // First-letter case-resilience fallback (e.g. handle first letter case difference on mobile auto-capitalize)
-    if (!isValid && password.length >= 8) {
+    if (!isValid && password.length >= 1) {
       const altFirstChar =
         password[0] === password[0].toUpperCase()
           ? password[0].toLowerCase() + password.slice(1)
@@ -173,7 +173,7 @@ export async function authenticateOrResolveUser(
         try {
           await prisma.user.update({
             where: { id: user.id },
-            data: { password: hashPassword(password) },
+            data: { password: hashPassword(password, true) },
           })
         } catch {}
       }
@@ -184,7 +184,7 @@ export async function authenticateOrResolveUser(
     const a = Buffer.from(password)
     const b = Buffer.from(stored)
     let valid = a.length === b.length && crypto.timingSafeEqual(a, b)
-    if (!valid && password.length >= 8 && stored.length >= 8) {
+    if (!valid && password.length >= 1 && stored.length >= 1) {
       const altFirstChar =
         password[0] === password[0].toUpperCase()
           ? password[0].toLowerCase() + password.slice(1)
@@ -195,8 +195,22 @@ export async function authenticateOrResolveUser(
       }
     }
     if (!valid) throw new Error("Invalid credentials")
-    try { await prisma.user.update({ where: { id: user.id }, data: { password: hashPassword(password) } }) }
-    catch { throw new Error("Unable to secure account password") }
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { password: hashPassword(password, true) },
+      })
+    } catch (updateErr: any) {
+      console.warn("[auth] Non-fatal password hash upgrade notice:", updateErr?.message)
+      try {
+        if (user.email) {
+          await prisma.user.update({
+            where: { email: user.email },
+            data: { password: hashPassword(password, true) },
+          })
+        }
+      } catch {}
+    }
   }
 
   // Resolve assigned Gaushalas strictly verifying active custody

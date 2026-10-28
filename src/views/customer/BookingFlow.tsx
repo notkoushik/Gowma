@@ -19,6 +19,9 @@ import {
   Eye,
   Sparkles,
   Building2,
+  Crosshair,
+  Trash2,
+  Navigation,
 } from "lucide-react"
 import type { Animal, AnimalType } from "../../data/animals"
 import { type Gosala } from "../../data/customer"
@@ -261,23 +264,37 @@ export default function BookingFlow({
     animal.type === "Cow" && includeCalfPair
       ? `${animal.name} & Accompanying Baby Calf`
       : animal.name
-  const [selectedLocIndex, setSelectedLocIndex] = useState(0)
+  const [selectedLocIndex, setSelectedLocIndex] = useState<number | null>(0)
+  const [houseFlatNo, setHouseFlatNo] = useState("")
+  const [buildingName, setBuildingName] = useState("")
+  const [streetArea, setStreetArea] = useState(
+    () => venueOptions[0]?.name || "",
+  )
+  const [landmark, setLandmark] = useState("")
+  const [cityPincode, setCityPincode] = useState(
+    () => gosala.region || "Bengaluru - 560001",
+  )
   const [address, setAddress] = useState(
     () => venueOptions[0]?.name || "Local Sanctuary Area",
   )
   const [distanceKm, setDistanceKm] = useState(
     () => venueOptions[0]?.distanceKm || 6.5,
   )
+  const [hasUserEditedAddress, setHasUserEditedAddress] = useState(false)
 
+  // Initialize only once on mount if not yet edited by user
   useEffect(() => {
     if (
+      !hasUserEditedAddress &&
       venueOptions.length > 0 &&
-      (!address || address === "Local Sanctuary Area")
+      address === "Local Sanctuary Area"
     ) {
-      setAddress(venueOptions[0].name)
+      const defaultName = venueOptions[0].name
+      setAddress(defaultName)
+      setStreetArea(defaultName)
       setDistanceKm(venueOptions[0].distanceKm)
     }
-  }, [venueOptions, address])
+  }, [venueOptions, hasUserEditedAddress, address])
   const [payMethod, setPayMethod] = useState<"upi" | "card" | "netbanking">(
     "upi",
   )
@@ -603,8 +620,56 @@ export default function BookingFlow({
   const canNext = useMemo(() => {
     if (step === 0) return !!selectedDate
     if (step === 1) return !!slot
+    if (step === 4) return Boolean(address && address.trim().length > 3)
     return true
-  }, [step, selectedDate, slot])
+  }, [step, selectedDate, slot, address])
+
+  const updateAddressFields = (
+    flat: string,
+    bld: string,
+    street: string,
+    mark: string,
+    city: string,
+  ) => {
+    setHouseFlatNo(flat)
+    setBuildingName(bld)
+    setStreetArea(street)
+    setLandmark(mark)
+    setCityPincode(city)
+    setHasUserEditedAddress(true)
+    const parts = [
+      flat ? `Flat/House: ${flat}` : "",
+      bld,
+      street,
+      mark ? `Landmark: ${mark}` : "",
+      city,
+    ].filter(Boolean)
+    setAddress(parts.join(", "))
+  }
+
+  const handleClearAddress = () => {
+    setHouseFlatNo("")
+    setBuildingName("")
+    setStreetArea("")
+    setLandmark("")
+    setCityPincode("")
+    setAddress("")
+    setSelectedLocIndex(null)
+    setHasUserEditedAddress(true)
+  }
+
+  const handleUseGps = () => {
+    setHasUserEditedAddress(true)
+    const detectedCity = deviceLocation.city || gosala.region || "Local Area"
+    const detectedStreet = deviceLocation.address || "Devotee Live Location"
+    updateAddressFields(
+      houseFlatNo,
+      buildingName,
+      detectedStreet,
+      landmark,
+      detectedCity,
+    )
+  }
 
   const calculateEndTime = (startTime: string, durMin: number) => {
     const [h, m] = startTime.split(":").map(Number)
@@ -618,9 +683,16 @@ export default function BookingFlow({
 
   const handleSelectLocation = (idx: number) => {
     setSelectedLocIndex(idx)
+    setHasUserEditedAddress(true)
     const venue = venueOptions[idx]
     if (venue) {
-      setAddress(venue.name)
+      updateAddressFields(
+        houseFlatNo,
+        buildingName,
+        venue.name,
+        landmark,
+        cityPincode,
+      )
       setDistanceKm(venue.distanceKm)
     }
   }
@@ -1115,25 +1187,58 @@ export default function BookingFlow({
 
           {step === 4 && (
             <div className="space-y-4">
+              {/* Header with Quick Actions: GPS & Clear */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="font-mono text-[10.5px] uppercase tracking-wider text-ink-faint block">
+                    Ceremony Delivery Location
+                  </label>
+                  <p className="text-[11.5px] text-ink-soft">
+                    Shared with Admin, Manager & Driver for accurate navigation
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleUseGps}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-sm border border-saffron/40 bg-saffron-soft text-saffron-deep hover:bg-saffron hover:text-white transition-colors cursor-pointer"
+                    title="Detect current device location"
+                  >
+                    <Crosshair size={12} />
+                    <span>GPS</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearAddress}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-sm border border-line bg-card text-ink-soft hover:text-danger hover:border-danger/30 transition-colors cursor-pointer"
+                    title="Clear address fields"
+                  >
+                    <Trash2 size={12} />
+                    <span>Clear</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Landmark / Area Presets */}
               <div>
-                <label className="font-mono text-[10.5px] uppercase tracking-wider text-ink-faint block mb-2">
-                  Select service area / landmark ({venueOptions.length}{" "}
-                  available)
-                </label>
-                <div className="grid grid-cols-1 gap-2">
+                <span className="text-[11px] font-medium text-ink-faint block mb-1.5">
+                  Suggested Hub Areas & Landmarks:
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                   {venueOptions.map((loc, idx) => (
                     <button
                       key={loc.name}
+                      type="button"
                       onClick={() => handleSelectLocation(idx)}
-                      className={`p-3 rounded-sm border text-left flex items-center justify-between text-[12.5px] transition-colors ${
+                      className={`p-2.5 rounded-sm border text-left flex items-center justify-between text-[11.5px] transition-colors cursor-pointer ${
                         selectedLocIndex === idx
-                          ? "border-saffron bg-saffron-soft font-medium text-ink"
-                          : "border-line bg-card text-ink-soft hover:border-line-strong"
+                          ? "border-saffron bg-saffron-soft font-medium text-ink shadow-2xs"
+                          : "border-line bg-card text-ink-soft hover:border-line-strong hover:bg-paper"
                       }`}
                     >
-                      <span className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5 min-w-0 flex-1 truncate">
                         <MapPin
-                          size={14}
+                          size={13}
                           className={`shrink-0 ${
                             selectedLocIndex === idx
                               ? "text-saffron"
@@ -1142,7 +1247,7 @@ export default function BookingFlow({
                         />
                         <span className="truncate">{loc.name}</span>
                       </span>
-                      <span className="font-mono tabular text-ink-faint shrink-0 ml-2">
+                      <span className="font-mono tabular text-ink-faint shrink-0 ml-1 text-[10.5px]">
                         {loc.distanceKm} km
                       </span>
                     </button>
@@ -1150,48 +1255,175 @@ export default function BookingFlow({
                 </div>
               </div>
 
-              <div className="rounded-sm border border-line bg-card p-4">
-                <div className="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
-                  Detailed address
+              {/* Structured Address Entry Card */}
+              <div className="rounded-sm border border-line bg-card p-3.5 space-y-3">
+                <div className="font-mono text-[10px] uppercase tracking-wider text-ink-faint flex items-center justify-between">
+                  <span>Structured Devotee Address</span>
+                  <span className="text-forest text-[10.5px]">
+                    ✓ Real-time Sync
+                  </span>
                 </div>
-                <textarea
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  rows={2}
-                  className="mt-2 w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] text-ink outline-none focus:border-saffron focus:ring-2 focus:ring-saffron/20 resize-none"
-                />
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] text-ink-faint block mb-1">
+                      House / Flat No.
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Flat 304, Tower B"
+                      value={houseFlatNo}
+                      onChange={(e) =>
+                        updateAddressFields(
+                          e.target.value,
+                          buildingName,
+                          streetArea,
+                          landmark,
+                          cityPincode,
+                        )
+                      }
+                      className="w-full bg-paper border border-line rounded px-2.5 py-1.5 text-[12.5px] text-ink placeholder:text-ink-faint/60 outline-none focus:border-saffron"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-ink-faint block mb-1">
+                      Building / Society
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Gokulam Enclave"
+                      value={buildingName}
+                      onChange={(e) =>
+                        updateAddressFields(
+                          houseFlatNo,
+                          e.target.value,
+                          streetArea,
+                          landmark,
+                          cityPincode,
+                        )
+                      }
+                      className="w-full bg-paper border border-line rounded px-2.5 py-1.5 text-[12.5px] text-ink placeholder:text-ink-faint/60 outline-none focus:border-saffron"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-ink-faint block mb-1">
+                    Street / Road / Colony
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 5th Main Road, Indiranagar"
+                    value={streetArea}
+                    onChange={(e) =>
+                      updateAddressFields(
+                        houseFlatNo,
+                        buildingName,
+                        e.target.value,
+                        landmark,
+                        cityPincode,
+                      )
+                    }
+                    className="w-full bg-paper border border-line rounded px-2.5 py-1.5 text-[12.5px] text-ink placeholder:text-ink-faint/60 outline-none focus:border-saffron"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] text-ink-faint block mb-1">
+                      Sacred Altar / Landmark
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Opp. Shiva Temple"
+                      value={landmark}
+                      onChange={(e) =>
+                        updateAddressFields(
+                          houseFlatNo,
+                          buildingName,
+                          streetArea,
+                          e.target.value,
+                          cityPincode,
+                        )
+                      }
+                      className="w-full bg-paper border border-line rounded px-2.5 py-1.5 text-[12.5px] text-ink placeholder:text-ink-faint/60 outline-none focus:border-saffron"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-ink-faint block mb-1">
+                      City & Pincode
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Bengaluru - 560038"
+                      value={cityPincode}
+                      onChange={(e) =>
+                        updateAddressFields(
+                          houseFlatNo,
+                          buildingName,
+                          streetArea,
+                          landmark,
+                          e.target.value,
+                        )
+                      }
+                      className="w-full bg-paper border border-line rounded px-2.5 py-1.5 text-[12.5px] text-ink placeholder:text-ink-faint/60 outline-none focus:border-saffron"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-ink-faint block mb-1">
+                    Combined Service Address (Editable)
+                  </label>
+                  <textarea
+                    value={address}
+                    onChange={(e) => {
+                      setAddress(e.target.value)
+                      setHasUserEditedAddress(true)
+                    }}
+                    rows={2}
+                    placeholder="Enter complete ceremony venue address..."
+                    className="w-full bg-paper border border-line rounded px-2.5 py-1.5 text-[12.5px] text-ink outline-none focus:border-saffron focus:ring-1 focus:ring-saffron resize-none"
+                  />
+                </div>
               </div>
 
-              <div className="rounded-sm border border-line bg-card p-4 space-y-2 text-[13px]">
+              {/* Distance & Transport Breakdown */}
+              <div className="rounded-sm border border-line bg-card p-3.5 space-y-2 text-[12.5px]">
                 <div className="flex justify-between">
-                  <span className="text-ink-faint">Total distance</span>
-                  <span className="font-mono text-ink tabular">
+                  <span className="text-ink-faint">Transit Distance</span>
+                  <span className="font-mono text-ink tabular font-medium">
                     {distanceKm} km
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-ink-faint">
-                    Free transport included
+                    Complimentary Allowance
                   </span>
-                  <span className="font-mono text-ok tabular">
+                  <span className="font-mono text-ok tabular font-medium">
                     First {pricingConfig.freeKm} km (₹0)
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-ink-faint">
-                    Chargeable ({chargeableKm.toFixed(1)} km ×{" "}
+                    Chargeable Distance ({chargeableKm.toFixed(1)} km ×{" "}
                     {inr(pricingConfig.perKm)}/km)
                   </span>
-                  <span className="font-mono text-ink tabular font-medium">
+                  <span className="font-mono text-ink tabular font-semibold text-saffron-deep">
                     {inr(transport)}
                   </span>
                 </div>
               </div>
-              <p className="text-[11.5px] text-ink-faint px-1">
-                Transport is free within {pricingConfig.freeKm} km. Beyond that,{" "}
-                {inr(pricingConfig.perKm)}/km applies to the chargeable
-                distance, rounded per admin rules.
-              </p>
+
+              {!address.trim() && (
+                <div className="p-2.5 rounded bg-warn-soft/60 border border-warn/30 text-warn text-[12px] flex items-center gap-2">
+                  <AlertCircle size={14} className="shrink-0" />
+                  <span>
+                    Please provide a ceremony delivery address to proceed to
+                    checkout.
+                  </span>
+                </div>
+              )}
             </div>
           )}
 

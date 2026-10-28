@@ -554,11 +554,13 @@ export default function Gaushalas({
     useState<"my_portfolio" | "all_network">("all_network")
 
   // Selected Gaushala for Professional Profile View
-  const [selectedGosalaId, setSelectedGosalaId] = useState<string | null>(() => {
-    return activeGosalaFilter && activeGosalaFilter !== "ALL"
-      ? activeGosalaFilter
-      : null
-  })
+  const [selectedGosalaId, setSelectedGosalaId] = useState<string | null>(
+    () => {
+      return activeGosalaFilter && activeGosalaFilter !== "ALL"
+        ? activeGosalaFilter
+        : null
+    },
+  )
 
   // Synchronize when store's activeGosalaFilter changes externally
   useEffect(() => {
