@@ -2476,7 +2476,7 @@ export default function Pricing({
                                     />
                                   </div>
                                 ) : (
-                                  <span>{inr(animal.price || 3500)}</span>
+                                  <span>{inr(animal.price ?? 0)}</span>
                                 )}
                               </td>
 
@@ -2506,7 +2506,7 @@ export default function Pricing({
                                       onClick={() => {
                                         setEditingAnimalName(animal.name)
                                         setEditingAnimalPrice(
-                                          animal.price || 3500,
+                                          animal.price ?? 0,
                                         )
                                       }}
                                       className="inline-flex items-center gap-1 px-2.5 py-1 text-[11.5px] font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded transition cursor-pointer"
@@ -2997,7 +2997,7 @@ export default function Pricing({
                             {isFlat ? (
                               <div>
                                 <span className="font-mono font-bold text-ink">
-                                  {inr(g.customCommissionFlat || 400)}
+                                  {inr(g.customCommissionFlat || g.commissionValue || 0)}
                                 </span>
                                 <span className="text-[10px] text-ink-faint block font-mono">
                                   Flat / booking

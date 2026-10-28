@@ -400,31 +400,19 @@ export default function Settlements() {
                 <div className="flex justify-between">
                   <span className="text-ink-soft">Escrow Gross Volume:</span>
                   <strong className="font-mono text-ink text-[14px]">
-                    {inr(totalGrossAmount || 45000)}
+                    {inr(totalGrossAmount)}
                   </strong>
                 </div>
                 <div className="flex justify-between text-saffron-deep">
                   <span>GOMAA Platform Fee ({defaultCommPct}%):</span>
                   <span className="font-mono">
-                    −
-                    {inr(
-                      totalCommission ||
-                        Math.round(
-                          (totalGrossAmount || 45000) * (defaultCommPct / 100),
-                        ),
-                    )}
+                    −{inr(totalCommission)}
                   </span>
                 </div>
                 <div className="pt-2 border-t border-forest/20 flex justify-between font-bold text-forest text-[15px]">
                   <span>Total Net Disbursed ({defaultGaushalaPct}%):</span>
                   <span className="font-mono">
-                    {inr(
-                      totalPayable ||
-                        Math.round(
-                          (totalGrossAmount || 45000) *
-                            (defaultGaushalaPct / 100),
-                        ),
-                    )}
+                    {inr(totalPayable)}
                   </span>
                 </div>
               </div>

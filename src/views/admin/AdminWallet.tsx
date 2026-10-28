@@ -144,9 +144,9 @@ export default function AdminWallet({
         managerUniqueId,
         summary,
         totalBookings: gBookings.length,
-        totalGross: gTotalGross || 12000, // Seed realistic volume if clean state
-        gaushalaNet: gGaushalaNet || 9600,
-        sanctuaryCorpus: sanctuaryCorpus || 7200,
+        totalGross: gTotalGross,
+        gaushalaNet: gGaushalaNet,
+        sanctuaryCorpus: sanctuaryCorpus,
         managerWalletAvailable: summary.availableBalance,
         managerLifetimeWithdrawn: summary.totalWithdrawn,
         sharePct: summary.policy.managerSharePct,
