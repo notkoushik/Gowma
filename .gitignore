@@ -22,3 +22,6 @@ logs/
 /.opencode-skills/
 .opencode/
 server/data/backups/
+__pycache__/
+*.pyc
+
