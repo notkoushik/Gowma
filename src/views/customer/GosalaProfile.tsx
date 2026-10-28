@@ -620,73 +620,75 @@ export function EnRouteModal({
   const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${effectiveCustLat},${effectiveCustLng}&destination=${effectiveGosalaLat},${effectiveGosalaLng}`
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-ink/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
-      <div className="bg-card border border-line rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl">
+    <div className="fixed inset-0 z-[1000] bg-ink/75 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-6 animate-in fade-in duration-200">
+      <div className="bg-card border border-line rounded-xl sm:rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl">
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-line flex items-center justify-between gap-3 bg-paper">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-forest text-white grid place-items-center shadow-xs shrink-0">
-              <Navigation size={20} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-serif text-[17px] sm:text-[19px] font-bold text-ink">
-                  {mode === "route"
-                    ? "Sacred Transit & Road Route"
-                    : "Gaushala Premise Pinpoint"}
-                </h3>
-                <span className="font-mono text-[11px] px-2 py-0.5 rounded-full bg-forest text-white font-medium">
-                  {mode === "route" ? "Live Roadway" : "Satellite Verified"}
-                </span>
+        <div className="p-3 sm:p-5 border-b border-line bg-paper">
+          <div className="flex items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-forest text-white grid place-items-center shadow-xs shrink-0">
+                <Navigation size={18} className="sm:w-5 sm:h-5" />
               </div>
-              <p className="text-[12px] text-ink-faint">
-                {mode === "route"
-                  ? `Direct road route from your location to ${gosalaName}`
-                  : `Exact physical sanctuary location on the map`}
-              </p>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <h3 className="font-serif text-[15px] sm:text-[18px] font-bold text-ink leading-tight truncate">
+                    {mode === "route"
+                      ? "Sacred Transit Route"
+                      : "Gaushala Premise Pinpoint"}
+                  </h3>
+                  <span className="font-mono text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full bg-forest text-white font-medium whitespace-nowrap shrink-0">
+                    {mode === "route" ? "Live Roadway" : "Satellite Verified"}
+                  </span>
+                </div>
+                <p className="text-[11px] sm:text-[12px] text-ink-faint truncate mt-0.5">
+                  {mode === "route"
+                    ? `Direct road route from your location to ${gosalaName}`
+                    : `Exact physical sanctuary location on the map`}
+                </p>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <a
-              href={googleMapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line bg-card hover:bg-paper text-ink text-[12px] font-medium transition cursor-pointer shadow-xs"
-            >
-              <ExternalLink size={13} className="text-saffron" />
-              <span className="hidden sm:inline">Open in Google Maps</span>
-              <span className="sm:hidden">Maps</span>
-            </a>
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-8 w-8 rounded-lg border border-line bg-card hover:bg-paper-deep text-ink-soft grid place-items-center transition cursor-pointer"
-            >
-              <X size={16} />
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <a
+                href={googleMapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-line bg-card hover:bg-paper text-ink text-[11px] sm:text-[12px] font-medium transition cursor-pointer shadow-xs"
+              >
+                <ExternalLink size={12} className="text-saffron shrink-0" />
+                <span className="hidden sm:inline">Open in Maps</span>
+                <span className="sm:hidden font-mono">Maps</span>
+              </a>
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg border border-line bg-card hover:bg-paper-deep text-ink-soft grid place-items-center transition cursor-pointer"
+              >
+                <X size={15} />
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Telemetry Metric Strip (Only in Route Mode) */}
         {mode === "route" && (
-          <div className="p-3 sm:p-4 bg-paper-deep/60 border-b border-line flex flex-wrap items-center justify-between gap-3 text-[12.5px]">
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-1.5 font-medium text-ink">
-                <span className="text-ink-faint font-mono text-[11px] uppercase tracking-wider">
+          <div className="px-3 py-2 sm:p-4 bg-paper-deep/60 border-b border-line flex flex-wrap items-center justify-between gap-2 text-[12px] sm:text-[12.5px]">
+            <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+              <div className="flex items-center gap-1 font-medium text-ink">
+                <span className="text-ink-faint font-mono text-[10.5px] uppercase tracking-wider">
                   Distance:
                 </span>
-                <span className="font-serif font-bold text-[15px] text-forest">
+                <span className="font-serif font-bold text-[14px] sm:text-[15px] text-forest whitespace-nowrap">
                   {roadRoute?.distanceKm
                     ? `${roadRoute.distanceKm} km`
                     : "Calculating..."}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 font-medium text-ink">
-                <span className="text-ink-faint font-mono text-[11px] uppercase tracking-wider">
+              <div className="flex items-center gap-1 font-medium text-ink">
+                <span className="text-ink-faint font-mono text-[10.5px] uppercase tracking-wider">
                   Est. Transit:
                 </span>
-                <span className="font-serif font-bold text-[15px] text-saffron-deep">
+                <span className="font-serif font-bold text-[14px] sm:text-[15px] text-saffron-deep whitespace-nowrap">
                   {roadRoute?.durationMin
                     ? `~${roadRoute.durationMin} mins`
                     : "Calculating..."}
@@ -702,29 +704,31 @@ export function EnRouteModal({
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-ok/10 border border-ok/20 text-ok font-mono text-[11px] font-medium">
-              <CheckCircle2 size={12} />
-              <span>Within 35 km Doorstep Radius</span>
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-ok/10 border border-ok/20 text-ok font-mono text-[10px] sm:text-[11px] font-medium whitespace-nowrap">
+              <CheckCircle2 size={11} className="shrink-0" />
+              <span>Within 35 km Radius</span>
             </div>
           </div>
         )}
 
         {/* Map Canvas */}
-        <div className="relative w-full h-[400px] sm:h-[480px] md:h-[520px] bg-paper-deep overflow-hidden">
+        <div className="relative w-full h-[300px] xs:h-[350px] sm:h-[450px] md:h-[500px] bg-paper-deep overflow-hidden">
           <div ref={mapContainerRef} className="absolute inset-0 z-0" />
         </div>
 
         {/* Footer */}
-        <div className="p-3.5 sm:p-4 border-t border-line bg-paper flex items-center justify-between gap-3 text-[12px]">
-          <div className="flex items-center gap-2 text-ink-soft min-w-0">
-            <MapPin size={14} className="text-saffron shrink-0" />
-            <span className="truncate">{gosalaAddress}</span>
+        <div className="p-3 sm:p-4 border-t border-line bg-paper flex items-center justify-between gap-3 text-[12px]">
+          <div className="flex items-center gap-1.5 text-ink-soft min-w-0 flex-1">
+            <MapPin size={13} className="text-saffron shrink-0" />
+            <span className="truncate text-[11.5px] sm:text-[12px] font-medium text-ink">
+              {gosalaAddress || customerAddress || "Sanctuary Location"}
+            </span>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 rounded-lg bg-forest text-white hover:bg-forest-deep font-semibold transition cursor-pointer shadow-xs shrink-0"
+            className="px-4 py-1.5 rounded-lg bg-forest text-white hover:bg-forest/90 font-medium text-[12px] cursor-pointer shadow-xs shrink-0 transition"
           >
             Done
           </button>

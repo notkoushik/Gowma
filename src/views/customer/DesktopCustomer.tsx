@@ -633,11 +633,11 @@ export default function DesktopCustomer({
                         </span>
                       </div>
                       <div className="p-4">
-                        <div className="flex items-baseline justify-between">
-                          <span className="font-serif text-[17px] text-ink">
-                            {a.name}
+                        <div className="flex items-baseline justify-between gap-2 min-w-0">
+                          <span className="font-serif text-[17px] text-ink font-semibold break-words line-clamp-1 min-w-0 flex-1">
+                            {a.name.replace(/_/g, " ")}
                           </span>
-                          <span className="font-mono text-[13px] text-ink tabular">
+                          <span className="font-mono text-[13px] text-ink tabular font-semibold shrink-0 whitespace-nowrap ml-1">
                             {inr(a.price)}
                           </span>
                         </div>

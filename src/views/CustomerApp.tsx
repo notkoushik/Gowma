@@ -693,11 +693,11 @@ function Discover({
                   />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-serif text-[16px] text-ink">
-                      {a.name}
+                  <div className="flex items-start justify-between gap-2.5 min-w-0">
+                    <span className="font-serif text-[15px] sm:text-[16px] text-ink font-semibold break-words line-clamp-2 min-w-0 flex-1 leading-snug">
+                      {a.name.replace(/_/g, " ")}
                     </span>
-                    <span className="font-mono text-[13px] text-ink tabular font-medium">
+                    <span className="font-mono text-[13px] text-ink tabular font-semibold shrink-0 whitespace-nowrap ml-1 self-start">
                       {inr(a.price)}
                     </span>
                   </div>
@@ -805,17 +805,17 @@ function AnimalDetail({
       </div>
 
       <div className="p-4 space-y-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="font-serif text-[24px] text-ink leading-tight">
-              {animal.name}
+        <div className="flex items-start justify-between gap-3 min-w-0">
+          <div className="min-w-0 flex-1">
+            <h1 className="font-serif text-[22px] sm:text-[24px] text-ink leading-tight break-words">
+              {animal.name.replace(/_/g, " ")}
             </h1>
-            <div className="text-[12.5px] text-ink-faint">
+            <div className="text-[12.5px] text-ink-faint mt-0.5">
               {animal.breed || animal.type} · {animal.category}
             </div>
           </div>
-          <div className="text-right">
-            <div className="font-mono text-[20px] text-ink tabular">
+          <div className="text-right shrink-0">
+            <div className="font-mono text-[18px] sm:text-[20px] text-ink tabular font-semibold whitespace-nowrap">
               {inr(animal.price)}
             </div>
             <div className="text-[11px] text-ink-faint">base · 60 min</div>
