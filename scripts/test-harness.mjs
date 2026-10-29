@@ -206,9 +206,14 @@ export class TestHarness {
       data: { password: hashPassword(testPassword) },
     })
 
+    const endpoint =
+      user.role === "SUPER_ADMIN" || user.role === "OPERATIONS_ADMIN"
+        ? "/api/auth/admin-login"
+        : "/api/auth/login"
+
     const loginRes = await handleApiRequest(
       "POST",
-      "/api/auth/login",
+      endpoint,
       JSON.stringify({ emailOrPhone: user.email, password: testPassword })
     )
 

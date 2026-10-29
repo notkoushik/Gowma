@@ -826,13 +826,13 @@ import crypto2 from "node:crypto";
 
 // server/auth/jwt.ts
 import crypto from "crypto";
-var FALLBACK_JWT_SECRET = "gomaa_secure_jwt_secret_shield_prod_2026_pan_india_vedic_cow_sanctuary_987654321";
-var JWT_SECRET = process.env.GOMAA_JWT_SECRET || process.env.JWT_SECRET || FALLBACK_JWT_SECRET;
-if (process.env.NODE_ENV === "production" && JWT_SECRET === FALLBACK_JWT_SECRET) {
-  console.warn(
-    "[Security Notice] Using built-in fallback JWT_SECRET. For production, set GOMAA_JWT_SECRET in your Vercel Environment Variables."
+var DEV_FALLBACK_JWT_SECRET = "gomaa_secure_jwt_secret_shield_prod_2026_pan_india_vedic_cow_sanctuary_987654321";
+if (process.env.NODE_ENV === "production" && (!process.env.GOMAA_JWT_SECRET || process.env.GOMAA_JWT_SECRET.length < 32)) {
+  throw new Error(
+    "[FATAL SECURITY] In production, GOMAA_JWT_SECRET is mandatory and must be a high-entropy secret at least 32 characters long."
   );
 }
+var JWT_SECRET = process.env.GOMAA_JWT_SECRET || process.env.JWT_SECRET || DEV_FALLBACK_JWT_SECRET;
 function base64UrlEncode(strOrBuffer) {
   const buf = typeof strOrBuffer === "string" ? Buffer.from(strOrBuffer, "utf-8") : strOrBuffer;
   return buf.toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
@@ -958,7 +958,7 @@ function verifyQuote(token, customerId) {
 }
 
 // server/router.ts
-import crypto7 from "node:crypto";
+import crypto6 from "node:crypto";
 
 // server/services/razorpayService.ts
 import crypto3 from "node:crypto";
@@ -1032,9 +1032,18 @@ async function createPaymentOrder(input, options = {}) {
   const quoteToken = text(input?.quoteToken, "quote");
   const holdId = text(input?.holdId, "hold");
   const amountPaise = amount(input?.amountPaise);
-  const order = await request("/orders", options, "POST", { amount: amountPaise, currency: "INR", notes: { customerId, holdId, quoteDigest: digest(quoteToken) } });
-  if (typeof order.id !== "string" || !order.id) throw new Error("Razorpay returned an invalid order");
-  return { orderId: order.id, amountPaise, currency: "INR" };
+  try {
+    const order = await request("/orders", options, "POST", { amount: amountPaise, currency: "INR", notes: { customerId, holdId, quoteDigest: digest(quoteToken) } });
+    if (typeof order.id === "string" && order.id) {
+      return { orderId: order.id, amountPaise, currency: "INR" };
+    }
+  } catch (err) {
+    if (process.env.NODE_ENV !== "production") {
+      return { orderId: `order_test_${crypto3.randomBytes(8).toString("hex")}`, amountPaise, currency: "INR" };
+    }
+    throw err;
+  }
+  throw new Error("Razorpay returned an invalid order");
 }
 function verifyWebhookSignature(rawBody, signature, secret) {
   const webhookSecret = secret ?? process.env.RAZORPAY_WEBHOOK_SECRET;
@@ -1043,6 +1052,190 @@ function verifyWebhookSignature(rawBody, signature, secret) {
   if (typeof rawBody !== "string") return false;
   const expected = crypto3.createHmac("sha256", webhookSecret).update(rawBody).digest("hex");
   return equalHex(signature, expected);
+}
+
+// server/services/walletService.ts
+async function getOrCreateWallet(userId) {
+  if (!userId) throw new Error("User ID is required to access wallet");
+  const existing = await prisma.wallet.findUnique({
+    where: { userId }
+  });
+  if (existing) return existing;
+  try {
+    return await prisma.wallet.create({
+      data: {
+        userId,
+        balancePaise: 0n,
+        currency: "INR",
+        isActive: true
+      }
+    });
+  } catch (err) {
+    const retry = await prisma.wallet.findUnique({ where: { userId } });
+    if (retry) return retry;
+    throw err;
+  }
+}
+async function getWalletBalance(userId) {
+  const wallet = await getOrCreateWallet(userId);
+  const balancePaise = BigInt(wallet.balancePaise);
+  const balanceRupees = Number(balancePaise) / 100;
+  return {
+    walletId: wallet.id,
+    userId: wallet.userId,
+    balancePaise: balancePaise.toString(),
+    balanceRupees,
+    currency: wallet.currency,
+    isActive: wallet.isActive
+  };
+}
+async function creditWallet(input) {
+  const { userId, purpose, referenceId, idempotencyKey, description, metadata } = input;
+  const amountPaise = BigInt(input.amountPaise);
+  if (amountPaise <= 0n) {
+    throw new Error("Credit amount must be greater than zero");
+  }
+  if (!idempotencyKey || typeof idempotencyKey !== "string") {
+    throw new Error("A unique idempotencyKey is required for wallet mutations");
+  }
+  return await prisma.$transaction(async (tx) => {
+    const existingTx = await tx.walletTransaction.findUnique({
+      where: { idempotencyKey }
+    });
+    if (existingTx) {
+      if (existingTx.status === "SUCCESS") {
+        return {
+          idempotentReplay: true,
+          transactionId: existingTx.id,
+          balanceAfter: existingTx.balanceAfter.toString()
+        };
+      }
+      throw new Error(`Transaction with idempotency key ${idempotencyKey} previously ended in ${existingTx.status}`);
+    }
+    let wallet = await tx.wallet.findUnique({ where: { userId } });
+    if (!wallet) {
+      wallet = await tx.wallet.create({
+        data: { userId, balancePaise: 0n, currency: "INR" }
+      });
+    }
+    if (!wallet.isActive) {
+      throw new Error("Wallet account is currently suspended or inactive");
+    }
+    const balanceBefore = BigInt(wallet.balancePaise);
+    const balanceAfter = balanceBefore + amountPaise;
+    const updatedWallet = await tx.wallet.update({
+      where: { id: wallet.id },
+      data: { balancePaise: balanceAfter }
+    });
+    const record = await tx.walletTransaction.create({
+      data: {
+        walletId: wallet.id,
+        amountPaise,
+        type: "CREDIT",
+        purpose,
+        status: "SUCCESS",
+        balanceBefore,
+        balanceAfter,
+        idempotencyKey,
+        referenceId: referenceId || null,
+        description: description || `Wallet credited with \u20B9${Number(amountPaise) / 100}`,
+        metadata: metadata ? metadata : void 0
+      }
+    });
+    return {
+      idempotentReplay: false,
+      transactionId: record.id,
+      amountPaise: amountPaise.toString(),
+      balanceBefore: balanceBefore.toString(),
+      balanceAfter: balanceAfter.toString(),
+      balanceRupees: Number(balanceAfter) / 100
+    };
+  });
+}
+async function debitWallet(input) {
+  const { userId, purpose, referenceId, idempotencyKey, description, metadata } = input;
+  const amountPaise = BigInt(input.amountPaise);
+  if (amountPaise <= 0n) {
+    throw new Error("Debit amount must be greater than zero");
+  }
+  if (!idempotencyKey || typeof idempotencyKey !== "string") {
+    throw new Error("A unique idempotencyKey is required for wallet mutations");
+  }
+  return await prisma.$transaction(async (tx) => {
+    const existingTx = await tx.walletTransaction.findUnique({
+      where: { idempotencyKey }
+    });
+    if (existingTx) {
+      if (existingTx.status === "SUCCESS") {
+        return {
+          idempotentReplay: true,
+          transactionId: existingTx.id,
+          balanceAfter: existingTx.balanceAfter.toString()
+        };
+      }
+      throw new Error(`Transaction with idempotency key ${idempotencyKey} previously ended in ${existingTx.status}`);
+    }
+    const wallet = await tx.wallet.findUnique({ where: { userId } });
+    if (!wallet) {
+      throw new Error("Wallet not found. Top-up required before debiting.");
+    }
+    if (!wallet.isActive) {
+      throw new Error("Wallet account is currently suspended or inactive");
+    }
+    const balanceBefore = BigInt(wallet.balancePaise);
+    if (balanceBefore < amountPaise) {
+      throw new Error(`Insufficient wallet balance. Available: \u20B9${Number(balanceBefore) / 100}, Required: \u20B9${Number(amountPaise) / 100}`);
+    }
+    const balanceAfter = balanceBefore - amountPaise;
+    await tx.wallet.update({
+      where: { id: wallet.id },
+      data: { balancePaise: balanceAfter }
+    });
+    const record = await tx.walletTransaction.create({
+      data: {
+        walletId: wallet.id,
+        amountPaise,
+        type: "DEBIT",
+        purpose,
+        status: "SUCCESS",
+        balanceBefore,
+        balanceAfter,
+        idempotencyKey,
+        referenceId: referenceId || null,
+        description: description || `Wallet debited by \u20B9${Number(amountPaise) / 100}`,
+        metadata: metadata ? metadata : void 0
+      }
+    });
+    return {
+      idempotentReplay: false,
+      transactionId: record.id,
+      amountPaise: amountPaise.toString(),
+      balanceBefore: balanceBefore.toString(),
+      balanceAfter: balanceAfter.toString(),
+      balanceRupees: Number(balanceAfter) / 100
+    };
+  });
+}
+async function getWalletTransactions(userId, limit = 50) {
+  const wallet = await getOrCreateWallet(userId);
+  const transactions = await prisma.walletTransaction.findMany({
+    where: { walletId: wallet.id },
+    orderBy: { createdAt: "desc" },
+    take: Math.min(limit, 100)
+  });
+  return transactions.map((t) => ({
+    id: t.id,
+    amountPaise: t.amountPaise.toString(),
+    amountRupees: Number(t.amountPaise) / 100,
+    type: t.type,
+    purpose: t.purpose,
+    status: t.status,
+    balanceBefore: t.balanceBefore.toString(),
+    balanceAfter: t.balanceAfter.toString(),
+    referenceId: t.referenceId,
+    description: t.description,
+    createdAt: t.createdAt.toISOString()
+  }));
 }
 
 // server/auth/password.ts
@@ -1068,7 +1261,32 @@ function verifyPassword(password, stored) {
 }
 
 // server/auth/authService.ts
-import crypto5 from "node:crypto";
+var adminRateLimitMap = /* @__PURE__ */ new Map();
+function checkAdminRateLimit(ipOrKey) {
+  const now = Date.now();
+  const entry = adminRateLimitMap.get(ipOrKey);
+  if (!entry) return;
+  if (entry.blockedUntil && now < entry.blockedUntil) {
+    const remainingSec = Math.ceil((entry.blockedUntil - now) / 1e3);
+    throw new Error(`Too many administrative attempts. Locked out for ${remainingSec} seconds.`);
+  }
+  if (now - entry.firstAttemptAt > 15 * 60 * 1e3) {
+    adminRateLimitMap.delete(ipOrKey);
+  }
+}
+function recordAdminLoginAttempt(ipOrKey, success) {
+  const now = Date.now();
+  if (success) {
+    adminRateLimitMap.delete(ipOrKey);
+    return;
+  }
+  const entry = adminRateLimitMap.get(ipOrKey) || { attempts: 0, firstAttemptAt: now };
+  entry.attempts += 1;
+  if (entry.attempts >= 5) {
+    entry.blockedUntil = now + 15 * 60 * 1e3;
+  }
+  adminRateLimitMap.set(ipOrKey, entry);
+}
 var inMemoryPasswords = /* @__PURE__ */ new Map();
 function generateUniqueId(role, phone) {
   const cleanDigits = (phone || "").replace(/\D/g, "");
@@ -1131,87 +1349,7 @@ function getAuthUserFromHeader(authHeader) {
   const result = verifyJwt(token);
   return result.valid && result.payload ? result.payload : null;
 }
-async function authenticateOrResolveUser(emailOrPhone, roleHint, password) {
-  const query = (emailOrPhone || "").trim().toLowerCase();
-  if (!query) throw new Error("Email, phone, or user ID is required");
-  const rawDigits = emailOrPhone.replace(/\D/g, "").slice(-10);
-  const user = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { id: query },
-        { uniqueId: { equals: query, mode: "insensitive" } },
-        { email: { equals: query, mode: "insensitive" } },
-        { phone: { equals: query, mode: "insensitive" } },
-        ...rawDigits.length === 10 ? [
-          { phone: { contains: rawDigits } },
-          { phone: { equals: `+91 ${rawDigits}` } },
-          { phone: { equals: `+91${rawDigits}` } }
-        ] : []
-      ]
-    },
-    include: { managerAssignments: { include: { gosala: true } } }
-  });
-  if (!user) throw new Error("Invalid credentials or user not found");
-  if (user.isActive === false) throw new Error("Account is inactive");
-  if (!user.uniqueId) {
-    const autoId = generateUniqueId(user.role, user.phone);
-    try {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { uniqueId: autoId }
-      });
-      user.uniqueId = autoId;
-    } catch {
-    }
-  }
-  if (!password) throw new Error("Password is required");
-  if (isPasswordHash(user.password)) {
-    let isValid = verifyPassword(password, user.password);
-    if (!isValid && password.length >= 1) {
-      const altFirstChar = password[0] === password[0].toUpperCase() ? password[0].toLowerCase() + password.slice(1) : password[0].toUpperCase() + password.slice(1);
-      if (verifyPassword(altFirstChar, user.password)) {
-        isValid = true;
-        try {
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { password: hashPassword(password, true) }
-          });
-        } catch {
-        }
-      }
-    }
-    if (!isValid) throw new Error("Invalid credentials");
-  } else {
-    const stored = typeof user.password === "string" ? user.password : "";
-    const a = Buffer.from(password);
-    const b = Buffer.from(stored);
-    let valid = a.length === b.length && crypto5.timingSafeEqual(a, b);
-    if (!valid && password.length >= 1 && stored.length >= 1) {
-      const altFirstChar = password[0] === password[0].toUpperCase() ? password[0].toLowerCase() + password.slice(1) : password[0].toUpperCase() + password.slice(1);
-      const altA = Buffer.from(altFirstChar);
-      if (altA.length === b.length && crypto5.timingSafeEqual(altA, b)) {
-        valid = true;
-      }
-    }
-    if (!valid) throw new Error("Invalid credentials");
-    try {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { password: hashPassword(password, true) }
-      });
-    } catch (updateErr) {
-      console.warn("[auth] Non-fatal password hash upgrade notice:", updateErr?.message);
-      try {
-        if (user.email) {
-          await prisma.user.update({
-            where: { email: user.email },
-            data: { password: hashPassword(password, true) }
-          });
-        }
-      } catch {
-      }
-    }
-  }
+async function buildUserSession(user) {
   const assignedGosalas = (user.managerAssignments || []).filter((a) => {
     if (!a.gosala) return false;
     if (user.role === "GOSALA_MANAGER") {
@@ -1316,13 +1454,97 @@ async function authenticateOrResolveUser(emailOrPhone, roleHint, password) {
     }
   };
 }
+async function authenticateOrResolveUser(emailOrPhone, roleHint, password) {
+  const query = (emailOrPhone || "").trim().toLowerCase();
+  if (!query) throw new Error("Email, phone, or user ID is required");
+  const rawDigits = emailOrPhone.replace(/\D/g, "").slice(-10);
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { id: query },
+        { uniqueId: { equals: query, mode: "insensitive" } },
+        { email: { equals: query, mode: "insensitive" } },
+        { phone: { equals: query, mode: "insensitive" } },
+        ...rawDigits.length === 10 ? [
+          { phone: { contains: rawDigits } },
+          { phone: { equals: `+91 ${rawDigits}` } },
+          { phone: { equals: `+91${rawDigits}` } }
+        ] : []
+      ]
+    },
+    include: { managerAssignments: { include: { gosala: true } } }
+  });
+  if (!user) throw new Error("Invalid credentials or user not found");
+  if (user.isActive === false) throw new Error("Account is inactive");
+  if (user.role === "SUPER_ADMIN" || user.role === "OPERATIONS_ADMIN") {
+    throw new Error("Administrative accounts must sign in via the secure /admin portal.");
+  }
+  if (!user.uniqueId) {
+    const autoId = generateUniqueId(user.role, user.phone);
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { uniqueId: autoId }
+      });
+      user.uniqueId = autoId;
+    } catch {
+    }
+  }
+  if (!password) throw new Error("Password is required");
+  if (!isPasswordHash(user.password) || !verifyPassword(password, user.password)) {
+    throw new Error("Invalid credentials");
+  }
+  return buildUserSession(user);
+}
+async function authenticateAdminUser(emailOrPhone, password) {
+  const query = (emailOrPhone || "").trim().toLowerCase();
+  if (!query) throw new Error("Administrative email, phone, or ID is required");
+  const rawDigits = emailOrPhone.replace(/\D/g, "").slice(-10);
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { id: query },
+        { uniqueId: { equals: query, mode: "insensitive" } },
+        { email: { equals: query, mode: "insensitive" } },
+        { phone: { equals: query, mode: "insensitive" } },
+        ...rawDigits.length === 10 ? [
+          { phone: { contains: rawDigits } },
+          { phone: { equals: `+91 ${rawDigits}` } },
+          { phone: { equals: `+91${rawDigits}` } }
+        ] : []
+      ]
+    },
+    include: { managerAssignments: { include: { gosala: true } } }
+  });
+  if (!user) throw new Error("Invalid administrative credentials");
+  if (user.isActive === false) throw new Error("Account is inactive");
+  if (user.role !== "SUPER_ADMIN" && user.role !== "OPERATIONS_ADMIN") {
+    throw new Error("Access Denied: Administrative credentials required.");
+  }
+  if (!password) throw new Error("Password is required");
+  if (!isPasswordHash(user.password) || !verifyPassword(password, user.password)) {
+    throw new Error("Invalid administrative credentials");
+  }
+  if (!user.uniqueId) {
+    const autoId = generateUniqueId(user.role, user.phone);
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { uniqueId: autoId }
+      });
+      user.uniqueId = autoId;
+    } catch {
+    }
+  }
+  return buildUserSession(user);
+}
 async function registerUser(payload) {
   const emailNorm = payload.email.trim().toLowerCase();
   const rawDigits = (payload.phone || "").replace(/\D/g, "").slice(-10);
   const hasValidPhone = rawDigits.length === 10;
   const phoneFormatted = hasValidPhone ? `+91 ${rawDigits}` : `+91 98${Math.floor(1e7 + Math.random() * 9e7)}`;
-  if (!payload.name || !payload.email || !payload.role) {
-    throw new Error("Full name, email address, and role are required for registration");
+  if (!payload.name || !payload.email) {
+    throw new Error("Full name and email address are required for registration");
   }
   const phoneQuery = hasValidPhone ? [
     { phone: { equals: `+91 ${rawDigits}` } },
@@ -1335,11 +1557,6 @@ async function registerUser(payload) {
         { email: { equals: emailNorm, mode: "insensitive" } },
         ...phoneQuery
       ]
-    },
-    include: {
-      managerAssignments: {
-        include: { gosala: true }
-      }
     }
   });
   if (existing) {
@@ -1349,23 +1566,20 @@ async function registerUser(payload) {
     if (isEmailMatch && isPhoneMatch) {
       throw new Error(`An account with email "${emailNorm}" is already registered. Please sign in or use "Forgot Password".`);
     } else if (isEmailMatch) {
-      if (payload.role === "manager") {
-        throw new Error(`An account with email "${emailNorm}" is already registered. If you wish to reassign a Gaushala to this manager, please select them from the Custodians Matrix instead of registering a new account.`);
-      } else {
-        throw new Error(`An account with email "${emailNorm}" is already registered. Please sign in with your password or use "Forgot Password" to reset it.`);
-      }
+      throw new Error(`An account with email "${emailNorm}" is already registered. Please sign in with your password or use "Forgot Password" to reset it.`);
     } else if (isPhoneMatch) {
       throw new Error(`The mobile number "${payload.phone.trim()}" is already registered with another account. Please use a different phone number or sign in with your registered email.`);
     } else {
       throw new Error(`An account with matching credentials is already registered. Please sign in instead.`);
     }
   }
-  const dbRole = mapFrontendToDbRole(payload.role);
+  const dbRole = "CUSTOMER";
+  const feRole = "customer";
   if (!payload.password || payload.password.length < 8) {
     throw new Error("Password must be at least 8 characters");
   }
   const passwordHash = hashPassword(payload.password);
-  const uniqueId = generateUniqueId(payload.role, phoneFormatted);
+  const uniqueId = generateUniqueId("CUSTOMER", phoneFormatted);
   const user = await prisma.user.create({
     data: {
       uniqueId,
@@ -1377,63 +1591,15 @@ async function registerUser(payload) {
       isActive: true
     }
   });
-  const assignedGosalas = [];
-  if (dbRole === "GOSALA_MANAGER") {
-    let targetGosalaId = payload.gosalaId;
-    let gRec = null;
-    if (targetGosalaId) {
-      gRec = await prisma.gosala.findUnique({ where: { id: targetGosalaId } });
-    } else if (payload.gosalaName) {
-      gRec = await prisma.gosala.findFirst({
-        where: { name: { contains: payload.gosalaName, mode: "insensitive" } }
-      });
-      if (gRec) targetGosalaId = gRec.id;
-    }
-    if (targetGosalaId && gRec) {
-      try {
-        const assignment = await prisma.gosalaManagerAssignment.create({
-          data: {
-            userId: user.id,
-            gosalaId: targetGosalaId,
-            region: gRec.region || "Cyberabad / Gachibowli Zone",
-            status: "Active"
-          },
-          include: { gosala: true }
-        });
-        if (assignment.gosala) {
-          assignedGosalas.push({ id: assignment.gosala.id, name: assignment.gosala.name });
-        }
-      } catch (err) {
-        console.warn("Could not create manager assignment during registration:", err);
-      }
-    }
-  }
-  const metaPatch = {};
-  if (payload.role === "customer" && payload.customerData) {
-    metaPatch.customerData = {
-      ...payload.customerData,
+  const metaPatch = {
+    customerData: {
+      ...payload.customerData || {},
       memberSince: (/* @__PURE__ */ new Date()).toLocaleDateString("en-IN", { month: "short", year: "numeric" }),
       totalBookings: 0
-    };
-  } else if (payload.role === "driver" && payload.driverData) {
-    metaPatch.driverData = {
-      driverId: `DRV-${user.id.slice(0, 4)}`,
-      status: "Available",
-      rating: 5,
-      totalTrips: 0,
-      phone: user.phone,
-      ...payload.driverData
-    };
-  } else if (payload.role === "manager" && payload.managerData) {
-    metaPatch.managerData = payload.managerData;
-  }
-  if (Object.keys(metaPatch).length > 0) {
-    saveUserMeta(user.email, metaPatch);
-    saveUserMeta(user.id, metaPatch);
-  }
-  const feRole = mapDbRoleToFrontend(user.role);
-  const gosalaIds = assignedGosalas.map((g) => g.id);
-  const gosalaNames = assignedGosalas.map((g) => g.name);
+    }
+  };
+  saveUserMeta(user.email, metaPatch);
+  saveUserMeta(user.id, metaPatch);
   const token = signJwt({
     userId: user.id,
     uniqueId: user.uniqueId || uniqueId,
@@ -1442,9 +1608,8 @@ async function registerUser(payload) {
     phone: user.phone,
     role: feRole,
     dbRole: user.role,
-    gosalaIds,
-    gosalaNames,
-    driverData: metaPatch.driverData,
+    gosalaIds: [],
+    gosalaNames: [],
     customerData: metaPatch.customerData
   });
   return {
@@ -1458,9 +1623,8 @@ async function registerUser(payload) {
       role: feRole,
       dbRole: user.role,
       avatar: user.avatar,
-      gosalas: assignedGosalas,
-      assignedGosalaNames: gosalaNames,
-      driverData: metaPatch.driverData,
+      gosalas: [],
+      assignedGosalaNames: [],
       customerData: metaPatch.customerData
     }
   };
@@ -2026,7 +2190,7 @@ async function sendOtpSms({
 }
 
 // server/services/otpService.ts
-import crypto6 from "node:crypto";
+import crypto5 from "node:crypto";
 function maskIdentifier(id, channel) {
   if (channel === "EMAIL" || id.includes("@")) {
     const [local, domain] = id.split("@");
@@ -2042,8 +2206,8 @@ function maskIdentifier(id, channel) {
   }
 }
 function hashOtp(otp) {
-  const salt = crypto6.randomBytes(16).toString("hex");
-  const derived = crypto6.scryptSync(otp, salt, 32);
+  const salt = crypto5.randomBytes(16).toString("hex");
+  const derived = crypto5.scryptSync(otp, salt, 32);
   return `scrypt$${salt}$${derived.toString("hex")}`;
 }
 function verifyOtpHash(otp, storedHash) {
@@ -2052,10 +2216,10 @@ function verifyOtpHash(otp, storedHash) {
   if (parts.length !== 3) return false;
   const [, salt, digest2] = parts;
   if (!salt || !digest2) return false;
-  const derived = crypto6.scryptSync(otp, salt, 32).toString("hex");
+  const derived = crypto5.scryptSync(otp, salt, 32).toString("hex");
   const bufExpected = Buffer.from(digest2);
   const bufActual = Buffer.from(derived);
-  return bufExpected.length === bufActual.length && crypto6.timingSafeEqual(bufExpected, bufActual);
+  return bufExpected.length === bufActual.length && crypto5.timingSafeEqual(bufExpected, bufActual);
 }
 var otpTableVerified = false;
 async function ensureOtpTable() {
@@ -2126,10 +2290,10 @@ async function requestPasswordResetOtp(emailOrPhone, channel = "EMAIL", ipAddres
   if (recentCount >= 5) {
     throw new Error("Too many verification requests. Please wait 15 minutes before requesting another code.");
   }
-  const rawOtp = crypto6.randomInt(1e5, 999999).toString();
+  const rawOtp = crypto5.randomInt(1e5, 999999).toString();
   const otpHash = hashOtp(rawOtp);
   const expiresAt = new Date(Date.now() + 10 * 60 * 1e3);
-  const otpId = crypto6.randomUUID();
+  const otpId = crypto5.randomUUID();
   const primaryId = channel === "PHONE" && rawDigits.length === 10 ? rawDigits : user.email.toLowerCase();
   await prisma.$executeRawUnsafe(
     `INSERT INTO "verification_otps" 
@@ -2148,7 +2312,7 @@ async function requestPasswordResetOtp(emailOrPhone, channel = "EMAIL", ipAddres
         `INSERT INTO "verification_otps" 
          ("id", "identifier", "otpHash", "channel", "purpose", "attempts", "maxAttempts", "expiresAt", "used", "ipAddress", "createdAt") 
          VALUES ($1, $2, $3, $4, 'PASSWORD_RESET', 0, 5, $5, false, $6, NOW())`,
-        crypto6.randomUUID(),
+        crypto5.randomUUID(),
         user.email.toLowerCase(),
         otpHash,
         channel,
@@ -3155,7 +3319,11 @@ function formatBooking(b) {
       }),
       remark: admApproval.remark,
       actorRole: admApproval.actorRole
-    } : void 0
+    } : void 0,
+    paymentProvider: b.paymentProvider || "RAZORPAY",
+    paymentOrderId: b.paymentOrderId || void 0,
+    paymentId: b.paymentId || void 0,
+    walletTxId: b.walletTxId || void 0
   };
 }
 function formatManagerUser(user) {
@@ -3232,7 +3400,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   const { pathname, query } = parseUrl(rawUrl);
   if (!pathname.startsWith("/api/")) return null;
   const authUser = getAuthUserFromHeader(headers?.authorization || headers?.Authorization);
-  const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/auth/accounts" || pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/places/search" || pathname === "/api/animals" || pathname === "/api/gosalas" || pathname === "/api/vets" || pathname === "/api/debug/email-status");
+  const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/admin-login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/places/search" || pathname === "/api/animals" || pathname === "/api/gosalas" || pathname === "/api/vets");
   if (!isPublicRoute && !authUser) {
     return { status: 401, body: { ok: false, error: "Authentication required" } };
   }
@@ -3241,8 +3409,12 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     const denied = requireRole("customer", "admin", "super_admin");
     if (denied) return denied;
   }
-  if ((method === "GET" || method === "POST") && pathname === "/api/users") {
+  if ((method === "GET" || method === "POST") && pathname === "/api/users" || method === "GET" && pathname === "/api/debug/email-status") {
     const denied = requireRole("super_admin");
+    if (denied) return denied;
+  }
+  if (method === "GET" && pathname === "/api/auth/accounts") {
+    const denied = requireRole("super_admin", "admin");
     if (denied) return denied;
   }
   if ((method === "PUT" || method === "DELETE") && /^\/api\/users\/[^/]+$/.test(pathname)) {
@@ -3251,6 +3423,10 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   }
   if ((method === "PUT" || method === "PATCH") && (pathname === "/api/pricing-config" || pathname === "/api/pricing/config") || method === "POST" && pathname.startsWith("/api/settlements/")) {
     const denied = requireRole("super_admin");
+    if (denied) return denied;
+  }
+  if (method === "GET" && (pathname === "/api/settlements" || pathname === "/api/settlements/schedule")) {
+    const denied = requireRole("super_admin", "admin", "manager");
     if (denied) return denied;
   }
   let body = {};
@@ -3276,8 +3452,33 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       }
       return { status: 200, body: { ok: true, token: session.token, user: session.user } };
     } catch (err) {
+      if (err.message?.includes("/admin portal")) {
+        return { status: 403, body: { ok: false, error: err.message, requiresAdminPortal: true } };
+      }
       const isAuthErr = err.message?.toLowerCase().includes("password") || err.message?.toLowerCase().includes("invalid") || err.message?.toLowerCase().includes("unauthorized");
       return { status: isAuthErr ? 401 : 500, body: { ok: false, error: err.message || "Authentication failed" } };
+    }
+  }
+  if (method === "POST" && pathname === "/api/auth/admin-login") {
+    const clientIp = headers?.["x-forwarded-for"] || "127.0.0.1";
+    try {
+      const emailOrPhone = body.email || body.phone || body.username || body.emailOrPhone || "";
+      if (!emailOrPhone) {
+        return { status: 400, body: { ok: false, error: "Administrative email, phone, or ID is required" } };
+      }
+      checkAdminRateLimit(clientIp);
+      const session = await authenticateAdminUser(emailOrPhone, body.password);
+      recordAdminLoginAttempt(clientIp, true);
+      console.log(`[ADMIN SECURITY AUDIT] Successful login for ${session.user.email} (${session.user.role}) from ${clientIp}`);
+      return { status: 200, body: { ok: true, token: session.token, user: session.user } };
+    } catch (err) {
+      recordAdminLoginAttempt(clientIp, false);
+      console.warn(`[ADMIN SECURITY AUDIT] Failed login from ${clientIp}: ${err.message}`);
+      const isAccessDenied = err.message?.includes("Access Denied");
+      const isRateLimit = err.message?.includes("Too many");
+      const isAuthErr = err.message?.toLowerCase().includes("password") || err.message?.toLowerCase().includes("invalid");
+      const status = isRateLimit ? 429 : isAccessDenied ? 403 : isAuthErr ? 401 : 500;
+      return { status, body: { ok: false, error: err.message || "Administrative authentication failed" } };
     }
   }
   if (method === "GET" && pathname === "/api/auth/me") {
@@ -3604,7 +3805,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         }
         return tx.temporarySlotHold.create({
           data: {
-            id: "HOLD-" + crypto7.randomUUID().replace(/-/g, "").slice(0, 20).toUpperCase(),
+            id: "HOLD-" + crypto6.randomUUID().replace(/-/g, "").slice(0, 20).toUpperCase(),
             animalId: animal.id,
             date: body.date,
             startTime: body.start,
@@ -3756,6 +3957,109 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       return { status: 201, body: { ok: true, ...result, keyId: process.env.RAZORPAY_KEY_ID } };
     } catch (err) {
       return { status: 503, body: { ok: false, error: err.message || "Payment provider unavailable" } };
+    }
+  }
+  if (method === "GET" && pathname === "/api/wallet/balance") {
+    if (!authUser || !authUser.userId) {
+      return { status: 401, body: { ok: false, error: "Authentication required" } };
+    }
+    try {
+      const balance = await getWalletBalance(authUser.userId);
+      return { status: 200, body: { ok: true, ...balance } };
+    } catch (err) {
+      return { status: 500, body: { ok: false, error: err.message || "Failed to fetch wallet balance" } };
+    }
+  }
+  if (method === "GET" && pathname === "/api/wallet/transactions") {
+    if (!authUser || !authUser.userId) {
+      return { status: 401, body: { ok: false, error: "Authentication required" } };
+    }
+    try {
+      const limit = Number(query.get("limit")) || 50;
+      const transactions = await getWalletTransactions(authUser.userId, limit);
+      return { status: 200, body: { ok: true, transactions } };
+    } catch (err) {
+      return { status: 500, body: { ok: false, error: err.message || "Failed to fetch transactions" } };
+    }
+  }
+  if (method === "POST" && pathname === "/api/wallet/topup/order") {
+    if (!authUser || !authUser.userId) {
+      return { status: 401, body: { ok: false, error: "Authentication required" } };
+    }
+    const amountRupees = Number(body.amountRupees || body.amount);
+    if (!amountRupees || amountRupees < 100 || amountRupees > 5e4) {
+      return {
+        status: 400,
+        body: { ok: false, error: "Top-up amount must be between \u20B9100 and \u20B950,000" }
+      };
+    }
+    const amountPaise = Math.round(amountRupees * 100);
+    try {
+      const result = await createPaymentOrder({
+        customerId: authUser.userId,
+        quoteToken: `wallet_topup_${authUser.userId}_${Date.now()}`,
+        holdId: `topup_hold_${authUser.userId}`,
+        amountPaise
+      });
+      return {
+        status: 201,
+        body: {
+          ok: true,
+          ...result,
+          amountRupees,
+          keyId: process.env.RAZORPAY_KEY_ID || "rzp_test_gomaa_synthetic"
+        }
+      };
+    } catch (err) {
+      return { status: 503, body: { ok: false, error: err.message || "Failed to create topup order" } };
+    }
+  }
+  if (method === "POST" && pathname === "/api/wallet/topup/verify") {
+    if (!authUser || !authUser.userId) {
+      return { status: 401, body: { ok: false, error: "Authentication required" } };
+    }
+    const { paymentId, orderId, signature, amountPaise } = body;
+    if (!paymentId || !orderId || !signature || !amountPaise) {
+      return { status: 400, body: { ok: false, error: "Missing required payment verification parameters" } };
+    }
+    const expectedPaise = BigInt(amountPaise);
+    if (expectedPaise <= 0n) {
+      return { status: 400, body: { ok: false, error: "Invalid payment amount" } };
+    }
+    const existingTx = await prisma.walletTransaction.findFirst({
+      where: { referenceId: paymentId }
+    });
+    if (existingTx) {
+      return {
+        status: 409,
+        body: { ok: false, error: "This payment has already been credited to a wallet" }
+      };
+    }
+    const secret = process.env.RAZORPAY_KEY_SECRET || "gomaa_test_secret_2026";
+    const expected = crypto6.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+    if (signature !== expected) {
+      return { status: 402, body: { ok: false, error: "Invalid cryptographic payment signature" } };
+    }
+    try {
+      const creditRes = await creditWallet({
+        userId: authUser.userId,
+        amountPaise: expectedPaise,
+        purpose: "TOPUP",
+        referenceId: paymentId,
+        idempotencyKey: `topup_${paymentId}`,
+        description: `Wallet top-up of \u20B9${Number(expectedPaise) / 100} via Razorpay (${paymentId})`,
+        metadata: { orderId, paymentId }
+      });
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          message: "Wallet topped up successfully",
+          ...creditRes
+        }
+      };
+    } catch (err) {
+      return { status: 500, body: { ok: false, error: err.message || "Failed to credit wallet" } };
     }
   }
   if (method === "POST" && pathname === "/api/payments/webhook") {
@@ -3950,42 +4254,61 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     }
     let payment = body.payment || {};
     const expectedPaise = Math.round(Number(quote.total) * 100);
-    const hasLiveRazorpay = Boolean(
-      process.env.RAZORPAY_KEY_ID && !process.env.RAZORPAY_KEY_ID.includes("test") && !process.env.RAZORPAY_KEY_ID.includes("synthetic")
-    );
-    if (!payment.paymentId || !payment.orderId || !payment.signature) {
-      if (process.env.NODE_ENV === "production" && hasLiveRazorpay || body.strictPayment) {
+    const isWalletPayment = body.paymentProvider === "WALLET" || b.paymentProvider === "WALLET";
+    if (isWalletPayment) {
+      try {
+        const debitRes = await debitWallet({
+          userId: authUser.userId,
+          amountPaise: expectedPaise,
+          purpose: "BOOKING_PAYMENT",
+          referenceId: b.id,
+          idempotencyKey: `booking_pay_${b.id}`,
+          description: `Devotional Seva Booking payment for ${b.id}`
+        });
+        payment = {
+          paymentId: debitRes.transactionId,
+          orderId: `wallet_ord_${b.id}`,
+          signature: `wallet_sig_${debitRes.transactionId}`,
+          amountPaise: expectedPaise
+        };
+      } catch (err) {
+        return { status: 402, body: { error: err.message || "Wallet payment failed" } };
+      }
+    } else {
+      if (!payment.paymentId || !payment.orderId || !payment.signature) {
         return { status: 402, body: { error: "Verified Razorpay payment is required before booking" } };
       }
-      const orderId = `order_test_${Date.now()}`;
-      const paymentId = `pay_test_${Date.now()}`;
-      const secret = process.env.RAZORPAY_KEY_SECRET || "gomaa_test_secret_2026";
-      const signature = crypto7.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
-      payment = {
-        orderId,
-        paymentId,
-        signature,
-        amountPaise: expectedPaise
-      };
-    }
-    if (!Number.isSafeInteger(expectedPaise) || Number(payment.amountPaise) !== expectedPaise) {
-      if (process.env.NODE_ENV === "production" && hasLiveRazorpay || body.strictPayment) {
+      if (!Number.isSafeInteger(expectedPaise) || Number(payment.amountPaise) !== expectedPaise) {
         return { status: 402, body: { error: "Payment amount does not match the server quote" } };
       }
-      payment.amountPaise = expectedPaise;
-    }
-    try {
-      await verifyCapturedPayment({
-        paymentId: payment.paymentId,
-        orderId: payment.orderId,
-        signature: payment.signature,
-        customerId: authUser.userId,
-        quoteToken,
-        amountPaise: expectedPaise,
-        holdId: String(body.holdId || b.holdId || "")
+      const replayedBooking = await prisma.booking.findFirst({
+        where: {
+          OR: [
+            { paymentId: payment.paymentId },
+            { paymentOrderId: payment.orderId }
+          ]
+        },
+        select: { id: true, customerId: true }
       });
-    } catch (err) {
-      return { status: 402, body: { error: err.message || "Payment verification failed" } };
+      if (replayedBooking && replayedBooking.id !== b.id) {
+        return {
+          status: 409,
+          body: { error: "This payment proof has already been applied to an existing booking" }
+        };
+      }
+      try {
+        await verifyCapturedPayment({
+          paymentId: payment.paymentId,
+          orderId: payment.orderId,
+          signature: payment.signature,
+          customerId: authUser.userId,
+          quoteToken,
+          amountPaise: expectedPaise,
+          holdId: String(body.holdId || b.holdId || "")
+        });
+      } catch (err) {
+        return { status: 402, body: { error: err.message || "Payment verification failed" } };
+      }
     }
     try {
       const existingBooking = await prisma.booking.findUnique({ where: { id: b.id } });
@@ -4087,9 +4410,10 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
             ) + (b.transport ?? 0) + (b.addons ?? 0),
             status: toPrismaStatus(b.status) || "PAYMENT_VERIFIED",
             isPaid: true,
-            paymentProvider: "RAZORPAY",
+            paymentProvider: isWalletPayment ? "WALLET" : "RAZORPAY",
             paymentOrderId: payment.orderId,
             paymentId: payment.paymentId,
+            walletTxId: isWalletPayment ? payment.paymentId : null,
             paymentStatus: "CAPTURED",
             paymentCapturedAt: /* @__PURE__ */ new Date(),
             handoverOtp: b.handoverOtp || String(Math.floor(1e3 + Math.random() * 9e3)),
@@ -6084,7 +6408,30 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   }
   if (method === "GET" && pathname === "/api/vets") {
     try {
-      const vets = await prisma.empanelledVet.findMany({ orderBy: { createdAt: "asc" } });
+      const gosalaQuery = query.get("gosala") || query.get("gosalaId") || query.get("gosalaName");
+      const where = {};
+      if (authUser?.role === "manager" && authUser.gosalaNames?.length > 0) {
+        where.OR = [
+          ...authUser.gosalaNames.map((gn) => ({ gosala: { name: { equals: gn, mode: "insensitive" } } })),
+          ...authUser.gosalaNames.map((gn) => ({ assignedGosalas: { has: gn } }))
+        ];
+      } else if (authUser?.role === "admin" && authUser.gosalaNames?.length > 0) {
+        where.OR = [
+          ...authUser.gosalaNames.map((gn) => ({ gosala: { name: { equals: gn, mode: "insensitive" } } })),
+          ...authUser.gosalaNames.map((gn) => ({ assignedGosalas: { has: gn } }))
+        ];
+      } else if (gosalaQuery) {
+        where.OR = [
+          { gosalaId: gosalaQuery },
+          { gosala: { name: { contains: gosalaQuery, mode: "insensitive" } } },
+          { assignedGosalas: { has: gosalaQuery } }
+        ];
+      }
+      const vets = await prisma.empanelledVet.findMany({
+        where,
+        include: { gosala: { select: { id: true, name: true, region: true } } },
+        orderBy: { createdAt: "asc" }
+      });
       return { status: 200, body: { ok: true, vets } };
     } catch (e) {
       console.warn("[GET /api/vets] DB fallback notice:", e?.message);
@@ -6092,12 +6439,28 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     }
   }
   if (method === "POST" && pathname === "/api/vets") {
+    const denied = requireRole("super_admin", "admin", "manager");
+    if (denied) return denied;
     const vet = body.vet || body;
     const id = vet.id || `VET-${Date.now()}`;
+    let gosalaId = vet.gosalaId;
+    if (!gosalaId && vet.gosalaName) {
+      const g = await prisma.gosala.findFirst({
+        where: { name: { equals: vet.gosalaName, mode: "insensitive" } }
+      });
+      if (g) gosalaId = g.id;
+    }
+    if (!gosalaId && authUser?.role === "manager" && authUser.gosalaNames?.[0]) {
+      const g = await prisma.gosala.findFirst({
+        where: { name: { equals: authUser.gosalaNames[0], mode: "insensitive" } }
+      });
+      if (g) gosalaId = g.id;
+    }
     try {
       const fullVet = await prisma.empanelledVet.upsert({
         where: { regNo: vet.regNo || id },
         update: {
+          gosalaId: gosalaId || void 0,
           name: vet.name,
           qualification: vet.qualification || "B.V.Sc",
           clinic: vet.clinic || "Local Veterinary Clinic",
@@ -6105,10 +6468,11 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           address: vet.address || "Veterinary Center",
           specialization: vet.specialization || "General Bovine Care",
           emergency24x7: vet.emergency24x7 ?? true,
-          assignedGosalas: vet.assignedGosalas || ["All Gaushalas"]
+          assignedGosalas: vet.assignedGosalas || (vet.gosalaName ? [vet.gosalaName] : ["All Gaushalas"])
         },
         create: {
           id,
+          gosalaId: gosalaId || null,
           name: vet.name,
           qualification: vet.qualification || "B.V.Sc",
           regNo: vet.regNo || `REG-${Date.now()}`,
@@ -6117,8 +6481,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           address: vet.address || "Veterinary Center",
           specialization: vet.specialization || "General Bovine Care",
           emergency24x7: vet.emergency24x7 ?? true,
-          assignedGosalas: vet.assignedGosalas || ["All Gaushalas"]
-        }
+          assignedGosalas: vet.assignedGosalas || (vet.gosalaName ? [vet.gosalaName] : ["All Gaushalas"])
+        },
+        include: { gosala: { select: { id: true, name: true, region: true } } }
       });
       wsHub.broadcastToChannel("channel:animals", "VET_UPDATED", {
         vet: fullVet,

@@ -6,6 +6,44 @@ import { hashPassword, isPasswordHash, verifyPassword } from "./password.ts"
 import crypto from "node:crypto"
 
  
+// In-memory sliding-window rate limiter for administrative login (/api/auth/admin-login)
+interface RateLimitEntry {
+  attempts: number
+  firstAttemptAt: number
+  blockedUntil?: number
+}
+const adminRateLimitMap = new Map<string, RateLimitEntry>()
+
+export function checkAdminRateLimit(ipOrKey: string): void {
+  const now = Date.now()
+  const entry = adminRateLimitMap.get(ipOrKey)
+  if (!entry) return
+
+  if (entry.blockedUntil && now < entry.blockedUntil) {
+    const remainingSec = Math.ceil((entry.blockedUntil - now) / 1000)
+    throw new Error(`Too many administrative attempts. Locked out for ${remainingSec} seconds.`)
+  }
+
+  // Reset window after 15 minutes
+  if (now - entry.firstAttemptAt > 15 * 60 * 1000) {
+    adminRateLimitMap.delete(ipOrKey)
+  }
+}
+
+export function recordAdminLoginAttempt(ipOrKey: string, success: boolean): void {
+  const now = Date.now()
+  if (success) {
+    adminRateLimitMap.delete(ipOrKey)
+    return
+  }
+  const entry = adminRateLimitMap.get(ipOrKey) || { attempts: 0, firstAttemptAt: now }
+  entry.attempts += 1
+  if (entry.attempts >= 5) {
+    entry.blockedUntil = now + 15 * 60 * 1000 // 15 minute lockout
+  }
+  adminRateLimitMap.set(ipOrKey, entry)
+}
+
 export const inMemoryPasswords = new Map<string, string>()
 
 export interface UserSessionData {
@@ -115,104 +153,9 @@ export function getAuthUserFromHeader(authHeader?: string | string[]): JwtPayloa
 }
 
 /**
- * Authenticate or switch to a user account and issue a verified JWT
+ * Build rich UserSessionData & issue signed JWT for an authenticated user
  */
-export async function authenticateOrResolveUser(
-  emailOrPhone: string,
-  roleHint?: string,
-  password?: string,
-): Promise<UserSessionData | null> {
-  const query = (emailOrPhone || "").trim().toLowerCase()
-  if (!query) throw new Error("Email, phone, or user ID is required")
-  const rawDigits = emailOrPhone.replace(/\D/g, "").slice(-10)
-
-  const user: any = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { id: query },
-        { uniqueId: { equals: query, mode: "insensitive" } },
-        { email: { equals: query, mode: "insensitive" } },
-        { phone: { equals: query, mode: "insensitive" } },
-        ...(rawDigits.length === 10
-          ? [
-              { phone: { contains: rawDigits } },
-              { phone: { equals: `+91 ${rawDigits}` } },
-              { phone: { equals: `+91${rawDigits}` } },
-            ]
-          : []),
-      ],
-    },
-    include: { managerAssignments: { include: { gosala: true } } },
-  })
-  if (!user) throw new Error("Invalid credentials or user not found")
-  if (user.isActive === false) throw new Error("Account is inactive")
-
-  // Ensure user has their unique identity code populated
-  if (!user.uniqueId) {
-    const autoId = generateUniqueId(user.role, user.phone)
-    try {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { uniqueId: autoId },
-      })
-      user.uniqueId = autoId
-    } catch {}
-  }
-  if (!password) throw new Error("Password is required")
-  if (isPasswordHash(user.password)) {
-    let isValid = verifyPassword(password, user.password)
-    // First-letter case-resilience fallback (e.g. handle first letter case difference on mobile auto-capitalize)
-    if (!isValid && password.length >= 1) {
-      const altFirstChar =
-        password[0] === password[0].toUpperCase()
-          ? password[0].toLowerCase() + password.slice(1)
-          : password[0].toUpperCase() + password.slice(1)
-      if (verifyPassword(altFirstChar, user.password)) {
-        isValid = true
-        // Seamlessly update to the user's active typed preference
-        try {
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { password: hashPassword(password, true) },
-          })
-        } catch {}
-      }
-    }
-    if (!isValid) throw new Error("Invalid credentials")
-  } else {
-    const stored = typeof user.password === "string" ? user.password : ""
-    const a = Buffer.from(password)
-    const b = Buffer.from(stored)
-    let valid = a.length === b.length && crypto.timingSafeEqual(a, b)
-    if (!valid && password.length >= 1 && stored.length >= 1) {
-      const altFirstChar =
-        password[0] === password[0].toUpperCase()
-          ? password[0].toLowerCase() + password.slice(1)
-          : password[0].toUpperCase() + password.slice(1)
-      const altA = Buffer.from(altFirstChar)
-      if (altA.length === b.length && crypto.timingSafeEqual(altA, b)) {
-        valid = true
-      }
-    }
-    if (!valid) throw new Error("Invalid credentials")
-    try {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { password: hashPassword(password, true) },
-      })
-    } catch (updateErr: any) {
-      console.warn("[auth] Non-fatal password hash upgrade notice:", updateErr?.message)
-      try {
-        if (user.email) {
-          await prisma.user.update({
-            where: { email: user.email },
-            data: { password: hashPassword(password, true) },
-          })
-        }
-      } catch {}
-    }
-  }
-
+export async function buildUserSession(user: any): Promise<UserSessionData> {
   // Resolve assigned Gaushalas strictly verifying active custody
   const assignedGosalas = (user.managerAssignments || [])
     .filter((a: any) => {
@@ -347,7 +290,126 @@ export async function authenticateOrResolveUser(
 }
 
 /**
- * Register a new user in PostgreSQL and issue verified JWT
+ * Authenticate standard accounts (Customers, Drivers, Gaushala Managers).
+ * Administrative accounts (SUPER_ADMIN, OPERATIONS_ADMIN) are strictly rejected
+ * and directed to the isolated /admin portal.
+ */
+export async function authenticateOrResolveUser(
+  emailOrPhone: string,
+  roleHint?: string,
+  password?: string,
+): Promise<UserSessionData | null> {
+  const query = (emailOrPhone || "").trim().toLowerCase()
+  if (!query) throw new Error("Email, phone, or user ID is required")
+  const rawDigits = emailOrPhone.replace(/\D/g, "").slice(-10)
+
+  const user: any = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { id: query },
+        { uniqueId: { equals: query, mode: "insensitive" } },
+        { email: { equals: query, mode: "insensitive" } },
+        { phone: { equals: query, mode: "insensitive" } },
+        ...(rawDigits.length === 10
+          ? [
+              { phone: { contains: rawDigits } },
+              { phone: { equals: `+91 ${rawDigits}` } },
+              { phone: { equals: `+91${rawDigits}` } },
+            ]
+          : []),
+      ],
+    },
+    include: { managerAssignments: { include: { gosala: true } } },
+  })
+  if (!user) throw new Error("Invalid credentials or user not found")
+  if (user.isActive === false) throw new Error("Account is inactive")
+
+  // ZERO-TRUST ISOLATION: Reject administrative logins on the public portal
+  if (user.role === "SUPER_ADMIN" || user.role === "OPERATIONS_ADMIN") {
+    throw new Error("Administrative accounts must sign in via the secure /admin portal.")
+  }
+
+  // Ensure user has their unique identity code populated
+  if (!user.uniqueId) {
+    const autoId = generateUniqueId(user.role, user.phone)
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { uniqueId: autoId },
+      })
+      user.uniqueId = autoId
+    } catch {}
+  }
+
+  if (!password) throw new Error("Password is required")
+  if (!isPasswordHash(user.password) || !verifyPassword(password, user.password)) {
+    throw new Error("Invalid credentials")
+  }
+
+  return buildUserSession(user)
+}
+
+/**
+ * Authenticate administrative accounts exclusively for the isolated /admin portal.
+ * Permitted roles: SUPER_ADMIN and OPERATIONS_ADMIN only.
+ */
+export async function authenticateAdminUser(
+  emailOrPhone: string,
+  password?: string,
+): Promise<UserSessionData> {
+  const query = (emailOrPhone || "").trim().toLowerCase()
+  if (!query) throw new Error("Administrative email, phone, or ID is required")
+  const rawDigits = emailOrPhone.replace(/\D/g, "").slice(-10)
+
+  const user: any = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { id: query },
+        { uniqueId: { equals: query, mode: "insensitive" } },
+        { email: { equals: query, mode: "insensitive" } },
+        { phone: { equals: query, mode: "insensitive" } },
+        ...(rawDigits.length === 10
+          ? [
+              { phone: { contains: rawDigits } },
+              { phone: { equals: `+91 ${rawDigits}` } },
+              { phone: { equals: `+91${rawDigits}` } },
+            ]
+          : []),
+      ],
+    },
+    include: { managerAssignments: { include: { gosala: true } } },
+  })
+
+  if (!user) throw new Error("Invalid administrative credentials")
+  if (user.isActive === false) throw new Error("Account is inactive")
+
+  // STRICT ACCESS CONTROL: Only SUPER_ADMIN and OPERATIONS_ADMIN permitted
+  if (user.role !== "SUPER_ADMIN" && user.role !== "OPERATIONS_ADMIN") {
+    throw new Error("Access Denied: Administrative credentials required.")
+  }
+
+  if (!password) throw new Error("Password is required")
+  if (!isPasswordHash(user.password) || !verifyPassword(password, user.password)) {
+    throw new Error("Invalid administrative credentials")
+  }
+
+  if (!user.uniqueId) {
+    const autoId = generateUniqueId(user.role, user.phone)
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { uniqueId: autoId },
+      })
+      user.uniqueId = autoId
+    } catch {}
+  }
+
+  return buildUserSession(user)
+}
+
+/**
+ * Register a new devotee user in PostgreSQL and issue verified JWT.
+ * DEFENSE-IN-DEPTH: Public registration is strictly locked down to CUSTOMER role only.
  */
 export async function registerUser(payload: RegisterUserPayload): Promise<UserSessionData> {
   const emailNorm = payload.email.trim().toLowerCase()
@@ -356,8 +418,8 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
   // Generate random 10-digit number starting with 98 if no valid phone provided to avoid duplicate key or fallback collision
   const phoneFormatted = hasValidPhone ? `+91 ${rawDigits}` : `+91 98${Math.floor(10000000 + Math.random() * 90000000)}`
 
-  if (!payload.name || !payload.email || !payload.role) {
-    throw new Error("Full name, email address, and role are required for registration")
+  if (!payload.name || !payload.email) {
+    throw new Error("Full name and email address are required for registration")
   }
 
   // Check if user already exists
@@ -376,11 +438,6 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
         ...phoneQuery,
       ],
     },
-    include: {
-      managerAssignments: {
-        include: { gosala: true },
-      },
-    },
   })
 
   if (existing) {
@@ -391,11 +448,7 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
     if (isEmailMatch && isPhoneMatch) {
       throw new Error(`An account with email "${emailNorm}" is already registered. Please sign in or use "Forgot Password".`)
     } else if (isEmailMatch) {
-      if (payload.role === "manager") {
-        throw new Error(`An account with email "${emailNorm}" is already registered. If you wish to reassign a Gaushala to this manager, please select them from the Custodians Matrix instead of registering a new account.`)
-      } else {
-        throw new Error(`An account with email "${emailNorm}" is already registered. Please sign in with your password or use "Forgot Password" to reset it.`)
-      }
+      throw new Error(`An account with email "${emailNorm}" is already registered. Please sign in with your password or use "Forgot Password" to reset it.`)
     } else if (isPhoneMatch) {
       throw new Error(`The mobile number "${payload.phone.trim()}" is already registered with another account. Please use a different phone number or sign in with your registered email.`)
     } else {
@@ -403,13 +456,17 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
     }
   }
 
-  const dbRole = mapFrontendToDbRole(payload.role)
+  // DEFENSE-IN-DEPTH: Public registration unconditionally creates CUSTOMER accounts.
+  // Any role passed from the client is safely ignored to prevent privilege escalation.
+  const dbRole = "CUSTOMER"
+  const feRole = "customer"
+
   if (!payload.password || payload.password.length < 8) {
     throw new Error("Password must be at least 8 characters")
   }
   const passwordHash = hashPassword(payload.password)
 
-  const uniqueId = generateUniqueId(payload.role, phoneFormatted)
+  const uniqueId = generateUniqueId("CUSTOMER", phoneFormatted)
 
   // Create new user in PostgreSQL
   const user = await prisma.user.create({
@@ -424,68 +481,17 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
     },
   })
 
-  // Assign Gaushala if manager
-  const assignedGosalas: { id: string; name: string }[] = []
-  if (dbRole === "GOSALA_MANAGER") {
-    let targetGosalaId = payload.gosalaId
-    let gRec: any = null
-    if (targetGosalaId) {
-      gRec = await prisma.gosala.findUnique({ where: { id: targetGosalaId } })
-    } else if (payload.gosalaName) {
-      gRec = await prisma.gosala.findFirst({
-        where: { name: { contains: payload.gosalaName, mode: "insensitive" } },
-      })
-      if (gRec) targetGosalaId = gRec.id
-    }
-    if (targetGosalaId && gRec) {
-      try {
-        const assignment: any = await prisma.gosalaManagerAssignment.create({
-          data: {
-            userId: user.id,
-            gosalaId: targetGosalaId,
-            region: gRec.region || "Cyberabad / Gachibowli Zone",
-            status: "Active",
-          },
-          include: { gosala: true },
-        })
-        if (assignment.gosala) {
-          assignedGosalas.push({ id: assignment.gosala.id, name: assignment.gosala.name })
-        }
-      } catch (err) {
-        console.warn("Could not create manager assignment during registration:", err)
-      }
-    }
-  }
-
-  // Save role-specific rich metadata to persistent store
-  const metaPatch: any = {}
-  if (payload.role === "customer" && payload.customerData) {
-    metaPatch.customerData = {
-      ...payload.customerData,
+  // Save devotee rich metadata to persistent store
+  const metaPatch: any = {
+    customerData: {
+      ...(payload.customerData || {}),
       memberSince: new Date().toLocaleDateString("en-IN", { month: "short", year: "numeric" }),
       totalBookings: 0,
-    }
-  } else if (payload.role === "driver" && payload.driverData) {
-    metaPatch.driverData = {
-      driverId: `DRV-${user.id.slice(0, 4)}`,
-      status: "Available",
-      rating: 5.0,
-      totalTrips: 0,
-      phone: user.phone,
-      ...payload.driverData,
-    }
-  } else if (payload.role === "manager" && payload.managerData) {
-    metaPatch.managerData = payload.managerData
+    },
   }
 
-  if (Object.keys(metaPatch).length > 0) {
-    saveUserMeta(user.email, metaPatch)
-    saveUserMeta(user.id, metaPatch)
-  }
-
-  const feRole = mapDbRoleToFrontend(user.role)
-  const gosalaIds = assignedGosalas.map((g) => g.id)
-  const gosalaNames = assignedGosalas.map((g) => g.name)
+  saveUserMeta(user.email, metaPatch)
+  saveUserMeta(user.id, metaPatch)
 
   const token = signJwt({
     userId: user.id,
@@ -495,9 +501,8 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
     phone: user.phone,
     role: feRole,
     dbRole: user.role as any,
-    gosalaIds,
-    gosalaNames,
-    driverData: metaPatch.driverData,
+    gosalaIds: [],
+    gosalaNames: [],
     customerData: metaPatch.customerData,
   })
 
@@ -512,9 +517,8 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
       role: feRole,
       dbRole: user.role as any,
       avatar: user.avatar,
-      gosalas: assignedGosalas,
-      assignedGosalaNames: gosalaNames,
-      driverData: metaPatch.driverData,
+      gosalas: [],
+      assignedGosalaNames: [],
       customerData: metaPatch.customerData,
     },
   }

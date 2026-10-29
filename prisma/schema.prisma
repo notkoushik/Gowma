@@ -70,6 +70,27 @@ enum AuditAction {
   HANDOVER_VERIFIED
 }
 
+enum WalletTransactionType {
+  CREDIT
+  DEBIT
+}
+
+enum WalletTransactionPurpose {
+  TOPUP
+  BOOKING_PAYMENT
+  BOOKING_REFUND
+  GAUSHALA_SETTLEMENT
+  CASHBACK
+  ADJUSTMENT
+}
+
+enum WalletTransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REVERSED
+}
+
 // -------------------------------------------------------------
 // Core Identity & Directory
 // -------------------------------------------------------------
@@ -95,6 +116,7 @@ model User {
   auditTrails        ApprovalAuditTrail[]
   createdBlocks      AnimalScheduleBlock[]
   createdHolds       TemporarySlotHold[]
+  wallet             Wallet?
 
   @@index([email])
   @@index([uniqueId])
@@ -143,6 +165,7 @@ model Gosala {
   bookings    Booking[]
   settlements SettlementBatch[]
   offerings   GosalaOffering[]
+  vets        EmpanelledVet[]
 
   @@index([region])
   @@map("gosalas")
@@ -235,9 +258,10 @@ model Booking {
   isPaid      Boolean       @default(true)
   paymentProvider String?   @default("RAZORPAY")
   paymentOrderId String?
-  paymentId     String?
-  paymentStatus String      @default("PENDING")
+  paymentId     String?       @unique
+  paymentStatus String        @default("PENDING")
   paymentCapturedAt DateTime?
+  walletTxId    String?
 
   // Anti-Corruption Historical Snapshots (Protection from retroactive master price shifts)
   freeKmSnapshot        Float @default(5.0)
@@ -466,6 +490,7 @@ model VerificationOtp {
 
 model EmpanelledVet {
   id              String   @id @default(uuid())
+  gosalaId        String?
   name            String
   qualification   String
   regNo           String   @unique
@@ -478,6 +503,56 @@ model EmpanelledVet {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  // Relationships
+  gosala          Gosala?  @relation(fields: [gosalaId], references: [id], onDelete: SetNull)
+
+  @@index([gosalaId])
   @@map("empanelled_vets")
+}
+
+// -------------------------------------------------------------
+// Digital Wallet, Double-Entry Ledger & Payment Escrow Engine
+// -------------------------------------------------------------
+
+model Wallet {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  balancePaise BigInt   @default(0) // Integer paise to eliminate rounding errors (₹100.00 = 10000)
+  currency     String   @default("INR")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relationships
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+
+  @@index([userId])
+  @@map("wallets")
+}
+
+model WalletTransaction {
+  id             String                   @id @default(uuid())
+  walletId       String
+  amountPaise    BigInt // Always positive integer in paise
+  type           WalletTransactionType
+  purpose        WalletTransactionPurpose
+  status         WalletTransactionStatus  @default(PENDING)
+  balanceBefore  BigInt
+  balanceAfter   BigInt
+  idempotencyKey String                   @unique // Anti-replay & anti-double-spending shield
+  referenceId    String? // e.g. paymentId, bookingId, settlementBatchId
+  description    String?
+  metadata       Json?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  // Relationships
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, createdAt])
+  @@index([referenceId])
+  @@index([purpose, status])
+  @@map("wallet_transactions")
 }
 

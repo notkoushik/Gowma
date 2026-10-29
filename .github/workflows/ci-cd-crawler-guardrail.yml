@@ -12,6 +12,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gomaa_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -22,29 +37,52 @@ jobs:
           node-version: 20
           cache: "npm"
 
+      - name: Install System Dependencies for Chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser
+
       - name: Install Dependencies
         run: npm ci
+
+      - name: Initialize Database Schema in CI Container
+        run: npx prisma db push --accept-data-loss
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/gomaa_db?schema=public"
+
+      - name: Seed Initial Operational Fixtures
+        run: node scripts/seed-cloud-db.js
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/gomaa_db?schema=public"
 
       - name: Generate Database Client & Build Project
         run: npm run build
         env:
-          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/gomaa_db?schema=public&connection_limit=2&pool_timeout=15"
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/gomaa_db?schema=public"
 
       - name: Run Contract & Security Test Gates
         run: npm test
 
-      - name: Launch Vite Headless Preview Server
-        run: npx vite preview --port 4173 --host 127.0.0.1 &
+      - name: Run Comprehensive Integration & Wallet Verification Gates
+        run: npm run test:integration
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/gomaa_db?schema=public"
+          GOMAA_JWT_SECRET: "ci_testing_secret_key_with_at_least_32_characters_long"
+
+      - name: Launch GOMAA Full-Stack Server with API Router
+        run: npx vite --port 4173 --host 127.0.0.1 &
         env:
           PORT: 4173
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/gomaa_db?schema=public"
+          GOMAA_JWT_SECRET: "ci_testing_secret_key_with_at_least_32_characters_long"
 
-      - name: Wait for Local Preview Server Readiness
+      - name: Wait for Local Server Readiness
         run: npx wait-on http://127.0.0.1:4173 --timeout 30000
 
       - name: Execute Full Application Autonomous Crawler
         run: node scripts/test-full-application-crawler.mjs http://127.0.0.1:4173
         env:
-          PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
+          PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
           TEST_TARGET_URL: "http://127.0.0.1:4173"
 
       - name: Verification Confirmation

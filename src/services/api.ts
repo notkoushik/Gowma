@@ -72,6 +72,21 @@ export const api = {
     return data
   },
 
+  async adminLogin(emailOrPhone: string, password?: string) {
+    const data = await request<{
+      ok: boolean
+      token: string
+      user: any
+    }>("/api/auth/admin-login", {
+      method: "POST",
+      body: JSON.stringify({ email: emailOrPhone, password }),
+    })
+    if (data.token) {
+      setAuthToken(data.token)
+    }
+    return data
+  },
+
   async register(data: {
     name: string
     email: string

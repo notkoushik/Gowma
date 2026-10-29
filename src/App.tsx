@@ -35,6 +35,7 @@ import Animals from "./views/manager/Animals"
 import ManagerLedger from "./views/manager/ManagerLedger"
 import AdminWallet from "./views/admin/AdminWallet"
 import Login from "./views/Login"
+import AdminLogin from "./views/AdminLogin"
 import ManagerApp from "./views/ManagerApp"
 import DriverApp from "./views/DriverApp"
 import CustomerApp from "./views/CustomerApp"
@@ -125,7 +126,7 @@ function parseHash(): {
   if (!hash) return { role: undefined }
   const parts = hash.split("/")
   const r = parts[0]
-  if (r === "login") return { role: null }
+  if (r === "login" || r === "admin-login" || r === "admin") return { role: null }
   if (VALID_ROLES.includes(r as RoleId)) {
     return { role: r as RoleId, subview: parts[1], sector: parts[2] }
   }
@@ -272,6 +273,19 @@ export default function App() {
     useState<"all" | "unread" | "booking" | "welfare">("all")
   const unreadNotifCount = notifications.filter((n) => !n.read).length
 
+  const isAdminRoute = useMemo(() => {
+    if (typeof window === "undefined") return false
+    const path = window.location.pathname.toLowerCase()
+    const hash = window.location.hash.toLowerCase()
+    return (
+      path === "/admin" ||
+      path.startsWith("/admin/") ||
+      hash === "#admin" ||
+      hash.startsWith("#admin/") ||
+      hash === "#admin-login"
+    )
+  }, [])
+
   // Listen for Escape key to exit maximized mode
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -394,11 +408,20 @@ export default function App() {
   }
 
   const handleSignOut = () => {
+    const wasAdmin = auth === "super_admin" || auth === "admin" || isAdminRoute
     setAuth(null)
     clearAuthSession()
     try {
       localStorage.setItem("gomaa_auth_role", "login")
-      window.location.hash = "#login"
+      if (wasAdmin) {
+        if (typeof window !== "undefined" && window.location.pathname.startsWith("/admin")) {
+          window.location.reload()
+        } else {
+          window.location.href = "/admin"
+        }
+      } else {
+        window.location.hash = "#login"
+      }
     } catch (e) {}
   }
 
@@ -584,6 +607,11 @@ export default function App() {
     window.addEventListener("hashchange", onHashChange)
     return () => window.removeEventListener("hashchange", onHashChange)
   }, [])
+
+  // ZERO-TRUST ISOLATION: /admin route strictly demands Super Admin or Operations Admin authentication
+  if (isAdminRoute && (!auth || (auth !== "super_admin" && auth !== "admin"))) {
+    return <AdminLogin onSignIn={(role) => handleLoginSuccess(role)} />
+  }
 
   if (!auth) return <Login onSignIn={(role) => handleLoginSuccess(role)} />
   if (auth === "customer") return <CustomerApp onSignOut={handleSignOut} />

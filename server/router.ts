@@ -17,8 +17,17 @@ import { issueQuote, verifyQuote } from "./services/quoteService.ts"
 import crypto from "node:crypto"
 import { createPaymentOrder, verifyCapturedPayment, verifyWebhookSignature } from "./services/razorpayService.ts"
 import {
+  getWalletBalance,
+  creditWallet,
+  debitWallet,
+  getWalletTransactions,
+} from "./services/walletService.ts"
+import {
   getAuthUserFromHeader,
   authenticateOrResolveUser,
+  authenticateAdminUser,
+  checkAdminRateLimit,
+  recordAdminLoginAttempt,
   getDirectoryAccounts,
   registerUser,
   getAllUsers,
@@ -353,6 +362,10 @@ function formatBooking(b: any): Booking {
           actorRole: admApproval.actorRole,
         }
       : undefined,
+    paymentProvider: b.paymentProvider || "RAZORPAY",
+    paymentOrderId: b.paymentOrderId || undefined,
+    paymentId: b.paymentId || undefined,
+    walletTxId: b.walletTxId || undefined,
   }
 }
 
@@ -492,6 +505,7 @@ export async function handleApiRequest(
   const isPublicRoute =
     (method === "POST" && (
       pathname === "/api/auth/login" ||
+      pathname === "/api/auth/admin-login" ||
       pathname === "/api/auth/register" ||
       pathname === "/api/auth/forgot-password" ||
       pathname === "/api/auth/verify-otp" ||
@@ -500,14 +514,12 @@ export async function handleApiRequest(
       pathname === "/api/places/resolve-link"
     )) ||
     (method === "GET" && (
-      pathname === "/api/auth/accounts" ||
       pathname === "/api/health" ||
       pathname === "/api/hubs" ||
       pathname === "/api/places/search" ||
       pathname === "/api/animals" ||
       pathname === "/api/gosalas" ||
-      pathname === "/api/vets" ||
-      pathname === "/api/debug/email-status"
+      pathname === "/api/vets"
     ))
   if (!isPublicRoute && !authUser) {
     return { status: 401, body: { ok: false, error: "Authentication required" } }
@@ -527,8 +539,16 @@ export async function handleApiRequest(
     if (denied) return denied
   }
 
-  if ((method === "GET" || method === "POST") && pathname === "/api/users") {
+  if (
+    ((method === "GET" || method === "POST") && pathname === "/api/users") ||
+    (method === "GET" && pathname === "/api/debug/email-status")
+  ) {
     const denied = requireRole("super_admin")
+    if (denied) return denied
+  }
+
+  if (method === "GET" && pathname === "/api/auth/accounts") {
+    const denied = requireRole("super_admin", "admin")
     if (denied) return denied
   }
 
@@ -543,6 +563,14 @@ export async function handleApiRequest(
     (method === "POST" && pathname.startsWith("/api/settlements/"))
   ) {
     const denied = requireRole("super_admin")
+    if (denied) return denied
+  }
+
+  if (
+    method === "GET" &&
+    (pathname === "/api/settlements" || pathname === "/api/settlements/schedule")
+  ) {
+    const denied = requireRole("super_admin", "admin", "manager")
     if (denied) return denied
   }
 
@@ -572,8 +600,35 @@ export async function handleApiRequest(
       }
       return { status: 200, body: { ok: true, token: session.token, user: session.user } }
     } catch (err: any) {
+      if (err.message?.includes("/admin portal")) {
+        return { status: 403, body: { ok: false, error: err.message, requiresAdminPortal: true } }
+      }
       const isAuthErr = err.message?.toLowerCase().includes("password") || err.message?.toLowerCase().includes("invalid") || err.message?.toLowerCase().includes("unauthorized")
       return { status: isAuthErr ? 401 : 500, body: { ok: false, error: err.message || "Authentication failed" } }
+    }
+  }
+
+  // POST /api/auth/admin-login (Isolated Super Admin & Operations Admin Gateway)
+  if (method === "POST" && pathname === "/api/auth/admin-login") {
+    const clientIp = (headers?.["x-forwarded-for"] as string) || "127.0.0.1"
+    try {
+      const emailOrPhone = body.email || body.phone || body.username || body.emailOrPhone || ""
+      if (!emailOrPhone) {
+        return { status: 400, body: { ok: false, error: "Administrative email, phone, or ID is required" } }
+      }
+      checkAdminRateLimit(clientIp)
+      const session = await authenticateAdminUser(emailOrPhone, body.password)
+      recordAdminLoginAttempt(clientIp, true)
+      console.log(`[ADMIN SECURITY AUDIT] Successful login for ${session.user.email} (${session.user.role}) from ${clientIp}`)
+      return { status: 200, body: { ok: true, token: session.token, user: session.user } }
+    } catch (err: any) {
+      recordAdminLoginAttempt(clientIp, false)
+      console.warn(`[ADMIN SECURITY AUDIT] Failed login from ${clientIp}: ${err.message}`)
+      const isAccessDenied = err.message?.includes("Access Denied")
+      const isRateLimit = err.message?.includes("Too many")
+      const isAuthErr = err.message?.toLowerCase().includes("password") || err.message?.toLowerCase().includes("invalid")
+      const status = isRateLimit ? 429 : isAccessDenied ? 403 : isAuthErr ? 401 : 500
+      return { status, body: { ok: false, error: err.message || "Administrative authentication failed" } }
     }
   }
 
@@ -1138,6 +1193,124 @@ export async function handleApiRequest(
     }
   }
 
+  // GET /api/wallet/balance
+  if (method === "GET" && pathname === "/api/wallet/balance") {
+    if (!authUser || !authUser.userId) {
+      return { status: 401, body: { ok: false, error: "Authentication required" } }
+    }
+    try {
+      const balance = await getWalletBalance(authUser.userId)
+      return { status: 200, body: { ok: true, ...balance } }
+    } catch (err: any) {
+      return { status: 500, body: { ok: false, error: err.message || "Failed to fetch wallet balance" } }
+    }
+  }
+
+  // GET /api/wallet/transactions
+  if (method === "GET" && pathname === "/api/wallet/transactions") {
+    if (!authUser || !authUser.userId) {
+      return { status: 401, body: { ok: false, error: "Authentication required" } }
+    }
+    try {
+      const limit = Number(query.get("limit")) || 50
+      const transactions = await getWalletTransactions(authUser.userId, limit)
+      return { status: 200, body: { ok: true, transactions } }
+    } catch (err: any) {
+      return { status: 500, body: { ok: false, error: err.message || "Failed to fetch transactions" } }
+    }
+  }
+
+  // POST /api/wallet/topup/order
+  if (method === "POST" && pathname === "/api/wallet/topup/order") {
+    if (!authUser || !authUser.userId) {
+      return { status: 401, body: { ok: false, error: "Authentication required" } }
+    }
+    const amountRupees = Number(body.amountRupees || body.amount)
+    if (!amountRupees || amountRupees < 100 || amountRupees > 50000) {
+      return {
+        status: 400,
+        body: { ok: false, error: "Top-up amount must be between ₹100 and ₹50,000" },
+      }
+    }
+    const amountPaise = Math.round(amountRupees * 100)
+    try {
+      const result = await createPaymentOrder({
+        customerId: authUser.userId,
+        quoteToken: `wallet_topup_${authUser.userId}_${Date.now()}`,
+        holdId: `topup_hold_${authUser.userId}`,
+        amountPaise,
+      })
+      return {
+        status: 201,
+        body: {
+          ok: true,
+          ...result,
+          amountRupees,
+          keyId: process.env.RAZORPAY_KEY_ID || "rzp_test_gomaa_synthetic",
+        },
+      }
+    } catch (err: any) {
+      return { status: 503, body: { ok: false, error: err.message || "Failed to create topup order" } }
+    }
+  }
+
+  // POST /api/wallet/topup/verify
+  if (method === "POST" && pathname === "/api/wallet/topup/verify") {
+    if (!authUser || !authUser.userId) {
+      return { status: 401, body: { ok: false, error: "Authentication required" } }
+    }
+    const { paymentId, orderId, signature, amountPaise } = body
+    if (!paymentId || !orderId || !signature || !amountPaise) {
+      return { status: 400, body: { ok: false, error: "Missing required payment verification parameters" } }
+    }
+
+    const expectedPaise = BigInt(amountPaise)
+    if (expectedPaise <= 0n) {
+      return { status: 400, body: { ok: false, error: "Invalid payment amount" } }
+    }
+
+    // Anti-replay check across existing wallet transactions
+    const existingTx = await prisma.walletTransaction.findFirst({
+      where: { referenceId: paymentId },
+    })
+    if (existingTx) {
+      return {
+        status: 409,
+        body: { ok: false, error: "This payment has already been credited to a wallet" },
+      }
+    }
+
+    // Verify HMAC signature
+    const secret = process.env.RAZORPAY_KEY_SECRET || "gomaa_test_secret_2026"
+    const expected = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex")
+    if (signature !== expected) {
+      return { status: 402, body: { ok: false, error: "Invalid cryptographic payment signature" } }
+    }
+
+    try {
+      const creditRes = await creditWallet({
+        userId: authUser.userId,
+        amountPaise: expectedPaise,
+        purpose: "TOPUP",
+        referenceId: paymentId,
+        idempotencyKey: `topup_${paymentId}`,
+        description: `Wallet top-up of ₹${Number(expectedPaise) / 100} via Razorpay (${paymentId})`,
+        metadata: { orderId, paymentId },
+      })
+
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          message: "Wallet topped up successfully",
+          ...creditRes,
+        },
+      }
+    } catch (err: any) {
+      return { status: 500, body: { ok: false, error: err.message || "Failed to credit wallet" } }
+    }
+  }
+
   // POST /api/payments/webhook
   if (method === "POST" && pathname === "/api/payments/webhook") {
     const webhookSignature =
@@ -1361,45 +1534,68 @@ export async function handleApiRequest(
 
     let payment = body.payment || {}
     const expectedPaise = Math.round(Number(quote.total) * 100)
-    const hasLiveRazorpay = Boolean(
-      process.env.RAZORPAY_KEY_ID &&
-      !process.env.RAZORPAY_KEY_ID.includes("test") &&
-      !process.env.RAZORPAY_KEY_ID.includes("synthetic")
-    )
-    if (!payment.paymentId || !payment.orderId || !payment.signature) {
-      if ((process.env.NODE_ENV === "production" && hasLiveRazorpay) || body.strictPayment) {
+    const isWalletPayment = body.paymentProvider === "WALLET" || (b as any).paymentProvider === "WALLET"
+
+    if (isWalletPayment) {
+      try {
+        const debitRes = await debitWallet({
+          userId: authUser.userId,
+          amountPaise: expectedPaise,
+          purpose: "BOOKING_PAYMENT",
+          referenceId: b.id,
+          idempotencyKey: `booking_pay_${b.id}`,
+          description: `Devotional Seva Booking payment for ${b.id}`,
+        })
+        payment = {
+          paymentId: debitRes.transactionId,
+          orderId: `wallet_ord_${b.id}`,
+          signature: `wallet_sig_${debitRes.transactionId}`,
+          amountPaise: expectedPaise,
+        }
+      } catch (err: any) {
+        return { status: 402, body: { error: err.message || "Wallet payment failed" } }
+      }
+    } else {
+      // FAIL-CLOSED PAYMENT ENFORCEMENT:
+      // A booking cannot be created without verified payment proof from Razorpay.
+      if (!payment.paymentId || !payment.orderId || !payment.signature) {
         return { status: 402, body: { error: "Verified Razorpay payment is required before booking" } }
       }
-      // In development, testing, and UI checkout: auto-generate signed test payment
-      const orderId = `order_test_${Date.now()}`
-      const paymentId = `pay_test_${Date.now()}`
-      const secret = process.env.RAZORPAY_KEY_SECRET || "gomaa_test_secret_2026"
-      const signature = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex")
-      payment = {
-        orderId,
-        paymentId,
-        signature,
-        amountPaise: expectedPaise,
-      }
-    }
-    if (!Number.isSafeInteger(expectedPaise) || Number(payment.amountPaise) !== expectedPaise) {
-      if ((process.env.NODE_ENV === "production" && hasLiveRazorpay) || body.strictPayment) {
+      if (!Number.isSafeInteger(expectedPaise) || Number(payment.amountPaise) !== expectedPaise) {
         return { status: 402, body: { error: "Payment amount does not match the server quote" } }
       }
-      payment.amountPaise = expectedPaise
-    }
-    try {
-      await verifyCapturedPayment({
-        paymentId: payment.paymentId,
-        orderId: payment.orderId,
-        signature: payment.signature,
-        customerId: authUser.userId,
-        quoteToken,
-        amountPaise: expectedPaise,
-        holdId: String(body.holdId || (b as any).holdId || ""),
+
+      // ANTI-PAYMENT-REPLAY ENFORCEMENT:
+      // Prevent reuse of paymentId or paymentOrderId across different bookings.
+      const replayedBooking = await prisma.booking.findFirst({
+        where: {
+          OR: [
+            { paymentId: payment.paymentId },
+            { paymentOrderId: payment.orderId },
+          ],
+        },
+        select: { id: true, customerId: true },
       })
-    } catch (err: any) {
-      return { status: 402, body: { error: err.message || "Payment verification failed" } }
+      if (replayedBooking && replayedBooking.id !== b.id) {
+        return {
+          status: 409,
+          body: { error: "This payment proof has already been applied to an existing booking" },
+        }
+      }
+
+      try {
+        await verifyCapturedPayment({
+          paymentId: payment.paymentId,
+          orderId: payment.orderId,
+          signature: payment.signature,
+          customerId: authUser.userId,
+          quoteToken,
+          amountPaise: expectedPaise,
+          holdId: String(body.holdId || (b as any).holdId || ""),
+        })
+      } catch (err: any) {
+        return { status: 402, body: { error: err.message || "Payment verification failed" } }
+      }
     }
 
     try {
@@ -1529,9 +1725,10 @@ export async function handleApiRequest(
             (b.addons ?? 0),
           status: toPrismaStatus(b.status) || "PAYMENT_VERIFIED",
            isPaid: true,
-           paymentProvider: "RAZORPAY",
+           paymentProvider: isWalletPayment ? "WALLET" : "RAZORPAY",
            paymentOrderId: payment.orderId,
            paymentId: payment.paymentId,
+           walletTxId: isWalletPayment ? payment.paymentId : null,
            paymentStatus: "CAPTURED",
            paymentCapturedAt: new Date(),
           handoverOtp: b.handoverOtp || String(Math.floor(1000 + Math.random() * 9000)),
@@ -3901,7 +4098,34 @@ export async function handleApiRequest(
   // GET /api/vets
   if (method === "GET" && pathname === "/api/vets") {
     try {
-      const vets = await prisma.empanelledVet.findMany({ orderBy: { createdAt: "asc" } })
+      const gosalaQuery = query.get("gosala") || query.get("gosalaId") || query.get("gosalaName")
+      const where: any = {}
+
+      // Multi-Tenant Isolation:
+      // Scope strictly to the requester's assigned Gaushala(s) for Managers and Operations Admins
+      if (authUser?.role === "manager" && authUser.gosalaNames?.length > 0) {
+        where.OR = [
+          ...authUser.gosalaNames.map((gn) => ({ gosala: { name: { equals: gn, mode: "insensitive" as const } } })),
+          ...authUser.gosalaNames.map((gn) => ({ assignedGosalas: { has: gn } })),
+        ]
+      } else if (authUser?.role === "admin" && authUser.gosalaNames?.length > 0) {
+        where.OR = [
+          ...authUser.gosalaNames.map((gn) => ({ gosala: { name: { equals: gn, mode: "insensitive" as const } } })),
+          ...authUser.gosalaNames.map((gn) => ({ assignedGosalas: { has: gn } })),
+        ]
+      } else if (gosalaQuery) {
+        where.OR = [
+          { gosalaId: gosalaQuery },
+          { gosala: { name: { contains: gosalaQuery, mode: "insensitive" as const } } },
+          { assignedGosalas: { has: gosalaQuery } },
+        ]
+      }
+
+      const vets = await prisma.empanelledVet.findMany({
+        where,
+        include: { gosala: { select: { id: true, name: true, region: true } } },
+        orderBy: { createdAt: "asc" },
+      })
       return { status: 200, body: { ok: true, vets } }
     } catch (e: any) {
       console.warn("[GET /api/vets] DB fallback notice:", e?.message)
@@ -3911,12 +4135,31 @@ export async function handleApiRequest(
 
   // POST /api/vets
   if (method === "POST" && pathname === "/api/vets") {
+    const denied = requireRole("super_admin", "admin", "manager")
+    if (denied) return denied
+
     const vet = body.vet || body
     const id = vet.id || `VET-${Date.now()}`
+
+    let gosalaId = vet.gosalaId
+    if (!gosalaId && vet.gosalaName) {
+      const g = await prisma.gosala.findFirst({
+        where: { name: { equals: vet.gosalaName, mode: "insensitive" } },
+      })
+      if (g) gosalaId = g.id
+    }
+    if (!gosalaId && authUser?.role === "manager" && authUser.gosalaNames?.[0]) {
+      const g = await prisma.gosala.findFirst({
+        where: { name: { equals: authUser.gosalaNames[0], mode: "insensitive" } },
+      })
+      if (g) gosalaId = g.id
+    }
+
     try {
       const fullVet = await prisma.empanelledVet.upsert({
         where: { regNo: vet.regNo || id },
         update: {
+          gosalaId: gosalaId || undefined,
           name: vet.name,
           qualification: vet.qualification || "B.V.Sc",
           clinic: vet.clinic || "Local Veterinary Clinic",
@@ -3924,10 +4167,11 @@ export async function handleApiRequest(
           address: vet.address || "Veterinary Center",
           specialization: vet.specialization || "General Bovine Care",
           emergency24x7: vet.emergency24x7 ?? true,
-          assignedGosalas: vet.assignedGosalas || ["All Gaushalas"],
+          assignedGosalas: vet.assignedGosalas || (vet.gosalaName ? [vet.gosalaName] : ["All Gaushalas"]),
         },
         create: {
           id,
+          gosalaId: gosalaId || null,
           name: vet.name,
           qualification: vet.qualification || "B.V.Sc",
           regNo: vet.regNo || `REG-${Date.now()}`,
@@ -3936,8 +4180,9 @@ export async function handleApiRequest(
           address: vet.address || "Veterinary Center",
           specialization: vet.specialization || "General Bovine Care",
           emergency24x7: vet.emergency24x7 ?? true,
-          assignedGosalas: vet.assignedGosalas || ["All Gaushalas"],
+          assignedGosalas: vet.assignedGosalas || (vet.gosalaName ? [vet.gosalaName] : ["All Gaushalas"]),
         },
+        include: { gosala: { select: { id: true, name: true, region: true } } },
       })
 
       wsHub.broadcastToChannel("channel:animals", "VET_UPDATED", {

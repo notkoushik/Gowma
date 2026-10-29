@@ -67,6 +67,10 @@ export type Booking = {
   driverRating?: number | null
   driverTotalTrips?: number | null
   driverAvatar?: string | null
+  paymentProvider?: string
+  paymentOrderId?: string
+  paymentId?: string
+  walletTxId?: string
 }
 
 export type PricingConfig = {

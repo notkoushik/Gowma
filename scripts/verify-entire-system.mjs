@@ -27,11 +27,18 @@ async function run() {
 
     // 2. Authentication Gateway
     console.log("\n[2/8] Verifying Authentication & Password Security...")
-    const badLogin = await handleApiRequest("POST", "/api/auth/login", JSON.stringify({
+    // Admin on public login must be rejected (Portal Isolation)
+    const adminOnPublic = await handleApiRequest("POST", "/api/auth/login", JSON.stringify({
+      emailOrPhone: saUser.email,
+      password: "some_password",
+    }))
+    harness.assert(adminOnPublic?.status === 403, "Admin on public login redirected to /admin (403)", `status=${adminOnPublic?.status}`)
+
+    const badLogin = await handleApiRequest("POST", "/api/auth/admin-login", JSON.stringify({
       emailOrPhone: saUser.email,
       password: "wrong_test_password_unauthorized",
     }))
-    harness.assert(badLogin?.status === 401, "Bad password rejected with 401", `status=${badLogin?.status}`)
+    harness.assert(badLogin?.status === 401, "Bad password rejected with 401 on /api/auth/admin-login", `status=${badLogin?.status}`)
 
     const nonExistent = await handleApiRequest("POST", "/api/auth/login", JSON.stringify({
       emailOrPhone: `ghost_${harness.testRunId}@example.test`,

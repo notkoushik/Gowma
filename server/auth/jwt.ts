@@ -1,18 +1,21 @@
 import crypto from "crypto"
 
-const FALLBACK_JWT_SECRET =
+const DEV_FALLBACK_JWT_SECRET =
   "gomaa_secure_jwt_secret_shield_prod_2026_pan_india_vedic_cow_sanctuary_987654321"
+
+if (
+  process.env.NODE_ENV === "production" &&
+  (!process.env.GOMAA_JWT_SECRET || process.env.GOMAA_JWT_SECRET.length < 32)
+) {
+  throw new Error(
+    "[FATAL SECURITY] In production, GOMAA_JWT_SECRET is mandatory and must be a high-entropy secret at least 32 characters long."
+  )
+}
 
 export const JWT_SECRET =
   process.env.GOMAA_JWT_SECRET ||
   process.env.JWT_SECRET ||
-  FALLBACK_JWT_SECRET
-
-if (process.env.NODE_ENV === "production" && JWT_SECRET === FALLBACK_JWT_SECRET) {
-  console.warn(
-    "[Security Notice] Using built-in fallback JWT_SECRET. For production, set GOMAA_JWT_SECRET in your Vercel Environment Variables."
-  )
-}
+  DEV_FALLBACK_JWT_SECRET
 
 function base64UrlEncode(strOrBuffer: string | Buffer): string {
   const buf =

@@ -1,6 +1,30 @@
+import fs from "node:fs"
 import puppeteer from "puppeteer-core"
 
-const CHROME_PATH = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+function resolveChromePath() {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH && fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
+    return process.env.PUPPETEER_EXECUTABLE_PATH
+  }
+  const linuxCandidates = [
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium",
+    "/snap/bin/chromium",
+  ]
+  const winCandidates = [
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    (process.env.LOCALAPPDATA || "") + "\\Google\\Chrome\\Application\\chrome.exe",
+  ]
+  const candidates = process.platform === "win32" ? winCandidates : linuxCandidates
+  for (const p of candidates) {
+    if (p && fs.existsSync(p)) return p
+  }
+  return process.platform === "win32" ? winCandidates[0] : "/usr/bin/chromium-browser"
+}
+
+const CHROME_PATH = resolveChromePath()
 const TARGET_URL = process.argv[2]?.startsWith("http")
   ? process.argv[2]
   : process.env.TEST_TARGET_URL || "https://gowma.vercel.app"
