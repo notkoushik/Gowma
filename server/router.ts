@@ -222,6 +222,33 @@ function normalizeDateStr(d: any): string {
   return s
 }
 
+function expandDateCandidates(input: any): string[] {
+  if (!input) return []
+  const s = String(input).replace(/\+/g, " ").trim()
+  const set = new Set<string>([s])
+  const normalized = normalizeDateStr(s)
+  if (normalized) set.add(normalized)
+
+  const parsed = new Date(s)
+  if (!isNaN(parsed.getTime())) {
+    const yyyy = parsed.getFullYear()
+    const mm = String(parsed.getMonth() + 1).padStart(2, "0")
+    const dd = String(parsed.getDate()).padStart(2, "0")
+    const d = parsed.getDate()
+    const shortMonth = parsed.toLocaleString("en-US", { month: "short" })
+
+    set.add(`${yyyy}-${mm}-${dd}`)
+    set.add(`${yyyy} ${mm} ${dd}`)
+    set.add(`${d} ${shortMonth} ${yyyy}`)
+    set.add(`${dd} ${shortMonth} ${yyyy}`)
+    set.add(`${d}-${shortMonth}-${yyyy}`)
+    set.add(`${dd}-${shortMonth}-${yyyy}`)
+    set.add(`${dd}/${mm}/${yyyy}`)
+    set.add(`${d}/${mm}/${yyyy}`)
+  }
+  return Array.from(set).filter(Boolean)
+}
+
 function formatBooking(b: any): Booking {
   const mgrApproval = b.auditTrails?.find(
     (a: any) =>
@@ -519,7 +546,10 @@ export async function handleApiRequest(
       pathname === "/api/places/search" ||
       pathname === "/api/animals" ||
       pathname === "/api/gosalas" ||
-      pathname === "/api/vets"
+      pathname === "/api/vets" ||
+      pathname === "/api/pricing-config" ||
+      pathname === "/api/pricing/config" ||
+      pathname === "/api/availability"
     ))
   if (!isPublicRoute && !authUser) {
     return { status: 401, body: { ok: false, error: "Authentication required" } }
@@ -871,16 +901,36 @@ export async function handleApiRequest(
   // GET /api/availability
   if (method === "GET" && pathname === "/api/availability") {
     try {
-      const animal = query.get("animal") || ""
+      const animalParam = (query.get("animal") || "").trim()
       const rawDate = query.get("date") || ""
       const date = rawDate.replace(/\+/g, " ").trim()
       const time = (query.get("time") || "").replace(/\+/g, " ").trim()
       const duration = Number(query.get("duration")) || 60
-      const dateCandidates = Array.from(new Set([rawDate, date].filter(Boolean)))
+      const dateCandidates = expandDateCandidates(rawDate || date)
+
+      // Resolve animal record to support lookup by ID, exact name, or partial name
+      const animalRecord = await prisma.animal.findFirst({
+        where: {
+          OR: [
+            { id: animalParam },
+            { name: { equals: animalParam, mode: "insensitive" } },
+            ...(animalParam ? [{ name: { contains: animalParam, mode: "insensitive" } }] : []),
+          ],
+        },
+      })
+      const animalId = animalRecord?.id
+      const animalName = animalRecord?.name || animalParam
 
       // Check manual schedule blocks
       const manualBlock = await prisma.animalScheduleBlock.findFirst({
-        where: { animalName: animal, date: { in: dateCandidates }, timeSlot: time },
+        where: {
+          OR: [
+            ...(animalId ? [{ animalId }] : []),
+            { animalName: { in: [animalName, animalParam] } },
+          ],
+          date: { in: dateCandidates },
+          timeSlot: time,
+        },
       })
       if (manualBlock) {
         return {
@@ -899,16 +949,20 @@ export async function handleApiRequest(
       const slotEnd = slotStart + duration
 
       // Check active temporary slot holds
-      const hold = await prisma.temporarySlotHold.findFirst({
+      const activeHolds = await prisma.temporarySlotHold.findMany({
         where: {
-          animal: { name: animal },
+          OR: [
+            ...(animalId ? [{ animalId }] : []),
+            { animal: { name: { equals: animalName, mode: "insensitive" } } },
+          ],
           date: { in: dateCandidates },
+          status: "ACTIVE",
           expiresAt: { gt: new Date() },
         },
       })
-      if (hold) {
+      for (const hold of activeHolds) {
         const holdStart = toMinutes(hold.startTime)
-        const holdEnd = holdStart + hold.durationMin
+        const holdEnd = holdStart + (hold.durationMin || 60)
         if (slotStart < holdEnd && slotEnd > holdStart) {
           return {
             status: 200,
@@ -926,9 +980,14 @@ export async function handleApiRequest(
       // Check confirmed or active bookings
       const bookings = await prisma.booking.findMany({
         where: {
-          animalName: animal,
+          OR: [
+            ...(animalId ? [{ animalId }] : []),
+            { animalName: { equals: animalName, mode: "insensitive" } },
+            { animalName: { equals: animalParam, mode: "insensitive" } },
+            ...(animalParam ? [{ animalName: { contains: animalParam, mode: "insensitive" } }] : []),
+          ],
           bookingDate: { in: dateCandidates },
-          status: { not: "REJECTED" },
+          status: { notIn: ["REJECTED", "CANCELLED"] },
         },
       })
 
@@ -977,10 +1036,17 @@ export async function handleApiRequest(
   // POST /api/hold
   if (method === "POST" && pathname === "/api/hold") {
     const animal = await prisma.animal.findFirst({
-      where: { name: body.animal },
+      where: {
+        OR: [
+          { id: body.animal },
+          { name: { equals: body.animal, mode: "insensitive" } },
+          ...(body.animal ? [{ name: { contains: body.animal, mode: "insensitive" } }] : []),
+        ],
+      },
     })
     if (!animal) return { status: 404, body: { error: "Animal not found" } }
 
+    const dateCandidates = expandDateCandidates(body.date)
     const ttlSeconds = Math.min(600, Math.max(60, Number(body.ttlSeconds) || 300))
     const ttl = ttlSeconds * 1000
     let hold: any
@@ -991,16 +1057,17 @@ export async function handleApiRequest(
         const holdStart = toMinutes(body.start)
         const holdEnd = holdStart + (Number(body.durationMin) || 60)
 
-        // Check if another customer or hold currently reserves an overlapping time window
+        // Check if another customer currently reserves an overlapping time window
         const activeHolds = await tx.temporarySlotHold.findMany({
           where: {
             animalId: animal.id,
-            date: body.date,
+            date: { in: dateCandidates },
             status: "ACTIVE",
             expiresAt: { gt: new Date() },
           },
         })
         const isSlotHeld = activeHolds.some((h) => {
+          if (authUser?.userId && h.customerId === authUser.userId) return false // Allow own hold renewal
           const s = toMinutes(h.startTime)
           const e = s + (h.durationMin || 60)
           return holdStart < e && holdEnd > s
@@ -1010,7 +1077,7 @@ export async function handleApiRequest(
         const bookings = await tx.booking.findMany({
           where: {
             animalId: animal.id,
-            bookingDate: body.date,
+            bookingDate: { in: dateCandidates },
             status: { notIn: ["REJECTED", "CANCELLED"] },
           },
         })
@@ -1447,8 +1514,6 @@ export async function handleApiRequest(
             where.OR = myGosalaNames.map((gn: string) => ({
               gosalaName: { equals: gn, mode: "insensitive" },
             }))
-          } else {
-            where.id = "NONE"
           }
         }
       } else if (authUser?.role === "super_admin") {

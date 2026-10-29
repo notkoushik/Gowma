@@ -3216,6 +3216,30 @@ function normalizeDateStr(d) {
   }
   return s;
 }
+function expandDateCandidates(input) {
+  if (!input) return [];
+  const s = String(input).replace(/\+/g, " ").trim();
+  const set = /* @__PURE__ */ new Set([s]);
+  const normalized = normalizeDateStr(s);
+  if (normalized) set.add(normalized);
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    const yyyy = parsed.getFullYear();
+    const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+    const dd = String(parsed.getDate()).padStart(2, "0");
+    const d = parsed.getDate();
+    const shortMonth = parsed.toLocaleString("en-US", { month: "short" });
+    set.add(`${yyyy}-${mm}-${dd}`);
+    set.add(`${yyyy} ${mm} ${dd}`);
+    set.add(`${d} ${shortMonth} ${yyyy}`);
+    set.add(`${dd} ${shortMonth} ${yyyy}`);
+    set.add(`${d}-${shortMonth}-${yyyy}`);
+    set.add(`${dd}-${shortMonth}-${yyyy}`);
+    set.add(`${dd}/${mm}/${yyyy}`);
+    set.add(`${d}/${mm}/${yyyy}`);
+  }
+  return Array.from(set).filter(Boolean);
+}
 function formatBooking(b) {
   const mgrApproval = b.auditTrails?.find(
     (a) => a.action === "MANAGER_CONFIRMED" || a.actorRole === "GOSALA_MANAGER"
@@ -3400,7 +3424,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   const { pathname, query } = parseUrl(rawUrl);
   if (!pathname.startsWith("/api/")) return null;
   const authUser = getAuthUserFromHeader(headers?.authorization || headers?.Authorization);
-  const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/admin-login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/places/search" || pathname === "/api/animals" || pathname === "/api/gosalas" || pathname === "/api/vets");
+  const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/admin-login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/places/search" || pathname === "/api/animals" || pathname === "/api/gosalas" || pathname === "/api/vets" || pathname === "/api/pricing-config" || pathname === "/api/pricing/config" || pathname === "/api/availability");
   if (!isPublicRoute && !authUser) {
     return { status: 401, body: { ok: false, error: "Authentication required" } };
   }
@@ -3678,14 +3702,32 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   }
   if (method === "GET" && pathname === "/api/availability") {
     try {
-      const animal = query.get("animal") || "";
+      const animalParam = (query.get("animal") || "").trim();
       const rawDate = query.get("date") || "";
       const date = rawDate.replace(/\+/g, " ").trim();
       const time = (query.get("time") || "").replace(/\+/g, " ").trim();
       const duration = Number(query.get("duration")) || 60;
-      const dateCandidates = Array.from(new Set([rawDate, date].filter(Boolean)));
+      const dateCandidates = expandDateCandidates(rawDate || date);
+      const animalRecord = await prisma.animal.findFirst({
+        where: {
+          OR: [
+            { id: animalParam },
+            { name: { equals: animalParam, mode: "insensitive" } },
+            ...animalParam ? [{ name: { contains: animalParam, mode: "insensitive" } }] : []
+          ]
+        }
+      });
+      const animalId = animalRecord?.id;
+      const animalName = animalRecord?.name || animalParam;
       const manualBlock = await prisma.animalScheduleBlock.findFirst({
-        where: { animalName: animal, date: { in: dateCandidates }, timeSlot: time }
+        where: {
+          OR: [
+            ...animalId ? [{ animalId }] : [],
+            { animalName: { in: [animalName, animalParam] } }
+          ],
+          date: { in: dateCandidates },
+          timeSlot: time
+        }
       });
       if (manualBlock) {
         return {
@@ -3699,16 +3741,20 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       }
       const slotStart = toMinutes(time);
       const slotEnd = slotStart + duration;
-      const hold = await prisma.temporarySlotHold.findFirst({
+      const activeHolds = await prisma.temporarySlotHold.findMany({
         where: {
-          animal: { name: animal },
+          OR: [
+            ...animalId ? [{ animalId }] : [],
+            { animal: { name: { equals: animalName, mode: "insensitive" } } }
+          ],
           date: { in: dateCandidates },
+          status: "ACTIVE",
           expiresAt: { gt: /* @__PURE__ */ new Date() }
         }
       });
-      if (hold) {
+      for (const hold of activeHolds) {
         const holdStart = toMinutes(hold.startTime);
-        const holdEnd = holdStart + hold.durationMin;
+        const holdEnd = holdStart + (hold.durationMin || 60);
         if (slotStart < holdEnd && slotEnd > holdStart) {
           return {
             status: 200,
@@ -3724,9 +3770,14 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       }
       const bookings = await prisma.booking.findMany({
         where: {
-          animalName: animal,
+          OR: [
+            ...animalId ? [{ animalId }] : [],
+            { animalName: { equals: animalName, mode: "insensitive" } },
+            { animalName: { equals: animalParam, mode: "insensitive" } },
+            ...animalParam ? [{ animalName: { contains: animalParam, mode: "insensitive" } }] : []
+          ],
           bookingDate: { in: dateCandidates },
-          status: { not: "REJECTED" }
+          status: { notIn: ["REJECTED", "CANCELLED"] }
         }
       });
       const pricing = await prisma.masterPricingConfig.findFirst().catch(() => null);
@@ -3768,9 +3819,16 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   }
   if (method === "POST" && pathname === "/api/hold") {
     const animal = await prisma.animal.findFirst({
-      where: { name: body.animal }
+      where: {
+        OR: [
+          { id: body.animal },
+          { name: { equals: body.animal, mode: "insensitive" } },
+          ...body.animal ? [{ name: { contains: body.animal, mode: "insensitive" } }] : []
+        ]
+      }
     });
     if (!animal) return { status: 404, body: { error: "Animal not found" } };
+    const dateCandidates = expandDateCandidates(body.date);
     const ttlSeconds = Math.min(600, Math.max(60, Number(body.ttlSeconds) || 300));
     const ttl = ttlSeconds * 1e3;
     let hold;
@@ -3782,12 +3840,13 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         const activeHolds = await tx.temporarySlotHold.findMany({
           where: {
             animalId: animal.id,
-            date: body.date,
+            date: { in: dateCandidates },
             status: "ACTIVE",
             expiresAt: { gt: /* @__PURE__ */ new Date() }
           }
         });
         const isSlotHeld = activeHolds.some((h) => {
+          if (authUser?.userId && h.customerId === authUser.userId) return false;
           const s = toMinutes(h.startTime);
           const e = s + (h.durationMin || 60);
           return holdStart < e && holdEnd > s;
@@ -3796,7 +3855,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         const bookings = await tx.booking.findMany({
           where: {
             animalId: animal.id,
-            bookingDate: body.date,
+            bookingDate: { in: dateCandidates },
             status: { notIn: ["REJECTED", "CANCELLED"] }
           }
         });
@@ -4179,8 +4238,6 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
             where.OR = myGosalaNames.map((gn) => ({
               gosalaName: { equals: gn, mode: "insensitive" }
             }));
-          } else {
-            where.id = "NONE";
           }
         }
       } else if (authUser?.role === "super_admin") {

@@ -509,15 +509,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setIsLoading(true)
     setIsLoadingProfiles(true)
     try {
-      // Step 1: Core operational state
-      const [meRes, gosalaRes, prRes, bkRes, stRes] = await Promise.all([
-        api.getMe().catch(() => null),
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem("gomaa_auth_token")
+          : null
+
+      // Step 1: Public operational catalog (safe for unauthenticated visitors)
+      const [gosalaRes, prRes, animalRes, vetRes] = await Promise.all([
         api.getGosalas().catch(() => null),
         api.getPricingConfig().catch(() => null),
-        api.getBookings().catch(() => null),
-        api.getSettlements().catch(() => null),
+        api.getAnimals().catch(() => null),
+        api.getVets().catch(() => null),
       ])
 
+      if (gosalaRes?.gosalas && Array.isArray(gosalaRes.gosalas)) {
+        setGosalas(gosalaRes.gosalas)
+      }
+      if (prRes?.config) {
+        setPricingConfig(prRes.config)
+      }
+      if (animalRes?.animals && Array.isArray(animalRes.animals)) {
+        setAnimals(animalRes.animals)
+      }
+      if (vetRes?.vets && Array.isArray(vetRes.vets)) {
+        setVets(vetRes.vets)
+      }
+
+      // If no valid auth token is stored, do not dispatch protected admin/user calls that trigger 401s
+      if (!token) {
+        setAuthUser(null)
+        setBookings([])
+        setSettlements([])
+        setManagers([])
+        setUsers([])
+        return
+      }
+
+      // Step 2: Authenticated session resolution
+      const meRes = await api.getMe().catch(() => null)
       if (meRes?.ok && meRes.user) {
         setAuthUser(meRes.user)
       }
@@ -525,18 +554,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const role = meRes?.user?.role
       const isSuper = role === "super_admin"
 
-      // Step 2: Auxiliary rosters & directory (staggered to protect database connection pool)
-      const [animalRes, mgRes, vetRes, profRes, usersRes, schedRes] =
+      // Step 3: Protected rosters & admin data
+      const [bkRes, stRes, mgRes, profRes, usersRes, schedRes] =
         await Promise.all([
-          api.getAnimals().catch(() => null),
+          api.getBookings().catch(() => null),
+          api.getSettlements().catch(() => null),
           api.getManagers().catch(() => null),
-          api.getVets().catch(() => null),
           api.getProfiles().catch(() => null),
           isSuper
             ? api.getUsers().catch(() => null)
             : Promise.resolve(null),
           api.getSettlementSchedule().catch(() => null),
         ])
+
       if (isSuper && usersRes?.ok && Array.isArray(usersRes.users)) {
         setUsers(usersRes.users)
       } else {
@@ -550,9 +580,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }))
         setBookings(sanitized)
       }
-      if (prRes?.config) {
-        setPricingConfig(prRes.config)
-      }
       if (mgRes?.managers && Array.isArray(mgRes.managers))
         setManagers(mgRes.managers)
       if (stRes?.settlements && Array.isArray(stRes.settlements))
@@ -560,15 +587,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (schedRes?.schedule) setSettlementSchedule(schedRes.schedule)
       if (profRes?.profiles) {
         setProfiles((prev) => ({ ...prev, ...profRes.profiles }))
-      }
-      if (gosalaRes?.gosalas && Array.isArray(gosalaRes.gosalas)) {
-        setGosalas(gosalaRes.gosalas)
-      }
-      if (animalRes?.animals && Array.isArray(animalRes.animals)) {
-        setAnimals(animalRes.animals)
-      }
-      if (vetRes?.vets && Array.isArray(vetRes.vets)) {
-        setVets(vetRes.vets)
       }
     } catch (e) {
       console.warn("Backend state init fallback:", e)

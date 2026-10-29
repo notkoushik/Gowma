@@ -126,7 +126,7 @@ function parseHash(): {
   if (!hash) return { role: undefined }
   const parts = hash.split("/")
   const r = parts[0]
-  if (r === "login" || r === "admin-login" || r === "admin") return { role: null }
+  if (r === "login" || r === "admin-login") return { role: null }
   if (VALID_ROLES.includes(r as RoleId)) {
     return { role: r as RoleId, subview: parts[1], sector: parts[2] }
   }
