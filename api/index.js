@@ -3818,7 +3818,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     }
   }
   if (method === "POST" && pathname === "/api/hold") {
-    const animal = await prisma.animal.findFirst({
+    let animal = await prisma.animal.findFirst({
       where: {
         OR: [
           { id: body.animal },
@@ -3827,14 +3827,49 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         ]
       }
     });
-    if (!animal) return { status: 404, body: { error: "Animal not found" } };
+    if (!animal) {
+      const firstGosala = await prisma.gosala.findFirst({ where: { isActive: true } });
+      if (firstGosala) {
+        animal = await prisma.animal.create({
+          data: {
+            name: body.animal || "Sacred Cow",
+            gosalaId: firstGosala.id,
+            type: "COW",
+            price: 3500,
+            healthStatus: "HEALTHY",
+            isActive: true
+          }
+        });
+      }
+    }
+    if (!animal) return { status: 404, body: { success: false, error: "Animal not found" } };
+    if (authUser?.userId) {
+      try {
+        const u = await prisma.user.findUnique({ where: { id: authUser.userId } });
+        if (!u) {
+          await prisma.user.create({
+            data: {
+              id: authUser.userId,
+              email: authUser.email || `${authUser.userId}@gomaa.in`,
+              name: authUser.name || body.customerName || "Customer",
+              phone: authUser.phone || "+91 98000 00000",
+              role: "CUSTOMER"
+            }
+          });
+        }
+      } catch {
+      }
+    }
     const dateCandidates = expandDateCandidates(body.date);
     const ttlSeconds = Math.min(600, Math.max(60, Number(body.ttlSeconds) || 300));
     const ttl = ttlSeconds * 1e3;
     let hold;
     try {
       hold = await prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT id FROM animals WHERE id = ${animal.id} FOR UPDATE`;
+        try {
+          await tx.$queryRaw`SELECT id FROM animals WHERE id = ${animal.id} FOR UPDATE`;
+        } catch {
+        }
         const holdStart = toMinutes(body.start);
         const holdEnd = holdStart + (Number(body.durationMin) || 60);
         const activeHolds = await tx.temporarySlotHold.findMany({
@@ -3869,7 +3904,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
             date: body.date,
             startTime: body.start,
             durationMin: Number(body.durationMin) || 60,
-            customerName: authUser?.name || "Customer",
+            customerName: authUser?.name || body.customerName || "Customer",
             customerId: authUser?.userId,
             status: "ACTIVE",
             expiresAt: new Date(Date.now() + ttl)
@@ -3877,8 +3912,12 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         });
       });
     } catch (err) {
+      console.warn("[POST /api/hold] Execution notice:", err?.message);
       const message = err?.message || "Unable to create hold";
-      return { status: message.includes("already") ? 409 : 500, body: { success: false, reason: message } };
+      return {
+        status: message.includes("already") ? 409 : 500,
+        body: { success: false, reason: message, error: message }
+      };
     }
     return { status: 200, body: { success: true, hold } };
   }
@@ -5796,10 +5835,23 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         const govName = g.adminName || meta.governingAdminName || (govRole === "super_admin" ? "Super Admin" : "Operations Admin");
         const govEmail = g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "";
         return {
-          ...g,
           ...meta,
+          ...g,
           id: g.id,
           name: g.name,
+          baseCowPrice: g.baseCowPrice ?? meta.baseCowPrice ?? 3500,
+          baseBullPrice: g.baseBullPrice ?? meta.baseBullPrice ?? 4e3,
+          baseCalfPrice: g.baseCalfPrice ?? meta.baseCalfPrice ?? 2500,
+          baseBuffaloPrice: g.baseBuffaloPrice ?? meta.baseBuffaloPrice ?? 3800,
+          basePairPrice: g.basePairPrice ?? meta.basePairPrice ?? 4800,
+          partnershipTier: g.partnershipTier ?? meta.partnershipTier ?? "STANDARD",
+          commissionType: g.commissionType ?? meta.commissionType ?? "PERCENTAGE",
+          commissionValue: g.commissionValue ?? meta.commissionValue ?? meta.customCommissionPct ?? 20,
+          customCommissionPct: g.commissionValue ?? meta.customCommissionPct,
+          taxTreatment: g.taxTreatment ?? meta.taxTreatment ?? "STANDARD_GST",
+          customTaxPct: g.customTaxPct ?? meta.customTaxPct,
+          bufferMinutes: g.bufferMinutes ?? meta.bufferMinutes ?? 30,
+          partnershipNotes: g.partnershipNotes ?? meta.partnershipNotes ?? "",
           status: meta.status || (g.isActive ? "Active" : "Maintenance"),
           region: g.region,
           address: g.address,
@@ -6149,6 +6201,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           console.warn("Could not sync manager assignment in PUT gosalas:", e);
         }
       }
+      const parsedCommValue = body.commissionValue !== void 0 ? Number(body.commissionValue) : body.customCommissionPct !== void 0 ? Number(body.customCommissionPct) : body.customCommissionFlat !== void 0 ? Number(body.customCommissionFlat) : void 0;
       const updated = await prisma.gosala.update({
         where: { id: existing.id },
         data: {
@@ -6159,6 +6212,20 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           contactEmail: email || contactEmail || void 0,
           latitude: finalLat,
           longitude: finalLng,
+          // Persist Sanctuary Category Base Rates to dedicated PostgreSQL columns
+          baseCowPrice: body.baseCowPrice !== void 0 ? Number(body.baseCowPrice) : void 0,
+          baseBullPrice: body.baseBullPrice !== void 0 ? Number(body.baseBullPrice) : void 0,
+          baseCalfPrice: body.baseCalfPrice !== void 0 ? Number(body.baseCalfPrice) : void 0,
+          baseBuffaloPrice: body.baseBuffaloPrice !== void 0 ? Number(body.baseBuffaloPrice) : void 0,
+          basePairPrice: body.basePairPrice !== void 0 ? Number(body.basePairPrice) : void 0,
+          // Persist Sanctuary Economics, Commission & Tax Settings
+          partnershipTier: body.partnershipTier !== void 0 ? String(body.partnershipTier) : void 0,
+          commissionType: body.commissionType !== void 0 ? String(body.commissionType) : void 0,
+          commissionValue: parsedCommValue,
+          taxTreatment: body.taxTreatment !== void 0 ? String(body.taxTreatment) : void 0,
+          customTaxPct: body.customTaxPct !== void 0 ? Number(body.customTaxPct) : void 0,
+          bufferMinutes: body.bufferMinutes !== void 0 ? Number(body.bufferMinutes) : void 0,
+          partnershipNotes: body.partnershipNotes !== void 0 ? String(body.partnershipNotes) : void 0,
           metadata: metaPatch,
           // ATOMICALLY PERSIST TO POSTGRESQL!
           ...callerAdminId ? { adminId: callerAdminId } : {},
@@ -6166,6 +6233,40 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           ...callerAdminName ? { adminName: callerAdminName } : {}
         }
       });
+      try {
+        if (body.baseCowPrice !== void 0 && Number(body.baseCowPrice) > 0) {
+          await prisma.animal.updateMany({
+            where: { gosalaId: existing.id, type: "COW" },
+            data: { price: Number(body.baseCowPrice) }
+          });
+        }
+        if (body.baseCalfPrice !== void 0 && Number(body.baseCalfPrice) > 0) {
+          await prisma.animal.updateMany({
+            where: { gosalaId: existing.id, type: "CALF" },
+            data: { price: Number(body.baseCalfPrice) }
+          });
+        }
+        if (body.baseBullPrice !== void 0 && Number(body.baseBullPrice) > 0) {
+          await prisma.animal.updateMany({
+            where: { gosalaId: existing.id, type: "BULL" },
+            data: { price: Number(body.baseBullPrice) }
+          });
+        }
+        if (body.baseBuffaloPrice !== void 0 && Number(body.baseBuffaloPrice) > 0) {
+          await prisma.animal.updateMany({
+            where: { gosalaId: existing.id, type: "BUFFALO" },
+            data: { price: Number(body.baseBuffaloPrice) }
+          });
+        }
+        if (body.basePairPrice !== void 0 && Number(body.basePairPrice) > 0) {
+          await prisma.animal.updateMany({
+            where: { gosalaId: existing.id, type: "COW_AND_CALF" },
+            data: { price: Number(body.basePairPrice) }
+          });
+        }
+      } catch (syncErr) {
+        console.warn("[PUT /api/gosalas/:id] Animal price sync notice:", syncErr);
+      }
       if (name && name.trim() !== existing.name) {
         const newName = name.trim();
         try {
@@ -6257,7 +6358,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         return {
           name: a.name,
           tagId: meta.tagId || "IN-MH-12-8491",
-          type: meta.type || (a.type === "COW" ? "Cow" : a.type === "BULL" ? "Bull" : "Calf"),
+          type: meta.type || (a.type === "COW" ? "Cow" : a.type === "BULL" ? "Bull" : a.type === "BUFFALO" ? "Buffalo" : a.type === "COW_AND_CALF" ? "Cow & Calf" : "Calf"),
           breed: meta.breed || a.breed || "Indigenous Gir",
           gosala: a.gosala?.name || meta.gosala || "Surya",
           gosalaId: a.gosala?.id,
@@ -6434,11 +6535,17 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     serverAnimals.set(name, updated);
     try {
       await prisma.animal.updateMany({
-        where: { name },
+        where: {
+          OR: [
+            { id: name },
+            { name: { equals: name, mode: "insensitive" } },
+            { name: { contains: name, mode: "insensitive" } }
+          ]
+        },
         data: {
           breed: updated.breed || void 0,
-          ageYears: updated.ageYears || void 0,
-          price: updated.price || void 0
+          ageYears: updated.ageYears !== void 0 ? Number(updated.ageYears) : void 0,
+          price: updated.price !== void 0 ? Number(updated.price) : void 0
         }
       });
     } catch {

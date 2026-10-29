@@ -100,6 +100,17 @@ input[type="number"] {
   }
 }
 
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 /* Leaflet mobile attribution & control adjustments */
 .leaflet-control-attribution {
   font-size: 9px !important;

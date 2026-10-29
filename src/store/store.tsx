@@ -901,6 +901,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setGosalas((prev) =>
         prev.map((g) => (g.id === id ? { ...g, ...patch } : g)),
       )
+
+      // Dynamic synchronization: cascade category base price changes to herd members of that type
+      if (
+        patch.baseCowPrice !== undefined ||
+        patch.baseBullPrice !== undefined ||
+        patch.baseCalfPrice !== undefined ||
+        patch.baseBuffaloPrice !== undefined ||
+        patch.basePairPrice !== undefined
+      ) {
+        setAnimals((prev) =>
+          prev.map((a) => {
+            const isMatch = a.gosalaId === id || a.gosala === id
+            if (!isMatch) return a
+            const aType = (a.type || "").toUpperCase()
+            if (
+              (aType === "COW" || aType === "SACRED COW") &&
+              patch.baseCowPrice !== undefined
+            ) {
+              return { ...a, price: Number(patch.baseCowPrice) }
+            }
+            if (
+              (aType === "CALF" || aType === "YOUNG BOVINE") &&
+              patch.baseCalfPrice !== undefined
+            ) {
+              return { ...a, price: Number(patch.baseCalfPrice) }
+            }
+            if (
+              (aType === "BULL" || aType === "NANDI") &&
+              patch.baseBullPrice !== undefined
+            ) {
+              return { ...a, price: Number(patch.baseBullPrice) }
+            }
+            if (
+              (aType === "BUFFALO" || aType === "MAHISHI") &&
+              patch.baseBuffaloPrice !== undefined
+            ) {
+              return { ...a, price: Number(patch.baseBuffaloPrice) }
+            }
+            if (
+              (aType === "COW_AND_CALF" ||
+                aType === "PAIR" ||
+                aType === "COW & CALF") &&
+              patch.basePairPrice !== undefined
+            ) {
+              return { ...a, price: Number(patch.basePairPrice) }
+            }
+            return a
+          }),
+        )
+      }
+
       api.updateGosala(id, patch).catch((err) => {
         console.warn(
           "api.updateGosala background error (using local state):",
@@ -1845,41 +1896,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <ToastCtx.Provider value={{ notify, dismiss }}>
       <StoreCtx.Provider value={store}>
         {children}
-        {/* Professional Alert Notification Viewport (Bottom-Right, Max 3, Deduplicated) */}
-        <div className="fixed bottom-5 right-5 z-[100] flex flex-col items-end gap-2 pointer-events-none max-w-[380px] w-full px-4 sm:px-0">
+        {/* Professional Alert Notification Viewport (Smooth Top-Right Pop-up, Max 4, Deduplicated) */}
+        <div className="fixed top-4 right-4 z-[9999] flex flex-col items-end gap-2.5 pointer-events-none max-w-[420px] w-[calc(100vw-32px)] sm:w-full transition-all">
           {toasts.map((t) => (
             <div
               key={t.id}
-              className={`pointer-events-auto w-full bg-card/95 backdrop-blur-md border shadow-xl rounded-lg p-3 text-[12.5px] flex items-start gap-2.5 transition-all duration-200 animate-[fadein_.2s_ease] ${
+              className={`pointer-events-auto w-full bg-card/95 backdrop-blur-md border shadow-2xl rounded-md p-3.5 text-[13px] flex items-start gap-3 transition-all duration-300 transform translate-y-0 opacity-100 ease-out border-l-4 animate-[slideInDown_.25s_ease-out] ${
                 t.tone === "ok"
-                  ? "border-emerald-200 bg-emerald-50/90 text-emerald-950"
+                  ? "border-emerald-300 border-l-emerald-600 bg-emerald-50/95 text-emerald-950"
                   : t.tone === "danger" || t.tone === "err"
-                    ? "border-red-200 bg-red-50/90 text-red-950"
+                    ? "border-red-300 border-l-red-600 bg-red-50/95 text-red-950"
                     : t.tone === "warn"
-                      ? "border-amber-200 bg-amber-50/90 text-amber-950"
-                      : "border-line-strong bg-paper/95 text-ink"
+                      ? "border-amber-300 border-l-amber-600 bg-amber-50/95 text-amber-950"
+                      : "border-line-strong border-l-forest bg-paper/95 text-ink"
               }`}
             >
               <div className="shrink-0 mt-0.5">
                 {t.tone === "ok" && (
-                  <CheckCircle2 size={16} className="text-emerald-700" />
+                  <CheckCircle2 size={18} className="text-emerald-700" />
                 )}
                 {t.tone === "info" && (
-                  <Info size={16} className="text-forest" />
+                  <Info size={18} className="text-forest" />
                 )}
                 {(t.tone === "danger" || t.tone === "err") && (
-                  <AlertCircle size={16} className="text-danger" />
+                  <AlertCircle size={18} className="text-red-600" />
                 )}
                 {t.tone === "warn" && (
-                  <AlertTriangle size={16} className="text-amber-700" />
+                  <AlertTriangle size={18} className="text-amber-700" />
                 )}
               </div>
 
               <div className="flex-1 min-w-0 pr-1">
-                <div className="font-medium flex items-center gap-1.5 flex-wrap leading-snug">
+                <div className="font-semibold text-[10.5px] uppercase tracking-wider mb-0.5 opacity-80">
+                  {t.tone === "ok"
+                    ? "System Confirmation"
+                    : t.tone === "warn"
+                      ? "Welfare Notice"
+                      : t.tone === "danger" || t.tone === "err"
+                        ? "Action Required"
+                        : "Governance Notice"}
+                </div>
+                <div className="font-medium flex items-center gap-1.5 flex-wrap leading-snug text-[12.5px]">
                   <span>{t.msg}</span>
                   {t.count > 1 && (
-                    <span className="font-mono text-[10px] bg-ink/10 text-ink px-1.5 py-0.2 rounded-full font-bold">
+                    <span className="font-mono text-[10px] bg-ink/15 text-ink px-1.5 py-0.2 rounded-full font-bold">
                       ×{t.count}
                     </span>
                   )}
@@ -1889,10 +1949,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 onClick={() => dismiss(t.id)}
-                className="text-ink-faint hover:text-ink p-0.5 rounded hover:bg-black/5 transition-colors shrink-0 cursor-pointer"
+                className="text-ink-faint hover:text-ink p-1 rounded-sm hover:bg-black/5 transition-colors shrink-0 cursor-pointer"
                 aria-label="Dismiss notification"
               >
-                <X size={14} />
+                <X size={15} />
               </button>
             </div>
           ))}
