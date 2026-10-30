@@ -56,6 +56,13 @@ interface VerifyOtpPayload {
   otp: string
 }
 
+export type RazorpayProof = {
+  paymentId: string
+  orderId: string
+  signature: string
+  amountPaise: number
+}
+
 export const api = {
   async login(emailOrPhone: string, roleHint?: string, password?: string) {
     const data = await request<{
@@ -279,6 +286,7 @@ export const api = {
 
   async holdSlot(params: {
     animal: string
+    gosala?: string
     date: string
     start: string
     durationMin: number
@@ -328,10 +336,23 @@ export const api = {
     return request<{ bookings: Booking[] }>("/api/bookings")
   },
 
-  async createBooking(booking: Booking, holdId?: string) {
+  async createBooking(booking: Booking, holdId?: string, payment?: RazorpayProof) {
     return request<{ booking: Booking }>("/api/bookings", {
       method: "POST",
-      body: JSON.stringify({ booking, holdId }),
+      body: JSON.stringify({ booking, holdId, quoteToken: (booking as any).quoteToken, payment }),
+    })
+  },
+
+  async createRazorpayOrder(params: { quoteToken: string; holdId: string }) {
+    return request<{
+      ok: boolean
+      orderId: string
+      amountPaise: number
+      currency: string
+      keyId: string
+    }>("/api/payments/razorpay/order", {
+      method: "POST",
+      body: JSON.stringify(params),
     })
   },
 

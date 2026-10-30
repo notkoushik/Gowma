@@ -42,6 +42,7 @@ import {
   resetPasswordWithToken,
 } from "./services/otpService.ts"
 import { sendOtpEmail } from "./services/resendService.ts"
+import { bookingInfo, messages, notifyGosalaTeam, notifyUsers } from "./services/notifyService.ts"
 import { canUseLiveTracking, canAccessBooking } from "./auth/authorization.ts"
 import {
   getAllOperationalHubs,
@@ -53,6 +54,8 @@ import {
   resolveGoogleMapsLinkOrCoords,
 } from "./services/googlePlacesService.ts"
 import { hashPassword, isPasswordHash } from "./auth/password.ts"
+import { handleWalletRoutes } from "./walletRoutes.ts"
+import { recordBookingPayment } from "./services/settlementService.ts"
 
 type HandlerResponse = {
   status: number
@@ -511,9 +514,12 @@ export async function handleApiRequest(
       pathname === "/api/auth/verify-otp" ||
       pathname === "/api/auth/reset-password" ||
       pathname === "/api/payments/webhook" ||
+      pathname === "/api/webhooks/razorpayx" ||
+      pathname === "/api/jobs/settlement-maturity" ||
       pathname === "/api/places/resolve-link"
     )) ||
     (method === "GET" && (
+      pathname === "/api/jobs/settlement-maturity" ||
       pathname === "/api/health" ||
       pathname === "/api/hubs" ||
       pathname === "/api/places/search" ||
@@ -529,6 +535,10 @@ export async function handleApiRequest(
     authUser && roles.includes(authUser.role)
       ? null
       : { status: 403, body: { ok: false, error: "Insufficient privileges" } }
+
+  // Commission wallet: settlements, split policy, payout accounts and withdrawals
+  const walletResponse = await handleWalletRoutes({ method, pathname, query, rawBody, headers, authUser })
+  if (walletResponse) return walletResponse
 
   if (
     (method === "POST" && pathname === "/api/hold") ||
@@ -976,8 +986,9 @@ export async function handleApiRequest(
 
   // POST /api/hold
   if (method === "POST" && pathname === "/api/hold") {
+    // Animal names are only unique within a gosala, so scope the lookup when the client says which one
     const animal = await prisma.animal.findFirst({
-      where: { name: body.animal },
+      where: { name: body.animal, ...(body.gosala ? { gosala: { name: body.gosala } } : {}) },
     })
     if (!animal) return { status: 404, body: { error: "Animal not found" } }
 
@@ -1030,8 +1041,9 @@ export async function handleApiRequest(
           expiresAt: new Date(Date.now() + ttl),
         },
       })
-      })
+      }, { timeout: 20000, maxWait: 10000 })
     } catch (err: any) {
+      console.warn("[api/hold] failed:", err?.code || "", err?.message)
       const message = err?.message || "Unable to create hold"
       return { status: message.includes("already") ? 409 : 500, body: { success: false, reason: message } }
     }
@@ -1743,7 +1755,25 @@ export async function handleApiRequest(
 
         await tx.temporarySlotHold.update({ where: { id: holdId }, data: { status: "CONSUMED", consumedAt: new Date() } })
         return createdBooking
-      })
+      }, { timeout: 20000, maxWait: 10000 }) // the default 5s is too tight when the database is a network hop away
+
+      // Hold the customer's money in escrow and record how it will be shared. If this fails the
+      // booking still stands; the Super Admin "import paid bookings" action picks it up later.
+      try {
+        await recordBookingPayment({
+          id: created.id,
+          gosalaId: created.gosalaId,
+          gosalaName: created.gosalaName,
+          customerId: created.customerId,
+          totalAmount: created.totalAmount,
+          taxFee: created.taxFee,
+          paymentProvider: created.paymentProvider,
+          paymentCapturedAt: created.paymentCapturedAt,
+          createdAt: created.createdAt,
+        })
+      } catch (settleErr: any) {
+        console.error(`[wallet] settlement not recorded for ${created.id}:`, settleErr?.message)
+      }
 
       const formatted = {
         ...formatBooking(created),
@@ -1797,6 +1827,11 @@ export async function handleApiRequest(
       wsHub.broadcastToChannel(`channel:gosala:${created.gosalaName}`, "BOOKING_UPDATED", {
         booking: formatted,
       })
+
+      // Tell the customer and the gaushala team (email, plus SMS once a template is set). Never blocks the booking.
+      const info = bookingInfo(created)
+      void notifyUsers([created.customerId], messages.bookingPlaced(info))
+      void notifyGosalaTeam(created.gosalaId, messages.bookingNeedsReview(info))
 
       return { status: 201, body: { booking: formatted } }
     } catch (err: any) {
@@ -1927,6 +1962,10 @@ export async function handleApiRequest(
         booking: formatted,
       })
 
+      const info = bookingInfo(updated)
+      void notifyGosalaTeam(updated.gosalaId, messages.bookingManagerDecided(info, confirm, remark))
+      if (!confirm) void notifyUsers([updated.customerId], messages.bookingRejected(info, remark))
+
       return { status: 200, body: { booking: formatted } }
     } catch (e: any) {
       console.error("[manager-decide] DB error:", e?.message)
@@ -2048,6 +2087,12 @@ export async function handleApiRequest(
         priority: "NORMAL",
         timestamp: new Date().toISOString(),
       })
+
+      const info = bookingInfo(updated)
+      void notifyUsers(
+        [updated.customerId],
+        confirm ? messages.bookingConfirmed(info) : messages.bookingRejected(info, remark),
+      )
 
       return { status: 200, body: { booking: formatted } }
     } catch (e: any) {

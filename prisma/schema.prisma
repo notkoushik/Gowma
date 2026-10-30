@@ -82,6 +82,47 @@ enum WalletTransactionPurpose {
   GAUSHALA_SETTLEMENT
   CASHBACK
   ADJUSTMENT
+  ESCROW_IN
+  ESCROW_OUT
+  TAX_COLLECTED
+  PLATFORM_FEE
+  SETTLEMENT_RELEASE
+  WITHDRAWAL_HOLD
+  WITHDRAWAL_PAID
+  WITHDRAWAL_REVERSAL
+}
+
+enum WalletKind {
+  USER
+  ESCROW
+  PLATFORM
+  TAX
+  WITHDRAWAL_HOLD
+}
+
+enum BookingSettlementStatus {
+  HELD
+  READY_FOR_APPROVAL
+  RELEASED
+  REJECTED
+  REFUNDED
+}
+
+enum SplitRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PayoutAccountType {
+  BANK
+  UPI
+}
+
+enum WithdrawalStatus {
+  PROCESSING
+  PAID
+  FAILED
 }
 
 enum WalletTransactionStatus {
@@ -138,9 +179,9 @@ model Gosala {
   updatedAt    DateTime @updatedAt
 
   // Governing Operations Admin
-  adminId      String?
-  adminEmail   String?
-  adminName    String?
+  adminId    String?
+  adminEmail String?
+  adminName  String?
 
   // Custom Pricing & Offerings
   baseCowPrice     Int? @default(3500)
@@ -150,14 +191,14 @@ model Gosala {
   basePairPrice    Int? @default(4800) // Cow & Calf Pair at single time service
 
   // Custom Gaushala Economics, Commission & Buffer Module
-  partnershipTier   String?  @default("STANDARD") // "PREFERRED" | "STANDARD" | "CHARITABLE" | "COMMERCIAL" | "CUSTOM"
-  commissionType    String?  @default("PERCENTAGE") // "PERCENTAGE" | "FIXED_PER_BOOKING" | "HYBRID"
-  commissionValue   Float?   // e.g. 8.0 for 8% preferred, or 400 for ₹400 flat
-  taxTreatment      String?  @default("STANDARD_GST") // "STANDARD_GST" | "SECTION_80G_EXEMPT" | "REDUCED_CHARITY_GST" | "CUSTOM_RATE"
-  customTaxPct      Float?   // e.g. 0.0 for exempt, 5.0 for concessional
-  bufferMinutes     Int?     @default(30) // Turnaround/sanctuary buffer between bookings
-  partnershipNotes  String?  // Rationale for special commission/tier
-  metadata          Json?
+  partnershipTier  String? @default("STANDARD") // "PREFERRED" | "STANDARD" | "CHARITABLE" | "COMMERCIAL" | "CUSTOM"
+  commissionType   String? @default("PERCENTAGE") // "PERCENTAGE" | "FIXED_PER_BOOKING" | "HYBRID"
+  commissionValue  Float? // e.g. 8.0 for 8% preferred, or 400 for ₹400 flat
+  taxTreatment     String? @default("STANDARD_GST") // "STANDARD_GST" | "SECTION_80G_EXEMPT" | "REDUCED_CHARITY_GST" | "CUSTOM_RATE"
+  customTaxPct     Float? // e.g. 0.0 for exempt, 5.0 for concessional
+  bufferMinutes    Int?    @default(30) // Turnaround/sanctuary buffer between bookings
+  partnershipNotes String? // Rationale for special commission/tier
+  metadata         Json?
 
   // Relationships
   animals     Animal[]
@@ -253,15 +294,15 @@ model Booking {
   gosalaPayable    Int
 
   // Lifecycle & Field tracking
-  status      BookingStatus @default(PAYMENT_VERIFIED)
-  driverStage Int           @default(0)
-  isPaid      Boolean       @default(true)
-  paymentProvider String?   @default("RAZORPAY")
-  paymentOrderId String?
-  paymentId     String?       @unique
-  paymentStatus String        @default("PENDING")
+  status            BookingStatus @default(PAYMENT_VERIFIED)
+  driverStage       Int           @default(0)
+  isPaid            Boolean       @default(true)
+  paymentProvider   String?       @default("RAZORPAY")
+  paymentOrderId    String?
+  paymentId         String?       @unique
+  paymentStatus     String        @default("PENDING")
   paymentCapturedAt DateTime?
-  walletTxId    String?
+  walletTxId        String?
 
   // Anti-Corruption Historical Snapshots (Protection from retroactive master price shifts)
   freeKmSnapshot        Float @default(5.0)
@@ -335,18 +376,18 @@ model ApprovalAuditTrail {
 // -------------------------------------------------------------
 
 model TemporarySlotHold {
-  id           String   @id // "HOLD-XXXXX"
+  id           String    @id // "HOLD-XXXXX"
   animalId     String
   date         String // "26 Sep 2026"
   startTime    String // "10:00"
   durationMin  Int // 60
   customerName String
   customerId   String?
-  status       String   @default("ACTIVE") // ACTIVE | CONSUMED | RELEASED | EXPIRED
+  status       String    @default("ACTIVE") // ACTIVE | CONSUMED | RELEASED | EXPIRED
   consumedAt   DateTime?
   releasedAt   DateTime?
   expiresAt    DateTime // Epoch timestamp for TTL eviction
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
 
   // Relationships
   animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
@@ -381,15 +422,15 @@ model AnimalScheduleBlock {
 // -------------------------------------------------------------
 
 model MasterPricingConfig {
-  id             Int      @id @default(1)
-  standardMin    Int      @default(60)
-  extraUnitMin   Int      @default(30)
-  extraUnitRate  Int      @default(500)
-  freeKm         Float    @default(5.0)
-  perKm          Float    @default(50.0)
-  taxPct         Float    @default(12.0)
-  commissionPct  Float    @default(20.0)
-  maxDurationMin Int      @default(240)
+  id                      Int      @id @default(1)
+  standardMin             Int      @default(60)
+  extraUnitMin            Int      @default(30)
+  extraUnitRate           Int      @default(500)
+  freeKm                  Float    @default(5.0)
+  perKm                   Float    @default(50.0)
+  taxPct                  Float    @default(12.0)
+  commissionPct           Float    @default(20.0)
+  maxDurationMin          Int      @default(240)
   bufferMin               Int      @default(30)
   rounding                String   @default("Nearest ₹10")
   samagriGaushalaCutPct   Float?   @default(90.0)
@@ -440,19 +481,19 @@ model SettlementBatch {
   status           SettlementStatus @default(PENDING)
 
   // Automated Banking Sweep Telemetry
-  utrNumber         String?          @unique
+  utrNumber         String?   @unique
   bankBeneficiary   String?
   bankName          String?
   accountMasked     String?
   ifscCode          String?
-  payoutMode        String?          @default("RBI_RTGS")
+  payoutMode        String?   @default("RBI_RTGS")
   disbursedAt       DateTime?
-  disbursementCycle String?          @default("CONTINUOUS_T_PLUS_ONE")
-  idempotencyKey    String?          @unique
+  disbursementCycle String?   @default("CONTINUOUS_T_PLUS_ONE")
+  idempotencyKey    String?   @unique
   failureReason     String?
 
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relationships
   gosala Gosala @relation(fields: [gosalaId], references: [id], onDelete: Cascade)
@@ -468,8 +509,8 @@ model SettlementBatch {
 
 model VerificationOtp {
   id          String    @id @default(uuid())
-  identifier  String    // normalized email or phone (+91...)
-  otpHash     String    // scrypt hash of the OTP
+  identifier  String // normalized email or phone (+91...)
+  otpHash     String // scrypt hash of the OTP
   channel     String    @default("EMAIL") // "EMAIL" | "PHONE"
   purpose     String    @default("PASSWORD_RESET") // "PASSWORD_RESET" | "REGISTRATION_VERIFY"
   attempts    Int       @default(0)
@@ -504,7 +545,7 @@ model EmpanelledVet {
   updatedAt       DateTime @updatedAt
 
   // Relationships
-  gosala          Gosala?  @relation(fields: [gosalaId], references: [id], onDelete: SetNull)
+  gosala Gosala? @relation(fields: [gosalaId], references: [id], onDelete: SetNull)
 
   @@index([gosalaId])
   @@map("empanelled_vets")
@@ -515,16 +556,18 @@ model EmpanelledVet {
 // -------------------------------------------------------------
 
 model Wallet {
-  id           String   @id @default(uuid())
-  userId       String   @unique
-  balancePaise BigInt   @default(0) // Integer paise to eliminate rounding errors (₹100.00 = 10000)
-  currency     String   @default("INR")
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id           String     @id @default(uuid())
+  kind         WalletKind @default(USER)
+  systemKey    String?    @unique // ESCROW | PLATFORM | TAX | WITHDRAWAL_HOLD for system wallets
+  userId       String?    @unique
+  balancePaise BigInt     @default(0) // Integer paise to eliminate rounding errors (₹100.00 = 10000)
+  currency     String     @default("INR")
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   // Relationships
-  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions WalletTransaction[]
 
   @@index([userId])
@@ -542,6 +585,8 @@ model WalletTransaction {
   balanceAfter   BigInt
   idempotencyKey String                   @unique // Anti-replay & anti-double-spending shield
   referenceId    String? // e.g. paymentId, bookingId, settlementBatchId
+  groupId        String? // entries that belong to one event (a release, a withdrawal)
+  bookingId      String?
   description    String?
   metadata       Json?
   createdAt      DateTime                 @default(now())
@@ -552,7 +597,173 @@ model WalletTransaction {
 
   @@index([walletId, createdAt])
   @@index([referenceId])
+  @@index([groupId])
+  @@index([bookingId])
   @@index([purpose, status])
   @@map("wallet_transactions")
 }
 
+// -------------------------------------------------------------
+// Commission settlement, split policy and withdrawals
+// -------------------------------------------------------------
+
+model WalletConfig {
+  id                  Int      @id @default(1)
+  platformBp          Int      @default(1000) // platform commission in basis points (1000 = 10%)
+  settlementDelayDays Int      @default(2)
+  updatedById         String?
+  updatedAt           DateTime @updatedAt
+
+  @@map("wallet_config")
+}
+
+// One approved policy per gaushala. policyKey "DEFAULT" applies to every gaushala without its own.
+// The admin share is whatever is left after platform and manager shares.
+model SplitPolicy {
+  id           String   @id @default(uuid())
+  policyKey    String   @unique
+  gosalaId     String?
+  managerBp    Int // manager share of the pre-tax amount, in basis points
+  approvedById String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("split_policies")
+}
+
+model SplitPolicyRequest {
+  id                String             @id @default(uuid())
+  policyKey         String
+  gosalaId          String?
+  gosalaName        String?
+  currentManagerBp  Int?
+  proposedManagerBp Int
+  status            SplitRequestStatus @default(PENDING)
+  requestedById     String
+  requestedByName   String
+  reason            String?
+  decidedById       String?
+  decidedByName     String?
+  decisionNote      String?
+  decidedAt         DateTime?
+  createdAt         DateTime           @default(now())
+
+  @@index([status])
+  @@index([policyKey])
+  @@map("split_policy_requests")
+}
+
+model BookingSettlement {
+  id             String                  @id @default(uuid())
+  bookingId      String                  @unique
+  gosalaId       String
+  gosalaName     String
+  customerId     String
+  grossPaise     BigInt // everything the customer paid, tax included
+  taxPaise       BigInt // goes to the tax wallet
+  platformPaise  BigInt
+  adminPaise     BigInt
+  managerPaise   BigInt
+  platformBp     Int // percentages frozen at the moment of payment
+  managerBp      Int
+  adminBp        Int
+  paymentSource  String // RAZORPAY | WALLET
+  status         BookingSettlementStatus @default(HELD)
+  paidAt         DateTime
+  eligibleAt     DateTime
+  readyAt        DateTime?
+  decidedById    String?
+  decidedByName  String?
+  decidedAt      DateTime?
+  decisionNote   String?
+  releaseGroupId String?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@index([status, eligibleAt])
+  @@index([gosalaId])
+  @@map("booking_settlements")
+}
+
+model PayoutAccount {
+  id                    String            @id @default(uuid())
+  userId                String
+  type                  PayoutAccountType
+  holderName            String
+  accountLast4          String?
+  ifsc                  String?
+  vpa                   String?
+  accountNumberEnc      String? // full number kept only for the payout provider call
+  providerContactId     String?
+  providerFundAccountId String?
+  isActive              Boolean           @default(true)
+  usableFrom            DateTime // new accounts wait before they can receive money
+  createdAt             DateTime          @default(now())
+
+  @@index([userId])
+  @@map("payout_accounts")
+}
+
+model WithdrawalRequest {
+  id               String           @id @default(uuid())
+  userId           String
+  walletId         String
+  payoutAccountId  String
+  amountPaise      BigInt
+  status           WithdrawalStatus @default(PROCESSING)
+  mode             String           @default("SANDBOX") // SANDBOX | RAZORPAYX
+  providerPayoutId String?
+  utr              String?
+  failureReason    String?
+  idempotencyKey   String           @unique
+  requestedAt      DateTime         @default(now())
+  completedAt      DateTime?
+
+  @@index([userId, requestedAt])
+  @@index([status])
+  @@map("withdrawal_requests")
+}
+
+model WithdrawalOtp {
+  id              String   @id @default(uuid())
+  userId          String
+  otpHash         String
+  amountPaise     BigInt
+  payoutAccountId String
+  attempts        Int      @default(0)
+  used            Boolean  @default(false)
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+
+  @@index([userId, used])
+  @@map("withdrawal_otps")
+}
+
+model ProviderEvent {
+  id          String   @id @default(uuid())
+  provider    String
+  eventId     String   @unique
+  eventType   String
+  payload     Json
+  processedAt DateTime @default(now())
+
+  @@map("provider_events")
+}
+
+// Who did what with money. Rows are only ever added.
+model WalletAuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  actorName  String
+  actorRole  String
+  action     String
+  targetType String
+  targetId   String?
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@map("wallet_audit_logs")
+}

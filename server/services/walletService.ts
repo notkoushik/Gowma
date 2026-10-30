@@ -1,4 +1,5 @@
 import { prisma } from "../prisma.ts"
+import { getUserWallet, postEntry, runLedgerTx } from "./ledgerService.ts"
 
 export type WalletBalanceResponse = {
   walletId: string
@@ -57,7 +58,7 @@ export async function getWalletBalance(userId: string): Promise<WalletBalanceRes
 
   return {
     walletId: wallet.id,
-    userId: wallet.userId,
+    userId: wallet.userId ?? userId,
     balancePaise: balancePaise.toString(),
     balanceRupees,
     currency: wallet.currency,
@@ -66,161 +67,77 @@ export async function getWalletBalance(userId: string): Promise<WalletBalanceRes
 }
 
 /**
- * Atomically credits a user's wallet using a double-entry ledger transaction.
- * Guaranteed idempotent via idempotencyKey.
+ * Credits a user's wallet. Idempotent through idempotencyKey.
  */
 export async function creditWallet(input: WalletMutationInput) {
   const { userId, purpose, referenceId, idempotencyKey, description, metadata } = input
   const amountPaise = BigInt(input.amountPaise)
-
-  if (amountPaise <= 0n) {
-    throw new Error("Credit amount must be greater than zero")
-  }
+  if (amountPaise <= 0n) throw new Error("Credit amount must be greater than zero")
   if (!idempotencyKey || typeof idempotencyKey !== "string") {
     throw new Error("A unique idempotencyKey is required for wallet mutations")
   }
 
-  return await prisma.$transaction(async (tx) => {
-    // 1. Idempotency Check: Return existing successful transaction if replayed
-    const existingTx = await tx.walletTransaction.findUnique({
-      where: { idempotencyKey },
+  return await runLedgerTx(async (tx) => {
+    const wallet = await getUserWallet(tx, userId)
+    const entry = await postEntry(tx, {
+      walletId: wallet.id,
+      type: "CREDIT",
+      amountPaise,
+      purpose,
+      idempotencyKey,
+      referenceId,
+      description: description || `Wallet credited with ₹${Number(amountPaise) / 100}`,
+      metadata,
     })
-    if (existingTx) {
-      if (existingTx.status === "SUCCESS") {
-        return {
-          idempotentReplay: true,
-          transactionId: existingTx.id,
-          balanceAfter: existingTx.balanceAfter.toString(),
-        }
-      }
-      throw new Error(`Transaction with idempotency key ${idempotencyKey} previously ended in ${existingTx.status}`)
+    if (entry.replay) {
+      return { idempotentReplay: true, transactionId: entry.id, balanceAfter: entry.balanceAfter.toString() }
     }
-
-    // 2. Fetch or create wallet
-    let wallet = await tx.wallet.findUnique({ where: { userId } })
-    if (!wallet) {
-      wallet = await tx.wallet.create({
-        data: { userId, balancePaise: 0n, currency: "INR" },
-      })
-    }
-    if (!wallet.isActive) {
-      throw new Error("Wallet account is currently suspended or inactive")
-    }
-
-    const balanceBefore = BigInt(wallet.balancePaise)
-    const balanceAfter = balanceBefore + amountPaise
-
-    // 3. Update wallet balance
-    const updatedWallet = await tx.wallet.update({
-      where: { id: wallet.id },
-      data: { balancePaise: balanceAfter },
-    })
-
-    // 4. Record immutable ledger transaction
-    const record = await tx.walletTransaction.create({
-      data: {
-        walletId: wallet.id,
-        amountPaise,
-        type: "CREDIT",
-        purpose,
-        status: "SUCCESS",
-        balanceBefore,
-        balanceAfter,
-        idempotencyKey,
-        referenceId: referenceId || null,
-        description: description || `Wallet credited with ₹${Number(amountPaise) / 100}`,
-        metadata: metadata ? (metadata as any) : undefined,
-      },
-    })
-
     return {
       idempotentReplay: false,
-      transactionId: record.id,
+      transactionId: entry.id,
       amountPaise: amountPaise.toString(),
-      balanceBefore: balanceBefore.toString(),
-      balanceAfter: balanceAfter.toString(),
-      balanceRupees: Number(balanceAfter) / 100,
+      balanceBefore: entry.balanceBefore.toString(),
+      balanceAfter: entry.balanceAfter.toString(),
+      balanceRupees: Number(entry.balanceAfter) / 100,
     }
   })
 }
 
 /**
- * Atomically debits a user's wallet with concurrency safety and strict balance checks.
- * Prevents double-spending and negative balances.
+ * Debits a user's wallet with one guarded update, so concurrent debits cannot overspend
+ * and the balance can never go negative.
  */
 export async function debitWallet(input: WalletMutationInput) {
   const { userId, purpose, referenceId, idempotencyKey, description, metadata } = input
   const amountPaise = BigInt(input.amountPaise)
-
-  if (amountPaise <= 0n) {
-    throw new Error("Debit amount must be greater than zero")
-  }
+  if (amountPaise <= 0n) throw new Error("Debit amount must be greater than zero")
   if (!idempotencyKey || typeof idempotencyKey !== "string") {
     throw new Error("A unique idempotencyKey is required for wallet mutations")
   }
 
-  return await prisma.$transaction(async (tx) => {
-    // 1. Idempotency Check: Return existing successful transaction if replayed
-    const existingTx = await tx.walletTransaction.findUnique({
-      where: { idempotencyKey },
-    })
-    if (existingTx) {
-      if (existingTx.status === "SUCCESS") {
-        return {
-          idempotentReplay: true,
-          transactionId: existingTx.id,
-          balanceAfter: existingTx.balanceAfter.toString(),
-        }
-      }
-      throw new Error(`Transaction with idempotency key ${idempotencyKey} previously ended in ${existingTx.status}`)
-    }
-
-    // 2. Fetch wallet
+  return await runLedgerTx(async (tx) => {
     const wallet = await tx.wallet.findUnique({ where: { userId } })
-    if (!wallet) {
-      throw new Error("Wallet not found. Top-up required before debiting.")
-    }
-    if (!wallet.isActive) {
-      throw new Error("Wallet account is currently suspended or inactive")
-    }
-
-    const balanceBefore = BigInt(wallet.balancePaise)
-    if (balanceBefore < amountPaise) {
-      throw new Error(`Insufficient wallet balance. Available: ₹${Number(balanceBefore) / 100}, Required: ₹${Number(amountPaise) / 100}`)
-    }
-
-    const balanceAfter = balanceBefore - amountPaise
-
-    // 3. Atomically update wallet balance
-    await tx.wallet.update({
-      where: { id: wallet.id },
-      data: { balancePaise: balanceAfter },
+    if (!wallet) throw new Error("Wallet not found. Top-up required before debiting.")
+    const entry = await postEntry(tx, {
+      walletId: wallet.id,
+      type: "DEBIT",
+      amountPaise,
+      purpose,
+      idempotencyKey,
+      referenceId,
+      description: description || `Wallet debited by ₹${Number(amountPaise) / 100}`,
+      metadata,
     })
-
-    // 4. Record immutable ledger transaction
-    const record = await tx.walletTransaction.create({
-      data: {
-        walletId: wallet.id,
-        amountPaise,
-        type: "DEBIT",
-        purpose,
-        status: "SUCCESS",
-        balanceBefore,
-        balanceAfter,
-        idempotencyKey,
-        referenceId: referenceId || null,
-        description: description || `Wallet debited by ₹${Number(amountPaise) / 100}`,
-        metadata: metadata ? (metadata as any) : undefined,
-      },
-    })
-
+    if (entry.replay) {
+      return { idempotentReplay: true, transactionId: entry.id, balanceAfter: entry.balanceAfter.toString() }
+    }
     return {
       idempotentReplay: false,
-      transactionId: record.id,
+      transactionId: entry.id,
       amountPaise: amountPaise.toString(),
-      balanceBefore: balanceBefore.toString(),
-      balanceAfter: balanceAfter.toString(),
-      balanceRupees: Number(balanceAfter) / 100,
+      balanceBefore: entry.balanceBefore.toString(),
+      balanceAfter: entry.balanceAfter.toString(),
+      balanceRupees: Number(entry.balanceAfter) / 100,
     }
   })
 }

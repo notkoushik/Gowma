@@ -38,6 +38,7 @@ import {
   getIndianLocalityFromCoords,
 } from "../../hooks/useDeviceLocation"
 import { useStore } from "../../store/store"
+import type { RazorpayProof } from "../../services/api"
 import { Skeleton } from "../../components/common/Skeleton"
 import EditProfileModal from "../../components/EditProfileModal"
 import CattleAndShelterGallery from "../../components/CattleAndShelterGallery"
@@ -58,7 +59,7 @@ export default function DesktopCustomer({
 }: {
   onSignOut: () => void
   myBookings: MyBooking[]
-  onCreate: (s: BookingSummary) => void
+  onCreate: (s: BookingSummary, payment?: RazorpayProof) => Promise<void>
 }) {
   const {
     profiles,
@@ -85,6 +86,11 @@ export default function DesktopCustomer({
     null,
   )
   const [q, setQ] = useState("")
+  const [typeFilter, setTypeFilter] = useState("All")
+  const [animalPage, setAnimalPage] = useState(1)
+  const [gosalaPage, setGosalaPage] = useState(1)
+  const ANIMALS_PER_PAGE = 10
+  const GOSALAS_PER_PAGE = 8
   const [deliveryAddress, setDeliveryAddress] = useState(
     customerProfile?.customerData?.defaultAddress || "Kothaguda, Hyderabad",
   )
@@ -202,10 +208,24 @@ export default function DesktopCustomer({
     myBookings[0]
   const list = liveAnimals.filter(
     (a) =>
-      q === "" ||
-      a.name.toLowerCase().includes(q.toLowerCase()) ||
-      a.type.toLowerCase().includes(q.toLowerCase()),
+      (typeFilter === "All" || a.type === typeFilter) &&
+      (q === "" ||
+        a.name.toLowerCase().includes(q.toLowerCase()) ||
+        a.type.toLowerCase().includes(q.toLowerCase()) ||
+        a.gosala.toLowerCase().includes(q.toLowerCase())),
   )
+  const animalTypes = ["All", ...Array.from(new Set(liveAnimals.map((a) => a.type)))]
+  const animalPages = Math.max(1, Math.ceil(list.length / ANIMALS_PER_PAGE))
+  const pagedAnimals = list.slice(
+    (Math.min(animalPage, animalPages) - 1) * ANIMALS_PER_PAGE,
+    Math.min(animalPage, animalPages) * ANIMALS_PER_PAGE,
+  )
+  const gosalaPages = Math.max(1, Math.ceil(sortedGaushalas.length / GOSALAS_PER_PAGE))
+  const pagedGaushalas = sortedGaushalas.slice(
+    (Math.min(gosalaPage, gosalaPages) - 1) * GOSALAS_PER_PAGE,
+    Math.min(gosalaPage, gosalaPages) * GOSALAS_PER_PAGE,
+  )
+  useEffect(() => setAnimalPage(1), [q, typeFilter])
 
   const nav: { id: Tab label: string }[] = [
     { id: "discover", label: "Discover" },
@@ -217,8 +237,8 @@ export default function DesktopCustomer({
   return (
     <div className="min-h-screen bg-paper">
       {/* Top nav */}
-      <header className="sticky top-0 z-30 h-16 bg-paper/90 backdrop-blur border-b border-line">
-        <div className="max-w-6xl mx-auto h-full px-6 flex items-center gap-6">
+      <header className="sticky top-0 z-30 bg-paper/95 backdrop-blur border-b border-line">
+        <div className="max-w-[1680px] mx-auto h-16 px-4 sm:px-6 lg:px-10 flex items-center gap-4 lg:gap-8">
           <button
             onClick={() => {
               setTab("discover")
@@ -238,127 +258,131 @@ export default function DesktopCustomer({
             </div>
           </button>
 
-          <nav className="hidden md:flex items-center gap-1 ml-4">
-            {nav.map((n) => (
-              <button
-                key={n.id}
-                onClick={() => {
-                  setTab(n.id)
-                  setDetail(null)
-                  setGosalaProfileId(null)
-                }}
-                className={`relative rounded-sm px-3 py-2 text-[13.5px] transition-colors ${
-                  tab === n.id && !detail
-                    ? "text-saffron-deep font-medium"
-                    : "text-ink-soft hover:text-ink"
-                }`}
-              >
-                {n.label}
-                {n.id === "track" && activeTrip && (
-                  <span className="absolute top-1.5 right-1 h-1.5 w-1.5 rounded-full bg-saffron" />
-                )}
-              </button>
-            ))}
+          <nav className="hidden md:flex items-stretch gap-1 h-full">
+            {nav.map((n) => {
+              const active = tab === n.id && !detail && !gosalaProfileId
+              return (
+                <button
+                  key={n.id}
+                  onClick={() => {
+                    setTab(n.id)
+                    setDetail(null)
+                    setGosalaProfileId(null)
+                  }}
+                  className={`relative whitespace-nowrap px-3.5 text-[13.5px] transition-colors cursor-pointer ${
+                    active
+                      ? "text-saffron-deep font-semibold"
+                      : "text-ink-soft hover:text-ink"
+                  }`}
+                >
+                  {n.label}
+                  {n.id === "track" && activeTrip && (
+                    <span className="absolute top-5 right-1 h-1.5 w-1.5 rounded-full bg-saffron" />
+                  )}
+                  <span
+                    className={`absolute left-3.5 right-3.5 bottom-0 h-0.5 rounded-full transition-colors ${
+                      active ? "bg-saffron" : "bg-transparent"
+                    }`}
+                  />
+                </button>
+              )
+            })}
           </nav>
 
           <div className="ml-auto flex items-center gap-3">
-            {/* Quick Location Switcher Button */}
             <button
-              onClick={() => setLocationPickerOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-sm bg-card border border-line hover:border-saffron/60 transition shadow-2xs cursor-pointer group text-left"
-              title="Click to switch region or detect GPS"
+              className="relative h-9 w-9 grid place-items-center rounded-full text-ink-soft hover:text-ink hover:bg-paper-deep transition-colors cursor-pointer"
+              aria-label="Notifications"
             >
-              <div className="h-6 w-6 rounded-full bg-saffron-soft text-saffron-deep grid place-items-center shrink-0">
-                <MapPin size={13} />
-              </div>
-              <div className="leading-tight max-w-[170px]">
-                <div className="text-[9.5px] uppercase font-mono tracking-wider text-ink-faint">
-                  Region
-                </div>
-                <div className="text-[12.5px] text-ink font-semibold group-hover:text-saffron-deep flex items-center gap-1">
-                  <span className="truncate">
-                    {deviceLocation.city ||
-                      (deviceLocation.isLoading
-                        ? "Locating..."
-                        : "Select Region")}
-                  </span>
-                  <ChevronDown
-                    size={12}
-                    className="text-ink-faint group-hover:text-saffron-deep shrink-0"
-                  />
-                </div>
-              </div>
+              <Bell size={17} />
+              <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-saffron ring-2 ring-paper" />
             </button>
-
-            {/* Editable Street / Venue Address */}
-            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-sm bg-card border border-line">
-              {isEditingAddress ? (
-                <input
-                  type="text"
-                  value={deliveryAddress}
-                  onChange={(e) => setDeliveryAddress(e.target.value)}
-                  onBlur={() => setIsEditingAddress(false)}
-                  onKeyDown={(e) =>
-                    e.key === "Enter" && setIsEditingAddress(false)
-                  }
-                  autoFocus
-                  className="text-[12.5px] text-ink font-medium bg-paper px-2 py-0.5 rounded outline-none border border-saffron max-w-[240px]"
-                />
-              ) : (
-                <span
-                  onClick={() => setIsEditingAddress(true)}
-                  title="Click to edit delivery venue address"
-                  className="text-[12.5px] text-ink font-medium hover:text-saffron-deep cursor-pointer max-w-[240px] truncate"
-                >
-                  {deliveryAddress}
-                </span>
-              )}
-              <button
-                onClick={handleDetectLocation}
-                disabled={deviceLocation.isLoading}
-                title="Detect live GPS location"
-                className="text-[11px] text-saffron-deep font-medium hover:underline inline-flex items-center gap-1 cursor-pointer ml-1 shrink-0"
-              >
-                <Crosshair
-                  size={12}
-                  className={deviceLocation.isLoading ? "animate-spin" : ""}
-                />
-                {deviceLocation.isLoading ? "Locating..." : "Use GPS"}
-              </button>
-            </div>
-            <button className="relative h-9 w-9 grid place-items-center rounded-sm border border-line bg-card text-ink-soft hover:text-ink transition-colors">
-              <Bell size={16} />
-              <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-saffron" />
-            </button>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setTab("profile")}
-                className="h-9 w-9 rounded-full bg-forest text-white grid place-items-center text-[12px] font-medium hover:ring-2 hover:ring-forest/40 transition-all cursor-pointer"
-                title="View Devotee Profile"
-              >
+            <span className="h-6 w-px bg-line" />
+            <button
+              onClick={() => {
+                setTab("profile")
+                setDetail(null)
+                setGosalaProfileId(null)
+              }}
+              className="flex items-center gap-2.5 rounded-full pl-1 pr-1 lg:pr-3 py-1 hover:bg-paper-deep transition-colors cursor-pointer"
+              title="View Devotee Profile"
+            >
+              <span className="h-8 w-8 rounded-full bg-forest text-white grid place-items-center text-[12px] font-medium">
                 {devoteeName.slice(0, 1)}
-              </button>
-              <div className="text-left hidden lg:block">
-                <div className="text-[12px] font-medium text-ink leading-tight truncate max-w-[120px]">
+              </span>
+              <span className="text-left hidden lg:block leading-tight">
+                <span className="block text-[12.5px] font-medium text-ink truncate max-w-[130px]">
                   {devoteeName}
-                </div>
-                <div className="text-[10px] font-mono text-saffron font-medium">
+                </span>
+                <span className="block text-[10px] font-mono text-saffron font-medium">
                   {authUser?.uniqueId || "GMA-DEV-0223"}
-                </div>
-              </div>
-            </div>
+                </span>
+              </span>
+            </button>
             <button
               onClick={onSignOut}
-              className="text-ink-faint hover:text-ink p-1.5 rounded-sm hover:bg-paper-deep transition-colors"
+              className="text-ink-faint hover:text-ink h-9 w-9 grid place-items-center rounded-full hover:bg-paper-deep transition-colors cursor-pointer"
               aria-label="Sign out"
+              title="Sign out"
             >
               <LogOut size={16} />
             </button>
           </div>
         </div>
+
+        {/* Location strip: where the seva will happen */}
+        <div className="border-t border-line/70 bg-card/60">
+          <div className="max-w-[1680px] mx-auto h-10 px-4 sm:px-6 lg:px-10 flex items-center gap-3 text-[12.5px]">
+            <button
+              onClick={() => setLocationPickerOpen(true)}
+              className="flex items-center gap-1.5 font-semibold text-ink hover:text-saffron-deep transition-colors cursor-pointer shrink-0"
+              title="Switch region"
+            >
+              <MapPin size={14} className="text-saffron" />
+              <span className="max-w-[140px] truncate">
+                {deviceLocation.city ||
+                  (deviceLocation.isLoading ? "Locating…" : "Select region")}
+              </span>
+              <ChevronDown size={12} className="text-ink-faint" />
+            </button>
+            <span className="h-4 w-px bg-line shrink-0" />
+            {isEditingAddress ? (
+              <input
+                type="text"
+                value={deliveryAddress}
+                onChange={(e) => setDeliveryAddress(e.target.value)}
+                onBlur={() => setIsEditingAddress(false)}
+                onKeyDown={(e) => e.key === "Enter" && setIsEditingAddress(false)}
+                autoFocus
+                className="flex-1 min-w-0 text-ink bg-paper px-2 py-0.5 rounded outline-none border border-saffron"
+              />
+            ) : (
+              <button
+                onClick={() => setIsEditingAddress(true)}
+                title="Click to edit the service address"
+                className="flex-1 min-w-0 text-left text-ink-soft hover:text-ink truncate cursor-pointer"
+              >
+                <span className="text-ink-faint">Deliver to </span>
+                {deliveryAddress}
+              </button>
+            )}
+            <button
+              onClick={handleDetectLocation}
+              disabled={deviceLocation.isLoading}
+              title="Detect live GPS location"
+              className="text-saffron-deep font-medium hover:underline inline-flex items-center gap-1 cursor-pointer shrink-0 disabled:opacity-60"
+            >
+              <Crosshair
+                size={12}
+                className={deviceLocation.isLoading ? "animate-spin" : ""}
+              />
+              {deviceLocation.isLoading ? "Locating…" : "Use GPS"}
+            </button>
+          </div>
+        </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className="max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-10 py-8">
         {/* Proactive GPS Permission & Fallback Banner */}
         {!detail &&
           !gosalaProfileId &&
@@ -398,19 +422,19 @@ export default function DesktopCustomer({
         ) : tab === "discover" ? (
           <div className="space-y-10">
             {/* Hero */}
-            <section className="relative overflow-hidden rounded-sm bg-forest">
+            <section className="relative overflow-hidden rounded-2xl bg-forest shadow-sm">
               <img
                 src="https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=1400&h=500&fit=crop&auto=format"
                 alt="Gau seva"
                 className="absolute inset-0 h-full w-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-r from-[#201c16]/90 via-[#201c16]/55 to-transparent" />
-              <div className="relative px-8 py-12 lg:py-16 max-w-xl text-paper">
+              <div className="relative px-8 lg:px-14 py-14 lg:py-20 max-w-2xl text-paper">
                 <div className="font-mono text-[10.5px] uppercase tracking-[0.2em] text-paper/70 flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-ok animate-pulse" />
                   Verified Gosalas · {deviceLocation.city || "Pan-India"}
                 </div>
-                <h1 className="font-serif text-[36px] leading-[1.1] text-white mt-3">
+                <h1 className="font-serif text-[36px] lg:text-[48px] leading-[1.08] text-white mt-4">
                   Book a sacred Gau Seva, at your doorstep.
                 </h1>
                 <p className="text-[14px] text-paper/85 mt-3 leading-relaxed">
@@ -418,7 +442,7 @@ export default function DesktopCustomer({
                   transparent pricing — transport included within{" "}
                   {pricing.freeKm} km.
                 </p>
-                <div className="mt-6 relative max-w-md">
+                <div className="mt-7 relative max-w-xl">
                   <Search
                     size={17}
                     className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint"
@@ -427,8 +451,22 @@ export default function DesktopCustomer({
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
                     placeholder="Search cow, calf, bull…"
-                    className="w-full bg-paper border border-transparent rounded-sm pl-10 pr-4 py-3 text-[14px] text-ink outline-none focus:ring-2 focus:ring-saffron/40"
+                    className="w-full bg-paper border border-transparent rounded-lg pl-10 pr-4 py-3.5 text-[14.5px] text-ink shadow-md outline-none focus:ring-2 focus:ring-saffron/50"
                   />
+                </div>
+                <div className="mt-6 flex flex-wrap gap-2.5 text-[12px]">
+                  {[
+                    `${sortedGaushalas.length} verified gaushalas`,
+                    `${liveAnimals.length} animals available`,
+                    `Free transport within ${pricing.freeKm} km`,
+                  ].map((t) => (
+                    <span
+                      key={t}
+                      className="rounded-full border border-white/25 bg-white/10 backdrop-blur px-3 py-1 text-paper/90"
+                    >
+                      {t}
+                    </span>
+                  ))}
                 </div>
               </div>
             </section>
@@ -470,8 +508,8 @@ export default function DesktopCustomer({
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                  {sortedGaushalas.map(({ gosala: g, serviceability }) => {
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
+                  {pagedGaushalas.map(({ gosala: g, serviceability }) => {
                     const housedCount = liveAnimals.filter(
                       (a) => a.gosala.toLowerCase() === g.name.toLowerCase(),
                     ).length
@@ -579,6 +617,13 @@ export default function DesktopCustomer({
                   })}
                 </div>
               )}
+              <Pagination
+                page={gosalaPage}
+                pages={gosalaPages}
+                total={sortedGaushalas.length}
+                perPage={GOSALAS_PER_PAGE}
+                onChange={setGosalaPage}
+              />
             </section>
 
             {/* Animals */}
@@ -590,6 +635,21 @@ export default function DesktopCustomer({
                 <span className="font-mono text-[11px] text-ink-faint">
                   {list.length} available now
                 </span>
+              </div>
+              <div className="flex flex-wrap gap-2 mb-5">
+                {animalTypes.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTypeFilter(t)}
+                    className={`rounded-full border px-4 py-1.5 text-[12.5px] font-medium transition-colors cursor-pointer ${
+                      typeFilter === t
+                        ? "border-saffron bg-saffron text-white"
+                        : "border-line bg-card text-ink-soft hover:border-saffron/60"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
               </div>
               {list.length === 0 ? (
                 <div className="p-8 text-center rounded-sm border border-dashed border-line bg-card/60">
@@ -607,14 +667,14 @@ export default function DesktopCustomer({
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-                  {list.map((a) => (
+                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
+                  {pagedAnimals.map((a) => (
                     <button
-                      key={a.name}
+                      key={`${a.gosala}::${a.name}`}
                       onClick={() => setDetail(a)}
-                      className="text-left rounded-sm border border-line bg-card overflow-hidden group hover:border-line-strong transition-colors"
+                      className="text-left rounded-xl border border-line bg-card overflow-hidden group cursor-pointer hover:border-saffron/50 hover:shadow-md hover:-translate-y-0.5 transition-all"
                     >
-                      <div className="h-40 bg-paper-deep overflow-hidden relative">
+                      <div className="h-48 bg-paper-deep overflow-hidden relative">
                         <img
                           src={a.photo}
                           alt={a.name}
@@ -652,6 +712,16 @@ export default function DesktopCustomer({
                   ))}
                 </div>
               )}
+              <Pagination
+                page={animalPage}
+                pages={animalPages}
+                total={list.length}
+                perPage={ANIMALS_PER_PAGE}
+                onChange={(p) => {
+                  setAnimalPage(p)
+                  window.scrollTo({ top: 0, behavior: "smooth" })
+                }}
+              />
             </section>
           </div>
         ) : tab === "bookings" ? (
@@ -678,8 +748,8 @@ export default function DesktopCustomer({
           animal={flow.animal}
           gosala={flow.gosala}
           onClose={() => setFlow(null)}
-          onComplete={(s) => {
-            onCreate(s)
+          onPlace={onCreate}
+          onComplete={() => {
             setFlow(null)
             setDetail(null)
             setTab("bookings")
@@ -1369,6 +1439,78 @@ function ProfileView({ onOpenEditProfile }: { onOpenEditProfile: () => void }) {
             </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+/* ---------------- Pagination ---------------- */
+function Pagination({
+  page,
+  pages,
+  total,
+  perPage,
+  onChange,
+}: {
+  page: number
+  pages: number
+  total: number
+  perPage: number
+  onChange: (p: number) => void
+}) {
+  if (pages <= 1) return null
+  const current = Math.min(page, pages)
+  const nums: (number | "…")[] = []
+  for (let p = 1; p <= pages; p++) {
+    if (p === 1 || p === pages || Math.abs(p - current) <= 1) nums.push(p)
+    else if (nums[nums.length - 1] !== "…") nums.push("…")
+  }
+  const from = (current - 1) * perPage + 1
+  const to = Math.min(current * perPage, total)
+  const btn =
+    "h-9 min-w-9 px-2.5 grid place-items-center rounded-md border text-[12.5px] font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+  return (
+    <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <span className="font-mono text-[11.5px] text-ink-faint">
+        Showing {from}–{to} of {total}
+      </span>
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => onChange(current - 1)}
+          disabled={current === 1}
+          className={`${btn} border-line bg-card text-ink-soft hover:border-saffron/60`}
+          aria-label="Previous page"
+        >
+          <ChevronLeft size={15} />
+        </button>
+        {nums.map((n, i) =>
+          n === "…" ? (
+            <span key={`e${i}`} className="px-1 text-ink-faint">
+              …
+            </span>
+          ) : (
+            <button
+              key={n}
+              onClick={() => onChange(n)}
+              className={`${btn} ${
+                n === current
+                  ? "border-saffron bg-saffron text-white"
+                  : "border-line bg-card text-ink-soft hover:border-saffron/60"
+              }`}
+              aria-current={n === current ? "page" : undefined}
+            >
+              {n}
+            </button>
+          ),
+        )}
+        <button
+          onClick={() => onChange(current + 1)}
+          disabled={current === pages}
+          className={`${btn} border-line bg-card text-ink-soft hover:border-saffron/60`}
+          aria-label="Next page"
+        >
+          <ChevronRight size={15} />
+        </button>
       </div>
     </div>
   )

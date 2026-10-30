@@ -30,6 +30,7 @@ import { pricing, type Gosala } from "../data/customer"
 import { CURRENT_CUSTOMER, inr, type Booking } from "../data/mock"
 import { tripStages } from "../data/driver"
 import { useStore, useToast } from "../store/store"
+import type { RazorpayProof } from "../services/api"
 import { Skeleton } from "../components/common/Skeleton"
 import BookingFlow from "./customer/BookingFlow"
 import { MobileGosalaProfile, EnRouteModal } from "./customer/GosalaProfile"
@@ -682,7 +683,7 @@ function Discover({
           <div className="space-y-3">
             {list.map((a) => (
               <button
-                key={a.name}
+                key={`${a.gosala}::${a.name}`}
                 onClick={() => onOpenAnimal(a)}
                 className="w-full flex gap-3 rounded-sm border border-line bg-card p-3 text-left hover:border-line-strong transition-colors"
               >
@@ -1145,7 +1146,7 @@ function MobileCustomer({
 }: {
   onSignOut: () => void
   myBookings: MyBooking[]
-  onCreate: (s: BookingSummary) => void
+  onCreate: (s: BookingSummary, payment?: RazorpayProof) => Promise<void>
 }) {
   const {
     profiles,
@@ -1662,8 +1663,8 @@ function MobileCustomer({
             animal={flow.animal}
             gosala={flow.gosala}
             onClose={() => setFlow(null)}
-            onComplete={(s) => {
-              onCreate(s)
+            onPlace={onCreate}
+            onComplete={() => {
               setFlow(null)
               setDetail(null)
               setTab("bookings")
@@ -1722,10 +1723,11 @@ export default function CustomerApp({ onSignOut }: { onSignOut: () => void }) {
     })
     .map(toMyBooking)
 
-  const create = (s: BookingSummary) =>
+  const create = (s: BookingSummary, payment?: RazorpayProof) =>
     createBooking(
       makeBooking(s, customerProfile, pricingConfig?.commissionPct, authUser),
       s.holdId,
+      payment,
     )
 
   return isDesktop ? (

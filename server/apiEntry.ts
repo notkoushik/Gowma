@@ -43,7 +43,16 @@ function resolveRequestUrl(req: any): string {
 
 export default async function handler(req: any, res: any) {
   // CORS support
-  res.setHeader("Access-Control-Allow-Origin", "*")
+  // Any origin in development. In production only the sites listed in GOMAA_ALLOWED_ORIGINS (comma separated)
+  // may call the API from a browser; the app itself is same-origin and needs no entry.
+  const origin = String(req.headers?.origin || "")
+  if (process.env.NODE_ENV !== "production") {
+    res.setHeader("Access-Control-Allow-Origin", "*")
+  } else {
+    const allowed = (process.env.GOMAA_ALLOWED_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean)
+    if (origin && allowed.includes(origin)) res.setHeader("Access-Control-Allow-Origin", origin)
+    res.setHeader("Vary", "Origin")
+  }
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization")
 
