@@ -136,7 +136,7 @@ export const messages = {
     subject: `Booking ${b.id} received`,
     text: `Your payment${b.total ? ` of ₹${b.total.toLocaleString("en-IN")}` : ""} was received and booking ${b.id} for ${b.animal} at ${b.gosala} on ${b.date}, ${b.time} is now with the gaushala manager for confirmation. We will tell you as soon as it is confirmed.`,
     sms: { template: "MSG91_TEMPLATE_BOOKING_PLACED", vars: [b.id, b.animal, b.date] },
-    whatsapp: { template: "gomaa_booking_placed", vars: [b.id, b.date] },
+    whatsapp: { template: "gomaa_booking_placed", vars: [b.id, b.animal, b.date] },
   }),
 
   bookingNeedsReview: (b: BookingInfo): Message => ({
