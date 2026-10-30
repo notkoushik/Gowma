@@ -73,7 +73,7 @@ async function deliver(user: { id: string; email: string; phone: string; name: s
   }
 }
 
-export async function notifyUsers(userIds: string[], msg: Message) {
+async function notifyUsersNow(userIds: string[], msg: Message) {
   if (!enabled() || !userIds.length) return
   try {
     const users = await prisma.user.findMany({
@@ -86,18 +86,18 @@ export async function notifyUsers(userIds: string[], msg: Message) {
   }
 }
 
-export async function notifySuperAdmins(msg: Message) {
+async function notifySuperAdminsNow(msg: Message) {
   if (!enabled()) return
   try {
     const admins = await prisma.user.findMany({ where: { role: "SUPER_ADMIN", isActive: true }, select: { id: true } })
-    await notifyUsers(admins.map((a) => a.id), msg)
+    await notifyUsersNow(admins.map((a) => a.id), msg)
   } catch (err: any) {
     console.warn("[notify] could not look up super admins:", err?.message)
   }
 }
 
 /** The gaushala's operations admin plus its active managers. */
-export async function notifyGosalaTeam(gosalaId: string, msg: Message) {
+async function notifyGosalaTeamNow(gosalaId: string, msg: Message) {
   if (!enabled()) return
   try {
     const gosala = await prisma.gosala.findUnique({
@@ -106,11 +106,29 @@ export async function notifyGosalaTeam(gosalaId: string, msg: Message) {
     })
     if (!gosala) return
     const ids = [gosala.adminId, ...gosala.managers.map((m) => m.userId)].filter(Boolean) as string[]
-    await notifyUsers(ids, msg)
+    await notifyUsersNow(ids, msg)
   } catch (err: any) {
     console.warn("[notify] could not look up gaushala team:", err?.message)
   }
 }
+
+// Serverless hosts (Vercel) freeze a function as soon as it responds, which would cut off messages still being sent.
+// Every send is registered here so the API entry can wait for them before it ends the response.
+const pending = new Set<Promise<unknown>>()
+function track<T>(p: Promise<T>): Promise<T> {
+  pending.add(p)
+  const done = () => pending.delete(p)
+  p.then(done, done)
+  return p
+}
+/** Waits (up to a few seconds) for notifications started during this request. */
+export async function flushNotifications(timeoutMs = 8000) {
+  if (!pending.size) return
+  await Promise.race([Promise.allSettled([...pending]), new Promise((r) => setTimeout(r, timeoutMs))])
+}
+export const notifyUsers = (userIds: string[], msg: Message) => track(notifyUsersNow(userIds, msg))
+export const notifySuperAdmins = (msg: Message) => track(notifySuperAdminsNow(msg))
+export const notifyGosalaTeam = (gosalaId: string, msg: Message) => track(notifyGosalaTeamNow(gosalaId, msg))
 
 // ----------------------------------------------------------------------------
 // The messages

@@ -2785,7 +2785,7 @@ ${msg.text}`;
     }
   }
 }
-async function notifyUsers(userIds, msg) {
+async function notifyUsersNow(userIds, msg) {
   if (!enabled() || !userIds.length) return;
   try {
     const users = await prisma.user.findMany({
@@ -2797,16 +2797,16 @@ async function notifyUsers(userIds, msg) {
     console.warn("[notify] could not look up recipients:", err?.message);
   }
 }
-async function notifySuperAdmins(msg) {
+async function notifySuperAdminsNow(msg) {
   if (!enabled()) return;
   try {
     const admins = await prisma.user.findMany({ where: { role: "SUPER_ADMIN", isActive: true }, select: { id: true } });
-    await notifyUsers(admins.map((a) => a.id), msg);
+    await notifyUsersNow(admins.map((a) => a.id), msg);
   } catch (err) {
     console.warn("[notify] could not look up super admins:", err?.message);
   }
 }
-async function notifyGosalaTeam(gosalaId, msg) {
+async function notifyGosalaTeamNow(gosalaId, msg) {
   if (!enabled()) return;
   try {
     const gosala = await prisma.gosala.findUnique({
@@ -2815,11 +2815,25 @@ async function notifyGosalaTeam(gosalaId, msg) {
     });
     if (!gosala) return;
     const ids = [gosala.adminId, ...gosala.managers.map((m) => m.userId)].filter(Boolean);
-    await notifyUsers(ids, msg);
+    await notifyUsersNow(ids, msg);
   } catch (err) {
     console.warn("[notify] could not look up gaushala team:", err?.message);
   }
 }
+var pending = /* @__PURE__ */ new Set();
+function track(p) {
+  pending.add(p);
+  const done = () => pending.delete(p);
+  p.then(done, done);
+  return p;
+}
+async function flushNotifications(timeoutMs = 8e3) {
+  if (!pending.size) return;
+  await Promise.race([Promise.allSettled([...pending]), new Promise((r) => setTimeout(r, timeoutMs))]);
+}
+var notifyUsers = (userIds, msg) => track(notifyUsersNow(userIds, msg));
+var notifySuperAdmins = (msg) => track(notifySuperAdminsNow(msg));
+var notifyGosalaTeam = (gosalaId, msg) => track(notifyGosalaTeamNow(gosalaId, msg));
 function bookingInfo(b) {
   return {
     id: b.id,
@@ -3779,8 +3793,8 @@ async function requestSplitChange(args) {
   await validateManagerBp(args.managerBp);
   const gosala = await prisma.gosala.findUnique({ where: { id: args.gosalaId } });
   if (!gosala) throw new LedgerError("Gaushala not found", "INVALID");
-  const pending = await prisma.splitPolicyRequest.findFirst({ where: { policyKey: gosala.id, status: "PENDING" } });
-  if (pending) throw new LedgerError("A change for this gaushala is already waiting for Super Admin approval", "CONFLICT");
+  const pending2 = await prisma.splitPolicyRequest.findFirst({ where: { policyKey: gosala.id, status: "PENDING" } });
+  if (pending2) throw new LedgerError("A change for this gaushala is already waiting for Super Admin approval", "CONFLICT");
   const current = await getManagerBpFor(gosala.id);
   if (current.managerBp === args.managerBp) throw new LedgerError("That is already the current manager percentage", "CONFLICT");
   return prisma.splitPolicyRequest.create({
@@ -8686,6 +8700,7 @@ async function handler(req, res) {
       res.end(JSON.stringify({ error: `Endpoint not found: ${req.method} ${requestUrl}` }));
       return;
     }
+    await flushNotifications();
     res.statusCode = result.status;
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify(result.body));
