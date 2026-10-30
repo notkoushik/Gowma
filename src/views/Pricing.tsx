@@ -500,24 +500,28 @@ export default function Pricing({
   const [editingAnimalName, setEditingAnimalName] = useState<string | null>(
     null,
   )
-  const [editingAnimalPrice, setEditingAnimalPrice] = useState<number>(3500)
+  const [editingAnimalPrice, setEditingAnimalPrice] = useState<number | "">(
+    3500,
+  )
 
   const handleSaveAnimalPrice = (animalName: string) => {
     if (!isSuperAdmin) return
-    updateAnimal(animalName, { price: Number(editingAnimalPrice) })
+    const finalPrice =
+      editingAnimalPrice === "" ? 3500 : Number(editingAnimalPrice)
+    updateAnimal(animalName, { price: finalPrice })
     setEditingAnimalName(null)
     notify(
-      `Updated darshan price for ${animalName} to ${inr(editingAnimalPrice)}`,
+      `Updated darshan price for ${animalName} to ${inr(finalPrice)}`,
       "ok",
     )
   }
 
   // Gaushala Category Base Price Matrix State
-  const [baseCow, setBaseCow] = useState<number>(3500)
-  const [basePair, setBasePair] = useState<number>(4800)
-  const [baseCalf, setBaseCalf] = useState<number>(2500)
-  const [baseBull, setBaseBull] = useState<number>(4500)
-  const [baseBuffalo, setBaseBuffalo] = useState<number>(3200)
+  const [baseCow, setBaseCow] = useState<number | "">(3500)
+  const [basePair, setBasePair] = useState<number | "">(4800)
+  const [baseCalf, setBaseCalf] = useState<number | "">(2500)
+  const [baseBull, setBaseBull] = useState<number | "">(4500)
+  const [baseBuffalo, setBaseBuffalo] = useState<number | "">(3200)
   const [isEditingBaseRates, setIsEditingBaseRates] = useState(false)
   const [customCommission, setCustomCommission] = useState<number | "">("")
 
@@ -525,7 +529,7 @@ export default function Pricing({
   const [bovineModalOpen, setBovineModalOpen] = useState(false)
   const [editingBovineId, setEditingBovineId] = useState<string | null>(null)
   const [bovineName, setBovineName] = useState("")
-  const [bovineBasePrice, setBovineBasePrice] = useState<number>(3500)
+  const [bovineBasePrice, setBovineBasePrice] = useState<number | "">(3500)
   const [bovineDescription, setBovineDescription] = useState("")
   const [bovineBadgeText, setBovineBadgeText] = useState("Custom Breed")
 
@@ -548,11 +552,11 @@ export default function Pricing({
   const handleSaveBaseRates = () => {
     if (!isSuperAdmin || !activeGosala) return
     updateGosala(activeGosala.id, {
-      baseCowPrice: Number(baseCow),
-      basePairPrice: Number(basePair),
-      baseCalfPrice: Number(baseCalf),
-      baseBullPrice: Number(baseBull),
-      baseBuffaloPrice: Number(baseBuffalo),
+      baseCowPrice: baseCow === "" ? undefined : Number(baseCow),
+      basePairPrice: basePair === "" ? undefined : Number(basePair),
+      baseCalfPrice: baseCalf === "" ? undefined : Number(baseCalf),
+      baseBullPrice: baseBull === "" ? undefined : Number(baseBull),
+      baseBuffaloPrice: baseBuffalo === "" ? undefined : Number(baseBuffalo),
       customCommissionPct:
         customCommission === "" ? undefined : Number(customCommission),
     })
@@ -806,11 +810,11 @@ export default function Pricing({
   const [econTargetGosala, setEconTargetGosala] = useState<Gosala | null>(null)
   const [econTier, setEconTier] = useState<PartnershipTier>("STANDARD")
   const [econCommType, setEconCommType] = useState<CommissionType>("percentage")
-  const [econCommValue, setEconCommValue] = useState<number>(20)
+  const [econCommValue, setEconCommValue] = useState<number | "">(20)
   const [econTaxTreatment, setEconTaxTreatment] =
     useState<TaxTreatment>("standard_gst")
-  const [econCustomTaxPct, setEconCustomTaxPct] = useState<number>(5)
-  const [econBufferMin, setEconBufferMin] = useState<number>(30)
+  const [econCustomTaxPct, setEconCustomTaxPct] = useState<number | "">(5)
+  const [econBufferMin, setEconBufferMin] = useState<number | "">(30)
   const [econNotes, setEconNotes] = useState<string>("")
 
   const handleOpenEditEconomics = (g: Gosala) => {
@@ -838,23 +842,34 @@ export default function Pricing({
 
   const handleSaveEconomics = () => {
     if (!isSuperAdmin || !econTargetGosala) return
+    const finalCommVal =
+      econCommValue === ""
+        ? econCommType === "fixed"
+          ? 400
+          : 20
+        : Number(econCommValue)
+    const finalTaxPct =
+      econTaxTreatment === "section_80g_exempt"
+        ? 0
+        : econTaxTreatment === "reduced_charity_gst"
+          ? 5
+          : econTaxTreatment === "standard_gst"
+            ? 18
+            : econCustomTaxPct === ""
+              ? 0
+              : Number(econCustomTaxPct)
+
     updateGosala(econTargetGosala.id, {
       partnershipTier: econTier,
       commissionType: econCommType,
       customCommissionPct:
-        econCommType === "percentage" ? Number(econCommValue) : undefined,
+        econCommType === "percentage" ? finalCommVal : undefined,
       customCommissionFlat:
-        econCommType === "fixed" ? Number(econCommValue) : undefined,
+        econCommType === "fixed" ? finalCommVal : undefined,
+      commissionValue: finalCommVal,
       taxTreatment: econTaxTreatment,
-      customTaxPct:
-        econTaxTreatment === "section_80g_exempt"
-          ? 0
-          : econTaxTreatment === "reduced_charity_gst"
-            ? 5
-            : econTaxTreatment === "standard_gst"
-              ? 18
-              : Number(econCustomTaxPct),
-      bufferMinutes: Number(econBufferMin),
+      customTaxPct: finalTaxPct,
+      bufferMinutes: econBufferMin === "" ? 30 : Number(econBufferMin),
       partnershipNotes: econNotes.trim(),
     })
     setEconModalOpen(false)
@@ -2062,15 +2077,20 @@ export default function Pricing({
                           <input
                             type="number"
                             value={basePair}
+                            placeholder="4800"
                             onChange={(e) =>
-                              setBasePair(Number(e.target.value))
+                              setBasePair(
+                                e.target.value === ""
+                                  ? ""
+                                  : Number(e.target.value),
+                              )
                             }
                             className="w-20 bg-card border border-amber-400 rounded px-1.5 py-0.5 text-[13px] font-mono font-bold text-ink"
                           />
                         </div>
                       ) : (
                         <span className="font-mono text-[15px] font-bold text-amber-900 tabular">
-                          {inr(basePair)}
+                          {inr(basePair || 0)}
                         </span>
                       )}
                     </div>
@@ -2100,13 +2120,20 @@ export default function Pricing({
                           <input
                             type="number"
                             value={baseCow}
-                            onChange={(e) => setBaseCow(Number(e.target.value))}
+                            placeholder="3500"
+                            onChange={(e) =>
+                              setBaseCow(
+                                e.target.value === ""
+                                  ? ""
+                                  : Number(e.target.value),
+                              )
+                            }
                             className="w-20 bg-card border border-forest rounded px-1.5 py-0.5 text-[13px] font-mono font-bold text-ink"
                           />
                         </div>
                       ) : (
                         <span className="font-mono text-[15px] font-bold text-forest tabular">
-                          {inr(baseCow)}
+                          {inr(baseCow || 0)}
                         </span>
                       )}
                     </div>
@@ -2136,15 +2163,20 @@ export default function Pricing({
                           <input
                             type="number"
                             value={baseCalf}
+                            placeholder="2500"
                             onChange={(e) =>
-                              setBaseCalf(Number(e.target.value))
+                              setBaseCalf(
+                                e.target.value === ""
+                                  ? ""
+                                  : Number(e.target.value),
+                              )
                             }
                             className="w-20 bg-card border border-saffron rounded px-1.5 py-0.5 text-[13px] font-mono font-bold text-ink"
                           />
                         </div>
                       ) : (
                         <span className="font-mono text-[15px] font-bold text-ink tabular">
-                          {inr(baseCalf)}
+                          {inr(baseCalf || 0)}
                         </span>
                       )}
                     </div>
@@ -2174,15 +2206,20 @@ export default function Pricing({
                           <input
                             type="number"
                             value={baseBull}
+                            placeholder="4000"
                             onChange={(e) =>
-                              setBaseBull(Number(e.target.value))
+                              setBaseBull(
+                                e.target.value === ""
+                                  ? ""
+                                  : Number(e.target.value),
+                              )
                             }
                             className="w-20 bg-card border border-line-strong rounded px-1.5 py-0.5 text-[13px] font-mono font-bold text-ink"
                           />
                         </div>
                       ) : (
                         <span className="font-mono text-[15px] font-bold text-ink tabular">
-                          {inr(baseBull)}
+                          {inr(baseBull || 0)}
                         </span>
                       )}
                     </div>
@@ -2212,15 +2249,20 @@ export default function Pricing({
                           <input
                             type="number"
                             value={baseBuffalo}
+                            placeholder="3800"
                             onChange={(e) =>
-                              setBaseBuffalo(Number(e.target.value))
+                              setBaseBuffalo(
+                                e.target.value === ""
+                                  ? ""
+                                  : Number(e.target.value),
+                              )
                             }
                             className="w-20 bg-card border border-indigo-400 rounded px-1.5 py-0.5 text-[13px] font-mono font-bold text-ink"
                           />
                         </div>
                       ) : (
                         <span className="font-mono text-[15px] font-bold text-indigo-950 tabular">
-                          {inr(baseBuffalo)}
+                          {inr(baseBuffalo || 0)}
                         </span>
                       )}
                     </div>
@@ -2468,9 +2510,12 @@ export default function Pricing({
                                       type="number"
                                       autoFocus
                                       value={editingAnimalPrice}
+                                      placeholder="3500"
                                       onChange={(e) =>
                                         setEditingAnimalPrice(
-                                          Number(e.target.value),
+                                          e.target.value === ""
+                                            ? ""
+                                            : Number(e.target.value),
                                         )
                                       }
                                       className="w-24 bg-card border border-amber-400 rounded px-2 py-1 text-[13px] font-mono outline-none focus:ring-2 focus:ring-amber-400"
@@ -4144,7 +4189,12 @@ export default function Pricing({
                   <input
                     type="number"
                     value={econCommValue}
-                    onChange={(e) => setEconCommValue(Number(e.target.value))}
+                    placeholder="20"
+                    onChange={(e) =>
+                      setEconCommValue(
+                        e.target.value === "" ? "" : Number(e.target.value),
+                      )
+                    }
                     className={inputCls}
                   />
                 </Field>
@@ -4153,7 +4203,12 @@ export default function Pricing({
                   <input
                     type="number"
                     value={econBufferMin}
-                    onChange={(e) => setEconBufferMin(Number(e.target.value))}
+                    placeholder="30"
+                    onChange={(e) =>
+                      setEconBufferMin(
+                        e.target.value === "" ? "" : Number(e.target.value),
+                      )
+                    }
                     className={inputCls}
                   />
                 </Field>
@@ -4186,8 +4241,11 @@ export default function Pricing({
                     <input
                       type="number"
                       value={econCustomTaxPct}
+                      placeholder="5"
                       onChange={(e) =>
-                        setEconCustomTaxPct(Number(e.target.value))
+                        setEconCustomTaxPct(
+                          e.target.value === "" ? "" : Number(e.target.value),
+                        )
                       }
                       className={inputCls}
                     />

@@ -19,7 +19,7 @@ const isServerless = Boolean(
 
 if (dbUrl) {
   const targetLimit = isServerless ? "1" : "5"
-  const timeout = isServerless ? "10" : "15"
+  const timeout = isServerless ? "30" : "15"
 
   if (dbUrl.includes("connection_limit=")) {
     dbUrl = dbUrl.replace(/connection_limit=\d+/, `connection_limit=${targetLimit}`)

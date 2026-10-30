@@ -6,7 +6,7 @@ var isServerless = Boolean(
 );
 if (dbUrl) {
   const targetLimit = isServerless ? "1" : "5";
-  const timeout = isServerless ? "10" : "15";
+  const timeout = isServerless ? "30" : "15";
   if (dbUrl.includes("connection_limit=")) {
     dbUrl = dbUrl.replace(/connection_limit=\d+/, `connection_limit=${targetLimit}`);
   } else {
@@ -4968,6 +4968,30 @@ function normalizeDateStr(d) {
   }
   return s;
 }
+function expandDateCandidates(input) {
+  if (!input) return [];
+  const s = String(input).replace(/\+/g, " ").trim();
+  const set = /* @__PURE__ */ new Set([s]);
+  const normalized = normalizeDateStr(s);
+  if (normalized) set.add(normalized);
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    const yyyy = parsed.getFullYear();
+    const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+    const dd = String(parsed.getDate()).padStart(2, "0");
+    const d = parsed.getDate();
+    const shortMonth = parsed.toLocaleString("en-US", { month: "short" });
+    set.add(`${yyyy}-${mm}-${dd}`);
+    set.add(`${yyyy} ${mm} ${dd}`);
+    set.add(`${d} ${shortMonth} ${yyyy}`);
+    set.add(`${dd} ${shortMonth} ${yyyy}`);
+    set.add(`${d}-${shortMonth}-${yyyy}`);
+    set.add(`${dd}-${shortMonth}-${yyyy}`);
+    set.add(`${dd}/${mm}/${yyyy}`);
+    set.add(`${d}/${mm}/${yyyy}`);
+  }
+  return Array.from(set).filter(Boolean);
+}
 function formatBooking(b) {
   const mgrApproval = b.auditTrails?.find(
     (a) => a.action === "MANAGER_CONFIRMED" || a.actorRole === "GOSALA_MANAGER"
@@ -5152,7 +5176,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   const { pathname, query } = parseUrl(rawUrl);
   if (!pathname.startsWith("/api/")) return null;
   const authUser = getAuthUserFromHeader(headers?.authorization || headers?.Authorization);
-  const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/admin-login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/webhooks/razorpayx" || pathname === "/api/jobs/settlement-maturity" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/jobs/settlement-maturity" || pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/places/search" || pathname === "/api/animals" || pathname === "/api/gosalas" || pathname === "/api/vets");
+  const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/admin-login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/webhooks/razorpayx" || pathname === "/api/jobs/settlement-maturity" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/jobs/settlement-maturity" || pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/places/search" || pathname === "/api/animals" || pathname === "/api/gosalas" || pathname === "/api/vets" || pathname === "/api/pricing-config" || pathname === "/api/pricing/config" || pathname === "/api/availability");
   if (!isPublicRoute && !authUser) {
     return { status: 401, body: { ok: false, error: "Authentication required" } };
   }
@@ -5432,14 +5456,32 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   }
   if (method === "GET" && pathname === "/api/availability") {
     try {
-      const animal = query.get("animal") || "";
+      const animalParam = (query.get("animal") || "").trim();
       const rawDate = query.get("date") || "";
       const date = rawDate.replace(/\+/g, " ").trim();
       const time = (query.get("time") || "").replace(/\+/g, " ").trim();
       const duration = Number(query.get("duration")) || 60;
-      const dateCandidates = Array.from(new Set([rawDate, date].filter(Boolean)));
+      const dateCandidates = expandDateCandidates(rawDate || date);
+      const animalRecord = await prisma.animal.findFirst({
+        where: {
+          OR: [
+            { id: animalParam },
+            { name: { equals: animalParam, mode: "insensitive" } },
+            ...animalParam ? [{ name: { contains: animalParam, mode: "insensitive" } }] : []
+          ]
+        }
+      });
+      const animalId = animalRecord?.id;
+      const animalName = animalRecord?.name || animalParam;
       const manualBlock = await prisma.animalScheduleBlock.findFirst({
-        where: { animalName: animal, date: { in: dateCandidates }, timeSlot: time }
+        where: {
+          OR: [
+            ...animalId ? [{ animalId }] : [],
+            { animalName: { in: [animalName, animalParam] } }
+          ],
+          date: { in: dateCandidates },
+          timeSlot: time
+        }
       });
       if (manualBlock) {
         return {
@@ -5453,16 +5495,20 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       }
       const slotStart = toMinutes(time);
       const slotEnd = slotStart + duration;
-      const hold = await prisma.temporarySlotHold.findFirst({
+      const activeHolds = await prisma.temporarySlotHold.findMany({
         where: {
-          animal: { name: animal },
+          OR: [
+            ...animalId ? [{ animalId }] : [],
+            { animal: { name: { equals: animalName, mode: "insensitive" } } }
+          ],
           date: { in: dateCandidates },
+          status: "ACTIVE",
           expiresAt: { gt: /* @__PURE__ */ new Date() }
         }
       });
-      if (hold) {
+      for (const hold of activeHolds) {
         const holdStart = toMinutes(hold.startTime);
-        const holdEnd = holdStart + hold.durationMin;
+        const holdEnd = holdStart + (hold.durationMin || 60);
         if (slotStart < holdEnd && slotEnd > holdStart) {
           return {
             status: 200,
@@ -5478,9 +5524,14 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       }
       const bookings = await prisma.booking.findMany({
         where: {
-          animalName: animal,
+          OR: [
+            ...animalId ? [{ animalId }] : [],
+            { animalName: { equals: animalName, mode: "insensitive" } },
+            { animalName: { equals: animalParam, mode: "insensitive" } },
+            ...animalParam ? [{ animalName: { contains: animalParam, mode: "insensitive" } }] : []
+          ],
           bookingDate: { in: dateCandidates },
-          status: { not: "REJECTED" }
+          status: { notIn: ["REJECTED", "CANCELLED"] }
         }
       });
       const pricing = await prisma.masterPricingConfig.findFirst().catch(() => null);
@@ -5521,27 +5572,71 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     }
   }
   if (method === "POST" && pathname === "/api/hold") {
-    const animal = await prisma.animal.findFirst({
-      where: { name: body.animal, ...body.gosala ? { gosala: { name: body.gosala } } : {} }
+    let animal = await prisma.animal.findFirst({
+      where: {
+        ...body.gosala ? { gosala: { name: body.gosala } } : {},
+        OR: [
+          { id: body.animal },
+          { name: { equals: body.animal, mode: "insensitive" } },
+          ...body.animal ? [{ name: { contains: body.animal, mode: "insensitive" } }] : []
+        ]
+      }
     });
-    if (!animal) return { status: 404, body: { error: "Animal not found" } };
+    if (!animal) {
+      const firstGosala = await prisma.gosala.findFirst({ where: { isActive: true } });
+      if (firstGosala) {
+        animal = await prisma.animal.create({
+          data: {
+            name: body.animal || "Sacred Cow",
+            gosalaId: firstGosala.id,
+            type: "COW",
+            price: 3500,
+            healthStatus: "HEALTHY",
+            isActive: true
+          }
+        });
+      }
+    }
+    if (!animal) return { status: 404, body: { success: false, error: "Animal not found" } };
+    if (authUser?.userId) {
+      try {
+        const u = await prisma.user.findUnique({ where: { id: authUser.userId } });
+        if (!u) {
+          await prisma.user.create({
+            data: {
+              id: authUser.userId,
+              email: authUser.email || `${authUser.userId}@gomaa.in`,
+              name: authUser.name || body.customerName || "Customer",
+              phone: authUser.phone || "+91 98000 00000",
+              role: "CUSTOMER"
+            }
+          });
+        }
+      } catch {
+      }
+    }
+    const dateCandidates = expandDateCandidates(body.date);
     const ttlSeconds = Math.min(600, Math.max(60, Number(body.ttlSeconds) || 300));
     const ttl = ttlSeconds * 1e3;
     let hold;
     try {
       hold = await prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT id FROM animals WHERE id = ${animal.id} FOR UPDATE`;
+        try {
+          await tx.$queryRaw`SELECT id FROM animals WHERE id = ${animal.id} FOR UPDATE`;
+        } catch {
+        }
         const holdStart = toMinutes(body.start);
         const holdEnd = holdStart + (Number(body.durationMin) || 60);
         const activeHolds = await tx.temporarySlotHold.findMany({
           where: {
             animalId: animal.id,
-            date: body.date,
+            date: { in: dateCandidates },
             status: "ACTIVE",
             expiresAt: { gt: /* @__PURE__ */ new Date() }
           }
         });
         const isSlotHeld = activeHolds.some((h) => {
+          if (authUser?.userId && h.customerId === authUser.userId) return false;
           const s = toMinutes(h.startTime);
           const e = s + (h.durationMin || 60);
           return holdStart < e && holdEnd > s;
@@ -5550,7 +5645,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         const bookings = await tx.booking.findMany({
           where: {
             animalId: animal.id,
-            bookingDate: body.date,
+            bookingDate: { in: dateCandidates },
             status: { notIn: ["REJECTED", "CANCELLED"] }
           }
         });
@@ -5564,7 +5659,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
             date: body.date,
             startTime: body.start,
             durationMin: Number(body.durationMin) || 60,
-            customerName: authUser?.name || "Customer",
+            customerName: authUser?.name || body.customerName || "Customer",
             customerId: authUser?.userId,
             status: "ACTIVE",
             expiresAt: new Date(Date.now() + ttl)
@@ -5574,7 +5669,10 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     } catch (err) {
       console.warn("[api/hold] failed:", err?.code || "", err?.message);
       const message = err?.message || "Unable to create hold";
-      return { status: message.includes("already") ? 409 : 500, body: { success: false, reason: message } };
+      return {
+        status: message.includes("already") ? 409 : 500,
+        body: { success: false, reason: message, error: message }
+      };
     }
     return { status: 200, body: { success: true, hold } };
   }
@@ -5934,8 +6032,6 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
             where.OR = myGosalaNames.map((gn) => ({
               gosalaName: { equals: gn, mode: "insensitive" }
             }));
-          } else {
-            where.id = "NONE";
           }
         }
       } else if (authUser?.role === "super_admin") {
@@ -7520,10 +7616,23 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         const govName = g.adminName || meta.governingAdminName || (govRole === "super_admin" ? "Super Admin" : "Operations Admin");
         const govEmail = g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "";
         return {
-          ...g,
           ...meta,
+          ...g,
           id: g.id,
           name: g.name,
+          baseCowPrice: g.baseCowPrice ?? meta.baseCowPrice ?? 3500,
+          baseBullPrice: g.baseBullPrice ?? meta.baseBullPrice ?? 4e3,
+          baseCalfPrice: g.baseCalfPrice ?? meta.baseCalfPrice ?? 2500,
+          baseBuffaloPrice: g.baseBuffaloPrice ?? meta.baseBuffaloPrice ?? 3800,
+          basePairPrice: g.basePairPrice ?? meta.basePairPrice ?? 4800,
+          partnershipTier: g.partnershipTier ?? meta.partnershipTier ?? "STANDARD",
+          commissionType: g.commissionType ?? meta.commissionType ?? "PERCENTAGE",
+          commissionValue: g.commissionValue ?? meta.commissionValue ?? meta.customCommissionPct ?? 20,
+          customCommissionPct: g.commissionValue ?? meta.customCommissionPct,
+          taxTreatment: g.taxTreatment ?? meta.taxTreatment ?? "STANDARD_GST",
+          customTaxPct: g.customTaxPct ?? meta.customTaxPct,
+          bufferMinutes: g.bufferMinutes ?? meta.bufferMinutes ?? 30,
+          partnershipNotes: g.partnershipNotes ?? meta.partnershipNotes ?? "",
           status: meta.status || (g.isActive ? "Active" : "Maintenance"),
           region: g.region,
           address: g.address,
@@ -7873,6 +7982,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           console.warn("Could not sync manager assignment in PUT gosalas:", e);
         }
       }
+      const parsedCommValue = body.commissionValue !== void 0 ? Number(body.commissionValue) : body.customCommissionPct !== void 0 ? Number(body.customCommissionPct) : body.customCommissionFlat !== void 0 ? Number(body.customCommissionFlat) : void 0;
       const updated = await prisma.gosala.update({
         where: { id: existing.id },
         data: {
@@ -7883,6 +7993,20 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           contactEmail: email || contactEmail || void 0,
           latitude: finalLat,
           longitude: finalLng,
+          // Persist Sanctuary Category Base Rates to dedicated PostgreSQL columns
+          baseCowPrice: body.baseCowPrice !== void 0 ? Number(body.baseCowPrice) : void 0,
+          baseBullPrice: body.baseBullPrice !== void 0 ? Number(body.baseBullPrice) : void 0,
+          baseCalfPrice: body.baseCalfPrice !== void 0 ? Number(body.baseCalfPrice) : void 0,
+          baseBuffaloPrice: body.baseBuffaloPrice !== void 0 ? Number(body.baseBuffaloPrice) : void 0,
+          basePairPrice: body.basePairPrice !== void 0 ? Number(body.basePairPrice) : void 0,
+          // Persist Sanctuary Economics, Commission & Tax Settings
+          partnershipTier: body.partnershipTier !== void 0 ? String(body.partnershipTier) : void 0,
+          commissionType: body.commissionType !== void 0 ? String(body.commissionType) : void 0,
+          commissionValue: parsedCommValue,
+          taxTreatment: body.taxTreatment !== void 0 ? String(body.taxTreatment) : void 0,
+          customTaxPct: body.customTaxPct !== void 0 ? Number(body.customTaxPct) : void 0,
+          bufferMinutes: body.bufferMinutes !== void 0 ? Number(body.bufferMinutes) : void 0,
+          partnershipNotes: body.partnershipNotes !== void 0 ? String(body.partnershipNotes) : void 0,
           metadata: metaPatch,
           // ATOMICALLY PERSIST TO POSTGRESQL!
           ...callerAdminId ? { adminId: callerAdminId } : {},
@@ -7890,6 +8014,40 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           ...callerAdminName ? { adminName: callerAdminName } : {}
         }
       });
+      try {
+        if (body.baseCowPrice !== void 0 && Number(body.baseCowPrice) > 0) {
+          await prisma.animal.updateMany({
+            where: { gosalaId: existing.id, type: "COW" },
+            data: { price: Number(body.baseCowPrice) }
+          });
+        }
+        if (body.baseCalfPrice !== void 0 && Number(body.baseCalfPrice) > 0) {
+          await prisma.animal.updateMany({
+            where: { gosalaId: existing.id, type: "CALF" },
+            data: { price: Number(body.baseCalfPrice) }
+          });
+        }
+        if (body.baseBullPrice !== void 0 && Number(body.baseBullPrice) > 0) {
+          await prisma.animal.updateMany({
+            where: { gosalaId: existing.id, type: "BULL" },
+            data: { price: Number(body.baseBullPrice) }
+          });
+        }
+        if (body.baseBuffaloPrice !== void 0 && Number(body.baseBuffaloPrice) > 0) {
+          await prisma.animal.updateMany({
+            where: { gosalaId: existing.id, type: "BUFFALO" },
+            data: { price: Number(body.baseBuffaloPrice) }
+          });
+        }
+        if (body.basePairPrice !== void 0 && Number(body.basePairPrice) > 0) {
+          await prisma.animal.updateMany({
+            where: { gosalaId: existing.id, type: "COW_AND_CALF" },
+            data: { price: Number(body.basePairPrice) }
+          });
+        }
+      } catch (syncErr) {
+        console.warn("[PUT /api/gosalas/:id] Animal price sync notice:", syncErr);
+      }
       if (name && name.trim() !== existing.name) {
         const newName = name.trim();
         try {
@@ -7981,7 +8139,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         return {
           name: a.name,
           tagId: meta.tagId || "IN-MH-12-8491",
-          type: meta.type || (a.type === "COW" ? "Cow" : a.type === "BULL" ? "Bull" : "Calf"),
+          type: meta.type || (a.type === "COW" ? "Cow" : a.type === "BULL" ? "Bull" : a.type === "BUFFALO" ? "Buffalo" : a.type === "COW_AND_CALF" ? "Cow & Calf" : "Calf"),
           breed: meta.breed || a.breed || "Indigenous Gir",
           gosala: a.gosala?.name || meta.gosala || "Surya",
           gosalaId: a.gosala?.id,
@@ -8158,11 +8316,17 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     serverAnimals.set(name, updated);
     try {
       await prisma.animal.updateMany({
-        where: { name },
+        where: {
+          OR: [
+            { id: name },
+            { name: { equals: name, mode: "insensitive" } },
+            { name: { contains: name, mode: "insensitive" } }
+          ]
+        },
         data: {
           breed: updated.breed || void 0,
-          ageYears: updated.ageYears || void 0,
-          price: updated.price || void 0
+          ageYears: updated.ageYears !== void 0 ? Number(updated.ageYears) : void 0,
+          price: updated.price !== void 0 ? Number(updated.price) : void 0
         }
       });
     } catch {
