@@ -38,7 +38,7 @@ import Schedule from "./manager/Schedule"
 import Animals from "./manager/Animals"
 import Availability from "./Availability"
 import ManagerLedger from "./manager/ManagerLedger"
-import ManagerWallet from "./manager/ManagerWallet"
+import WalletHub from "./wallet/WalletHub"
 import GaushalaProfileView from "./manager/GaushalaProfileView"
 import ManagerDevotees from "./manager/ManagerDevotees"
 import EditProfileModal from "../components/EditProfileModal"
@@ -1063,7 +1063,7 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
             </div>
           )}
           {view === "ledger" && <ManagerLedger />}
-          {view === "wallet" && <ManagerWallet />}
+          {view === "wallet" && <WalletHub role="manager" />}
           {view === "devotees" && (
             <ManagerDevotees
               currentGosalaName={

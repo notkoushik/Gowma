@@ -33,7 +33,7 @@ import LiveTracking from "./views/manager/LiveTracking"
 import Gaushalas from "./views/manager/Gaushalas"
 import Animals from "./views/manager/Animals"
 import ManagerLedger from "./views/manager/ManagerLedger"
-import AdminWallet from "./views/admin/AdminWallet"
+import WalletHub from "./views/wallet/WalletHub"
 import Login from "./views/Login"
 import AdminLogin from "./views/AdminLogin"
 import ManagerApp from "./views/ManagerApp"
@@ -126,7 +126,9 @@ function parseHash(): {
   if (!hash) return { role: undefined }
   const parts = hash.split("/")
   const r = parts[0]
-  if (r === "login" || r === "admin-login") return { role: null }
+  // A bare "#admin" is the admin login. "#admin/<view>" belongs to the Operations Admin
+  // workspace, so it must not be treated as a logout.
+  if (r === "login" || r === "admin-login" || (r === "admin" && !parts[1])) return { role: null }
   if (VALID_ROLES.includes(r as RoleId)) {
     return { role: r as RoleId, subview: parts[1], sector: parts[2] }
   }
@@ -1290,10 +1292,7 @@ export default function App() {
         <main className="flex-1 min-w-0 max-w-full overflow-x-hidden p-3 sm:p-5 lg:p-8">
           {view === "overview" && <Overview />}
           {view === "wallet" && (
-            <AdminWallet
-              onNavigateToManagers={() => handleSetAdminView("managers")}
-              onOpenProfileShareSplit={() => setEditAdminProfileOpen(true)}
-            />
+            <WalletHub role={isSuperAdmin ? "super_admin" : "admin"} />
           )}
           {view === "gosalas" && (
             <Gaushalas onNavigateToHerd={() => handleSetAdminView("animals")} />

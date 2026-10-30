@@ -28,7 +28,7 @@ import { type Gosala } from "../../data/customer"
 import { DEFAULT_GOSALA_OFFERINGS } from "../../data/gosalas"
 import { inr } from "../../data/mock"
 import { useStore } from "../../store/store"
-import { api } from "../../services/api"
+import { api, type RazorpayProof } from "../../services/api"
 import CattleAndShelterGallery from "../../components/CattleAndShelterGallery"
 
 import {
@@ -156,16 +156,43 @@ function Calendar({
   )
 }
 
+let razorpayScript: Promise<void> | null = null
+function loadRazorpayCheckout(): Promise<void> {
+  if ((window as any).Razorpay) return Promise.resolve()
+  razorpayScript ??= new Promise<void>((resolve, reject) => {
+    const el = document.createElement("script")
+    el.src = "https://checkout.razorpay.com/v1/checkout.js"
+    el.onload = () => resolve()
+    el.onerror = () => {
+      razorpayScript = null
+      reject(
+        new Error(
+          "Could not load Razorpay. Check your internet connection and try again.",
+        ),
+      )
+    }
+    document.head.appendChild(el)
+  })
+  return razorpayScript
+}
+
 export default function BookingFlow({
   animal,
   gosala,
   onClose,
+  onPlace,
   onComplete,
 }: {
   animal: Animal
   gosala: Gosala
   onClose: () => void
-  onComplete: (summary: import("../CustomerApp").BookingSummary) => void
+  /** Saves the booking on the server once Razorpay has captured the payment */
+  onPlace: (
+    summary: import("../CustomerApp").BookingSummary,
+    payment: RazorpayProof,
+  ) => Promise<void>
+  /** Called when the customer leaves the success screen */
+  onComplete: () => void
 }) {
   const { pricingConfig, checkAnimalAvailability, profiles, authUser } =
     useStore()
@@ -348,6 +375,7 @@ export default function BookingFlow({
   const [holdId, setHoldId] = useState<string | null>(null)
   const [holdError, setHoldError] = useState<string | null>(null)
   const [isHoldingSlot, setIsHoldingSlot] = useState(false)
+  const [holdRetry, setHoldRetry] = useState(0)
 
   // Dynamically formatted date string (e.g., "4 Oct 2026")
   const selectedDateStr = useMemo(() => {
@@ -557,13 +585,23 @@ export default function BookingFlow({
     setHoldId(null)
     setPaymentError(null)
 
-    api
-      .holdSlot({
+    const attempt = () =>
+      api.holdSlot({
         animal: animal.name,
+        gosala: gosala.name,
         date: selectedDateStr,
         start: slot,
         durationMin: duration,
         customerName: devoteeName,
+      })
+
+    // A 409 means the slot is genuinely taken; anything else (timeout, network) is retried once.
+    attempt()
+      .catch((err) => {
+        if (/\b409\b/.test(String(err?.message))) throw err
+        return new Promise<Awaited<ReturnType<typeof attempt>>>((resolve, reject) =>
+          setTimeout(() => attempt().then(resolve, reject), 800),
+        )
       })
       .then((res) => {
         if (!active) return
@@ -582,7 +620,9 @@ export default function BookingFlow({
         if (active) {
           console.warn("Slot hold error:", err)
           setHoldError(
-            "We could not secure this slot. Please select another available slot and try again.",
+            /\b409\b/.test(String(err?.message))
+              ? "This time slot was just taken by another devotee. Please select another slot."
+              : "We could not secure this slot right now. Tap Try again, or pick another slot.",
           )
         }
       })
@@ -593,7 +633,7 @@ export default function BookingFlow({
     return () => {
       active = false
     }
-  }, [step, slot, animal.name, selectedDateStr, duration, devoteeName])
+  }, [step, slot, animal.name, selectedDateStr, duration, devoteeName, holdRetry])
 
   // Hold timer countdown in step 5
   useEffect(() => {
@@ -697,7 +737,39 @@ export default function BookingFlow({
     }
   }
 
-  const pay = () => {
+  const buildSummary = (): import("../CustomerApp").BookingSummary => ({
+    animal: `${effectiveAnimalName} · ${effectiveAnimalType}`,
+    animalName: effectiveAnimalName,
+    animalType: effectiveAnimalType,
+    gosala: gosala.name,
+    date: selectedDateStr,
+    time: `${slot} – ${endTime}`,
+    start: slot!,
+    end: endTime,
+    durationMin: duration,
+    address,
+    distanceKm,
+    base: backendPricing?.base ?? animal.price,
+    extraTime: backendPricing?.extraTime ?? extraTime,
+    transport: backendPricing?.transport ?? transport,
+    addons: backendPricing?.addons ?? addonTotal,
+    tax: backendPricing?.tax ?? tax,
+    total: backendPricing?.total ?? total,
+    holdId: holdId || undefined,
+    freeKmSnapshot: backendPricing?.freeKmSnapshot ?? pricingConfig.freeKm,
+    perKmSnapshot: backendPricing?.perKmSnapshot ?? pricingConfig.perKm,
+    extraUnitRateSnapshot:
+      backendPricing?.extraUnitRateSnapshot ?? pricingConfig.extraUnitRate,
+    commissionSnapshot: backendPricing?.commission,
+    quoteToken: backendPricing?.quoteToken,
+    commissionPct:
+      backendPricing?.commissionPct ??
+      (gosala.customCommissionPct !== undefined
+        ? gosala.customCommissionPct
+        : pricingConfig.commissionPct),
+  })
+
+  const pay = async () => {
     setPaymentError(null)
     if (holdError) {
       setPaymentError(holdError)
@@ -722,17 +794,66 @@ export default function BookingFlow({
       return
     }
 
-    setPayingStep("Connecting to payment gateway…")
-    setTimeout(() => {
-      setPayingStep("Verifying server-side webhook signature…")
-      setTimeout(() => {
-        setPayingStep("Validating concurrency & securing atomic slot hold…")
-        setTimeout(() => {
-          setPayingStep(null)
-          setDone(true)
-        }, 600)
-      }, 700)
-    }, 700)
+    let proof: RazorpayProof | null = null
+    try {
+      setPayingStep("Creating secure payment order…")
+      const order = await api.createRazorpayOrder({
+        quoteToken: backendPricing.quoteToken,
+        holdId,
+      })
+      await loadRazorpayCheckout()
+
+      setPayingStep("Waiting for payment in Razorpay…")
+      proof = await new Promise<RazorpayProof>((resolve, reject) => {
+        const rzp = new (window as any).Razorpay({
+          key: order.keyId,
+          order_id: order.orderId,
+          amount: order.amountPaise,
+          currency: order.currency,
+          name: "GOMAA",
+          description: `${effectiveAnimalName} · ${gosala.name}`,
+          prefill: {
+            name: devoteeName,
+            email: authUser?.email || undefined,
+            contact: authUser?.phone || undefined,
+          },
+          theme: { color: "#C2621B" },
+          modal: { ondismiss: () => reject(new Error("PAYMENT_CANCELLED")) },
+          handler: (r: any) =>
+            resolve({
+              paymentId: r.razorpay_payment_id,
+              orderId: r.razorpay_order_id,
+              signature: r.razorpay_signature,
+              amountPaise: order.amountPaise,
+            }),
+        })
+        rzp.on("payment.failed", (r: any) =>
+          reject(new Error(r?.error?.description || "Payment failed")),
+        )
+        rzp.open()
+      })
+
+      setPayingStep("Confirming your booking…")
+      await onPlace(buildSummary(), proof)
+      setPayingStep(null)
+      setDone(true)
+    } catch (err: any) {
+      setPayingStep(null)
+      if (err?.message === "PAYMENT_CANCELLED") {
+        setPaymentError(
+          "Payment was cancelled. You have not been charged. Tap Pay to try again.",
+        )
+      } else if (proof) {
+        // Money was taken but the booking was refused: tell the customer exactly what to quote
+        setPaymentError(
+          `Your payment (${proof.paymentId}) was received, but we could not confirm the booking: ${err?.message || "unknown error"}. Please contact support with this payment ID. Do not pay again.`,
+        )
+      } else {
+        setPaymentError(
+          err?.message || "Payment could not be started. Please try again.",
+        )
+      }
+    }
   }
 
   if (done) {
@@ -746,9 +867,9 @@ export default function BookingFlow({
             Payment verified
           </h2>
           <p className="text-[13px] text-ink-soft mt-2 leading-relaxed">
-            Your booking is verified server-side and has entered the Manager
-            review queue. You'll be notified on WhatsApp, SMS, and in-app once
-            confirmed.
+            Your payment is confirmed and your booking is now with the
+            gaushala manager for review. We'll email you (and show it under
+            Track) as soon as it is confirmed.
           </p>
           <div className="mt-6 rounded-sm border border-line bg-card p-4 text-left space-y-2 text-[13px]">
             {[
@@ -775,42 +896,7 @@ export default function BookingFlow({
             ))}
           </div>
           <button
-            onClick={() =>
-              onComplete({
-                animal: `${effectiveAnimalName} · ${effectiveAnimalType}`,
-                animalName: effectiveAnimalName,
-                animalType: effectiveAnimalType,
-                gosala: gosala.name,
-                date: selectedDateStr,
-                time: `${slot} – ${endTime}`,
-                start: slot!,
-                end: endTime,
-                durationMin: duration,
-                address,
-                distanceKm,
-                base: backendPricing?.base ?? animal.price,
-                extraTime: backendPricing?.extraTime ?? extraTime,
-                transport: backendPricing?.transport ?? transport,
-                addons: backendPricing?.addons ?? addonTotal,
-                tax: backendPricing?.tax ?? tax,
-                total: backendPricing?.total ?? total,
-                holdId: holdId || undefined,
-                freeKmSnapshot:
-                  backendPricing?.freeKmSnapshot ?? pricingConfig.freeKm,
-                perKmSnapshot:
-                  backendPricing?.perKmSnapshot ?? pricingConfig.perKm,
-                extraUnitRateSnapshot:
-                  backendPricing?.extraUnitRateSnapshot ??
-                  pricingConfig.extraUnitRate,
-                commissionSnapshot: backendPricing?.commission,
-                quoteToken: backendPricing?.quoteToken,
-                commissionPct:
-                  backendPricing?.commissionPct ??
-                  (gosala.customCommissionPct !== undefined
-                    ? gosala.customCommissionPct
-                    : pricingConfig.commissionPct),
-              })
-            }
+            onClick={onComplete}
             className="w-full mt-6 bg-saffron text-white rounded-sm py-3 text-[14px] font-medium hover:bg-saffron-deep transition-colors shadow-sm"
           >
             View my booking & tracking
@@ -821,10 +907,10 @@ export default function BookingFlow({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-paper flex justify-center">
-      <div className="w-full max-w-[440px] flex flex-col bg-paper">
+    <div className="fixed inset-0 z-50 bg-paper lg:bg-black/55 lg:backdrop-blur-sm flex justify-center lg:items-center lg:p-6">
+      <div className="w-full max-w-[440px] lg:max-w-[760px] lg:h-[min(820px,92vh)] flex flex-col bg-paper lg:rounded-xl lg:border lg:border-line lg:shadow-2xl lg:overflow-hidden">
         {/* Header + progress */}
-        <div className="px-4 pt-4 pb-3 border-b border-line bg-card">
+        <div className="px-4 lg:px-8 pt-4 lg:pt-5 pb-3 border-b border-line bg-card">
           <div className="flex items-center gap-2">
             <button
               onClick={step === 0 ? handleClose : () => setStep((s) => s - 1)}
@@ -867,7 +953,7 @@ export default function BookingFlow({
         </div>
 
         {/* Photo Transparency & Inspection Quick Bar */}
-        <div className="mx-4 mt-2.5 p-2 rounded-md bg-paper-deep/80 border border-line flex items-center justify-between gap-2 text-[12px]">
+        <div className="mx-4 lg:mx-8 mt-2.5 p-2 rounded-md bg-paper-deep/80 border border-line flex items-center justify-between gap-2 text-[12px]">
           <div className="flex items-center gap-2 overflow-hidden">
             <div className="flex -space-x-1.5 shrink-0">
               <img
@@ -913,8 +999,8 @@ export default function BookingFlow({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
-          <h2 className="font-serif text-[20px] text-ink mb-4">
+        <div className="flex-1 overflow-y-auto p-4 lg:px-8 lg:py-6">
+          <h2 className="font-serif text-[20px] lg:text-[24px] text-ink mb-4">
             {steps[step]}
           </h2>
 
@@ -1438,12 +1524,21 @@ export default function BookingFlow({
                       Slot Temporarily Unavailable
                     </div>
                     <div className="mt-0.5 text-danger/90">{holdError}</div>
-                    <button
-                      onClick={() => setStep(1)}
-                      className="mt-2 inline-flex items-center text-[12px] font-medium underline cursor-pointer text-danger hover:text-danger/80"
-                    >
-                      Choose another available slot →
-                    </button>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+                      <button
+                        onClick={() => setHoldRetry((n) => n + 1)}
+                        disabled={isHoldingSlot}
+                        className="inline-flex items-center text-[12px] font-semibold underline cursor-pointer text-danger hover:text-danger/80 disabled:opacity-50"
+                      >
+                        Try again
+                      </button>
+                      <button
+                        onClick={() => setStep(1)}
+                        className="inline-flex items-center text-[12px] font-medium underline cursor-pointer text-danger hover:text-danger/80"
+                      >
+                        Choose another available slot →
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -1569,38 +1664,22 @@ export default function BookingFlow({
                 ))}
               </div>
 
-              {/* Payment Method Selector */}
+              {/* Razorpay Checkout offers UPI, cards, netbanking and wallets itself */}
               <div className="rounded-sm border border-line bg-card p-4">
                 <div className="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-3">
-                  Payment Method
+                  Payment
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { id: "upi", label: "UPI / QR", icon: QrCode },
-                    { id: "card", label: "Card", icon: CreditCard },
-                    { id: "netbanking", label: "NetBanking", icon: Lock },
-                  ].map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => setPayMethod(m.id as any)}
-                      className={`p-2.5 rounded-sm border text-center transition-colors ${
-                        payMethod === m.id
-                          ? "border-saffron bg-saffron-soft text-saffron-deep font-medium"
-                          : "border-line bg-paper text-ink-soft hover:border-line-strong"
-                      }`}
-                    >
-                      <m.icon size={15} className="mx-auto mb-1" />
-                      <div className="text-[11.5px]">{m.label}</div>
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-3 p-2.5 bg-paper rounded-sm border border-line text-[11px] text-ink-faint">
-                  {payMethod === "upi" &&
-                    "Google Pay, PhonePe, Paytm or UPI QR Code"}
-                  {payMethod === "card" &&
-                    "Visa, Mastercard, RuPay debit & credit cards"}
-                  {payMethod === "netbanking" &&
-                    "All major Indian banks supported (HDFC, ICICI, SBI, etc.)"}
+                <div className="flex items-start gap-3">
+                  <div className="h-9 w-9 rounded-md bg-saffron-soft text-saffron-deep grid place-items-center shrink-0">
+                    <Lock size={16} />
+                  </div>
+                  <div className="text-[12.5px] text-ink-soft leading-relaxed">
+                    <div className="text-ink font-medium text-[13px]">
+                      Secure checkout by Razorpay
+                    </div>
+                    Pay with UPI (Google Pay, PhonePe, Paytm), cards, NetBanking
+                    or wallets. The Razorpay window opens when you tap Pay.
+                  </div>
                 </div>
               </div>
 
@@ -1671,7 +1750,7 @@ export default function BookingFlow({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-line bg-card p-4">
+        <div className="border-t border-line bg-card p-4 lg:px-8">
           {step < 5 ? (
             <div className="flex items-center gap-3">
               <div className="min-w-0">

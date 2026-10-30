@@ -958,7 +958,7 @@ function verifyQuote(token, customerId) {
 }
 
 // server/router.ts
-import crypto6 from "node:crypto";
+import crypto9 from "node:crypto";
 
 // server/services/razorpayService.ts
 import crypto3 from "node:crypto";
@@ -1016,7 +1016,7 @@ async function verifyCapturedPayment(input, options = {}) {
   const expected = crypto3.createHmac("sha256", c.keySecret).update(`${orderId}|${paymentId}`).digest("hex");
   if (!equalHex(signature, expected)) throw new Error("Invalid payment signature");
   if (paymentId.startsWith("pay_synthetic") || paymentId.startsWith("pay_test_") || orderId.startsWith("order_test_")) {
-    if (!options.fetch) {
+    if (!options.fetch && process.env.NODE_ENV !== "production" && !/^rzp_(test|live)_(?!gomaa_synthetic)/.test(process.env.RAZORPAY_KEY_ID || "")) {
       return { paymentId, orderId, customerId, holdId, amountPaise };
     }
   }
@@ -1038,7 +1038,7 @@ async function createPaymentOrder(input, options = {}) {
       return { orderId: order.id, amountPaise, currency: "INR" };
     }
   } catch (err) {
-    if (process.env.NODE_ENV !== "production") {
+    if (process.env.NODE_ENV !== "production" && (!process.env.RAZORPAY_KEY_ID || process.env.NODE_ENV === "test")) {
       return { orderId: `order_test_${crypto3.randomBytes(8).toString("hex")}`, amountPaise, currency: "INR" };
     }
     throw err;
@@ -1052,6 +1052,137 @@ function verifyWebhookSignature(rawBody, signature, secret) {
   if (typeof rawBody !== "string") return false;
   const expected = crypto3.createHmac("sha256", webhookSecret).update(rawBody).digest("hex");
   return equalHex(signature, expected);
+}
+
+// server/services/ledgerService.ts
+var LedgerError = class extends Error {
+  constructor(message, code) {
+    super(message);
+    this.code = code;
+  }
+  code;
+};
+var formatRupees = (paise) => `\u20B9${(Number(paise) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+var TX_OPTIONS = { timeout: 12e4, maxWait: 2e4 };
+async function runLedgerTx(fn) {
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await prisma.$transaction(fn, TX_OPTIONS);
+    } catch (err) {
+      lastErr = err;
+      const code = err?.code;
+      if (code === "P2002" || code === "P2034") continue;
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+async function getSystemWallet(tx, key) {
+  const existing = await tx.wallet.findUnique({ where: { systemKey: key } });
+  if (existing) return existing;
+  try {
+    return await tx.wallet.create({ data: { kind: key, systemKey: key, userId: null } });
+  } catch (err) {
+    if (err?.code === "P2002") throw err;
+    throw err;
+  }
+}
+async function getUserWallet(tx, userId) {
+  if (!userId) throw new LedgerError("User ID is required to access a wallet", "INVALID");
+  return tx.wallet.upsert({ where: { userId }, update: {}, create: { kind: "USER", userId } });
+}
+async function postEntry(tx, e) {
+  if (typeof e.amountPaise !== "bigint" || e.amountPaise <= 0n) {
+    throw new LedgerError("Amount must be a positive number of paise", "INVALID");
+  }
+  if (!e.idempotencyKey) throw new LedgerError("An idempotencyKey is required", "INVALID");
+  const existing = await tx.walletTransaction.findUnique({ where: { idempotencyKey: e.idempotencyKey } });
+  if (existing) {
+    if (existing.status !== "SUCCESS") {
+      throw new LedgerError(`Entry ${e.idempotencyKey} previously ended in ${existing.status}`, "CONFLICT");
+    }
+    return {
+      id: existing.id,
+      replay: true,
+      balanceBefore: BigInt(existing.balanceBefore),
+      balanceAfter: BigInt(existing.balanceAfter)
+    };
+  }
+  let changed;
+  if (e.type === "CREDIT") {
+    changed = await tx.wallet.updateMany({
+      where: { id: e.walletId, isActive: true },
+      data: { balancePaise: { increment: e.amountPaise } }
+    });
+  } else {
+    changed = await tx.wallet.updateMany({
+      where: { id: e.walletId, isActive: true, balancePaise: { gte: e.amountPaise } },
+      data: { balancePaise: { decrement: e.amountPaise } }
+    });
+  }
+  if (changed.count === 0) {
+    const w = await tx.wallet.findUnique({ where: { id: e.walletId } });
+    if (!w) throw new LedgerError("Wallet not found", "INVALID");
+    if (!w.isActive) throw new LedgerError("Wallet account is suspended or inactive", "WALLET_INACTIVE");
+    throw new LedgerError(
+      `Insufficient wallet balance. Available: ${formatRupees(BigInt(w.balancePaise))}, required: ${formatRupees(e.amountPaise)}`,
+      "INSUFFICIENT_FUNDS"
+    );
+  }
+  const after = BigInt((await tx.wallet.findUniqueOrThrow({ where: { id: e.walletId } })).balancePaise);
+  const before = e.type === "CREDIT" ? after - e.amountPaise : after + e.amountPaise;
+  const row = await tx.walletTransaction.create({
+    data: {
+      walletId: e.walletId,
+      amountPaise: e.amountPaise,
+      type: e.type,
+      purpose: e.purpose,
+      status: "SUCCESS",
+      balanceBefore: before,
+      balanceAfter: after,
+      idempotencyKey: e.idempotencyKey,
+      groupId: e.groupId ?? null,
+      bookingId: e.bookingId ?? null,
+      referenceId: e.referenceId ?? null,
+      description: e.description ?? null,
+      metadata: e.metadata ? e.metadata : void 0
+    }
+  });
+  return { id: row.id, replay: false, balanceBefore: before, balanceAfter: after };
+}
+async function postGroup(tx, entries, opts = {}) {
+  if (!entries.length) throw new LedgerError("A ledger group needs at least one entry", "INVALID");
+  if (opts.balanced) {
+    let credit = 0n;
+    let debit = 0n;
+    for (const e of entries) {
+      if (e.type === "CREDIT") credit += e.amountPaise;
+      else debit += e.amountPaise;
+    }
+    if (credit !== debit) {
+      throw new LedgerError(
+        `Unbalanced ledger group: credits ${formatRupees(credit)} vs debits ${formatRupees(debit)}`,
+        "INVALID"
+      );
+    }
+  }
+  const ordered = [...entries].sort((a, b) => a.walletId < b.walletId ? -1 : a.walletId > b.walletId ? 1 : 0);
+  const results = [];
+  for (const e of ordered) results.push(await postEntry(tx, e));
+  return results;
+}
+var systemWalletsReady = false;
+async function ensureSystemWallets() {
+  if (systemWalletsReady) return;
+  for (const key of ["ESCROW", "PLATFORM", "TAX", "WITHDRAWAL_HOLD"]) {
+    await prisma.wallet.upsert({
+      where: { systemKey: key },
+      update: {},
+      create: { kind: key, systemKey: key }
+    });
+  }
+  systemWalletsReady = true;
 }
 
 // server/services/walletService.ts
@@ -1082,7 +1213,7 @@ async function getWalletBalance(userId) {
   const balanceRupees = Number(balancePaise) / 100;
   return {
     walletId: wallet.id,
-    userId: wallet.userId,
+    userId: wallet.userId ?? userId,
     balancePaise: balancePaise.toString(),
     balanceRupees,
     currency: wallet.currency,
@@ -1092,127 +1223,65 @@ async function getWalletBalance(userId) {
 async function creditWallet(input) {
   const { userId, purpose, referenceId, idempotencyKey, description, metadata } = input;
   const amountPaise = BigInt(input.amountPaise);
-  if (amountPaise <= 0n) {
-    throw new Error("Credit amount must be greater than zero");
-  }
+  if (amountPaise <= 0n) throw new Error("Credit amount must be greater than zero");
   if (!idempotencyKey || typeof idempotencyKey !== "string") {
     throw new Error("A unique idempotencyKey is required for wallet mutations");
   }
-  return await prisma.$transaction(async (tx) => {
-    const existingTx = await tx.walletTransaction.findUnique({
-      where: { idempotencyKey }
+  return await runLedgerTx(async (tx) => {
+    const wallet = await getUserWallet(tx, userId);
+    const entry = await postEntry(tx, {
+      walletId: wallet.id,
+      type: "CREDIT",
+      amountPaise,
+      purpose,
+      idempotencyKey,
+      referenceId,
+      description: description || `Wallet credited with \u20B9${Number(amountPaise) / 100}`,
+      metadata
     });
-    if (existingTx) {
-      if (existingTx.status === "SUCCESS") {
-        return {
-          idempotentReplay: true,
-          transactionId: existingTx.id,
-          balanceAfter: existingTx.balanceAfter.toString()
-        };
-      }
-      throw new Error(`Transaction with idempotency key ${idempotencyKey} previously ended in ${existingTx.status}`);
+    if (entry.replay) {
+      return { idempotentReplay: true, transactionId: entry.id, balanceAfter: entry.balanceAfter.toString() };
     }
-    let wallet = await tx.wallet.findUnique({ where: { userId } });
-    if (!wallet) {
-      wallet = await tx.wallet.create({
-        data: { userId, balancePaise: 0n, currency: "INR" }
-      });
-    }
-    if (!wallet.isActive) {
-      throw new Error("Wallet account is currently suspended or inactive");
-    }
-    const balanceBefore = BigInt(wallet.balancePaise);
-    const balanceAfter = balanceBefore + amountPaise;
-    const updatedWallet = await tx.wallet.update({
-      where: { id: wallet.id },
-      data: { balancePaise: balanceAfter }
-    });
-    const record = await tx.walletTransaction.create({
-      data: {
-        walletId: wallet.id,
-        amountPaise,
-        type: "CREDIT",
-        purpose,
-        status: "SUCCESS",
-        balanceBefore,
-        balanceAfter,
-        idempotencyKey,
-        referenceId: referenceId || null,
-        description: description || `Wallet credited with \u20B9${Number(amountPaise) / 100}`,
-        metadata: metadata ? metadata : void 0
-      }
-    });
     return {
       idempotentReplay: false,
-      transactionId: record.id,
+      transactionId: entry.id,
       amountPaise: amountPaise.toString(),
-      balanceBefore: balanceBefore.toString(),
-      balanceAfter: balanceAfter.toString(),
-      balanceRupees: Number(balanceAfter) / 100
+      balanceBefore: entry.balanceBefore.toString(),
+      balanceAfter: entry.balanceAfter.toString(),
+      balanceRupees: Number(entry.balanceAfter) / 100
     };
   });
 }
 async function debitWallet(input) {
   const { userId, purpose, referenceId, idempotencyKey, description, metadata } = input;
   const amountPaise = BigInt(input.amountPaise);
-  if (amountPaise <= 0n) {
-    throw new Error("Debit amount must be greater than zero");
-  }
+  if (amountPaise <= 0n) throw new Error("Debit amount must be greater than zero");
   if (!idempotencyKey || typeof idempotencyKey !== "string") {
     throw new Error("A unique idempotencyKey is required for wallet mutations");
   }
-  return await prisma.$transaction(async (tx) => {
-    const existingTx = await tx.walletTransaction.findUnique({
-      where: { idempotencyKey }
-    });
-    if (existingTx) {
-      if (existingTx.status === "SUCCESS") {
-        return {
-          idempotentReplay: true,
-          transactionId: existingTx.id,
-          balanceAfter: existingTx.balanceAfter.toString()
-        };
-      }
-      throw new Error(`Transaction with idempotency key ${idempotencyKey} previously ended in ${existingTx.status}`);
-    }
+  return await runLedgerTx(async (tx) => {
     const wallet = await tx.wallet.findUnique({ where: { userId } });
-    if (!wallet) {
-      throw new Error("Wallet not found. Top-up required before debiting.");
-    }
-    if (!wallet.isActive) {
-      throw new Error("Wallet account is currently suspended or inactive");
-    }
-    const balanceBefore = BigInt(wallet.balancePaise);
-    if (balanceBefore < amountPaise) {
-      throw new Error(`Insufficient wallet balance. Available: \u20B9${Number(balanceBefore) / 100}, Required: \u20B9${Number(amountPaise) / 100}`);
-    }
-    const balanceAfter = balanceBefore - amountPaise;
-    await tx.wallet.update({
-      where: { id: wallet.id },
-      data: { balancePaise: balanceAfter }
+    if (!wallet) throw new Error("Wallet not found. Top-up required before debiting.");
+    const entry = await postEntry(tx, {
+      walletId: wallet.id,
+      type: "DEBIT",
+      amountPaise,
+      purpose,
+      idempotencyKey,
+      referenceId,
+      description: description || `Wallet debited by \u20B9${Number(amountPaise) / 100}`,
+      metadata
     });
-    const record = await tx.walletTransaction.create({
-      data: {
-        walletId: wallet.id,
-        amountPaise,
-        type: "DEBIT",
-        purpose,
-        status: "SUCCESS",
-        balanceBefore,
-        balanceAfter,
-        idempotencyKey,
-        referenceId: referenceId || null,
-        description: description || `Wallet debited by \u20B9${Number(amountPaise) / 100}`,
-        metadata: metadata ? metadata : void 0
-      }
-    });
+    if (entry.replay) {
+      return { idempotentReplay: true, transactionId: entry.id, balanceAfter: entry.balanceAfter.toString() };
+    }
     return {
       idempotentReplay: false,
-      transactionId: record.id,
+      transactionId: entry.id,
       amountPaise: amountPaise.toString(),
-      balanceBefore: balanceBefore.toString(),
-      balanceAfter: balanceAfter.toString(),
-      balanceRupees: Number(balanceAfter) / 100
+      balanceBefore: entry.balanceBefore.toString(),
+      balanceAfter: entry.balanceAfter.toString(),
+      balanceRupees: Number(entry.balanceAfter) / 100
     };
   });
 }
@@ -1920,7 +1989,9 @@ async function sendOtpEmail({
   toEmail,
   userName = "Devotee",
   otp,
-  expiryMinutes = 10
+  expiryMinutes = 10,
+  purpose = "PASSWORD_RESET",
+  detail = ""
 }) {
   const normEmail = toEmail.trim().toLowerCase();
   if (normEmail.endsWith(".test") || normEmail.endsWith(".example") || normEmail.includes("example.com")) {
@@ -1962,8 +2033,7 @@ async function sendOtpEmail({
     
     <div class="greeting">Namaste ${userName},</div>
     <p class="lead-text">
-      We received a request to verify your identity and reset your account password on the GOMAA platform.
-      Please use the single-use verification code below:
+      ${purpose === "WITHDRAWAL" ? `We received a request to withdraw money from your GOMAA wallet${detail ? ` (${detail})` : ""}. Enter the single-use code below to confirm it:` : "We received a request to verify your identity and reset your account password on the GOMAA platform. Please use the single-use verification code below:"}
     </p>
 
     <div class="otp-container">
@@ -1972,7 +2042,7 @@ async function sendOtpEmail({
     </div>
 
     <div class="security-notice">
-      <strong>Security Alert:</strong> If you did not initiate this password recovery request, your account may be secure, but someone may have typed your email address by mistake. You can safely ignore this email; no changes have been made to your credentials.
+      <strong>Security Alert:</strong> ${purpose === "WITHDRAWAL" ? "If you did not ask to withdraw money, do not share this code with anyone and tell the Super Admin straight away. No money moves until the code is entered." : "If you did not initiate this password recovery request, your account may be secure, but someone may have typed your email address by mistake. You can safely ignore this email; no changes have been made to your credentials."}
     </div>
 
     <div class="footer">
@@ -1984,12 +2054,12 @@ async function sendOtpEmail({
 `;
   const text2 = `Namaste ${userName},
 
-Your GOMAA verification code is: ${otp}
+${purpose === "WITHDRAWAL" ? `Your GOMAA code to confirm a withdrawal${detail ? ` of ${detail}` : ""} is: ${otp}` : `Your GOMAA verification code is: ${otp}`}
 
 This single-use code expires in ${expiryMinutes} minutes.
 Never share this code with anyone.
 
-If you did not request this, you can safely ignore this email.
+${purpose === "WITHDRAWAL" ? "If you did not ask to withdraw money, tell the Super Admin straight away. No money moves until the code is entered." : "If you did not request this, you can safely ignore this email."}
 
 \u2014 GOMAA Operations
 Sacred Operations & Cattle Welfare Platform`;
@@ -2022,7 +2092,7 @@ Sacred Operations & Cattle Welfare Platform`;
       const info = await transporter.sendMail({
         from: `"GOMAA Security" <${gmailUser}>`,
         to: toEmail,
-        subject: `[GOMAA] Verification Code: ${otp}`,
+        subject: purpose === "WITHDRAWAL" ? `[GOMAA] Withdrawal confirmation code: ${otp}` : `[GOMAA] Verification Code: ${otp}`,
         text: text2,
         html,
         headers: {
@@ -2057,7 +2127,7 @@ Sacred Operations & Cattle Welfare Platform`;
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         console.error("[Resend API Error]:", data);
-        console.log(`[FALLBACK CODE DISPATCH] OTP for ${toEmail}: ${otp}`);
+        if (process.env.NODE_ENV !== "production") console.log(`[FALLBACK CODE DISPATCH] OTP for ${toEmail}: ${otp}`);
         return {
           success: false,
           error: data.message || `Resend HTTP ${res.status}`
@@ -2076,6 +2146,10 @@ Sacred Operations & Cattle Welfare Platform`;
       };
     }
   }
+  if (process.env.NODE_ENV === "production") {
+    console.error("[EMAIL] No email gateway is configured; the code was NOT sent.");
+    return { success: false, error: "No email gateway configured" };
+  }
   console.log(`
 ========================================================================`);
   console.log(`[EMAIL DISPATCH NOTICE] Neither GMAIL_APP_PASSWORD nor RESEND_API_KEY configured.`);
@@ -2085,18 +2159,189 @@ Sacred Operations & Cattle Welfare Platform`;
 `);
   return { success: true, simulated: true };
 }
+function msg91EmailConfigured() {
+  return Boolean(
+    (process.env.MSG91_AUTH_KEY || "").trim() && (process.env.MSG91_EMAIL_DOMAIN || "").trim() && (process.env.MSG91_EMAIL_FROM || "").trim() && (process.env.MSG91_EMAIL_TEMPLATE_ID || "").trim()
+  );
+}
+async function sendViaMsg91Email(to, name, subject, text2) {
+  try {
+    const res = await fetch("https://control.msg91.com/api/v5/email/send", {
+      method: "POST",
+      headers: { authkey: (process.env.MSG91_AUTH_KEY || "").trim(), "Content-Type": "application/json", accept: "application/json" },
+      body: JSON.stringify({
+        recipients: [{ to: [{ name: name || to, email: to }], variables: { name: name || "Devotee", title: subject, message: text2 } }],
+        from: { name: "GOMAA", email: (process.env.MSG91_EMAIL_FROM || "").trim() },
+        domain: (process.env.MSG91_EMAIL_DOMAIN || "").trim(),
+        template_id: (process.env.MSG91_EMAIL_TEMPLATE_ID || "").trim()
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.status !== "fail" && data?.hasError !== true) return { success: true, id: data?.data?.unique_id || data?.message };
+    return { success: false, error: String(data?.errors || data?.message || `MSG91 email HTTP ${res.status}`) };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+var escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function notificationHtml(subject, text2) {
+  const body = escapeHtml(text2).split(/\n\n+/).map((p) => `<p style="margin:0 0 14px 0;font-size:14px;line-height:1.55;color:#44403c">${p.replace(/\n/g, "<br>")}</p>`).join("");
+  return `<!DOCTYPE html><html><body style="margin:0;padding:24px;background:#f7f5f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+<div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #e6e0d4;border-radius:8px;padding:28px 28px 20px">
+<div style="font-size:18px;font-weight:700;color:#201c16;margin-bottom:4px">GOMAA</div>
+<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#78716c;margin-bottom:20px">${escapeHtml(subject)}</div>
+${body}
+<div style="margin-top:22px;padding-top:14px;border-top:1px solid #f0ebe0;font-size:11px;color:#a8a29e">GOMAA Sacred Operations Platform. This is an automated message.</div>
+</div></body></html>`;
+}
+async function sendNotificationEmail({ toEmail, subject, text: text2, name }) {
+  const to = toEmail.trim().toLowerCase();
+  if (!to || to.endsWith(".invalid") || to.endsWith(".test") || to.endsWith(".example") || to.includes("example.com")) {
+    return { success: true, simulated: true };
+  }
+  const html = notificationHtml(subject, text2);
+  if (msg91EmailConfigured()) {
+    const r = await sendViaMsg91Email(to, name || "", subject, text2);
+    if (r.success) return r;
+    console.warn(`[MSG91 email] not sent, trying fallback: ${r.error}`);
+  }
+  const gmailUser = (process.env.GMAIL_USER || "").replace(/["']/g, "").trim();
+  const gmailPass = (process.env.GMAIL_APP_PASSWORD || "").replace(/["'\s]/g, "").trim();
+  if (gmailUser && gmailPass) {
+    try {
+      const hostIp = await new Promise((resolve) => {
+        dns.lookup("smtp.gmail.com", { family: 4 }, (err, address) => resolve(!err && address ? address : "192.178.211.108"));
+      });
+      const transporter = nodemailer.createTransport({
+        host: hostIp,
+        port: 465,
+        secure: true,
+        tls: { servername: "smtp.gmail.com" },
+        connectionTimeout: 8e3,
+        greetingTimeout: 8e3,
+        socketTimeout: 1e4,
+        auth: { user: gmailUser, pass: gmailPass }
+      });
+      const info = await transporter.sendMail({ from: `"GOMAA" <${gmailUser}>`, to, subject: `[GOMAA] ${subject}`, text: text2, html });
+      return { success: true, id: info.messageId };
+    } catch (err) {
+      console.error("[Gmail SMTP notification error]:", err.message);
+    }
+  }
+  const apiKey = (process.env.RESEND_API_KEY || "").trim();
+  const fromEmail = (process.env.RESEND_FROM_EMAIL || "GOMAA Operations <onboarding@resend.dev>").trim();
+  if (apiKey) {
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ from: fromEmail, to: [to], subject: `[GOMAA] ${subject}`, html, text: text2 })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: data.message || `Resend HTTP ${res.status}` };
+      return { success: true, id: data.id };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+  console.log(`[EMAIL NOT SENT: no Gmail or Resend configured] To: ${to} | ${subject}`);
+  return { success: false, error: "No email gateway configured" };
+}
 
 // server/services/smsService.ts
+function indianMobile(toPhone) {
+  const d = String(toPhone || "").replace(/\D/g, "");
+  if (d.length === 12 && d.startsWith("91")) return d.slice(2);
+  if (d.length === 10) return d;
+  return "";
+}
+async function sendTemplateSms({
+  toPhone,
+  templateId,
+  vars = {}
+}) {
+  const authKey = (process.env.MSG91_AUTH_KEY || "").trim();
+  const mobile = indianMobile(toPhone);
+  if (!authKey || !templateId) return { success: false, error: "MSG91 is not configured for this message" };
+  if (!mobile) return { success: false, error: "No valid Indian mobile number on this account" };
+  try {
+    const res = await fetch("https://control.msg91.com/api/v5/flow", {
+      method: "POST",
+      headers: { authkey: authKey, "Content-Type": "application/json", accept: "application/json" },
+      body: JSON.stringify({
+        template_id: templateId,
+        short_url: "0",
+        recipients: [{ mobiles: `91${mobile}`, ...vars }]
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.type === "success") return { success: true, provider: "msg91", messageId: data.message };
+    return { success: false, error: data?.message || `MSG91 HTTP ${res.status}` };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+function whatsappConfigured() {
+  return Boolean(
+    (process.env.MSG91_AUTH_KEY || "").trim() && (process.env.MSG91_WHATSAPP_NUMBER || "").trim() && (process.env.MSG91_WHATSAPP_NAMESPACE || "").trim()
+  );
+}
+async function sendWhatsAppTemplate({
+  toPhone,
+  template,
+  vars,
+  language = "en",
+  urlButtonValue
+}) {
+  if (!whatsappConfigured()) return { success: false, error: "MSG91 WhatsApp is not configured" };
+  const mobile = indianMobile(toPhone);
+  if (!mobile) return { success: false, error: "No valid Indian mobile number on this account" };
+  const components = {};
+  vars.forEach((v, i) => {
+    components[`body_${i + 1}`] = { type: "text", value: String(v).replace(/\s+/g, " ").trim().slice(0, 60) || "-" };
+  });
+  const allComponents = { ...components };
+  if (urlButtonValue) allComponents.button_1 = { subtype: "url", type: "text", value: urlButtonValue };
+  try {
+    const res = await fetch("https://control.msg91.com/api/v5/whatsapp/whatsapp-outbound-message/bulk/", {
+      method: "POST",
+      headers: { authkey: (process.env.MSG91_AUTH_KEY || "").trim(), "Content-Type": "application/json", accept: "application/json" },
+      body: JSON.stringify({
+        integrated_number: (process.env.MSG91_WHATSAPP_NUMBER || "").trim(),
+        content_type: "template",
+        payload: {
+          messaging_product: "whatsapp",
+          type: "template",
+          template: {
+            name: template,
+            language: { code: language, policy: "deterministic" },
+            namespace: (process.env.MSG91_WHATSAPP_NAMESPACE || "").trim(),
+            to_and_components: [{ to: [`91${mobile}`], components: allComponents }]
+          }
+        }
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.status !== "fail" && data?.hasError !== true) {
+      return { success: true, provider: "msg91", messageId: data?.request_id || data?.data?.request_id || data?.message };
+    }
+    return { success: false, error: String(data?.errors || data?.message || `MSG91 WhatsApp HTTP ${res.status}`) };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
 async function sendOtpSms({
   toPhone,
   otp,
-  expiryMinutes = 10
+  expiryMinutes = 10,
+  purpose = "PASSWORD_RESET"
 }) {
   const rawDigits = toPhone.replace(/\D/g, "");
   const indian10Digits = rawDigits.length === 12 && rawDigits.startsWith("91") ? rawDigits.slice(2) : rawDigits.length === 10 ? rawDigits : "";
   const e164Phone = toPhone.startsWith("+") ? toPhone.replace(/\s+/g, "") : `+${rawDigits}`;
+  if (process.env.NODE_ENV === "test") return { success: true, provider: "simulated" };
   const msg91AuthKey = (process.env.MSG91_AUTH_KEY || "").trim();
-  const msg91TemplateId = (process.env.MSG91_TEMPLATE_ID || "").trim();
+  const msg91TemplateId = (purpose === "WITHDRAWAL" ? (process.env.MSG91_TEMPLATE_WITHDRAWAL_OTP || "").trim() : "") || (process.env.MSG91_TEMPLATE_ID || "").trim();
   const fast2smsKey = (process.env.FAST2SMS_API_KEY || "").trim();
   const twilioSid = (process.env.TWILIO_ACCOUNT_SID || "").trim();
   const twilioAuth = (process.env.TWILIO_AUTH_TOKEN || "").trim();
@@ -2169,6 +2414,10 @@ async function sendOtpSms({
     } catch (err) {
       console.error("[Twilio Error]:", err.message);
     }
+  }
+  if (process.env.NODE_ENV === "production") {
+    console.error("[SMS] No SMS gateway accepted the message; the code was NOT sent.");
+    return { success: false, error: "No SMS gateway available" };
   }
   console.log(`
 ========================================================================`);
@@ -2489,6 +2738,173 @@ async function resetPasswordWithToken(emailOrPhone, resetToken, newPassword) {
     }
   };
 }
+
+// server/services/notifyService.ts
+var transports = { email: sendNotificationEmail, sms: sendTemplateSms, whatsapp: sendWhatsAppTemplate };
+var overridden = false;
+var inr = (paise) => `\u20B9${(Number(paise) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+var short = (s, n = 28) => s.length > n ? s.slice(0, n - 1) + "\u2026" : s;
+function enabled() {
+  return overridden || process.env.NODE_ENV !== "test";
+}
+async function deliver(user, msg) {
+  if (!enabled()) return;
+  const firstName = user.name.split(" ")[0] || "Devotee";
+  const body = `Namaste ${firstName},
+
+${msg.text}`;
+  try {
+    await transports.email({ toEmail: user.email, subject: msg.subject, text: body, name: firstName });
+  } catch (err) {
+    console.warn(`[notify] email to ${user.email} failed: ${err?.message}`);
+  }
+  if (msg.whatsapp && user.phone && (overridden || whatsappConfigured())) {
+    try {
+      const r = await transports.whatsapp({ toPhone: user.phone, template: msg.whatsapp.template, vars: [firstName, ...msg.whatsapp.vars] });
+      if (!r.success) console.warn(`[notify] WhatsApp to ${user.phone} not sent: ${r.error}`);
+    } catch (err) {
+      console.warn(`[notify] WhatsApp to ${user.phone} failed: ${err?.message}`);
+    }
+  }
+  if (msg.sms) {
+    const templateId = (process.env[msg.sms.template] || "").trim();
+    if (templateId && user.phone) {
+      const vars = {};
+      msg.sms.vars.forEach((v, i) => vars[`var${i + 1}`] = short(v));
+      try {
+        const r = await transports.sms({ toPhone: user.phone, templateId, vars });
+        if (!r.success) console.warn(`[notify] SMS to ${user.phone} not sent: ${r.error}`);
+      } catch (err) {
+        console.warn(`[notify] SMS to ${user.phone} failed: ${err?.message}`);
+      }
+    }
+  }
+}
+async function notifyUsers(userIds, msg) {
+  if (!enabled() || !userIds.length) return;
+  try {
+    const users = await prisma.user.findMany({
+      where: { id: { in: [...new Set(userIds)] }, isActive: true },
+      select: { id: true, email: true, phone: true, name: true }
+    });
+    await Promise.all(users.map((u) => deliver(u, msg)));
+  } catch (err) {
+    console.warn("[notify] could not look up recipients:", err?.message);
+  }
+}
+async function notifySuperAdmins(msg) {
+  if (!enabled()) return;
+  try {
+    const admins = await prisma.user.findMany({ where: { role: "SUPER_ADMIN", isActive: true }, select: { id: true } });
+    await notifyUsers(admins.map((a) => a.id), msg);
+  } catch (err) {
+    console.warn("[notify] could not look up super admins:", err?.message);
+  }
+}
+async function notifyGosalaTeam(gosalaId, msg) {
+  if (!enabled()) return;
+  try {
+    const gosala = await prisma.gosala.findUnique({
+      where: { id: gosalaId },
+      select: { adminId: true, managers: { where: { status: "Active" }, select: { userId: true } } }
+    });
+    if (!gosala) return;
+    const ids = [gosala.adminId, ...gosala.managers.map((m) => m.userId)].filter(Boolean);
+    await notifyUsers(ids, msg);
+  } catch (err) {
+    console.warn("[notify] could not look up gaushala team:", err?.message);
+  }
+}
+function bookingInfo(b) {
+  return {
+    id: b.id,
+    animal: b.animalName,
+    gosala: b.gosalaName,
+    date: b.bookingDate,
+    time: `${b.startTime}${b.endTime ? ` \u2013 ${b.endTime}` : ""}`,
+    customer: b.customerName,
+    total: typeof b.totalAmount === "number" ? b.totalAmount : void 0
+  };
+}
+var messages = {
+  bookingPlaced: (b) => ({
+    subject: `Booking ${b.id} received`,
+    text: `Your payment${b.total ? ` of \u20B9${b.total.toLocaleString("en-IN")}` : ""} was received and booking ${b.id} for ${b.animal} at ${b.gosala} on ${b.date}, ${b.time} is now with the gaushala manager for confirmation. We will tell you as soon as it is confirmed.`,
+    sms: { template: "MSG91_TEMPLATE_BOOKING_PLACED", vars: [b.id, b.animal, b.date] },
+    whatsapp: { template: "gomaa_booking_placed", vars: [b.id, b.date] }
+  }),
+  bookingNeedsReview: (b) => ({
+    subject: `New booking to review: ${b.animal} on ${b.date}`,
+    text: `${b.customer || "A devotee"} booked ${b.animal} at ${b.gosala} on ${b.date}, ${b.time}${b.total ? ` (\u20B9${b.total.toLocaleString("en-IN")})` : ""}. Booking ${b.id} is paid and waiting for your review.`,
+    sms: { template: "MSG91_TEMPLATE_BOOKING_REVIEW", vars: [b.id, b.animal, b.date] },
+    whatsapp: { template: "gomaa_new_booking_review", vars: [b.id, b.animal] }
+  }),
+  bookingManagerDecided: (b, confirmed, remark) => ({
+    subject: `Booking ${b.id}: ${confirmed ? "feasibility confirmed" : "declined"}`,
+    text: confirmed ? `The manager confirmed feasibility for ${b.animal} on ${b.date}, ${b.time}. Booking ${b.id} now needs the operations admin's approval.` : `Booking ${b.id} for ${b.animal} on ${b.date} was declined by the manager${remark ? `: ${remark}` : ""}. The payment will be refunded.`
+  }),
+  bookingConfirmed: (b) => ({
+    subject: `Booking ${b.id} confirmed`,
+    text: `Your booking ${b.id} for ${b.animal} at ${b.gosala} on ${b.date}, ${b.time} is confirmed. You can follow it live under Track in the GOMAA app.`,
+    sms: { template: "MSG91_TEMPLATE_BOOKING_CONFIRMED", vars: [b.id, b.animal, b.date] },
+    whatsapp: { template: "gomaa_booking_confirmed", vars: [b.id, b.gosala] }
+  }),
+  bookingRejected: (b, remark) => ({
+    subject: `Booking ${b.id} could not be confirmed`,
+    text: `We are sorry: booking ${b.id} for ${b.animal} on ${b.date} could not be confirmed${remark ? ` (${remark})` : ""}. Your payment will be refunded to the original payment method.`,
+    sms: { template: "MSG91_TEMPLATE_BOOKING_REJECTED", vars: [b.id] },
+    whatsapp: { template: "gomaa_booking_rejected", vars: [b.id] }
+  }),
+  earningsReleased: (amountPaise, bookingId, gosala) => ({
+    subject: `${inr(amountPaise)} added to your wallet`,
+    text: `${inr(amountPaise)} from booking ${bookingId} at ${gosala} has been approved and added to your GOMAA wallet. You can withdraw it from My Wallet.`,
+    sms: { template: "MSG91_TEMPLATE_EARNINGS", vars: [inr(amountPaise).replace("\u20B9", ""), bookingId] },
+    whatsapp: { template: "gomaa_earnings_added", vars: [inr(amountPaise).replace("\u20B9", "").replace(/,/g, ""), bookingId] }
+  }),
+  readyForApproval: (count, totalPaise) => ({
+    subject: `${count} booking${count === 1 ? "" : "s"} ready for your approval`,
+    text: `${count} paid booking${count === 1 ? " has" : "s have"} passed the 2-day wait (${inr(totalPaise)} in escrow). Open Treasury & Wallets to approve and release ${count === 1 ? "it" : "them"}.`
+  }),
+  splitRequested: (who, gosala, from, to, reason) => ({
+    subject: `Manager share change waiting: ${gosala}`,
+    text: `${who} asks to change the manager's share at ${gosala} from ${from}% to ${to}%.${reason ? `
+
+Reason: ${reason}` : ""}
+
+Open Treasury & Wallets to approve or decline. Nothing changes until you decide.`
+  }),
+  splitDecided: (gosala, to, approved, note) => ({
+    subject: `Manager share change ${approved ? "approved" : "declined"}: ${gosala}`,
+    text: approved ? `The Super Admin approved the manager share at ${gosala} at ${to}%. It applies to bookings paid from now on.${note ? `
+
+Note: ${note}` : ""}` : `The Super Admin declined your request to set the manager share at ${gosala} to ${to}%. The earlier percentage stays.${note ? `
+
+Note: ${note}` : ""}`
+  }),
+  withdrawalPaid: (amountPaise, account, utr) => ({
+    subject: `Withdrawal of ${inr(amountPaise)} sent`,
+    text: `${inr(amountPaise)} was sent to ${account}.${utr ? `
+
+Bank reference (UTR): ${utr}` : ""}
+
+It normally shows in your account within minutes. If you did not make this withdrawal, tell the Super Admin straight away.`,
+    sms: { template: "MSG91_TEMPLATE_WITHDRAWAL_PAID", vars: [inr(amountPaise).replace("\u20B9", ""), account, utr || "pending"] },
+    whatsapp: { template: "gomaa_withdrawal_status", vars: [inr(amountPaise).replace("\u20B9", "").replace(/,/g, ""), "paid"] }
+  }),
+  withdrawalFailed: (amountPaise, reason) => ({
+    subject: `Withdrawal of ${inr(amountPaise)} failed`,
+    text: `Your withdrawal of ${inr(amountPaise)} could not be completed${reason ? ` (${reason})` : ""}. The full amount has been returned to your GOMAA wallet. You can try again or choose another account.`,
+    sms: { template: "MSG91_TEMPLATE_WITHDRAWAL_FAILED", vars: [inr(amountPaise).replace("\u20B9", "")] },
+    whatsapp: { template: "gomaa_withdrawal_status", vars: [inr(amountPaise).replace("\u20B9", "").replace(/,/g, ""), "failed and returned to your wallet"] }
+  }),
+  payoutAccountChanged: (added, label) => ({
+    subject: `Payout account ${added ? "added" : "removed"}`,
+    text: `A payout account (${label}) was ${added ? "added to" : "removed from"} your GOMAA wallet.${added ? "\n\nFor your safety a new account may need a waiting period before it can receive money." : ""}
+
+If this was not you, contact the Super Admin straight away and change your password.`,
+    sms: { template: "MSG91_TEMPLATE_PAYOUT_ACCOUNT", vars: [added ? "added" : "removed"] }
+  })
+};
 
 // server/auth/authorization.ts
 var normalize = (value) => String(value ?? "").trim().toLowerCase();
@@ -3062,6 +3478,1342 @@ async function searchGooglePlacesApi(query, apiKey) {
   }
 }
 
+// server/walletRoutes.ts
+import crypto8 from "node:crypto";
+
+// server/services/settlementService.ts
+var BP_TOTAL = 1e4;
+var DEFAULT_PLATFORM_BP = 1e3;
+var DEFAULT_MANAGER_BP = 3e3;
+var DEFAULT_DELAY_DAYS = 2;
+var DAY_MS = 24 * 60 * 60 * 1e3;
+function computeShares(grossPaise, taxPaise, platformBp, managerBp) {
+  if (grossPaise < 0n || taxPaise < 0n || taxPaise > grossPaise) {
+    throw new LedgerError("Tax cannot exceed the amount paid", "INVALID");
+  }
+  const adminBp = BP_TOTAL - platformBp - managerBp;
+  if (platformBp < 0 || managerBp < 0 || adminBp < 0) {
+    throw new LedgerError("Platform and manager percentages cannot add up to more than 100%", "INVALID");
+  }
+  const net = grossPaise - taxPaise;
+  const managerPaise = net * BigInt(managerBp) / BigInt(BP_TOTAL);
+  const adminPaise = net * BigInt(adminBp) / BigInt(BP_TOTAL);
+  const platformPaise = net - managerPaise - adminPaise;
+  return { grossPaise, taxPaise, platformPaise, adminPaise, managerPaise, platformBp, adminBp, managerBp };
+}
+function splitEqually(totalPaise, recipients) {
+  const out = /* @__PURE__ */ new Map();
+  if (!recipients.length) return out;
+  const n = BigInt(recipients.length);
+  const base = totalPaise / n;
+  let extra = totalPaise - base * n;
+  for (const id of recipients) {
+    const add = extra > 0n ? 1n : 0n;
+    if (extra > 0n) extra -= 1n;
+    out.set(id, base + add);
+  }
+  return out;
+}
+async function getWalletConfig() {
+  const row = await prisma.walletConfig.findUnique({ where: { id: 1 } });
+  return {
+    platformBp: row?.platformBp ?? DEFAULT_PLATFORM_BP,
+    settlementDelayDays: row?.settlementDelayDays ?? DEFAULT_DELAY_DAYS
+  };
+}
+async function getManagerBpFor(gosalaId) {
+  const own = await prisma.splitPolicy.findUnique({ where: { policyKey: gosalaId } });
+  if (own) return { managerBp: own.managerBp, policyKey: own.policyKey, isDefault: false };
+  const def = await prisma.splitPolicy.findUnique({ where: { policyKey: "DEFAULT" } });
+  return { managerBp: def?.managerBp ?? DEFAULT_MANAGER_BP, policyKey: "DEFAULT", isDefault: true };
+}
+async function recordBookingPayment(booking) {
+  await ensureSystemWallets();
+  const cfg = await getWalletConfig();
+  const policy = await getManagerBpFor(booking.gosalaId);
+  const grossPaise = BigInt(Math.round(booking.totalAmount * 100));
+  const taxPaise = BigInt(Math.round(booking.taxFee * 100));
+  const shares = computeShares(grossPaise, taxPaise, cfg.platformBp, policy.managerBp);
+  const paidAt = booking.paymentCapturedAt ?? booking.createdAt ?? /* @__PURE__ */ new Date();
+  const source = booking.paymentProvider === "WALLET" ? "WALLET" : "RAZORPAY";
+  return runLedgerTx(async (tx) => {
+    const existing = await tx.bookingSettlement.findUnique({ where: { bookingId: booking.id } });
+    if (existing) return { created: false, settlementId: existing.id };
+    if (grossPaise > 0n) {
+      const escrow = await getSystemWallet(tx, "ESCROW");
+      await postEntry(tx, {
+        walletId: escrow.id,
+        type: "CREDIT",
+        amountPaise: grossPaise,
+        purpose: "ESCROW_IN",
+        idempotencyKey: `escrow_in:${booking.id}`,
+        bookingId: booking.id,
+        referenceId: booking.id,
+        description: `Customer payment held in escrow for ${booking.id}`,
+        metadata: { source }
+      });
+    }
+    const row = await tx.bookingSettlement.create({
+      data: {
+        bookingId: booking.id,
+        gosalaId: booking.gosalaId,
+        gosalaName: booking.gosalaName,
+        customerId: booking.customerId,
+        grossPaise: shares.grossPaise,
+        taxPaise: shares.taxPaise,
+        platformPaise: shares.platformPaise,
+        adminPaise: shares.adminPaise,
+        managerPaise: shares.managerPaise,
+        platformBp: shares.platformBp,
+        managerBp: shares.managerBp,
+        adminBp: shares.adminBp,
+        paymentSource: source,
+        status: "HELD",
+        paidAt,
+        eligibleAt: new Date(paidAt.getTime() + cfg.settlementDelayDays * DAY_MS)
+      }
+    });
+    return { created: true, settlementId: row.id };
+  });
+}
+async function backfillSettlements() {
+  const have = await prisma.bookingSettlement.findMany({ select: { bookingId: true } });
+  const skip = new Set(have.map((h) => h.bookingId));
+  const bookings = await prisma.booking.findMany({
+    where: {
+      isPaid: true,
+      paymentStatus: "CAPTURED",
+      status: { notIn: ["REJECTED", "CANCELLED"] }
+    }
+  });
+  let created = 0;
+  for (const b of bookings) {
+    if (skip.has(b.id)) continue;
+    const res = await recordBookingPayment({
+      id: b.id,
+      gosalaId: b.gosalaId,
+      gosalaName: b.gosalaName,
+      customerId: b.customerId,
+      totalAmount: b.totalAmount,
+      taxFee: b.taxFee,
+      paymentProvider: b.paymentProvider,
+      paymentCapturedAt: b.paymentCapturedAt,
+      createdAt: b.createdAt
+    });
+    if (res.created) created++;
+  }
+  return { scanned: bookings.length, created };
+}
+async function runMaturity(now = /* @__PURE__ */ new Date()) {
+  const due = await prisma.bookingSettlement.findMany({
+    where: { status: "HELD", eligibleAt: { lte: now } },
+    select: { id: true, bookingId: true, grossPaise: true }
+  });
+  if (!due.length) return { moved: 0 };
+  const bookings = await prisma.booking.findMany({
+    where: { id: { in: due.map((d) => d.bookingId) } },
+    select: { id: true, status: true }
+  });
+  const blocked = new Set(bookings.filter((b) => b.status === "REJECTED" || b.status === "CANCELLED").map((b) => b.id));
+  const ids = due.filter((d) => !blocked.has(d.bookingId)).map((d) => d.id);
+  if (!ids.length) return { moved: 0 };
+  const res = await prisma.bookingSettlement.updateMany({
+    where: { id: { in: ids }, status: "HELD" },
+    data: { status: "READY_FOR_APPROVAL", readyAt: now }
+  });
+  if (res.count > 0) {
+    const total = due.filter((d) => ids.includes(d.id)).reduce((sum, d) => sum + BigInt(d.grossPaise), 0n);
+    void notifySuperAdmins(messages.readyForApproval(res.count, total));
+  }
+  return { moved: res.count };
+}
+async function recipientsFor(tx, gosalaId) {
+  const gosala = await tx.gosala.findUnique({ where: { id: gosalaId } });
+  if (!gosala) throw new LedgerError("Gaushala for this booking no longer exists", "INVALID");
+  const admins = gosala.adminId ? [gosala.adminId] : [];
+  const assignments = await tx.gosalaManagerAssignment.findMany({
+    where: { gosalaId, status: "Active" },
+    orderBy: { assignedAt: "asc" }
+  });
+  const managers = assignments.map((a) => a.userId);
+  return { gosala, admins, managers };
+}
+async function approveSettlement(settlementId, actor, note) {
+  await ensureSystemWallets();
+  return runLedgerTx(async (tx) => {
+    const s = await tx.bookingSettlement.findUnique({ where: { id: settlementId } });
+    if (!s) throw new LedgerError("Settlement not found", "INVALID");
+    if (s.status === "RELEASED") return { id: s.id, replay: true, releaseGroupId: s.releaseGroupId };
+    if (s.status !== "READY_FOR_APPROVAL") {
+      throw new LedgerError(
+        s.status === "HELD" ? `Not ready yet. This booking becomes eligible on ${s.eligibleAt.toLocaleDateString("en-IN")}.` : `Settlement is ${s.status.toLowerCase().replace(/_/g, " ")} and cannot be approved`,
+        "CONFLICT"
+      );
+    }
+    const booking = await tx.booking.findUnique({ where: { id: s.bookingId }, select: { status: true } });
+    if (booking && (booking.status === "REJECTED" || booking.status === "CANCELLED")) {
+      throw new LedgerError(`Booking was ${booking.status.toLowerCase()}. Refund it instead of releasing it.`, "CONFLICT");
+    }
+    const { gosala, admins, managers } = await recipientsFor(tx, s.gosalaId);
+    if (s.adminPaise > 0n && admins.length === 0) {
+      throw new LedgerError(`${gosala.name} has no Operations Admin assigned, so the admin share has nowhere to go`, "INVALID");
+    }
+    if (s.managerPaise > 0n && managers.length === 0) {
+      throw new LedgerError(`${gosala.name} has no active Manager assigned, so the manager share has nowhere to go`, "INVALID");
+    }
+    const claimed = await tx.bookingSettlement.updateMany({
+      where: { id: s.id, status: "READY_FOR_APPROVAL" },
+      data: { status: "RELEASED" }
+    });
+    if (claimed.count !== 1) throw new LedgerError("Settlement was already handled by someone else", "CONFLICT");
+    const groupId = `rel_${s.id}`;
+    const escrow = await getSystemWallet(tx, "ESCROW");
+    const platform = await getSystemWallet(tx, "PLATFORM");
+    const tax = await getSystemWallet(tx, "TAX");
+    const base = { groupId, bookingId: s.bookingId, referenceId: s.bookingId };
+    const entries = [
+      {
+        ...base,
+        walletId: escrow.id,
+        type: "DEBIT",
+        amountPaise: s.grossPaise,
+        purpose: "ESCROW_OUT",
+        idempotencyKey: `${groupId}:escrow`,
+        description: `Released from escrow for ${s.bookingId}`
+      }
+    ];
+    if (s.taxPaise > 0n) {
+      entries.push({ ...base, walletId: tax.id, type: "CREDIT", amountPaise: s.taxPaise, purpose: "TAX_COLLECTED", idempotencyKey: `${groupId}:tax`, description: `Tax collected on ${s.bookingId}` });
+    }
+    if (s.platformPaise > 0n) {
+      entries.push({ ...base, walletId: platform.id, type: "CREDIT", amountPaise: s.platformPaise, purpose: "PLATFORM_FEE", idempotencyKey: `${groupId}:platform`, description: `Platform commission on ${s.bookingId}` });
+    }
+    for (const [uid, amt] of splitEqually(s.adminPaise, admins)) {
+      if (amt <= 0n) continue;
+      const w = await getUserWallet(tx, uid);
+      entries.push({ ...base, walletId: w.id, type: "CREDIT", amountPaise: amt, purpose: "SETTLEMENT_RELEASE", idempotencyKey: `${groupId}:admin:${uid}`, description: `Admin share (${s.adminBp / 100}%) for ${s.bookingId}`, metadata: { role: "ADMIN", gosala: gosala.name } });
+    }
+    for (const [uid, amt] of splitEqually(s.managerPaise, managers)) {
+      if (amt <= 0n) continue;
+      const w = await getUserWallet(tx, uid);
+      entries.push({ ...base, walletId: w.id, type: "CREDIT", amountPaise: amt, purpose: "SETTLEMENT_RELEASE", idempotencyKey: `${groupId}:manager:${uid}`, description: `Manager share (${s.managerBp / 100}%) for ${s.bookingId}`, metadata: { role: "MANAGER", gosala: gosala.name } });
+    }
+    await postGroup(tx, entries, { balanced: true });
+    await tx.bookingSettlement.update({
+      where: { id: s.id },
+      data: {
+        releaseGroupId: groupId,
+        decidedById: actor.userId,
+        decidedByName: actor.name,
+        decidedAt: /* @__PURE__ */ new Date(),
+        decisionNote: note ?? null
+      }
+    });
+    return { id: s.id, replay: false, releaseGroupId: groupId };
+  });
+}
+async function rejectSettlement(settlementId, actor, note) {
+  if (!note || !note.trim()) throw new LedgerError("A reason is required to reject a settlement", "INVALID");
+  const res = await prisma.bookingSettlement.updateMany({
+    where: { id: settlementId, status: { in: ["HELD", "READY_FOR_APPROVAL"] } },
+    data: { status: "REJECTED", decidedById: actor.userId, decidedByName: actor.name, decidedAt: /* @__PURE__ */ new Date(), decisionNote: note.trim() }
+  });
+  if (res.count !== 1) throw new LedgerError("Only held or ready settlements can be rejected", "CONFLICT");
+  return { id: settlementId };
+}
+async function refundSettlement(settlementId, actor, note) {
+  if (!note || !note.trim()) throw new LedgerError("A reason is required to refund a booking", "INVALID");
+  await ensureSystemWallets();
+  return runLedgerTx(async (tx) => {
+    const s = await tx.bookingSettlement.findUnique({ where: { id: settlementId } });
+    if (!s) throw new LedgerError("Settlement not found", "INVALID");
+    if (s.status === "REFUNDED") return { id: s.id, replay: true };
+    if (s.status === "RELEASED") {
+      throw new LedgerError("This money was already released to wallets. It cannot be refunded from escrow.", "CONFLICT");
+    }
+    const claimed = await tx.bookingSettlement.updateMany({
+      where: { id: s.id, status: { in: ["HELD", "READY_FOR_APPROVAL", "REJECTED"] } },
+      data: { status: "REFUNDED", decidedById: actor.userId, decidedByName: actor.name, decidedAt: /* @__PURE__ */ new Date(), decisionNote: note.trim() }
+    });
+    if (claimed.count !== 1) throw new LedgerError("Settlement was already handled by someone else", "CONFLICT");
+    const groupId = `ref_${s.id}`;
+    const escrow = await getSystemWallet(tx, "ESCROW");
+    const customer = await getUserWallet(tx, s.customerId);
+    await postGroup(
+      tx,
+      [
+        { walletId: escrow.id, type: "DEBIT", amountPaise: s.grossPaise, purpose: "ESCROW_OUT", idempotencyKey: `${groupId}:escrow`, groupId, bookingId: s.bookingId, referenceId: s.bookingId, description: `Refund of ${s.bookingId} from escrow` },
+        { walletId: customer.id, type: "CREDIT", amountPaise: s.grossPaise, purpose: "BOOKING_REFUND", idempotencyKey: `${groupId}:customer`, groupId, bookingId: s.bookingId, referenceId: s.bookingId, description: `Refund for booking ${s.bookingId}` }
+      ],
+      { balanced: true }
+    );
+    return { id: s.id, replay: false };
+  });
+}
+async function validateManagerBp(managerBp) {
+  if (!Number.isInteger(managerBp) || managerBp < 0) {
+    throw new LedgerError("Manager percentage must be a whole number of basis points (30% = 3000)", "INVALID");
+  }
+  const { platformBp } = await getWalletConfig();
+  if (platformBp + managerBp > BP_TOTAL) {
+    throw new LedgerError(
+      `Manager can be at most ${(BP_TOTAL - platformBp) / 100}% because the platform commission is ${platformBp / 100}%`,
+      "INVALID"
+    );
+  }
+}
+async function requestSplitChange(args) {
+  await validateManagerBp(args.managerBp);
+  const gosala = await prisma.gosala.findUnique({ where: { id: args.gosalaId } });
+  if (!gosala) throw new LedgerError("Gaushala not found", "INVALID");
+  const pending = await prisma.splitPolicyRequest.findFirst({ where: { policyKey: gosala.id, status: "PENDING" } });
+  if (pending) throw new LedgerError("A change for this gaushala is already waiting for Super Admin approval", "CONFLICT");
+  const current = await getManagerBpFor(gosala.id);
+  if (current.managerBp === args.managerBp) throw new LedgerError("That is already the current manager percentage", "CONFLICT");
+  return prisma.splitPolicyRequest.create({
+    data: {
+      policyKey: gosala.id,
+      gosalaId: gosala.id,
+      gosalaName: gosala.name,
+      currentManagerBp: current.managerBp,
+      proposedManagerBp: args.managerBp,
+      requestedById: args.actor.userId,
+      requestedByName: args.actor.name,
+      reason: args.reason?.trim() || null
+    }
+  });
+}
+async function decideSplitChange(requestId, actor, approve, note) {
+  const req = await prisma.splitPolicyRequest.findUnique({ where: { id: requestId } });
+  if (!req) throw new LedgerError("Request not found", "INVALID");
+  if (req.status !== "PENDING") throw new LedgerError("This request was already decided", "CONFLICT");
+  if (approve) await validateManagerBp(req.proposedManagerBp);
+  return prisma.$transaction(async (tx) => {
+    const claimed = await tx.splitPolicyRequest.updateMany({
+      where: { id: requestId, status: "PENDING" },
+      data: { status: approve ? "APPROVED" : "REJECTED", decidedById: actor.userId, decidedByName: actor.name, decisionNote: note ?? null, decidedAt: /* @__PURE__ */ new Date() }
+    });
+    if (claimed.count !== 1) throw new LedgerError("This request was already decided", "CONFLICT");
+    if (approve) {
+      await tx.splitPolicy.upsert({
+        where: { policyKey: req.policyKey },
+        update: { managerBp: req.proposedManagerBp, approvedById: actor.userId },
+        create: { policyKey: req.policyKey, gosalaId: req.gosalaId, managerBp: req.proposedManagerBp, approvedById: actor.userId }
+      });
+    }
+    return { id: requestId, approved: approve };
+  });
+}
+async function setSplitPolicyDirect(args) {
+  await validateManagerBp(args.managerBp);
+  const isDefault = args.policyKey === "DEFAULT";
+  if (!isDefault) {
+    const g = await prisma.gosala.findUnique({ where: { id: args.policyKey } });
+    if (!g) throw new LedgerError("Gaushala not found", "INVALID");
+  }
+  return prisma.splitPolicy.upsert({
+    where: { policyKey: args.policyKey },
+    update: { managerBp: args.managerBp, approvedById: args.actor.userId },
+    create: { policyKey: args.policyKey, gosalaId: isDefault ? null : args.policyKey, managerBp: args.managerBp, approvedById: args.actor.userId }
+  });
+}
+async function setPlatformBp(platformBp, actor) {
+  if (!Number.isInteger(platformBp) || platformBp < 0 || platformBp > BP_TOTAL) {
+    throw new LedgerError("Platform percentage must be between 0% and 100%", "INVALID");
+  }
+  const policies = await prisma.splitPolicy.findMany();
+  const worst = Math.max(0, ...policies.map((p) => p.managerBp));
+  const defaultBp = policies.find((p) => p.policyKey === "DEFAULT")?.managerBp ?? DEFAULT_MANAGER_BP;
+  const highest = Math.max(worst, defaultBp);
+  if (platformBp + highest > BP_TOTAL) {
+    throw new LedgerError(
+      `With ${platformBp / 100}% platform commission, a manager share of ${highest / 100}% would leave the admin with a negative share. Lower the manager percentage first.`,
+      "CONFLICT"
+    );
+  }
+  return prisma.walletConfig.upsert({
+    where: { id: 1 },
+    update: { platformBp, updatedById: actor.userId },
+    create: { id: 1, platformBp, updatedById: actor.userId }
+  });
+}
+async function getReleaseCredits(settlementId) {
+  const s = await prisma.bookingSettlement.findUnique({ where: { id: settlementId } });
+  if (!s) return null;
+  const rows = await prisma.walletTransaction.findMany({
+    where: { groupId: `rel_${settlementId}`, purpose: "SETTLEMENT_RELEASE", type: "CREDIT" },
+    include: { wallet: { select: { userId: true } } }
+  });
+  return {
+    bookingId: s.bookingId,
+    gosalaName: s.gosalaName,
+    credits: rows.filter((r) => r.wallet.userId).map((r) => ({ userId: r.wallet.userId, amountPaise: BigInt(r.amountPaise) }))
+  };
+}
+
+// server/services/withdrawalService.ts
+import crypto7 from "node:crypto";
+
+// server/services/payoutProvider.ts
+import crypto6 from "node:crypto";
+var SandboxProvider = class {
+  mode = "SANDBOX";
+  async send(req) {
+    const id = `sbx_${req.requestId.replace(/-/g, "").slice(0, 14)}`;
+    return { state: "PAID", providerPayoutId: id, utr: `SANDBOX-${crypto6.randomBytes(5).toString("hex").toUpperCase()}` };
+  }
+  async status(providerPayoutId) {
+    return { state: "PAID", providerPayoutId, utr: `SANDBOX-${providerPayoutId.slice(-8).toUpperCase()}` };
+  }
+};
+var API2 = "https://api.razorpay.com/v1";
+var RazorpayXProvider = class {
+  constructor(keyId, keySecret, accountNumber, fetchImpl = fetch) {
+    this.keyId = keyId;
+    this.keySecret = keySecret;
+    this.accountNumber = accountNumber;
+    this.fetchImpl = fetchImpl;
+  }
+  keyId;
+  keySecret;
+  accountNumber;
+  fetchImpl;
+  mode = "RAZORPAYX";
+  async call(path2, method, body, extraHeaders = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15e3);
+    try {
+      const res = await this.fetchImpl(`${API2}${path2}`, {
+        method,
+        signal: controller.signal,
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${this.keyId}:${this.keySecret}`).toString("base64")}`,
+          ...body ? { "Content-Type": "application/json" } : {},
+          ...extraHeaders
+        },
+        ...body ? { body: JSON.stringify(body) } : {}
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const reason = json?.error?.description || `Provider returned ${res.status}`;
+        const err = new Error(reason);
+        err.status = res.status;
+        throw err;
+      }
+      return json;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  mapStatus(p) {
+    const st = String(p?.status || "");
+    if (st === "processed") return { state: "PAID", providerPayoutId: p.id, utr: String(p.utr || "") };
+    if (st === "failed" || st === "rejected" || st === "cancelled" || st === "reversed") {
+      return { state: "FAILED", reason: p?.failure_reason || p?.status_details?.description || `Payout ${st}` };
+    }
+    return { state: "PROCESSING", providerPayoutId: p.id };
+  }
+  async send(req) {
+    try {
+      let contactId = req.existingContactId || void 0;
+      if (!contactId) {
+        const c = await this.call("/contacts", "POST", {
+          name: req.contactName,
+          email: req.contactEmail,
+          contact: req.contactPhone,
+          type: "employee",
+          // RazorpayX allows at most 40 characters here
+          reference_id: `gc_${req.requestId.replace(/-/g, "")}`
+        });
+        contactId = c.id;
+      }
+      let fundAccountId = req.existingFundAccountId || void 0;
+      if (!fundAccountId) {
+        const body = req.target.type === "BANK" ? {
+          contact_id: contactId,
+          account_type: "bank_account",
+          bank_account: { name: req.target.holderName, ifsc: req.target.ifsc, account_number: req.target.accountNumber }
+        } : { contact_id: contactId, account_type: "vpa", vpa: { address: req.target.vpa } };
+        const f = await this.call("/fund_accounts", "POST", body);
+        fundAccountId = f.id;
+      }
+      const amountRupees = Number(req.amountPaise) / 100;
+      const mode = req.target.type === "UPI" ? "UPI" : amountRupees > 5e5 ? "NEFT" : "IMPS";
+      const p = await this.call(
+        "/payouts",
+        "POST",
+        {
+          account_number: this.accountNumber,
+          fund_account_id: fundAccountId,
+          amount: Number(req.amountPaise),
+          currency: "INR",
+          mode,
+          purpose: "payout",
+          queue_if_low_balance: false,
+          reference_id: req.requestId,
+          narration: "GOMAA wallet withdrawal"
+        },
+        { "X-Payout-Idempotency": req.requestId }
+      );
+      const out = this.mapStatus(p);
+      return out.state === "FAILED" ? out : { ...out, contactId, fundAccountId };
+    } catch (err) {
+      if (err?.status && err.status >= 400 && err.status < 500) {
+        return { state: "FAILED", reason: err.message || "Provider rejected the payout" };
+      }
+      return { state: "PROCESSING", providerPayoutId: `pending_${req.requestId}` };
+    }
+  }
+  async status(providerPayoutId) {
+    if (providerPayoutId.startsWith("pending_")) return { state: "PROCESSING", providerPayoutId };
+    const p = await this.call(`/payouts/${encodeURIComponent(providerPayoutId)}`, "GET");
+    return this.mapStatus(p);
+  }
+};
+function getPayoutProvider() {
+  const wantsLive = process.env.GOMAA_PAYOUT_MODE === "razorpayx" && process.env.GOMAA_PAYOUT_PROVIDER_ENABLED === "true";
+  const keyId = process.env.RAZORPAYX_KEY_ID || process.env.RAZORPAY_KEY_ID || "";
+  const keySecret = process.env.RAZORPAYX_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || "";
+  const account = process.env.RAZORPAYX_ACCOUNT_NUMBER || "";
+  const realKeys = /^rzp_(test|live)_[A-Za-z0-9]{10,}$/.test(keyId) && !keyId.includes("synthetic");
+  if (wantsLive && realKeys && keySecret && account) {
+    return new RazorpayXProvider(keyId, keySecret, account);
+  }
+  return new SandboxProvider();
+}
+function payoutModeReason() {
+  const p = getPayoutProvider();
+  if (p.mode === "RAZORPAYX") return "Live payouts through RazorpayX";
+  return "Sandbox: no real money moves. Set GOMAA_PAYOUT_MODE=razorpayx, GOMAA_PAYOUT_PROVIDER_ENABLED=true, real RazorpayX keys and RAZORPAYX_ACCOUNT_NUMBER to go live.";
+}
+
+// server/services/auditService.ts
+async function audit(actor, action, targetType, targetId, details) {
+  try {
+    await prisma.walletAuditLog.create({
+      data: {
+        actorId: actor.userId ?? null,
+        actorName: actor.name,
+        actorRole: actor.role,
+        action,
+        targetType,
+        targetId: targetId ?? null,
+        details: details ? JSON.parse(JSON.stringify(details)) : void 0
+      }
+    });
+  } catch (err) {
+    console.warn(`[audit] ${action} ${targetType}:${targetId ?? "-"} by ${actor.name} (${actor.role}) not saved: ${String(err?.message || err).split("\n").pop()}`);
+  }
+}
+var SYSTEM_ACTOR = { userId: null, name: "System", role: "system" };
+
+// server/services/withdrawalService.ts
+var IFSC = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+var ACCOUNT = /^\d{9,18}$/;
+var VPA = /^[a-zA-Z0-9._-]{2,256}@[a-zA-Z][a-zA-Z0-9]{1,63}$/;
+var MIN_WITHDRAWAL_PAISE = 100n;
+function dataKey() {
+  const key = process.env.GOMAA_DATA_KEY;
+  if (!key && process.env.NODE_ENV === "production") {
+    throw new LedgerError("Payout accounts are disabled until GOMAA_DATA_KEY is configured on the server", "CONFLICT");
+  }
+  return crypto7.createHash("sha256").update(key || JWT_SECRET).digest();
+}
+function assertPayoutsEnabled() {
+  const provider = getPayoutProvider();
+  if (provider.mode === "SANDBOX" && process.env.NODE_ENV === "production" && process.env.GOMAA_ALLOW_SANDBOX_PAYOUTS !== "true") {
+    throw new LedgerError("Withdrawals are not switched on yet. Please contact the Super Admin.", "CONFLICT");
+  }
+}
+function encrypt(plain) {
+  const iv = crypto7.randomBytes(12);
+  const c = crypto7.createCipheriv("aes-256-gcm", dataKey(), iv);
+  const enc = Buffer.concat([c.update(plain, "utf8"), c.final()]);
+  return [iv, c.getAuthTag(), enc].map((b) => b.toString("base64")).join(".");
+}
+function decrypt(blob) {
+  const [iv, tag, enc] = blob.split(".").map((p) => Buffer.from(p, "base64"));
+  const d = crypto7.createDecipheriv("aes-256-gcm", dataKey(), iv);
+  d.setAuthTag(tag);
+  return Buffer.concat([d.update(enc), d.final()]).toString("utf8");
+}
+var coolOffHours = () => {
+  const fromEnv = process.env.GOMAA_PAYOUT_ACCOUNT_COOLOFF_HOURS;
+  if (fromEnv !== void 0 && fromEnv !== "") return Math.max(0, Number(fromEnv) || 0);
+  return getPayoutProvider().mode === "SANDBOX" ? 0 : 24;
+};
+function publicAccount(a) {
+  return {
+    id: a.id,
+    type: a.type,
+    holderName: a.holderName,
+    label: a.type === "BANK" ? `Bank \u2022\u2022\u2022\u2022${a.accountLast4} (${a.ifsc})` : a.vpa,
+    usableFrom: a.usableFrom.toISOString(),
+    usableNow: a.usableFrom.getTime() <= Date.now(),
+    createdAt: a.createdAt.toISOString()
+  };
+}
+async function listPayoutAccounts(userId) {
+  const rows = await prisma.payoutAccount.findMany({ where: { userId, isActive: true }, orderBy: { createdAt: "desc" } });
+  return rows.map(publicAccount);
+}
+async function addPayoutAccount(userId, input) {
+  const type = input?.type === "UPI" ? "UPI" : input?.type === "BANK" ? "BANK" : null;
+  if (!type) throw new LedgerError("Choose bank account or UPI", "INVALID");
+  const holderName = String(input.holderName || "").trim();
+  if (holderName.length < 2 || holderName.length > 80) throw new LedgerError("Enter the account holder's name", "INVALID");
+  const count = await prisma.payoutAccount.count({ where: { userId, isActive: true } });
+  if (count >= 5) throw new LedgerError("You can keep at most 5 payout accounts. Remove one first.", "CONFLICT");
+  const usableFrom = new Date(Date.now() + coolOffHours() * 3600 * 1e3);
+  if (type === "BANK") {
+    const accountNumber = String(input.accountNumber || "").replace(/\s+/g, "");
+    const ifsc = String(input.ifsc || "").trim().toUpperCase();
+    if (!ACCOUNT.test(accountNumber)) throw new LedgerError("Account number must be 9 to 18 digits", "INVALID");
+    if (!IFSC.test(ifsc)) throw new LedgerError("IFSC looks wrong. It is 4 letters, a zero, then 6 letters or digits", "INVALID");
+    const dup2 = await prisma.payoutAccount.findFirst({ where: { userId, isActive: true, ifsc, accountLast4: accountNumber.slice(-4) } });
+    if (dup2) throw new LedgerError("This bank account is already saved", "CONFLICT");
+    const row2 = await prisma.payoutAccount.create({
+      data: { userId, type, holderName, accountLast4: accountNumber.slice(-4), ifsc, accountNumberEnc: encrypt(accountNumber), usableFrom }
+    });
+    return publicAccount(row2);
+  }
+  const vpa = String(input.vpa || "").trim().toLowerCase();
+  if (!VPA.test(vpa)) throw new LedgerError("UPI ID should look like name@bank", "INVALID");
+  const dup = await prisma.payoutAccount.findFirst({ where: { userId, isActive: true, vpa } });
+  if (dup) throw new LedgerError("This UPI ID is already saved", "CONFLICT");
+  const row = await prisma.payoutAccount.create({ data: { userId, type, holderName, vpa, usableFrom } });
+  return publicAccount(row);
+}
+async function removePayoutAccount(userId, id) {
+  const res = await prisma.payoutAccount.updateMany({ where: { id, userId, isActive: true }, data: { isActive: false } });
+  if (res.count !== 1) throw new LedgerError("Account not found", "INVALID");
+}
+async function requestWithdrawalOtp(userId, amountPaise, payoutAccountId) {
+  assertPayoutsEnabled();
+  await assertCanWithdraw(userId, amountPaise, payoutAccountId);
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new LedgerError("Account not found", "INVALID");
+  const recent = await prisma.withdrawalOtp.count({ where: { userId, createdAt: { gt: new Date(Date.now() - 15 * 60 * 1e3) } } });
+  if (recent >= 5) throw new LedgerError("Too many codes requested. Wait 15 minutes and try again.", "CONFLICT");
+  const otp = crypto7.randomInt(1e5, 1e6).toString();
+  await prisma.withdrawalOtp.updateMany({ where: { userId, used: false }, data: { used: true } });
+  await prisma.withdrawalOtp.create({
+    data: { userId, otpHash: hashOtp(otp), amountPaise, payoutAccountId, expiresAt: new Date(Date.now() + 10 * 60 * 1e3) }
+  });
+  const detail = inr(amountPaise);
+  const waTemplate = (process.env.MSG91_WHATSAPP_OTP_TEMPLATE || "").trim();
+  const none = { success: false, error: "not used" };
+  const [emailRes, waRes, smsRes] = await Promise.all([
+    sendOtpEmail({ toEmail: user.email, userName: user.name, otp, expiryMinutes: 10, purpose: "WITHDRAWAL", detail }).catch((e) => ({ success: false, error: e?.message })),
+    user.phone && waTemplate && whatsappConfigured() ? sendWhatsAppTemplate({ toPhone: user.phone, template: waTemplate, vars: [otp], urlButtonValue: otp }).catch((e) => ({ success: false, error: e?.message })) : Promise.resolve(none),
+    user.phone && process.env.GOMAA_WITHDRAWAL_OTP_SMS === "true" ? sendOtpSms({ toPhone: user.phone, otp, expiryMinutes: 10, purpose: "WITHDRAWAL" }).catch((e) => ({ success: false, error: e?.message })) : Promise.resolve(none)
+  ]);
+  const delivered = Boolean(emailRes.success) || Boolean(waRes.success) || Boolean(smsRes.success);
+  if (!delivered) {
+    if (process.env.NODE_ENV !== "production") return { sent: false, maskedTarget: user.email, devOtp: otp };
+    throw new LedgerError("We could not send the verification code. Try again in a moment.", "CONFLICT");
+  }
+  const digits = String(user.phone || "").replace(/\D/g, "");
+  return {
+    sent: true,
+    maskedTarget: user.email.replace(/^(.).*(@.*)$/, "$1***$2"),
+    byEmail: Boolean(emailRes.success),
+    byWhatsApp: Boolean(waRes.success),
+    bySms: Boolean(smsRes.success),
+    maskedPhone: (waRes.success || smsRes.success) && digits.length >= 4 ? `\u2022\u2022\u2022\u2022\u2022\u2022${digits.slice(-4)}` : void 0
+  };
+}
+async function assertCanWithdraw(userId, amountPaise, payoutAccountId) {
+  if (amountPaise < MIN_WITHDRAWAL_PAISE) throw new LedgerError("Minimum withdrawal is \u20B91", "INVALID");
+  const account = await prisma.payoutAccount.findFirst({ where: { id: payoutAccountId, userId, isActive: true } });
+  if (!account) throw new LedgerError("Choose a saved bank account or UPI ID", "INVALID");
+  if (account.usableFrom.getTime() > Date.now()) {
+    throw new LedgerError(`This account becomes usable on ${account.usableFrom.toLocaleString("en-IN")}`, "CONFLICT");
+  }
+  const wallet = await prisma.wallet.findUnique({ where: { userId } });
+  if (!wallet || !wallet.isActive) throw new LedgerError("Wallet is not available", "WALLET_INACTIVE");
+  if (BigInt(wallet.balancePaise) < amountPaise) {
+    throw new LedgerError(`You can withdraw at most \u20B9${(Number(wallet.balancePaise) / 100).toLocaleString("en-IN")}`, "INSUFFICIENT_FUNDS");
+  }
+  return { account, wallet };
+}
+async function consumeOtp(userId, otp, amountPaise, payoutAccountId) {
+  const row = await prisma.withdrawalOtp.findFirst({ where: { userId, used: false }, orderBy: { createdAt: "desc" } });
+  if (!row || row.expiresAt.getTime() < Date.now()) throw new LedgerError("The code expired. Request a new one.", "CONFLICT");
+  if (row.attempts >= 5) throw new LedgerError("Too many wrong codes. Request a new one.", "CONFLICT");
+  if (BigInt(row.amountPaise) !== amountPaise || row.payoutAccountId !== payoutAccountId) {
+    throw new LedgerError("The code was issued for a different amount or account. Request a new one.", "CONFLICT");
+  }
+  if (!verifyOtpHash(String(otp || ""), row.otpHash)) {
+    await prisma.withdrawalOtp.update({ where: { id: row.id }, data: { attempts: { increment: 1 } } });
+    throw new LedgerError("That code is not correct", "INVALID");
+  }
+  const claimed = await prisma.withdrawalOtp.updateMany({ where: { id: row.id, used: false }, data: { used: true } });
+  if (claimed.count !== 1) throw new LedgerError("That code was already used", "CONFLICT");
+}
+function serializeWithdrawal(w, accountLabel) {
+  return {
+    id: w.id,
+    amountPaise: w.amountPaise.toString(),
+    amountRupees: Number(w.amountPaise) / 100,
+    status: w.status,
+    mode: w.mode,
+    utr: w.utr,
+    failureReason: w.failureReason,
+    account: accountLabel,
+    requestedAt: w.requestedAt.toISOString(),
+    completedAt: w.completedAt ? w.completedAt.toISOString() : null
+  };
+}
+async function createWithdrawal(args) {
+  assertPayoutsEnabled();
+  await ensureSystemWallets();
+  const { userId, amountPaise, payoutAccountId, otp, idempotencyKey } = args;
+  if (!idempotencyKey) throw new LedgerError("An idempotency key is required", "INVALID");
+  const replay = await prisma.withdrawalRequest.findUnique({ where: { idempotencyKey } });
+  if (replay) {
+    if (replay.userId !== userId) throw new LedgerError("Request not found", "INVALID");
+    return { replay: true, withdrawal: serializeWithdrawal(replay) };
+  }
+  const { account } = await assertCanWithdraw(userId, amountPaise, payoutAccountId);
+  await consumeOtp(userId, otp, amountPaise, payoutAccountId);
+  const provider = getPayoutProvider();
+  const request2 = await runLedgerTx(async (tx) => {
+    const wallet = await getUserWallet(tx, userId);
+    const hold = await getSystemWallet(tx, "WITHDRAWAL_HOLD");
+    const row = await tx.withdrawalRequest.create({
+      data: { userId, walletId: wallet.id, payoutAccountId, amountPaise, mode: provider.mode, idempotencyKey }
+    });
+    const groupId = `wd_${row.id}`;
+    await postGroup(
+      tx,
+      [
+        { walletId: wallet.id, type: "DEBIT", amountPaise, purpose: "WITHDRAWAL_HOLD", idempotencyKey: `${groupId}:wallet`, groupId, referenceId: row.id, description: `Withdrawal to ${account.type === "UPI" ? account.vpa : `bank \u2022\u2022\u2022\u2022${account.accountLast4}`}` },
+        { walletId: hold.id, type: "CREDIT", amountPaise, purpose: "WITHDRAWAL_HOLD", idempotencyKey: `${groupId}:hold`, groupId, referenceId: row.id, description: `Held for withdrawal ${row.id}` }
+      ],
+      { balanced: true }
+    );
+    return row;
+  });
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  await audit({ userId, name: user?.name || "Unknown", role: { GOSALA_MANAGER: "manager", OPERATIONS_ADMIN: "admin", SUPER_ADMIN: "super_admin", CUSTOMER: "customer", DRIVER: "driver" }[String(user?.role)] || String(user?.role || "") }, "WITHDRAWAL_REQUESTED", "withdrawal", request2.id, { amountRupees: Number(amountPaise) / 100, account: account.type === "UPI" ? account.vpa : `bank \u2022\u2022\u2022\u2022${account.accountLast4}`, mode: provider.mode });
+  const target = targetFor(account);
+  let outcome;
+  try {
+    outcome = await provider.send({
+      requestId: request2.id,
+      amountPaise,
+      target,
+      contactName: account.holderName,
+      contactEmail: user?.email,
+      contactPhone: user?.phone?.replace(/\D/g, "").slice(-10),
+      existingContactId: account.providerContactId,
+      existingFundAccountId: account.providerFundAccountId
+    });
+  } catch (err) {
+    outcome = { state: "PROCESSING", providerPayoutId: `pending_${request2.id}` };
+  }
+  if (outcome.fundAccountId && !account.providerFundAccountId) {
+    await prisma.payoutAccount.update({
+      where: { id: account.id },
+      data: { providerContactId: outcome.contactId, providerFundAccountId: outcome.fundAccountId }
+    });
+  }
+  const done = await applyOutcome(request2.id, outcome);
+  return { replay: false, withdrawal: serializeWithdrawal(done, account.type === "UPI" ? account.vpa : `Bank \u2022\u2022\u2022\u2022${account.accountLast4}`) };
+}
+async function applyOutcome(requestId, outcome) {
+  await ensureSystemWallets();
+  if (outcome.state === "PROCESSING") {
+    return prisma.withdrawalRequest.update({ where: { id: requestId }, data: { providerPayoutId: outcome.providerPayoutId } });
+  }
+  let closedNow = false;
+  const result = await runLedgerTx(async (tx) => {
+    closedNow = false;
+    const claimed = await tx.withdrawalRequest.updateMany({
+      where: { id: requestId, status: "PROCESSING" },
+      data: outcome.state === "PAID" ? { status: "PAID", utr: outcome.utr || null, providerPayoutId: outcome.providerPayoutId, completedAt: /* @__PURE__ */ new Date() } : { status: "FAILED", failureReason: outcome.reason, completedAt: /* @__PURE__ */ new Date() }
+    });
+    const row = await tx.withdrawalRequest.findUniqueOrThrow({ where: { id: requestId } });
+    if (claimed.count !== 1) return row;
+    closedNow = true;
+    const hold = await getSystemWallet(tx, "WITHDRAWAL_HOLD");
+    const groupId = `wdc_${row.id}`;
+    void audit(SYSTEM_ACTOR, outcome.state === "PAID" ? "WITHDRAWAL_PAID" : "WITHDRAWAL_FAILED", "withdrawal", row.id, outcome.state === "PAID" ? { utr: outcome.utr } : { reason: outcome.reason });
+    if (outcome.state === "PAID") {
+      await postGroup(tx, [{ walletId: hold.id, type: "DEBIT", amountPaise: row.amountPaise, purpose: "WITHDRAWAL_PAID", idempotencyKey: `${groupId}:paid`, groupId, referenceId: row.id, description: `Paid out. UTR ${outcome.utr || "pending"}` }]);
+    } else {
+      await postGroup(
+        tx,
+        [
+          { walletId: hold.id, type: "DEBIT", amountPaise: row.amountPaise, purpose: "WITHDRAWAL_REVERSAL", idempotencyKey: `${groupId}:hold`, groupId, referenceId: row.id, description: `Withdrawal ${row.id} failed` },
+          { walletId: row.walletId, type: "CREDIT", amountPaise: row.amountPaise, purpose: "WITHDRAWAL_REVERSAL", idempotencyKey: `${groupId}:wallet`, groupId, referenceId: row.id, description: `Returned: ${outcome.reason}` }
+        ],
+        { balanced: true }
+      );
+    }
+    return row;
+  });
+  if (closedNow) {
+    const account = await prisma.payoutAccount.findUnique({ where: { id: result.payoutAccountId } }).catch(() => null);
+    const label = account ? publicAccount(account).label : "your account";
+    void notifyUsers(
+      [result.userId],
+      outcome.state === "PAID" ? messages.withdrawalPaid(BigInt(result.amountPaise), label, outcome.utr || "") : messages.withdrawalFailed(BigInt(result.amountPaise), outcome.state === "FAILED" ? outcome.reason : "")
+    );
+  }
+  return result;
+}
+function targetFor(account) {
+  return account.type === "BANK" ? { type: "BANK", holderName: account.holderName, accountNumber: decrypt(account.accountNumberEnc), ifsc: account.ifsc } : { type: "UPI", holderName: account.holderName, vpa: account.vpa };
+}
+async function refreshProcessing(userId) {
+  const provider = getPayoutProvider();
+  const open = await prisma.withdrawalRequest.findMany({
+    where: { status: "PROCESSING", providerPayoutId: { not: null }, ...userId ? { userId } : {} },
+    take: 25
+  });
+  for (const w of open) {
+    try {
+      let out;
+      if (w.providerPayoutId.startsWith("pending_")) {
+        if (provider.mode !== "RAZORPAYX" || Date.now() - w.requestedAt.getTime() < 10 * 60 * 1e3) continue;
+        const account = await prisma.payoutAccount.findUnique({ where: { id: w.payoutAccountId } });
+        const user = await prisma.user.findUnique({ where: { id: w.userId } });
+        if (!account) continue;
+        out = await provider.send({
+          requestId: w.id,
+          amountPaise: BigInt(w.amountPaise),
+          target: targetFor(account),
+          contactName: account.holderName,
+          contactEmail: user?.email,
+          contactPhone: user?.phone?.replace(/\D/g, "").slice(-10),
+          existingContactId: account.providerContactId,
+          existingFundAccountId: account.providerFundAccountId
+        });
+      } else {
+        out = await provider.status(w.providerPayoutId);
+      }
+      if (out.state !== "PROCESSING") await applyOutcome(w.id, out);
+      else if (out.providerPayoutId !== w.providerPayoutId) await applyOutcome(w.id, out);
+    } catch {
+    }
+  }
+}
+async function listWithdrawals(userId, limit = 30) {
+  const rows = await prisma.withdrawalRequest.findMany({ where: { userId }, orderBy: { requestedAt: "desc" }, take: Math.min(limit, 100) });
+  const accounts = await prisma.payoutAccount.findMany({ where: { id: { in: rows.map((r) => r.payoutAccountId) } } });
+  const label = new Map(accounts.map((a) => [a.id, publicAccount(a).label]));
+  return rows.map((r) => serializeWithdrawal(r, label.get(r.payoutAccountId)));
+}
+async function handlePayoutWebhook(eventId, event) {
+  const type = String(event?.event || "");
+  const entity = event?.payload?.payout?.entity;
+  if (!entity?.id) return { ignored: true };
+  const seen = await prisma.providerEvent.findUnique({ where: { eventId } });
+  if (seen) return { replay: true };
+  await prisma.providerEvent.create({ data: { provider: "RAZORPAYX", eventId, eventType: type, payload: event } });
+  const w = await prisma.withdrawalRequest.findFirst({
+    where: { OR: [{ providerPayoutId: entity.id }, { id: String(entity.reference_id || "") }] }
+  });
+  if (!w) return { ignored: true };
+  if (type === "payout.processed") return applyOutcome(w.id, { state: "PAID", providerPayoutId: entity.id, utr: String(entity.utr || "") });
+  if (type === "payout.failed" || type === "payout.rejected" || type === "payout.reversed" || type === "payout.cancelled") {
+    return applyOutcome(w.id, { state: "FAILED", reason: entity.failure_reason || entity.status_details?.description || type });
+  }
+  return applyOutcome(w.id, { state: "PROCESSING", providerPayoutId: entity.id });
+}
+
+// server/walletRoutes.ts
+var ok = (body = {}, status = 200) => ({ status, body: { ok: true, ...body } });
+var fail = (status, error) => ({ status, body: { ok: false, error } });
+var rupees = (p) => Number(p) / 100;
+var iso = (d) => d ? d.toISOString() : null;
+function parseJson(raw) {
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+function toPaise(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const paise = Math.round(n * 100);
+  if (!Number.isSafeInteger(paise)) return null;
+  return BigInt(paise);
+}
+function actorOf(user) {
+  return { userId: user.userId, name: user.name };
+}
+function serializeSettlement(s, extra = {}) {
+  return {
+    id: s.id,
+    bookingId: s.bookingId,
+    gosalaId: s.gosalaId,
+    gosalaName: s.gosalaName,
+    status: s.status,
+    paymentSource: s.paymentSource,
+    grossRupees: rupees(s.grossPaise),
+    taxRupees: rupees(s.taxPaise),
+    platformRupees: rupees(s.platformPaise),
+    adminRupees: rupees(s.adminPaise),
+    managerRupees: rupees(s.managerPaise),
+    platformPct: s.platformBp / 100,
+    adminPct: s.adminBp / 100,
+    managerPct: s.managerBp / 100,
+    paidAt: iso(s.paidAt),
+    eligibleAt: iso(s.eligibleAt),
+    decidedByName: s.decidedByName,
+    decidedAt: iso(s.decidedAt),
+    decisionNote: s.decisionNote,
+    ...extra
+  };
+}
+function mapLedgerError(err) {
+  if (err instanceof LedgerError) {
+    const status = err.code === "INSUFFICIENT_FUNDS" ? 402 : err.code === "CONFLICT" ? 409 : 400;
+    return fail(status, err.message);
+  }
+  console.error("[wallet] unexpected error:", err);
+  return fail(500, "Something went wrong while handling the wallet request");
+}
+async function gosalasFor(user) {
+  if (user.role === "super_admin") return prisma.gosala.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });
+  const scoped = [...user.gosalaIds || [], ...user.gosalaNames || []];
+  return prisma.gosala.findMany({
+    where: {
+      isActive: true,
+      OR: [{ adminId: user.userId }, ...scoped.length ? [{ id: { in: scoped } }, { name: { in: scoped } }] : []]
+    },
+    orderBy: { name: "asc" }
+  });
+}
+async function walletSummary(userId, role) {
+  const earnsFrom = async () => {
+    if (role === "admin") return (await prisma.gosala.findMany({ where: { adminId: userId }, select: { id: true } })).map((g) => g.id);
+    if (role === "manager") return (await prisma.gosalaManagerAssignment.findMany({ where: { userId, status: "Active" }, select: { gosalaId: true } })).map((a) => a.gosalaId);
+    return [];
+  };
+  const [wallet, gosalaIds, processing] = await Promise.all([
+    prisma.wallet.findUnique({ where: { userId } }),
+    earnsFrom(),
+    prisma.withdrawalRequest.aggregate({ where: { userId, status: "PROCESSING" }, _sum: { amountPaise: true } })
+  ]);
+  const available = wallet ? BigInt(wallet.balancePaise) : 0n;
+  const [rows, txs, adminGosalas, managerCounts] = await Promise.all([
+    gosalaIds.length ? prisma.bookingSettlement.findMany({ where: { gosalaId: { in: gosalaIds }, status: { in: ["HELD", "READY_FOR_APPROVAL"] } }, orderBy: { eligibleAt: "asc" }, take: 200 }) : Promise.resolve([]),
+    wallet ? prisma.walletTransaction.findMany({ where: { walletId: wallet.id }, orderBy: { createdAt: "desc" }, take: 40 }) : Promise.resolve([]),
+    role === "admin" && gosalaIds.length ? prisma.gosala.findMany({ where: { id: { in: gosalaIds } }, select: { id: true, adminId: true } }) : Promise.resolve([]),
+    role === "manager" && gosalaIds.length ? prisma.gosalaManagerAssignment.groupBy({ by: ["gosalaId"], where: { gosalaId: { in: gosalaIds }, status: "Active" }, _count: { _all: true } }) : Promise.resolve([])
+  ]);
+  const people = /* @__PURE__ */ new Map();
+  if (role === "admin") for (const g of adminGosalas) people.set(g.id, 1);
+  else for (const c of managerCounts) people.set(c.gosalaId, Math.max(1, c._count._all));
+  const earnsFromNames = gosalaIds.length ? (await prisma.gosala.findMany({ where: { id: { in: gosalaIds } }, select: { name: true }, orderBy: { name: "asc" } })).map((g) => g.name) : [];
+  const upcoming = rows.map((s) => {
+    const total = role === "admin" ? s.adminPaise : s.managerPaise;
+    return {
+      settlementId: s.id,
+      bookingId: s.bookingId,
+      gosalaName: s.gosalaName,
+      status: s.status,
+      myRupees: rupees(total / BigInt(people.get(s.gosalaId) ?? 1)),
+      eligibleAt: iso(s.eligibleAt)
+    };
+  });
+  const coming = upcoming.reduce((sum, u) => sum + Math.round(u.myRupees * 100), 0);
+  const inTransit = processing._sum.amountPaise ? BigInt(processing._sum.amountPaise) : 0n;
+  return {
+    earnsFrom: earnsFromNames,
+    availableRupees: rupees(available),
+    comingRupees: coming / 100,
+    inTransitRupees: rupees(inTransit),
+    upcoming,
+    transactions: txs.map((t) => ({
+      id: t.id,
+      type: t.type,
+      purpose: t.purpose,
+      amountRupees: rupees(t.amountPaise),
+      balanceAfterRupees: rupees(t.balanceAfter),
+      bookingId: t.bookingId,
+      description: t.description,
+      createdAt: t.createdAt.toISOString()
+    }))
+  };
+}
+async function notifyRole(channel, role, title, message) {
+  try {
+    wsHub.broadcastToChannel(channel, "ROLE_ALERT", { targetRole: role, title, message, priority: "NORMAL", timestamp: (/* @__PURE__ */ new Date()).toISOString() });
+  } catch {
+  }
+}
+async function handleWalletRoutes(args) {
+  const { method, pathname, query, rawBody, headers, authUser } = args;
+  if (method === "POST" && pathname === "/api/webhooks/razorpayx") {
+    const sig = String(headers?.["x-razorpay-signature"] || headers?.["X-Razorpay-Signature"] || "");
+    const eventId = String(headers?.["x-razorpay-event-id"] || headers?.["X-Razorpay-Event-Id"] || "");
+    const secret = process.env.RAZORPAYX_WEBHOOK_SECRET || process.env.RAZORPAY_WEBHOOK_SECRET;
+    if (!secret) return fail(503, "Webhook secret is not configured");
+    if (!eventId) return fail(400, "Missing event id");
+    let valid = false;
+    try {
+      valid = verifyWebhookSignature(rawBody, sig, secret);
+    } catch {
+      valid = false;
+    }
+    if (!valid) return fail(401, "Invalid webhook signature");
+    try {
+      await handlePayoutWebhook(eventId, parseJson(rawBody));
+      return ok();
+    } catch (err) {
+      return mapLedgerError(err);
+    }
+  }
+  if ((method === "GET" || method === "POST") && pathname === "/api/jobs/settlement-maturity") {
+    const secret = process.env.CRON_SECRET;
+    const given = String(headers?.authorization || headers?.Authorization || "");
+    if (!secret || given.length !== `Bearer ${secret}`.length || !crypto8.timingSafeEqual(Buffer.from(given), Buffer.from(`Bearer ${secret}`))) {
+      return fail(401, "Unauthorized");
+    }
+    const moved = await runMaturity();
+    await refreshProcessing();
+    return ok(moved);
+  }
+  if (!authUser) return null;
+  const isSA = authUser.role === "super_admin";
+  const isAdmin = authUser.role === "admin";
+  const isManager = authUser.role === "manager";
+  if (method === "GET" && pathname === "/api/wallet/me") {
+    if (!isAdmin && !isManager) return fail(403, "Only Operations Admins and Managers have an earnings wallet");
+    try {
+      const [summary, accounts, withdrawals, cfg] = await Promise.all([
+        walletSummary(authUser.userId, authUser.role),
+        listPayoutAccounts(authUser.userId),
+        listWithdrawals(authUser.userId),
+        getWalletConfig(),
+        refreshProcessing(authUser.userId)
+      ]);
+      return ok({ ...summary, accounts, withdrawals, payoutMode: getPayoutProvider().mode, payoutModeNote: payoutModeReason(), delayDays: cfg.settlementDelayDays });
+    } catch (err) {
+      return mapLedgerError(err);
+    }
+  }
+  if (pathname === "/api/payout-accounts") {
+    if (!isAdmin && !isManager) return fail(403, "Only Operations Admins and Managers can save payout accounts");
+    try {
+      if (method === "GET") return ok({ accounts: await listPayoutAccounts(authUser.userId) });
+      if (method === "POST") {
+        const account = await addPayoutAccount(authUser.userId, parseJson(rawBody));
+        void audit({ userId: authUser.userId, name: authUser.name, role: authUser.role }, "PAYOUT_ACCOUNT_ADDED", "payout_account", account.id, { type: account.type, label: account.label });
+        void notifyUsers([authUser.userId], messages.payoutAccountChanged(true, account.label));
+        return ok({ account }, 201);
+      }
+    } catch (err) {
+      return mapLedgerError(err);
+    }
+  }
+  const acctDel = pathname.match(/^\/api\/payout-accounts\/([^/]+)$/);
+  if (method === "DELETE" && acctDel) {
+    if (!isAdmin && !isManager) return fail(403, "Not allowed");
+    try {
+      const before = (await listPayoutAccounts(authUser.userId)).find((a) => a.id === acctDel[1]);
+      await removePayoutAccount(authUser.userId, acctDel[1]);
+      void notifyUsers([authUser.userId], messages.payoutAccountChanged(false, before?.label || "a payout account"));
+      void audit({ userId: authUser.userId, name: authUser.name, role: authUser.role }, "PAYOUT_ACCOUNT_REMOVED", "payout_account", acctDel[1]);
+      return ok();
+    } catch (err) {
+      return mapLedgerError(err);
+    }
+  }
+  if (method === "POST" && pathname === "/api/withdrawals/otp") {
+    if (!isAdmin && !isManager) return fail(403, "Not allowed");
+    const b = parseJson(rawBody);
+    const amountPaise = toPaise(b.amountRupees);
+    if (!amountPaise) return fail(400, "Enter an amount greater than zero");
+    try {
+      const otpRes = await requestWithdrawalOtp(authUser.userId, amountPaise, String(b.payoutAccountId || ""));
+      void audit({ userId: authUser.userId, name: authUser.name, role: authUser.role }, "WITHDRAWAL_CODE_SENT", "payout_account", String(b.payoutAccountId || ""), { amountRupees: b.amountRupees });
+      return ok(otpRes);
+    } catch (err) {
+      return mapLedgerError(err);
+    }
+  }
+  if (pathname === "/api/withdrawals") {
+    if (!isAdmin && !isManager) return fail(403, "Not allowed");
+    try {
+      if (method === "GET") {
+        await refreshProcessing(authUser.userId);
+        return ok({ withdrawals: await listWithdrawals(authUser.userId, Number(query.get("limit")) || 30) });
+      }
+      if (method === "POST") {
+        const b = parseJson(rawBody);
+        const amountPaise = toPaise(b.amountRupees);
+        if (!amountPaise) return fail(400, "Enter an amount greater than zero");
+        const res = await createWithdrawal({
+          userId: authUser.userId,
+          amountPaise,
+          payoutAccountId: String(b.payoutAccountId || ""),
+          otp: String(b.otp || ""),
+          idempotencyKey: String(b.idempotencyKey || "")
+        });
+        return ok(res, res.replay ? 200 : 201);
+      }
+    } catch (err) {
+      return mapLedgerError(err);
+    }
+  }
+  if (method === "GET" && pathname === "/api/split-policy") {
+    if (!isAdmin && !isSA) return fail(403, "Only the Operations Admin and Super Admin can view split policy");
+    try {
+      const [cfg, gosalas, policyRows, requests] = await Promise.all([
+        getWalletConfig(),
+        gosalasFor(authUser),
+        prisma.splitPolicy.findMany(),
+        prisma.splitPolicyRequest.findMany({ where: isSA ? {} : { requestedById: authUser.userId }, orderBy: { createdAt: "desc" }, take: 50 })
+      ]);
+      const byKey = new Map(policyRows.map((p) => [p.policyKey, p.managerBp]));
+      const def = byKey.get("DEFAULT");
+      const rows = gosalas.map((g) => {
+        const own = byKey.get(g.id);
+        const managerBp = own ?? def ?? DEFAULT_MANAGER_BP;
+        return { gosalaId: g.id, gosalaName: g.name, managerPct: managerBp / 100, adminPct: (BP_TOTAL - cfg.platformBp - managerBp) / 100, isDefault: own === void 0 };
+      });
+      return ok({
+        platformPct: cfg.platformBp / 100,
+        defaultManagerPct: (def ?? DEFAULT_MANAGER_BP) / 100,
+        policies: rows,
+        requests: requests.map((r) => ({
+          id: r.id,
+          gosalaId: r.gosalaId,
+          gosalaName: r.gosalaName,
+          currentManagerPct: (r.currentManagerBp ?? 0) / 100,
+          proposedManagerPct: r.proposedManagerBp / 100,
+          status: r.status,
+          requestedByName: r.requestedByName,
+          reason: r.reason,
+          decidedByName: r.decidedByName,
+          decisionNote: r.decisionNote,
+          createdAt: r.createdAt.toISOString(),
+          decidedAt: iso(r.decidedAt)
+        }))
+      });
+    } catch (err) {
+      return mapLedgerError(err);
+    }
+  }
+  if (method === "POST" && pathname === "/api/split-policy/requests") {
+    if (!isAdmin) return fail(403, "Only the Operations Admin proposes manager percentages. Super Admin sets them directly.");
+    const b = parseJson(rawBody);
+    const managerBp = Math.round(Number(b.managerPct) * 100);
+    if (!Number.isFinite(managerBp)) return fail(400, "Enter the manager percentage");
+    try {
+      const allowed = await gosalasFor(authUser);
+      if (!allowed.some((g) => g.id === String(b.gosalaId))) return fail(403, "You can only request changes for gaushalas you govern");
+      const r = await requestSplitChange({ actor: actorOf(authUser), gosalaId: String(b.gosalaId), managerBp, reason: b.reason });
+      void audit({ userId: authUser.userId, name: authUser.name, role: authUser.role }, "SPLIT_CHANGE_REQUESTED", "split_request", r.id, { gosala: r.gosalaName, from: (r.currentManagerBp ?? 0) / 100, to: r.proposedManagerBp / 100, reason: r.reason });
+      void notifySuperAdmins(messages.splitRequested(r.requestedByName, r.gosalaName || "a gaushala", (r.currentManagerBp ?? 0) / 100, r.proposedManagerBp / 100, r.reason));
+      void notifyRole("channel:super_admin", "SUPER_ADMIN", "Manager share change waiting", `${r.requestedByName} proposed ${r.proposedManagerBp / 100}% for the manager at ${r.gosalaName}.`);
+      return ok({ requestId: r.id }, 201);
+    } catch (err) {
+      return mapLedgerError(err);
+    }
+  }
+  const saPaths = pathname.startsWith("/api/superadmin/");
+  if (saPaths && !isSA) return fail(403, "Only the Super Admin can do this");
+  if (method === "GET" && pathname === "/api/superadmin/wallet") {
+    try {
+      await ensureSystemWallets();
+      await runMaturity();
+      const sys = await prisma.wallet.findMany({ where: { systemKey: { not: null } } });
+      const bal = (k) => rupees(BigInt(sys.find((w) => w.systemKey === k)?.balancePaise ?? 0));
+      const counts = await prisma.bookingSettlement.groupBy({ by: ["status"], _count: { _all: true }, _sum: { grossPaise: true } });
+      const cfg = await getWalletConfig();
+      return ok({
+        escrowRupees: bal("ESCROW"),
+        platformRupees: bal("PLATFORM"),
+        taxRupees: bal("TAX"),
+        withdrawalHoldRupees: bal("WITHDRAWAL_HOLD"),
+        platformPct: cfg.platformBp / 100,
+        delayDays: cfg.settlementDelayDays,
+        byStatus: counts.map((c) => ({ status: c.status, count: c._count._all, grossRupees: rupees(c._sum.grossPaise ?? 0n) })),
+        payoutMode: getPayoutProvider().mode,
+        payoutModeNote: payoutModeReason()
+      });
+    } catch (err) {
+      return mapLedgerError(err);
+    }
+  }
+  if (method === "GET" && pathname === "/api/superadmin/settlements") {
+    try {
+      await runMaturity();
+      const status = query.get("status");
+      const rows = await prisma.bookingSettlement.findMany({
+        where: status ? { status } : {},
+        orderBy: [{ eligibleAt: "asc" }],
+        take: Math.min(Number(query.get("limit")) || 100, 300)
+      });
+      const bookings = await prisma.booking.findMany({
+        where: { id: { in: rows.map((r) => r.bookingId) } },
+        select: { id: true, status: true, customerName: true, bookingDate: true }
+      });
+      const byId = new Map(bookings.map((b) => [b.id, b]));
+      return ok({
+        settlements: rows.map(
+          (s) => serializeSettlement(s, {
+            bookingStatus: byId.get(s.bookingId)?.status ?? null,
+            customerName: byId.get(s.bookingId)?.customerName ?? null,
+            bookingDate: byId.get(s.bookingId)?.bookingDate ?? null
+          })
+        )
+      });
+    } catch (err) {
+      return mapLedgerError(err);
+    }
+  }
+  if (method === "POST" && pathname === "/api/superadmin/settlements/approve") {
+    const b = parseJson(rawBody);
+    const ids = Array.isArray(b.ids) ? b.ids.map(String).slice(0, 100) : [];
+    if (!ids.length) return fail(400, "Choose at least one settlement");
+    const released = [];
+    const failed = [];
+    for (const id of ids) {
+      try {
+        const r = await approveSettlement(id, actorOf(authUser), b.note);
+        released.push(id);
+        if (!r.replay) void audit({ userId: authUser.userId, name: authUser.name, role: authUser.role }, "SETTLEMENT_APPROVED", "settlement", id, { releaseGroupId: r.releaseGroupId });
+        if (!r.replay) {
+          void (async () => {
+            const rel = await getReleaseCredits(id);
+            if (!rel) return;
+            for (const c of rel.credits) void notifyUsers([c.userId], messages.earningsReleased(c.amountPaise, rel.bookingId, rel.gosalaName));
+          })();
+        }
+      } catch (err) {
+        failed.push({ id, error: err instanceof LedgerError ? err.message : "Could not release this settlement" });
+        if (!(err instanceof LedgerError)) console.error("[approve]", err);
+      }
+    }
+    if (released.length) {
+      void notifyRole("channel:admin", "OPERATIONS_ADMIN", "Earnings released", `${released.length} settlement(s) were approved and credited to wallets.`);
+      void notifyRole("channel:manager", "GOSALA_MANAGER", "Earnings released", `${released.length} settlement(s) were approved and credited to wallets.`);
+    }
+    return ok({ released, failed }, failed.length && !released.length ? 409 : 200);
+  }
+  const rejectMatch = pathname.match(/^\/api\/superadmin\/settlements\/([^/]+)\/(reject|refund)$/);
+  if (method === "POST" && rejectMatch) {
+    const b = parseJson(rawBody);
+    try {
+      if (rejectMatch[2] === "reject") await rejectSettlement(rejectMatch[1], actorOf(authUser), String(b.note || ""));
+      else await refundSettlement(rejectMatch[1], actorOf(authUser), String(b.note || ""));
+      void audit({ userId: authUser.userId, name: authUser.name, role: authUser.role }, rejectMatch[2] === "reject" ? "SETTLEMENT_REJECTED" : "SETTLEMENT_REFUNDED", "settlement", rejectMatch[1], { note: String(b.note || "") });
+      return ok();
+    } catch (err) {
+      return mapLedgerError(err);
+    }
+  }
+  if (method === "POST" && pathname === "/api/superadmin/settlements/backfill") {
+    try {
+      const res = await backfillSettlements();
+      void audit({ userId: authUser.userId, name: authUser.name, role: authUser.role }, "SETTLEMENTS_IMPORTED", "settlement", null, res);
+      return ok(res);
+    } catch (err) {
+      return mapLedgerError(err);
+    }
+  }
+  if (method === "PUT" && pathname === "/api/superadmin/wallet-config") {
+    const b = parseJson(rawBody);
+    try {
+      const row = await setPlatformBp(Math.round(Number(b.platformPct) * 100), actorOf(authUser));
+      void audit({ userId: authUser.userId, name: authUser.name, role: authUser.role }, "PLATFORM_PERCENT_CHANGED", "wallet_config", "1", { platformPct: row.platformBp / 100 });
+      return ok({ platformPct: row.platformBp / 100 });
+    } catch (err) {
+      return mapLedgerError(err);
+    }
+  }
+  if (method === "PUT" && pathname === "/api/superadmin/split-policy") {
+    const b = parseJson(rawBody);
+    try {
+      await setSplitPolicyDirect({ actor: actorOf(authUser), policyKey: String(b.policyKey || "DEFAULT"), managerBp: Math.round(Number(b.managerPct) * 100) });
+      void audit({ userId: authUser.userId, name: authUser.name, role: authUser.role }, "SPLIT_POLICY_SET", "split_policy", String(b.policyKey || "DEFAULT"), { managerPct: Number(b.managerPct) });
+      return ok();
+    } catch (err) {
+      return mapLedgerError(err);
+    }
+  }
+  const decideMatch = pathname.match(/^\/api\/superadmin\/split-requests\/([^/]+)\/decide$/);
+  if (method === "POST" && decideMatch) {
+    const b = parseJson(rawBody);
+    try {
+      await decideSplitChange(decideMatch[1], actorOf(authUser), b.approve === true, b.note);
+      void (async () => {
+        const req = await prisma.splitPolicyRequest.findUnique({ where: { id: decideMatch[1] } });
+        if (req) void notifyUsers([req.requestedById], messages.splitDecided(req.gosalaName || "your gaushala", req.proposedManagerBp / 100, b.approve === true, b.note));
+      })();
+      void audit({ userId: authUser.userId, name: authUser.name, role: authUser.role }, b.approve === true ? "SPLIT_CHANGE_APPROVED" : "SPLIT_CHANGE_DECLINED", "split_request", decideMatch[1], { note: b.note ?? null });
+      return ok();
+    } catch (err) {
+      return mapLedgerError(err);
+    }
+  }
+  if (method === "GET" && pathname === "/api/superadmin/audit-log") {
+    try {
+      const rows = await prisma.walletAuditLog.findMany({ orderBy: { createdAt: "desc" }, take: Math.min(Number(query.get("limit")) || 200, 500) });
+      return ok({ entries: rows.map((r) => ({ id: r.id, at: r.createdAt.toISOString(), actor: r.actorName, role: r.actorRole, action: r.action, targetType: r.targetType, targetId: r.targetId, details: r.details })) });
+    } catch (err) {
+      if (err?.code === "P2021" || /wallet_audit_logs/.test(String(err?.message))) {
+        return fail(503, "The audit log table has not been created yet. Run: npx prisma db execute --file prisma/sql/2_wallet_hardening.sql");
+      }
+      return mapLedgerError(err);
+    }
+  }
+  if (method === "GET" && pathname === "/api/superadmin/reconciliation") {
+    try {
+      return ok(await reconcile());
+    } catch (err) {
+      return mapLedgerError(err);
+    }
+  }
+  return null;
+}
+async function reconcile() {
+  const wallets = await prisma.wallet.findMany();
+  const sums = await prisma.walletTransaction.groupBy({ by: ["walletId", "type"], where: { status: "SUCCESS" }, _sum: { amountPaise: true } });
+  const delta = /* @__PURE__ */ new Map();
+  for (const s of sums) {
+    const v = s._sum.amountPaise ? BigInt(s._sum.amountPaise) : 0n;
+    delta.set(s.walletId, (delta.get(s.walletId) ?? 0n) + (s.type === "CREDIT" ? v : -v));
+  }
+  const walletMismatches = wallets.filter((w) => BigInt(w.balancePaise) !== (delta.get(w.id) ?? 0n)).map((w) => ({ walletId: w.id, kind: w.kind, storedRupees: rupees(BigInt(w.balancePaise)), fromEntriesRupees: rupees(delta.get(w.id) ?? 0n) }));
+  const allGroups = await prisma.walletTransaction.groupBy({
+    by: ["groupId", "type"],
+    where: { groupId: { not: null }, status: "SUCCESS" },
+    _sum: { amountPaise: true }
+  });
+  const mustBalance = /^(rel_|ref_|wd_)/;
+  const net = /* @__PURE__ */ new Map();
+  for (const r of allGroups) {
+    if (!r.groupId || !mustBalance.test(r.groupId)) continue;
+    const v = r._sum.amountPaise ? BigInt(r._sum.amountPaise) : 0n;
+    net.set(r.groupId, (net.get(r.groupId) ?? 0n) + (r.type === "CREDIT" ? v : -v));
+  }
+  const unbalancedGroups = [...net.entries()].filter(([, v]) => v !== 0n).map(([groupId, v]) => ({ groupId, differenceRupees: rupees(v) }));
+  const escrow = wallets.find((w) => w.systemKey === "ESCROW");
+  const waiting = await prisma.bookingSettlement.aggregate({
+    where: { status: { in: ["HELD", "READY_FOR_APPROVAL", "REJECTED"] } },
+    _sum: { grossPaise: true }
+  });
+  const escrowBal = escrow ? BigInt(escrow.balancePaise) : 0n;
+  const waitingPaise = waiting._sum.grossPaise ? BigInt(waiting._sum.grossPaise) : 0n;
+  return {
+    walletMismatches,
+    unbalancedGroups,
+    escrow: { balanceRupees: rupees(escrowBal), waitingSettlementsRupees: rupees(waitingPaise), matches: escrowBal === waitingPaise },
+    healthy: walletMismatches.length === 0 && unbalancedGroups.length === 0 && escrowBal === waitingPaise
+  };
+}
+
 // server/router.ts
 var driverLiveLocations = /* @__PURE__ */ new Map();
 var serverAnimals = /* @__PURE__ */ new Map();
@@ -3424,11 +5176,13 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   const { pathname, query } = parseUrl(rawUrl);
   if (!pathname.startsWith("/api/")) return null;
   const authUser = getAuthUserFromHeader(headers?.authorization || headers?.Authorization);
-  const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/admin-login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/places/search" || pathname === "/api/animals" || pathname === "/api/gosalas" || pathname === "/api/vets" || pathname === "/api/pricing-config" || pathname === "/api/pricing/config" || pathname === "/api/availability");
+  const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/admin-login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/webhooks/razorpayx" || pathname === "/api/jobs/settlement-maturity" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/jobs/settlement-maturity" || pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/places/search" || pathname === "/api/animals" || pathname === "/api/gosalas" || pathname === "/api/vets" || pathname === "/api/pricing-config" || pathname === "/api/pricing/config" || pathname === "/api/availability");
   if (!isPublicRoute && !authUser) {
     return { status: 401, body: { ok: false, error: "Authentication required" } };
   }
   const requireRole = (...roles) => authUser && roles.includes(authUser.role) ? null : { status: 403, body: { ok: false, error: "Insufficient privileges" } };
+  const walletResponse = await handleWalletRoutes({ method, pathname, query, rawBody, headers, authUser });
+  if (walletResponse) return walletResponse;
   if (method === "POST" && pathname === "/api/hold" || method === "POST" && pathname === "/api/hold/release" || method === "POST" && pathname === "/api/bookings") {
     const denied = requireRole("customer", "admin", "super_admin");
     if (denied) return denied;
@@ -3820,6 +5574,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   if (method === "POST" && pathname === "/api/hold") {
     let animal = await prisma.animal.findFirst({
       where: {
+        ...body.gosala ? { gosala: { name: body.gosala } } : {},
         OR: [
           { id: body.animal },
           { name: { equals: body.animal, mode: "insensitive" } },
@@ -3899,7 +5654,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         }
         return tx.temporarySlotHold.create({
           data: {
-            id: "HOLD-" + crypto6.randomUUID().replace(/-/g, "").slice(0, 20).toUpperCase(),
+            id: "HOLD-" + crypto9.randomUUID().replace(/-/g, "").slice(0, 20).toUpperCase(),
             animalId: animal.id,
             date: body.date,
             startTime: body.start,
@@ -3910,9 +5665,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
             expiresAt: new Date(Date.now() + ttl)
           }
         });
-      });
+      }, { timeout: 2e4, maxWait: 1e4 });
     } catch (err) {
-      console.warn("[POST /api/hold] Execution notice:", err?.message);
+      console.warn("[api/hold] failed:", err?.code || "", err?.message);
       const message = err?.message || "Unable to create hold";
       return {
         status: message.includes("already") ? 409 : 500,
@@ -4134,7 +5889,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       };
     }
     const secret = process.env.RAZORPAY_KEY_SECRET || "gomaa_test_secret_2026";
-    const expected = crypto6.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+    const expected = crypto9.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
     if (signature !== expected) {
       return { status: 402, body: { ok: false, error: "Invalid cryptographic payment signature" } };
     }
@@ -4523,7 +6278,22 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         });
         await tx.temporarySlotHold.update({ where: { id: holdId }, data: { status: "CONSUMED", consumedAt: /* @__PURE__ */ new Date() } });
         return createdBooking;
-      });
+      }, { timeout: 2e4, maxWait: 1e4 });
+      try {
+        await recordBookingPayment({
+          id: created.id,
+          gosalaId: created.gosalaId,
+          gosalaName: created.gosalaName,
+          customerId: created.customerId,
+          totalAmount: created.totalAmount,
+          taxFee: created.taxFee,
+          paymentProvider: created.paymentProvider,
+          paymentCapturedAt: created.paymentCapturedAt,
+          createdAt: created.createdAt
+        });
+      } catch (settleErr) {
+        console.error(`[wallet] settlement not recorded for ${created.id}:`, settleErr?.message);
+      }
       const formatted = {
         ...formatBooking(created),
         customerEmail: b.customerEmail,
@@ -4572,6 +6342,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       wsHub.broadcastToChannel(`channel:gosala:${created.gosalaName}`, "BOOKING_UPDATED", {
         booking: formatted
       });
+      const info = bookingInfo(created);
+      void notifyUsers([created.customerId], messages.bookingPlaced(info));
+      void notifyGosalaTeam(created.gosalaId, messages.bookingNeedsReview(info));
       return { status: 201, body: { booking: formatted } };
     } catch (err) {
       console.error("Booking creation error in PostgreSQL:", err);
@@ -4671,6 +6444,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       wsHub.broadcastToChannel(`channel:booking:${id}`, "BOOKING_UPDATED", {
         booking: formatted
       });
+      const info = bookingInfo(updated);
+      void notifyGosalaTeam(updated.gosalaId, messages.bookingManagerDecided(info, confirm, remark));
+      if (!confirm) void notifyUsers([updated.customerId], messages.bookingRejected(info, remark));
       return { status: 200, body: { booking: formatted } };
     } catch (e) {
       console.error("[manager-decide] DB error:", e?.message);
@@ -4768,6 +6544,11 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         priority: "NORMAL",
         timestamp: (/* @__PURE__ */ new Date()).toISOString()
       });
+      const info = bookingInfo(updated);
+      void notifyUsers(
+        [updated.customerId],
+        confirm ? messages.bookingConfirmed(info) : messages.bookingRejected(info, remark)
+      );
       return { status: 200, body: { booking: formatted } };
     } catch (e) {
       console.error("[admin-decide] DB error:", e?.message);
@@ -6849,7 +8630,14 @@ function resolveRequestUrl(req) {
   return query ? `${pathname}?${query}` : pathname;
 }
 async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  const origin = String(req.headers?.origin || "");
+  if (process.env.NODE_ENV !== "production") {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  } else {
+    const allowed = (process.env.GOMAA_ALLOWED_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean);
+    if (origin && allowed.includes(origin)) res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  }
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
   if (req.method === "OPTIONS") {

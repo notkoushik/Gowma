@@ -54,7 +54,8 @@ export async function verifyCapturedPayment(input: PaymentInput, options: Razorp
 
   // Synthetic / offline test transactions for integration test runs
   if (paymentId.startsWith("pay_synthetic") || paymentId.startsWith("pay_test_") || orderId.startsWith("order_test_")) {
-    if (!options.fetch) {
+    // Never in production, and never once real Razorpay keys are in use
+    if (!options.fetch && process.env.NODE_ENV !== "production" && !/^rzp_(test|live)_(?!gomaa_synthetic)/.test(process.env.RAZORPAY_KEY_ID || "")) {
       return { paymentId, orderId, customerId, holdId, amountPaise }
     }
   }
@@ -75,7 +76,9 @@ export async function createPaymentOrder(input: Omit<PaymentInput, "paymentId" |
       return { orderId: order.id, amountPaise, currency: "INR" }
     }
   } catch (err: any) {
-    if (process.env.NODE_ENV !== "production") {
+    // Offline fake orders are for tests only. With real keys configured, surface the failure
+    // instead of handing the browser an order id that Razorpay Checkout will reject.
+    if (process.env.NODE_ENV !== "production" && (!process.env.RAZORPAY_KEY_ID || process.env.NODE_ENV === "test")) {
       return { orderId: `order_test_${crypto.randomBytes(8).toString("hex")}`, amountPaise, currency: "INR" }
     }
     throw err

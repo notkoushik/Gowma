@@ -24,7 +24,7 @@ import {
 } from "../data/animals"
 import { type Gosala, GOSALA_PHOTO_PRESETS } from "../data/gosalas"
 import { initialProfiles, type RoleProfile } from "../data/profiles"
-import { api } from "../services/api"
+import { api, type RazorpayProof } from "../services/api"
 
 export type { Gosala } from "../data/gosalas"
 
@@ -147,7 +147,7 @@ type Store = {
   updateProfile: (role: RoleId, updates: Partial<RoleProfile>) => Promise<void>
   currentRole: RoleId | null
   setCurrentRole: (r: RoleId | null) => void
-  createBooking: (b: Booking, holdId?: string) => void
+  createBooking: (b: Booking, holdId?: string, payment?: RazorpayProof) => Promise<void>
   managerDecide: (
     id: string,
     confirm: boolean,
@@ -1104,26 +1104,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   )
 
   const createBooking = useCallback(
-    (b: Booking, holdId?: string) => {
+    async (b: Booking, holdId?: string, payment?: RazorpayProof) => {
       setBookings((bs) => [b, ...bs])
+      try {
+        await api.createBooking(b, holdId, payment)
+      } catch (err) {
+        // The server refused it, so don't leave a phantom booking on screen
+        setBookings((bs) => bs.filter((x) => x.id !== b.id))
+        throw err
+      }
       api
-        .createBooking(b, holdId)
-        .then(() => {
-          api
-            .getBookings()
-            .then((res) => {
-              if (res?.bookings && Array.isArray(res.bookings)) {
-                const sanitized = res.bookings.map((item: any) => ({
-                  ...item,
-                  handoverOtp: item.handoverOtp || "4819",
-                  handoverOtpVerified: Boolean(item.handoverOtpVerified),
-                }))
-                setBookings(sanitized)
-              }
-            })
-            .catch(() => {})
+        .getBookings()
+        .then((res) => {
+          if (res?.bookings && Array.isArray(res.bookings)) {
+            const sanitized = res.bookings.map((item: any) => ({
+              ...item,
+              handoverOtp: item.handoverOtp || "4819",
+              handoverOtpVerified: Boolean(item.handoverOtpVerified),
+            }))
+            setBookings(sanitized)
+          }
         })
-        .catch(console.error)
+        .catch(() => {})
       notify(
         `Booking ${b.id} placed · Payment verified server-side · Sent to manager review`,
         "ok",
