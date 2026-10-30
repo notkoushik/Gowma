@@ -2584,15 +2584,20 @@ async function requestPasswordResetOtp(emailOrPhone, channel = "EMAIL", ipAddres
       );
     }
   } else {
-    const smsResult = await sendOtpSms({
-      toPhone: user.phone || emailOrPhone,
-      otp: rawOtp,
-      expiryMinutes: 10
-    });
-    if (!smsResult.success) {
-      throw new Error(
-        smsResult.error || "Carrier SMS dispatch is currently unavailable. Please use 'Email Address' verification to receive your 6-digit code."
-      );
+    const template = (process.env.MSG91_WHATSAPP_LOGIN_OTP_TEMPLATE || process.env.MSG91_WHATSAPP_OTP_TEMPLATE || "").trim();
+    if (process.env.NODE_ENV === "test") {
+    } else if (!template || !whatsappConfigured()) {
+      throw new Error("WhatsApp verification is not available right now. Please use 'Email Verification' to receive your code.");
+    } else {
+      const waResult = await sendWhatsAppTemplate({
+        toPhone: user.phone || emailOrPhone,
+        template,
+        vars: [rawOtp],
+        urlButtonValue: rawOtp
+      });
+      if (!waResult.success) {
+        throw new Error("We could not send the WhatsApp message. Please check that your registered number has WhatsApp, or use 'Email Verification'.");
+      }
     }
   }
   const targetIdentifier = channel === "PHONE" ? user.phone || emailOrPhone : user.email;
@@ -3514,11 +3519,19 @@ function splitEqually(totalPaise, recipients) {
   }
   return out;
 }
+function envDelayDays() {
+  const raw = (process.env.GOMAA_SETTLEMENT_DELAY_DAYS || "").trim();
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n <= 30 ? n : null;
+}
 async function getWalletConfig() {
   const row = await prisma.walletConfig.findUnique({ where: { id: 1 } });
   return {
     platformBp: row?.platformBp ?? DEFAULT_PLATFORM_BP,
-    settlementDelayDays: row?.settlementDelayDays ?? DEFAULT_DELAY_DAYS
+    // GOMAA_SETTLEMENT_DELAY_DAYS lets a test environment release earnings straight away (0).
+    // Leave it unset in production: the wallet setting (2 days by default) is used.
+    settlementDelayDays: envDelayDays() ?? row?.settlementDelayDays ?? DEFAULT_DELAY_DAYS
   };
 }
 async function getManagerBpFor(gosalaId) {

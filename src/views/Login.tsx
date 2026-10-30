@@ -697,17 +697,6 @@ export default function Login({
               <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
               <div className="leading-snug flex-1">
                 <div>{authError}</div>
-                {authError.includes("/admin") && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      window.location.href = "/admin"
-                    }}
-                    className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-slate-900 text-amber-400 font-semibold text-xs rounded hover:bg-slate-800 transition cursor-pointer shadow-xs"
-                  >
-                    Go to Secure /admin Portal →
-                  </button>
-                )}
               </div>
             </div>
           )}
@@ -997,16 +986,6 @@ export default function Login({
               </div>
             </form>
           )}
-          {/* Governance & Administrative Portal Link */}
-          <div className="mt-6 pt-4 border-t border-line/60 text-center text-[12px] text-ink-faint">
-            Platform governance or operations officer?{" "}
-            <a
-              href="/admin"
-              className="font-semibold text-slate-800 hover:text-amber-700 transition inline-flex items-center gap-1"
-            >
-              Access Secure /admin Portal →
-            </a>
-          </div>
         </div>
       </div>
 
@@ -1088,7 +1067,7 @@ export default function Login({
                       }`}
                     >
                       <Smartphone size={14} />
-                      <span>Mobile SMS OTP</span>
+                      <span>WhatsApp OTP</span>
                     </button>
                   </div>
                 </div>
@@ -1162,7 +1141,7 @@ export default function Login({
                 <div className="p-3 bg-stone-100 rounded text-[11.5px] text-ink-faint leading-relaxed">
                   <strong>Zero-Leakage Security:</strong> The single-use
                   verification code is delivered out-of-band to your private
-                  inbox or phone SMS. It is never exposed in browser logs.
+                  inbox or WhatsApp. It is never exposed in browser logs.
                 </div>
 
                 <button
