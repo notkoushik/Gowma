@@ -35,8 +35,12 @@ import {
   Key,
   RefreshCw,
   MessageSquare,
+  Coins,
+  Wallet,
 } from "lucide-react"
 import type { GosalaManager } from "../data/mock"
+import { inr } from "../data/mock"
+import { api } from "../services/api"
 import { useStore, useToast, type Gosala } from "../store/store"
 import { Eyebrow, Panel, PanelHead, Tag } from "../lib/ui"
 import { INDIAN_REGIONAL_HUBS } from "../data/regions"
@@ -136,6 +140,52 @@ export default function GosalaManagers() {
   const [editingManager, setEditingManager] = useState<GosalaManager | null>(
     null,
   )
+
+  // Credit Manager Modal state
+  const [creditingManager, setCreditingManager] =
+    useState<GosalaManager | null>(null)
+  const [creditAmount, setCreditAmount] = useState<string>("2500")
+  const [creditPurpose, setCreditPurpose] = useState<string>("OPERATIONAL_TEST")
+  const [creditNote, setCreditNote] = useState<string>(
+    "Manager operational & test credit granted by Super Admin",
+  )
+  const [creditingInProgress, setCreditingInProgress] = useState(false)
+
+  const handleCreditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!creditingManager) return
+    const amt = Number(creditAmount)
+    if (isNaN(amt) || amt <= 0) {
+      notify("Please enter a valid credit amount in ₹", "warn")
+      return
+    }
+    setCreditingInProgress(true)
+    try {
+      const res = await api.adminCreditWallet({
+        userId: creditingManager.id,
+        email: creditingManager.email,
+        amountRupees: amt,
+        purpose: creditPurpose,
+        description: creditNote,
+      })
+      if (res && res.ok) {
+        notify(
+          `Successfully credited ${inr(amt)} to ${creditingManager.name}'s wallet! Balance updated.`,
+          "ok",
+        )
+        setCreditingManager(null)
+      } else {
+        notify(
+          `Failed to credit wallet: ${res?.message || "Unknown error"}`,
+          "danger",
+        )
+      }
+    } catch (err: any) {
+      notify(`Credit failed: ${err.message || "Network error"}`, "danger")
+    } finally {
+      setCreditingInProgress(false)
+    }
+  }
 
   // Share Credentials Modal state
   const [shareCredentials, setShareCredentials] =
@@ -503,39 +553,6 @@ export default function GosalaManagers() {
         status: "Active",
         animalsCount: totalCows,
       })
-
-      // Relieve prior managers from any Gaushalas selected for this new manager
-      for (const gName of formSelectedGosalas) {
-        const found = gosalas.find(
-          (g) => g.name.toLowerCase() === gName.toLowerCase(),
-        )
-        if (found) {
-          managers.forEach((otherMgr) => {
-            const otherList = getManagerAssignedGosalas(otherMgr)
-            if (
-              otherList.some(
-                (gn) => gn.toLowerCase() === found.name.toLowerCase(),
-              )
-            ) {
-              const nextOtherList = otherList.filter(
-                (gn) => gn.toLowerCase() !== found.name.toLowerCase(),
-              )
-              updateManager(otherMgr.id, {
-                gosalas: nextOtherList,
-                gosala: nextOtherList[0] || "Unassigned",
-                status: otherMgr.status || "Active",
-              })
-            }
-          })
-
-          updateGosala(found.id, {
-            managerName: formName.trim(),
-            caretaker: formName.trim(),
-            isActingManager: false,
-            actAsManagerMyself: false,
-          } as any)
-        }
-      }
 
       setShowAddModal(false)
       notify(
@@ -1830,6 +1847,18 @@ export default function GosalaManagers() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => {
+                          setCreditingManager(m)
+                          setCreditAmount("2500")
+                        }}
+                        className="inline-flex items-center justify-center gap-1 py-1.5 px-1.5 bg-emerald-50 border border-emerald-300 rounded text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs cursor-pointer"
+                        title="Credit Manager Wallet"
+                      >
+                        <Coins size={11} className="shrink-0" />
+                        <span>Credit</span>
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleOpenEdit(m)}
                         className="inline-flex items-center justify-center gap-1 py-1.5 px-1.5 bg-paper border border-line rounded text-[11px] font-medium text-saffron-deep hover:bg-paper-deep transition shadow-2xs"
                       >
@@ -2002,6 +2031,18 @@ export default function GosalaManagers() {
                             >
                               <Key size={12} />
                               <span>Credentials</span>
+                            </button>
+                            <span className="text-line-strong">|</span>
+                            <button
+                              onClick={() => {
+                                setCreditingManager(m)
+                                setCreditAmount("2500")
+                              }}
+                              className="text-[12px] font-semibold text-emerald-700 hover:text-emerald-900 hover:underline flex items-center gap-1 cursor-pointer"
+                              title="Credit Manager Wallet"
+                            >
+                              <Coins size={12} />
+                              <span>Credit</span>
                             </button>
                             <span className="text-line-strong">|</span>
                             <button
@@ -3228,6 +3269,159 @@ export default function GosalaManagers() {
           </div>
         </div>
       )}
+
+      {/* ---------------- CREDIT MANAGER WALLET MODAL ---------------- */}
+      {creditingManager && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div
+            className="absolute inset-0 bg-ink/60 backdrop-blur-sm"
+            onClick={() => {
+              if (!creditingInProgress) setCreditingManager(null)
+            }}
+          />
+          <div className="relative w-full max-w-md bg-card rounded-xl shadow-2xl border border-emerald-500/30 p-6 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-start gap-3 pb-4 border-b border-line">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center justify-center shrink-0">
+                <Coins size={20} />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-serif text-[18px] font-bold text-ink leading-snug">
+                  Credit Manager Wallet
+                </h3>
+                <p className="text-[12px] text-ink-soft mt-0.5">
+                  Direct operational credit &amp; test funds with anti-replay ledger tracking.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  if (!creditingInProgress) setCreditingManager(null)
+                }}
+                disabled={creditingInProgress}
+                className="text-ink-faint hover:text-ink p-1 rounded hover:bg-paper-deep cursor-pointer"
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreditSubmit} className="space-y-4 pt-4">
+              {/* Manager Badge */}
+              <div className="p-3 bg-paper rounded-lg border border-line text-[12.5px] space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-ink">{creditingManager.name}</span>
+                  <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-paper-deep border border-line text-ink-soft">
+                    {creditingManager.id}
+                  </span>
+                </div>
+                <div className="text-[11.5px] text-ink-faint font-mono">
+                  {creditingManager.email}
+                </div>
+                <div className="text-[11.5px] text-emerald-700 font-medium">
+                  Gaushala: {creditingManager.gosalas?.join(", ") || creditingManager.gosala || "Assigned Sanctuary"}
+                </div>
+              </div>
+
+              {/* Amount */}
+              <div className="space-y-1.5">
+                <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider font-mono">
+                  Credit Amount (₹)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint font-semibold text-[15px]">
+                    ₹
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={creditAmount}
+                    onChange={(e) => setCreditAmount(e.target.value)}
+                    required
+                    disabled={creditingInProgress}
+                    placeholder="Enter amount in ₹"
+                    className="w-full pl-8 pr-4 py-2 bg-paper border border-line rounded-lg text-[15px] font-bold text-ink focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {[500, 1000, 2500, 5000].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setCreditAmount(String(amt))}
+                      disabled={creditingInProgress}
+                      className="px-2.5 py-1 rounded bg-paper border border-line text-[11px] font-mono text-ink-soft hover:text-emerald-700 hover:border-emerald-300 transition cursor-pointer"
+                    >
+                      +{inr(amt)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Purpose */}
+              <div className="space-y-1.5">
+                <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider font-mono">
+                  Credit Purpose
+                </label>
+                <select
+                  value={creditPurpose}
+                  onChange={(e) => setCreditPurpose(e.target.value)}
+                  disabled={creditingInProgress}
+                  className="w-full px-3 py-2 bg-paper border border-line rounded-lg text-[12.5px] font-medium text-ink focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="OPERATIONAL_TEST">Operational Test Credit (Testing End-to-End Flow)</option>
+                  <option value="ADJUSTMENT">Super Admin Ledger Adjustment</option>
+                  <option value="PUJA_COMMISSION">Manual Seva Commission Settlement</option>
+                  <option value="INCENTIVE">Gaushala Custodian Performance Incentive</option>
+                </select>
+              </div>
+
+              {/* Note / Description */}
+              <div className="space-y-1.5">
+                <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider font-mono">
+                  Description / Audit Memo
+                </label>
+                <input
+                  type="text"
+                  value={creditNote}
+                  onChange={(e) => setCreditNote(e.target.value)}
+                  disabled={creditingInProgress}
+                  placeholder="e.g. Test credit granted by Super Admin"
+                  className="w-full px-3 py-2 bg-paper border border-line rounded-lg text-[12.5px] text-ink focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="pt-3 border-t border-line flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setCreditingManager(null)}
+                  disabled={creditingInProgress}
+                  className="px-4 py-2 text-[12.5px] text-ink-soft hover:text-ink border border-line rounded-md hover:bg-paper-deep transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creditingInProgress}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 text-[12.5px] font-semibold rounded-md bg-emerald-700 hover:bg-emerald-800 text-white transition cursor-pointer shadow-xs disabled:opacity-50"
+                >
+                  {creditingInProgress ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      <span>Crediting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Coins size={14} />
+                      <span>Grant Credit</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {/* ---------------- REGISTER GAUSHALA MODAL (FULL-SCREEN PORTAL) ---------------- */}
       {showAddGosalaModal && (
         <div className="fixed inset-0 z-50 bg-paper text-ink overflow-y-auto flex flex-col animate-fade-in">
@@ -3813,6 +4007,7 @@ export default function GosalaManagers() {
                   }
                 } else if (newUserRole === "manager") {
                   payload.gosalaName = newUserGosala
+                  payload.assignedGosalaNames = newUserGosala ? [newUserGosala] : []
                 }
                 const createdUser = await addUser(payload)
                 if (!createdUser) {

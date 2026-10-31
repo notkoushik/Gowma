@@ -30,6 +30,8 @@ import {
   recordAdminLoginAttempt,
   getDirectoryAccounts,
   registerUser,
+  adminCreateUser,
+  generateGuaranteedUniqueId,
   getAllUsers,
   updateUser,
   deleteUser,
@@ -400,13 +402,13 @@ function formatBooking(b: any): Booking {
 }
 
 function formatManagerUser(user: any): GosalaManager {
-  const formattedMgrId = user.id.startsWith("MGR-")
+  const formattedMgrId = user.uniqueId || (user.id.startsWith("MGR-")
     ? user.id
     : user.id.startsWith("USER-MGR-")
       ? `MGR-${user.id.replace("USER-MGR-", "")}`
       : user.id.startsWith("USER-")
         ? `MGR-${user.id.replace("USER-", "")}`
-        : `MGR-${user.id.slice(0, 8)}`
+        : `MGR-${user.id.slice(0, 8)}`)
 
   const rawAssignments = user.managerAssignments || []
   const assignments = rawAssignments.filter((a: any) => {
@@ -423,10 +425,15 @@ function formatManagerUser(user: any): GosalaManager {
       const idMatch = Boolean(
         gMgrId &&
           (gMgrId === user.id ||
+            gMgrId === user.uniqueId ||
             gMgrId === formattedMgrId ||
             gMgrId === uCleanId ||
+            gMgrId === `MGR-${uCleanId.slice(0, 4)}` ||
+            gMgrId === `MGR-${uCleanId.slice(0, 8)}` ||
             user.id.includes(gMgrId) ||
-            gMgrId.includes(user.id)),
+            gMgrId.includes(uCleanId) ||
+            user.id.startsWith(gMgrId.replace(/^MGR-/, "")) ||
+            formattedMgrId.startsWith(gMgrId)),
       )
       const nameMatch = Boolean(
         gMgrName &&
@@ -822,7 +829,7 @@ export async function handleApiRequest(
   // POST /api/users (Admin Create User)
   if (method === "POST" && pathname === "/api/users") {
     try {
-      const session = await registerUser(body)
+      const session = await adminCreateUser(body, authUser)
       return { status: 201, body: { ok: true, user: session.user } }
     } catch (err: any) {
       return { status: 400, body: { ok: false, error: err.message || "Failed to create user" } }
@@ -1425,6 +1432,113 @@ export async function handleApiRequest(
       }
     } catch (err: any) {
       return { status: 500, body: { ok: false, error: err.message || "Failed to credit wallet" } }
+    }
+  }
+
+  // POST /api/wallet/credit or /api/admin/wallet/credit (Admin Wallet Direct / Test Credit)
+  if (method === "POST" && (pathname === "/api/wallet/credit" || pathname === "/api/admin/wallet/credit")) {
+    const denied = requireRole("super_admin", "admin")
+    if (denied) return denied
+
+    const { userId, email, amountRupees, purpose, description } = body
+    const query = (userId || email || "").trim()
+    if (!query) {
+      return { status: 400, body: { ok: false, error: "User ID or email is required" } }
+    }
+    const amount = Number(amountRupees)
+    if (isNaN(amount) || amount <= 0) {
+      return { status: 400, body: { ok: false, error: "Credit amount in ₹ must be greater than zero" } }
+    }
+
+    const cleanId = query.startsWith("MGR-") ? query.replace(/^MGR-/, "") : query
+    const targetUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { id: query },
+          { id: cleanId },
+          { id: { startsWith: cleanId } },
+          { uniqueId: query },
+          { email: { equals: query, mode: "insensitive" } },
+        ],
+      },
+    })
+    if (!targetUser) {
+      return { status: 404, body: { ok: false, error: `User "${query}" not found` } }
+    }
+
+    const amountPaise = BigInt(Math.round(amount * 100))
+    const validPurposes = ["TOPUP", "BOOKING_PAYMENT", "BOOKING_REFUND", "GAUSHALA_SETTLEMENT", "CASHBACK", "ADJUSTMENT"]
+    const enumPurpose = validPurposes.includes(purpose) ? (purpose as any) : "ADJUSTMENT"
+    const idempotencyKey = `admin_credit_${targetUser.id}_${Date.now()}_${Math.floor(Math.random() * 100000)}`
+    try {
+      const creditRes = await creditWallet({
+        userId: targetUser.id,
+        amountPaise,
+        purpose: enumPurpose,
+        idempotencyKey,
+        description: description || `Operational test credit of ₹${amount} granted by ${authUser.name} (${authUser.role})`,
+        metadata: { creditedBy: authUser.userId, role: authUser.role, requestedPurpose: purpose },
+      })
+
+      const newBalance = await getWalletBalance(targetUser.id)
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          message: `Successfully credited ₹${amount} to ${targetUser.name}`,
+          user: {
+            id: targetUser.id,
+            uniqueId: targetUser.uniqueId,
+            name: targetUser.name,
+            email: targetUser.email,
+            role: targetUser.role,
+          },
+          balance: newBalance,
+          ...creditRes,
+        },
+      }
+    } catch (err: any) {
+      return { status: 500, body: { ok: false, error: err.message || "Failed to credit wallet" } }
+    }
+  }
+
+  // POST /api/wallet/withdraw (Manager / User Wallet Payout / Withdrawal)
+  if (method === "POST" && pathname === "/api/wallet/withdraw") {
+    if (!authUser || !authUser.userId) {
+      return { status: 401, body: { ok: false, error: "Authentication required" } }
+    }
+    const { amountRupees, mode, bankName, accountMasked, ifsc } = body
+    const amount = Number(amountRupees)
+    if (isNaN(amount) || amount <= 0) {
+      return { status: 400, body: { ok: false, error: "Withdrawal amount in ₹ must be greater than zero" } }
+    }
+    try {
+      const balance = await getWalletBalance(authUser.userId)
+      if (amount > balance.balanceRupees) {
+        return { status: 400, body: { ok: false, error: `Insufficient wallet balance: ₹${balance.balanceRupees}` } }
+      }
+      const amountPaise = BigInt(Math.round(amount * 100))
+      const idempotencyKey = `withdraw_${authUser.userId}_${Date.now()}_${Math.floor(Math.random() * 100000)}`
+      const debitRes = await debitWallet({
+        userId: authUser.userId,
+        amountPaise,
+        purpose: "ADJUSTMENT",
+        idempotencyKey,
+        description: `Disbursed ₹${amount} via ${mode || "IMPS"} to ${bankName || "Bank"} (${accountMasked || "Account"})`,
+        metadata: { mode, bankName, accountMasked, ifsc, action: "WITHDRAWAL" },
+      })
+      const updatedBalance = await getWalletBalance(authUser.userId)
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          message: `Successfully disbursed ₹${amount} via ${mode || "IMPS"}`,
+          balance: updatedBalance,
+          ...debitRes,
+        },
+      }
+    } catch (err: any) {
+      return { status: 500, body: { ok: false, error: err.message || "Failed to process withdrawal" } }
     }
   }
 
@@ -2751,8 +2865,10 @@ export async function handleApiRequest(
         : undefined
 
       if (!user) {
+        const uniqueId = await generateGuaranteedUniqueId("GOSALA_MANAGER", cleanPhone)
         user = await prisma.user.create({
           data: {
+            uniqueId,
             name: cleanName,
             email,
             phone: cleanPhone,
@@ -2762,6 +2878,16 @@ export async function handleApiRequest(
           },
         })
       } else {
+        if (!user.uniqueId) {
+          const uniqueId = await generateGuaranteedUniqueId("GOSALA_MANAGER", cleanPhone)
+          try {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { uniqueId },
+            })
+            user.uniqueId = uniqueId
+          } catch {}
+        }
         user = await prisma.user.update({
           where: { id: user.id },
           data: {
@@ -2773,6 +2899,11 @@ export async function handleApiRequest(
           },
         })
       }
+
+      // Initialize wallet for manager
+      try {
+        await getOrCreateWallet(user.id)
+      } catch {}
 
       if (body.password) {
         setUserMeta(user.email, { password: body.password })
@@ -2846,8 +2977,9 @@ export async function handleApiRequest(
               status: "Active",
             },
           })
+          const canonicalMgrId = user.uniqueId || (user.id.startsWith("MGR-") ? user.id : `MGR-${user.id.slice(0, 8)}`)
           saveGosalaMeta(targetGosala.id, targetGosala.name, {
-            managerId: user.id.startsWith("MGR-") ? user.id : `MGR-${user.id.slice(0, 4)}`,
+            managerId: canonicalMgrId,
             managerName: user.name,
             caretaker: user.name,
             isActingManager: false,
@@ -2887,6 +3019,8 @@ export async function handleApiRequest(
           { id },
           { id: cleanId },
           { id: { startsWith: cleanId } },
+          { uniqueId: id },
+          { uniqueId: { equals: id, mode: "insensitive" } },
           { email: id },
           { name: id },
         ],
@@ -2993,8 +3127,9 @@ export async function handleApiRequest(
               status: "Active",
             },
           })
+          const canonicalMgrId = user.uniqueId || (user.id.startsWith("MGR-") ? user.id : `MGR-${user.id.slice(0, 8)}`)
           saveGosalaMeta(targetGosala.id, targetGosala.name, {
-            managerId: user.id.startsWith("MGR-") ? user.id : `MGR-${user.id.slice(0, 4)}`,
+            managerId: canonicalMgrId,
             managerName: user.name,
             caretaker: user.name,
             isActingManager: false,
@@ -3031,6 +3166,8 @@ export async function handleApiRequest(
           { id },
           { id: cleanId },
           { id: { startsWith: cleanId } },
+          { uniqueId: id },
+          { uniqueId: { equals: id, mode: "insensitive" } },
           { email: id },
           { name: id },
         ],
@@ -3088,6 +3225,8 @@ export async function handleApiRequest(
             { id },
             { id: cleanId },
             { id: { startsWith: cleanId } },
+            { uniqueId: id },
+            { uniqueId: { equals: id, mode: "insensitive" } },
             { email: { equals: id, mode: "insensitive" } },
             { name: { equals: id, mode: "insensitive" } },
           ],
@@ -3134,7 +3273,7 @@ export async function handleApiRequest(
           await prisma.temporarySlotHold.deleteMany({ where: { createdBy: user.id } })
         } catch {}
         try {
-          await prisma.animalScheduleBlock.deleteMany({ where: { createdBy: user.id } })
+          await prisma.animalScheduleBlock.deleteMany({ where: { blockedById: user.id } })
         } catch {}
 
         // 4. Delete user record or deactivate safely
@@ -3807,14 +3946,14 @@ export async function handleApiRequest(
         ? Boolean(restMeta.isActingManager)
         : undefined
 
-      const effectiveAdminName = callerAdminName || authUser?.name || "Operations Admin"
-      const effectiveAdminEmail = callerAdminEmail || authUser?.email || "admin@gomaa.in"
-      const effectiveAdminRole = restMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin")
-      const effectiveAdminId = callerAdminId || authUser?.userId || "USER-ADM-101"
-
       const currentMeta = (existing.metadata && typeof existing.metadata === "object")
         ? { ...(existing.metadata as any) }
         : getGosalaMeta(existing.id, existing.name)
+
+      const effectiveAdminName = callerAdminName || existing.adminName || currentMeta.governingAdminName || authUser?.name || "Operations Admin"
+      const effectiveAdminEmail = callerAdminEmail || existing.adminEmail || currentMeta.governingAdminEmail || authUser?.email || "admin@gomaa.in"
+      const effectiveAdminRole = restMeta.governingAdminRole || currentMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin")
+      const effectiveAdminId = callerAdminId || existing.adminId || currentMeta.adminId || authUser?.userId || "USER-ADM-101"
 
       const metaPatch: any = {
         ...currentMeta,

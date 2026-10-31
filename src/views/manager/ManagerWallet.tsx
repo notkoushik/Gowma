@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useEffect } from "react"
 import {
   Wallet,
   ArrowUpRight,
@@ -24,6 +24,7 @@ import {
 } from "lucide-react"
 import { inr } from "../../data/mock"
 import { useStore, useToast } from "../../store/store"
+import { api } from "../../services/api"
 import {
   computeManagerWallet,
   recordWithdrawal,
@@ -100,6 +101,34 @@ export default function ManagerWallet() {
 
   // Compute live wallet state (credits, available balance, withdrawals)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [dbBalance, setDbBalance] = useState<number | null>(null)
+  const [dbTransactions, setDbTransactions] = useState<any[]>([])
+
+  useEffect(() => {
+    let isMounted = true
+    api
+      .getWalletBalance()
+      .then((res) => {
+        if (isMounted && res && res.ok && typeof res.balanceRupees === "number") {
+          setDbBalance(res.balanceRupees)
+        }
+      })
+      .catch(() => {})
+
+    api
+      .getWalletTransactions(50)
+      .then((res) => {
+        if (isMounted && res && res.ok && Array.isArray(res.transactions)) {
+          setDbTransactions(res.transactions)
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      isMounted = false
+    }
+  }, [refreshKey])
+
   const walletSummary: ManagerWalletSummary = useMemo(() => {
     return computeManagerWallet(
       managerEmail,
@@ -117,72 +146,124 @@ export default function ManagerWallet() {
     refreshKey,
   ])
 
-  const handleWithdrawSubmit = (e: React.FormEvent) => {
+  // Effective available balance includes both Gaushala commission pool and direct database credits
+  const effectiveAvailableBalance = useMemo(() => {
+    const directCredit = dbBalance !== null ? dbBalance : 0
+    return Math.max(0, walletSummary.availableBalance + directCredit)
+  }, [walletSummary.availableBalance, dbBalance])
+
+  const handleWithdrawSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const amountNum = Number(withdrawAmount)
     if (isNaN(amountNum) || amountNum <= 0) {
       notify("Please enter a valid withdrawal amount", "warn")
       return
     }
-    if (amountNum > walletSummary.availableBalance) {
+    if (amountNum > effectiveAvailableBalance) {
       notify(
-        `Insufficient wallet balance. You can withdraw up to ${inr(walletSummary.availableBalance)}`,
+        `Insufficient wallet balance. You can withdraw up to ${inr(effectiveAvailableBalance)}`,
         "danger",
       )
       return
     }
 
     setProcessingWithdrawal(true)
-    setTimeout(() => {
-      try {
-        const newRecord = recordWithdrawal({
-          managerId: managerUniqueId,
-          managerName,
-          gosala: currentGosalaName,
-          amount: amountNum,
-          mode: withdrawMode,
-          bankName: bankDetails.bankName,
-          accountMasked: bankDetails.accountMasked,
-          ifsc: bankDetails.ifsc,
-        })
-
-        setCompletedWithdrawal(newRecord)
-        setRefreshKey((k) => k + 1)
-        notify(
-          `Withdrawal of ${inr(amountNum)} disbursed via Instant ${withdrawMode}! UTR: ${newRecord.utrNumber}`,
-          "ok",
-        )
-      } catch (err: any) {
-        notify(
-          `Withdrawal failed: ${err?.message || "Internal error"}`,
-          "danger",
-        )
-      } finally {
-        setProcessingWithdrawal(false)
+    try {
+      if (dbBalance !== null && dbBalance > 0) {
+        const debitAmt = Math.min(amountNum, dbBalance)
+        await api
+          .withdrawWallet({
+            amountRupees: debitAmt,
+            mode: withdrawMode,
+            bankName: bankDetails.bankName,
+            accountMasked: bankDetails.accountMasked,
+            ifsc: bankDetails.ifsc,
+          })
+          .catch((err) => {
+            console.warn("DB wallet withdraw note:", err)
+          })
       }
-    }, 700)
+
+      const newRecord = recordWithdrawal({
+        managerId: managerUniqueId,
+        managerName,
+        gosala: currentGosalaName,
+        amount: amountNum,
+        mode: withdrawMode,
+        bankName: bankDetails.bankName,
+        accountMasked: bankDetails.accountMasked,
+        ifsc: bankDetails.ifsc,
+      })
+
+      setCompletedWithdrawal(newRecord)
+      setRefreshKey((k) => k + 1)
+      notify(
+        `Withdrawal of ${inr(amountNum)} disbursed via Instant ${withdrawMode}! UTR: ${newRecord.utrNumber}`,
+        "ok",
+      )
+    } catch (err: any) {
+      notify(
+        `Withdrawal failed: ${err?.message || "Internal error"}`,
+        "danger",
+      )
+    } finally {
+      setProcessingWithdrawal(false)
+    }
   }
 
   const handleQuickAmount = (pct: number) => {
     if (pct === 1) {
-      setWithdrawAmount(String(walletSummary.availableBalance))
+      setWithdrawAmount(String(effectiveAvailableBalance))
     } else {
-      const amt = Math.floor(walletSummary.availableBalance * pct)
+      const amt = Math.floor(effectiveAvailableBalance * pct)
       setWithdrawAmount(String(amt))
     }
   }
 
+  const allCreditItems = useMemo(() => {
+    const items = [...walletSummary.creditItems]
+    dbTransactions
+      .filter((t) => t.type === "CREDIT")
+      .forEach((t) => {
+        const txDate = t.createdAt
+          ? new Date(t.createdAt).toLocaleDateString("en-IN", {
+              dateStyle: "medium",
+            })
+          : "Today"
+        items.unshift({
+          bookingId: t.referenceId || `TX-${t.id.slice(0, 8)}`,
+          date: txDate,
+          customer: t.description || "Super Admin Operational Credit",
+          animal: "Direct DB Credit",
+          ritualPurpose:
+            t.purpose === "ADJUSTMENT"
+              ? "Operational Adjustment / Test Credit"
+              : t.purpose || "Direct Ledger Credit",
+          grossAmount: t.amountRupees,
+          platformFee: 0,
+          gaushalaNet: t.amountRupees,
+          managerSharePct: 100,
+          managerCredit: t.amountRupees,
+          bonus: 0,
+          totalCredit: t.amountRupees,
+          status: "Completed",
+          isSettled: true,
+        })
+      })
+    return items
+  }, [walletSummary.creditItems, dbTransactions])
+
   const filteredCredits = useMemo(() => {
-    if (!searchFilter.trim()) return walletSummary.creditItems
+    if (!searchFilter.trim()) return allCreditItems
     const q = searchFilter.trim().toLowerCase()
-    return walletSummary.creditItems.filter(
+    return allCreditItems.filter(
       (c) =>
         c.bookingId.toLowerCase().includes(q) ||
         c.customer.toLowerCase().includes(q) ||
         c.animal.toLowerCase().includes(q) ||
         c.ritualPurpose.toLowerCase().includes(q),
     )
-  }, [walletSummary.creditItems, searchFilter])
+  }, [allCreditItems, searchFilter])
 
   return (
     <div className="space-y-6">
@@ -227,9 +308,9 @@ export default function ManagerWallet() {
                 setWithdrawAmount("")
                 setWithdrawModalOpen(true)
               }}
-              disabled={walletSummary.availableBalance <= 0}
+              disabled={effectiveAvailableBalance <= 0}
               className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13.5px] font-bold shadow-md transition cursor-pointer ${
-                walletSummary.availableBalance > 0
+                effectiveAvailableBalance > 0
                   ? "bg-amber-400 hover:bg-amber-300 text-amber-950 hover:scale-[1.02] active:scale-[0.98]"
                   : "bg-white/20 text-white/50 cursor-not-allowed"
               }`}
@@ -259,7 +340,7 @@ export default function ManagerWallet() {
             <span className="h-2 w-2 rounded-full bg-forest animate-pulse" />
           </div>
           <div className="font-serif text-[28px] sm:text-[32px] font-bold text-forest">
-            {inr(walletSummary.availableBalance)}
+            {inr(effectiveAvailableBalance)}
           </div>
           <div className="mt-2 flex items-center justify-between text-[11.5px] text-ink-soft">
             <span>Instant IMPS / RTGS 24x7</span>
@@ -537,7 +618,7 @@ export default function ManagerWallet() {
                 setWithdrawAmount("")
                 setWithdrawModalOpen(true)
               }}
-              disabled={walletSummary.availableBalance <= 0}
+              disabled={effectiveAvailableBalance <= 0}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-forest text-white text-[12.5px] font-semibold hover:bg-forest-deep transition cursor-pointer self-start sm:self-auto"
             >
               <Wallet size={14} />
@@ -557,7 +638,7 @@ export default function ManagerWallet() {
                 <p className="text-[12.5px] text-ink-soft max-w-sm mx-auto">
                   You have not initiated any bank withdrawals yet. Click
                   "Withdraw to Bank" above to transfer your available balance of{" "}
-                  {inr(walletSummary.availableBalance)} instantly.
+                  {inr(effectiveAvailableBalance)} instantly.
                 </p>
               </div>
             ) : (
@@ -806,7 +887,7 @@ export default function ManagerWallet() {
                         Available Balance
                       </div>
                       <div className="font-serif text-[24px] font-bold text-forest">
-                        {inr(walletSummary.availableBalance)}
+                        {inr(effectiveAvailableBalance)}
                       </div>
                     </div>
                     <button
@@ -830,7 +911,7 @@ export default function ManagerWallet() {
                       <input
                         type="number"
                         min="100"
-                        max={walletSummary.availableBalance}
+                        max={effectiveAvailableBalance}
                         placeholder="Enter amount"
                         value={withdrawAmount}
                         onChange={(e) => setWithdrawAmount(e.target.value)}
@@ -845,7 +926,7 @@ export default function ManagerWallet() {
                           key={amt}
                           type="button"
                           onClick={() => setWithdrawAmount(String(amt))}
-                          disabled={amt > walletSummary.availableBalance}
+                          disabled={amt > effectiveAvailableBalance}
                           className="px-2.5 py-1 rounded bg-paper-deep border border-line text-[11px] font-mono text-ink-soft hover:text-ink disabled:opacity-40 transition cursor-pointer"
                         >
                           +{inr(amt)}

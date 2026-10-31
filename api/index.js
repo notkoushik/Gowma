@@ -1186,7 +1186,7 @@ async function ensureSystemWallets() {
 }
 
 // server/services/walletService.ts
-async function getOrCreateWallet(userId) {
+async function getOrCreateWallet2(userId) {
   if (!userId) throw new Error("User ID is required to access wallet");
   const existing = await prisma.wallet.findUnique({
     where: { userId }
@@ -1208,7 +1208,7 @@ async function getOrCreateWallet(userId) {
   }
 }
 async function getWalletBalance(userId) {
-  const wallet = await getOrCreateWallet(userId);
+  const wallet = await getOrCreateWallet2(userId);
   const balancePaise = BigInt(wallet.balancePaise);
   const balanceRupees = Number(balancePaise) / 100;
   return {
@@ -1286,7 +1286,7 @@ async function debitWallet(input) {
   });
 }
 async function getWalletTransactions(userId, limit = 50) {
-  const wallet = await getOrCreateWallet(userId);
+  const wallet = await getOrCreateWallet2(userId);
   const transactions = await prisma.walletTransaction.findMany({
     where: { walletId: wallet.id },
     orderBy: { createdAt: "desc" },
@@ -1380,6 +1380,20 @@ function generateUniqueId(role, phone) {
       return `GMA-DEV-${suffix}`;
   }
 }
+async function generateGuaranteedUniqueId(role, phone) {
+  const base = generateUniqueId(role, phone);
+  let candidate = base;
+  let attempt = 0;
+  while (attempt < 10) {
+    const existing = await prisma.user.findUnique({ where: { uniqueId: candidate } });
+    if (!existing) return candidate;
+    attempt++;
+    const prefix = base.slice(0, base.lastIndexOf("-") + 1);
+    const randomPin = Math.floor(1e3 + Math.random() * 9e3).toString();
+    candidate = `${prefix}${randomPin}`;
+  }
+  return `${base}-${Date.now().toString().slice(-4)}`;
+}
 function mapDbRoleToFrontend(role) {
   switch (role) {
     case "SUPER_ADMIN":
@@ -1430,7 +1444,7 @@ async function buildUserSession(user) {
       const uName = (user.name || "").toLowerCase();
       if (gMgrId || gMgrName && !gMgrName.includes("none")) {
         const idMatch = Boolean(
-          gMgrId && (gMgrId === user.id || gMgrId === `MGR-${uCleanId.slice(0, 4)}` || gMgrId === uCleanId || user.id.includes(gMgrId) || gMgrId.includes(uCleanId))
+          gMgrId && (gMgrId === user.id || gMgrId === user.uniqueId || gMgrId === `MGR-${uCleanId.slice(0, 4)}` || gMgrId === `MGR-${uCleanId.slice(0, 8)}` || gMgrId === uCleanId || user.id.includes(gMgrId) || gMgrId.includes(uCleanId) || user.id.startsWith(gMgrId.replace(/^MGR-/, "")))
         );
         const nameMatch = Boolean(
           gMgrName && uName && (gMgrName === uName || gMgrName.includes(uName) || uName.includes(gMgrName))
@@ -1697,6 +1711,149 @@ async function registerUser(payload) {
       customerData: metaPatch.customerData
     }
   };
+}
+async function adminCreateUser(payload, adminUser) {
+  const emailNorm = (payload.email || "").trim().toLowerCase();
+  const rawDigits = (payload.phone || "").replace(/\D/g, "").slice(-10);
+  const hasValidPhone = rawDigits.length === 10;
+  const phoneFormatted = hasValidPhone ? `+91 ${rawDigits}` : `+91 98${Math.floor(1e7 + Math.random() * 9e7)}`;
+  if (!payload.name || !payload.email) {
+    throw new Error("Full name and email address are required for user creation");
+  }
+  const role = payload.role || "customer";
+  const dbRole = mapFrontendToDbRole(role);
+  const feRole = mapDbRoleToFrontend(dbRole);
+  const passwordRaw = payload.password && payload.password.length >= 6 ? payload.password : "Manager@Gomaa2026!";
+  const passwordHash = hashPassword(passwordRaw);
+  const existing = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: { equals: emailNorm, mode: "insensitive" } },
+        ...hasValidPhone ? [{ phone: { contains: rawDigits } }] : []
+      ]
+    }
+  });
+  let user;
+  if (existing) {
+    user = await prisma.user.update({
+      where: { id: existing.id },
+      data: {
+        name: payload.name.trim(),
+        phone: phoneFormatted,
+        role: dbRole,
+        password: passwordHash,
+        isActive: true
+      }
+    });
+  } else {
+    const uniqueId = await generateGuaranteedUniqueId(dbRole, phoneFormatted);
+    user = await prisma.user.create({
+      data: {
+        uniqueId,
+        name: payload.name.trim(),
+        email: emailNorm,
+        phone: phoneFormatted,
+        role: dbRole,
+        password: passwordHash,
+        isActive: true
+      }
+    });
+  }
+  saveUserMeta(user.email, { password: passwordRaw });
+  saveUserMeta(user.id, { password: passwordRaw });
+  inMemoryPasswords.set(user.email.toLowerCase(), passwordRaw);
+  inMemoryPasswords.set(user.id, passwordRaw);
+  try {
+    await getOrCreateWallet2(user.id);
+  } catch {
+  }
+  if (dbRole === "GOSALA_MANAGER") {
+    const rawGosalas = Array.isArray(payload.assignedGosalaNames) && payload.assignedGosalaNames.length > 0 ? payload.assignedGosalaNames : payload.gosalaName ? [payload.gosalaName] : payload.gosalaId ? [payload.gosalaId] : [];
+    for (const gNameOrId of rawGosalas) {
+      if (!gNameOrId || gNameOrId === "Unassigned") continue;
+      const targetGosala = await prisma.gosala.findFirst({
+        where: {
+          OR: [{ id: gNameOrId }, { name: gNameOrId }]
+        }
+      });
+      if (targetGosala) {
+        await prisma.gosalaManagerAssignment.deleteMany({
+          where: {
+            gosalaId: targetGosala.id,
+            NOT: { userId: user.id }
+          }
+        });
+        await prisma.gosalaManagerAssignment.upsert({
+          where: {
+            userId_gosalaId: {
+              userId: user.id,
+              gosalaId: targetGosala.id
+            }
+          },
+          create: {
+            userId: user.id,
+            gosalaId: targetGosala.id,
+            region: targetGosala.region,
+            status: "Active"
+          },
+          update: {
+            status: "Active"
+          }
+        });
+        const canonicalMgrId2 = user.uniqueId || `MGR-${user.id.slice(0, 8)}`;
+        saveGosalaMeta(targetGosala.id, targetGosala.name, {
+          managerId: canonicalMgrId2,
+          managerName: user.name,
+          caretaker: user.name,
+          isActingManager: false,
+          actAsManagerMyself: false
+        });
+      }
+    }
+    const canonicalMgrId = user.uniqueId || `MGR-${user.id.slice(0, 8)}`;
+    const metaPatch = {
+      managerData: {
+        ...payload.managerData || {},
+        managerId: canonicalMgrId,
+        assignedDate: (/* @__PURE__ */ new Date()).toISOString()
+      }
+    };
+    saveUserMeta(user.email, metaPatch);
+    saveUserMeta(user.id, metaPatch);
+  } else if (dbRole === "DRIVER") {
+    const metaPatch = {
+      driverData: {
+        ...payload.driverData || {},
+        status: "Active",
+        joinedDate: (/* @__PURE__ */ new Date()).toISOString()
+      }
+    };
+    saveUserMeta(user.email, metaPatch);
+    saveUserMeta(user.id, metaPatch);
+  } else if (dbRole === "CUSTOMER") {
+    const metaPatch = {
+      customerData: {
+        ...payload.customerData || {},
+        memberSince: (/* @__PURE__ */ new Date()).toLocaleDateString("en-IN", { month: "short", year: "numeric" }),
+        totalBookings: 0
+      }
+    };
+    saveUserMeta(user.email, metaPatch);
+    saveUserMeta(user.id, metaPatch);
+  }
+  const updatedUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    include: {
+      managerAssignments: {
+        include: {
+          gosala: {
+            include: { animals: true }
+          }
+        }
+      }
+    }
+  });
+  return buildUserSession(updatedUser || user);
 }
 async function getDirectoryAccounts() {
   try {
@@ -5103,7 +5260,7 @@ function formatBooking(b) {
   };
 }
 function formatManagerUser(user) {
-  const formattedMgrId = user.id.startsWith("MGR-") ? user.id : user.id.startsWith("USER-MGR-") ? `MGR-${user.id.replace("USER-MGR-", "")}` : user.id.startsWith("USER-") ? `MGR-${user.id.replace("USER-", "")}` : `MGR-${user.id.slice(0, 8)}`;
+  const formattedMgrId = user.uniqueId || (user.id.startsWith("MGR-") ? user.id : user.id.startsWith("USER-MGR-") ? `MGR-${user.id.replace("USER-MGR-", "")}` : user.id.startsWith("USER-") ? `MGR-${user.id.replace("USER-", "")}` : `MGR-${user.id.slice(0, 8)}`);
   const rawAssignments = user.managerAssignments || [];
   const assignments = rawAssignments.filter((a) => {
     if (!a.gosala) return false;
@@ -5115,7 +5272,7 @@ function formatManagerUser(user) {
     const uName = (user.name || "").toLowerCase();
     if (gMgrId || gMgrName && !gMgrName.includes("none")) {
       const idMatch = Boolean(
-        gMgrId && (gMgrId === user.id || gMgrId === formattedMgrId || gMgrId === uCleanId || user.id.includes(gMgrId) || gMgrId.includes(user.id))
+        gMgrId && (gMgrId === user.id || gMgrId === user.uniqueId || gMgrId === formattedMgrId || gMgrId === uCleanId || gMgrId === `MGR-${uCleanId.slice(0, 4)}` || gMgrId === `MGR-${uCleanId.slice(0, 8)}` || user.id.includes(gMgrId) || gMgrId.includes(uCleanId) || user.id.startsWith(gMgrId.replace(/^MGR-/, "")) || formattedMgrId.startsWith(gMgrId))
       );
       const nameMatch = Boolean(
         gMgrName && uName && (gMgrName === uName || gMgrName.includes(uName) || uName.includes(gMgrName))
@@ -5380,7 +5537,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   }
   if (method === "POST" && pathname === "/api/users") {
     try {
-      const session = await registerUser(body);
+      const session = await adminCreateUser(body, authUser);
       return { status: 201, body: { ok: true, user: session.user } };
     } catch (err) {
       return { status: 400, body: { ok: false, error: err.message || "Failed to create user" } };
@@ -5913,6 +6070,105 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       };
     } catch (err) {
       return { status: 500, body: { ok: false, error: err.message || "Failed to credit wallet" } };
+    }
+  }
+  if (method === "POST" && (pathname === "/api/wallet/credit" || pathname === "/api/admin/wallet/credit")) {
+    const denied = requireRole("super_admin", "admin");
+    if (denied) return denied;
+    const { userId, email, amountRupees, purpose, description } = body;
+    const query2 = (userId || email || "").trim();
+    if (!query2) {
+      return { status: 400, body: { ok: false, error: "User ID or email is required" } };
+    }
+    const amount2 = Number(amountRupees);
+    if (isNaN(amount2) || amount2 <= 0) {
+      return { status: 400, body: { ok: false, error: "Credit amount in \u20B9 must be greater than zero" } };
+    }
+    const cleanId = query2.startsWith("MGR-") ? query2.replace(/^MGR-/, "") : query2;
+    const targetUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { id: query2 },
+          { id: cleanId },
+          { id: { startsWith: cleanId } },
+          { uniqueId: query2 },
+          { email: { equals: query2, mode: "insensitive" } }
+        ]
+      }
+    });
+    if (!targetUser) {
+      return { status: 404, body: { ok: false, error: `User "${query2}" not found` } };
+    }
+    const amountPaise = BigInt(Math.round(amount2 * 100));
+    const validPurposes = ["TOPUP", "BOOKING_PAYMENT", "BOOKING_REFUND", "GAUSHALA_SETTLEMENT", "CASHBACK", "ADJUSTMENT"];
+    const enumPurpose = validPurposes.includes(purpose) ? purpose : "ADJUSTMENT";
+    const idempotencyKey = `admin_credit_${targetUser.id}_${Date.now()}_${Math.floor(Math.random() * 1e5)}`;
+    try {
+      const creditRes = await creditWallet({
+        userId: targetUser.id,
+        amountPaise,
+        purpose: enumPurpose,
+        idempotencyKey,
+        description: description || `Operational test credit of \u20B9${amount2} granted by ${authUser.name} (${authUser.role})`,
+        metadata: { creditedBy: authUser.userId, role: authUser.role, requestedPurpose: purpose }
+      });
+      const newBalance = await getWalletBalance(targetUser.id);
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          message: `Successfully credited \u20B9${amount2} to ${targetUser.name}`,
+          user: {
+            id: targetUser.id,
+            uniqueId: targetUser.uniqueId,
+            name: targetUser.name,
+            email: targetUser.email,
+            role: targetUser.role
+          },
+          balance: newBalance,
+          ...creditRes
+        }
+      };
+    } catch (err) {
+      return { status: 500, body: { ok: false, error: err.message || "Failed to credit wallet" } };
+    }
+  }
+  if (method === "POST" && pathname === "/api/wallet/withdraw") {
+    if (!authUser || !authUser.userId) {
+      return { status: 401, body: { ok: false, error: "Authentication required" } };
+    }
+    const { amountRupees, mode, bankName, accountMasked, ifsc } = body;
+    const amount2 = Number(amountRupees);
+    if (isNaN(amount2) || amount2 <= 0) {
+      return { status: 400, body: { ok: false, error: "Withdrawal amount in \u20B9 must be greater than zero" } };
+    }
+    try {
+      const balance = await getWalletBalance(authUser.userId);
+      if (amount2 > balance.balanceRupees) {
+        return { status: 400, body: { ok: false, error: `Insufficient wallet balance: \u20B9${balance.balanceRupees}` } };
+      }
+      const amountPaise = BigInt(Math.round(amount2 * 100));
+      const idempotencyKey = `withdraw_${authUser.userId}_${Date.now()}_${Math.floor(Math.random() * 1e5)}`;
+      const debitRes = await debitWallet({
+        userId: authUser.userId,
+        amountPaise,
+        purpose: "ADJUSTMENT",
+        idempotencyKey,
+        description: `Disbursed \u20B9${amount2} via ${mode || "IMPS"} to ${bankName || "Bank"} (${accountMasked || "Account"})`,
+        metadata: { mode, bankName, accountMasked, ifsc, action: "WITHDRAWAL" }
+      });
+      const updatedBalance = await getWalletBalance(authUser.userId);
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          message: `Successfully disbursed \u20B9${amount2} via ${mode || "IMPS"}`,
+          balance: updatedBalance,
+          ...debitRes
+        }
+      };
+    } catch (err) {
+      return { status: 500, body: { ok: false, error: err.message || "Failed to process withdrawal" } };
     }
   }
   if (method === "POST" && pathname === "/api/payments/webhook") {
@@ -7000,8 +7256,10 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       const rawPassword = typeof body.password === "string" ? body.password.trim() : "";
       const securePassword = rawPassword ? isPasswordHash(rawPassword) ? rawPassword : hashPassword(rawPassword) : void 0;
       if (!user) {
+        const uniqueId = await generateGuaranteedUniqueId("GOSALA_MANAGER", cleanPhone);
         user = await prisma.user.create({
           data: {
+            uniqueId,
             name: cleanName,
             email,
             phone: cleanPhone,
@@ -7011,6 +7269,17 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           }
         });
       } else {
+        if (!user.uniqueId) {
+          const uniqueId = await generateGuaranteedUniqueId("GOSALA_MANAGER", cleanPhone);
+          try {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { uniqueId }
+            });
+            user.uniqueId = uniqueId;
+          } catch {
+          }
+        }
         user = await prisma.user.update({
           where: { id: user.id },
           data: {
@@ -7021,6 +7290,10 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
             ...securePassword ? { password: securePassword } : {}
           }
         });
+      }
+      try {
+        await getOrCreateWallet(user.id);
+      } catch {
       }
       if (body.password) {
         setUserMeta(user.email, { password: body.password });
@@ -7083,8 +7356,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
               status: "Active"
             }
           });
+          const canonicalMgrId = user.uniqueId || (user.id.startsWith("MGR-") ? user.id : `MGR-${user.id.slice(0, 8)}`);
           saveGosalaMeta(targetGosala.id, targetGosala.name, {
-            managerId: user.id.startsWith("MGR-") ? user.id : `MGR-${user.id.slice(0, 4)}`,
+            managerId: canonicalMgrId,
             managerName: user.name,
             caretaker: user.name,
             isActingManager: false,
@@ -7120,6 +7394,8 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           { id },
           { id: cleanId },
           { id: { startsWith: cleanId } },
+          { uniqueId: id },
+          { uniqueId: { equals: id, mode: "insensitive" } },
           { email: id },
           { name: id }
         ]
@@ -7213,8 +7489,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
               status: "Active"
             }
           });
+          const canonicalMgrId = user.uniqueId || (user.id.startsWith("MGR-") ? user.id : `MGR-${user.id.slice(0, 8)}`);
           saveGosalaMeta(targetGosala.id, targetGosala.name, {
-            managerId: user.id.startsWith("MGR-") ? user.id : `MGR-${user.id.slice(0, 4)}`,
+            managerId: canonicalMgrId,
             managerName: user.name,
             caretaker: user.name,
             isActingManager: false,
@@ -7247,6 +7524,8 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           { id },
           { id: cleanId },
           { id: { startsWith: cleanId } },
+          { uniqueId: id },
+          { uniqueId: { equals: id, mode: "insensitive" } },
           { email: id },
           { name: id }
         ]
@@ -7298,6 +7577,8 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
             { id },
             { id: cleanId },
             { id: { startsWith: cleanId } },
+            { uniqueId: id },
+            { uniqueId: { equals: id, mode: "insensitive" } },
             { email: { equals: id, mode: "insensitive" } },
             { name: { equals: id, mode: "insensitive" } }
           ]
@@ -7343,7 +7624,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         } catch {
         }
         try {
-          await prisma.animalScheduleBlock.deleteMany({ where: { createdBy: user.id } });
+          await prisma.animalScheduleBlock.deleteMany({ where: { blockedById: user.id } });
         } catch {
         }
         try {
@@ -7896,11 +8177,11 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       const callerAdminEmail = restMeta.governingAdminEmail || restMeta.adminEmail || body.governingAdminEmail || body.adminEmail;
       const callerAdminId = restMeta.adminId || body.adminId;
       const isActing = body.actAsManagerMyself !== void 0 ? Boolean(body.actAsManagerMyself) : restMeta.isActingManager !== void 0 ? Boolean(restMeta.isActingManager) : void 0;
-      const effectiveAdminName = callerAdminName || authUser?.name || "Operations Admin";
-      const effectiveAdminEmail = callerAdminEmail || authUser?.email || "admin@gomaa.in";
-      const effectiveAdminRole = restMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin");
-      const effectiveAdminId = callerAdminId || authUser?.userId || "USER-ADM-101";
       const currentMeta = existing.metadata && typeof existing.metadata === "object" ? { ...existing.metadata } : getGosalaMeta(existing.id, existing.name);
+      const effectiveAdminName = callerAdminName || existing.adminName || currentMeta.governingAdminName || authUser?.name || "Operations Admin";
+      const effectiveAdminEmail = callerAdminEmail || existing.adminEmail || currentMeta.governingAdminEmail || authUser?.email || "admin@gomaa.in";
+      const effectiveAdminRole = restMeta.governingAdminRole || currentMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin");
+      const effectiveAdminId = callerAdminId || existing.adminId || currentMeta.adminId || authUser?.userId || "USER-ADM-101";
       const metaPatch = {
         ...currentMeta,
         ...restMeta,

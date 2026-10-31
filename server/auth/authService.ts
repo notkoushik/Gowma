@@ -1,7 +1,8 @@
 import { prisma } from "../prisma.ts"
 import { signJwt, verifyJwt, type JwtPayload } from "./jwt.ts"
 import { getUserMeta, saveUserMeta, deleteUserMeta } from "../userMeta.ts"
-import { getGosalaMeta } from "../gosalaMeta.ts"
+import { getGosalaMeta, saveGosalaMeta } from "../gosalaMeta.ts"
+import { getOrCreateWallet } from "../services/walletService.ts"
 import { hashPassword, isPasswordHash, verifyPassword } from "./password.ts"
 import crypto from "node:crypto"
 
@@ -92,6 +93,21 @@ export function generateUniqueId(role: string, phone?: string): string {
   }
 }
 
+export async function generateGuaranteedUniqueId(role: string, phone?: string): Promise<string> {
+  const base = generateUniqueId(role, phone)
+  let candidate = base
+  let attempt = 0
+  while (attempt < 10) {
+    const existing = await prisma.user.findUnique({ where: { uniqueId: candidate } })
+    if (!existing) return candidate
+    attempt++
+    const prefix = base.slice(0, base.lastIndexOf("-") + 1)
+    const randomPin = Math.floor(1000 + Math.random() * 9000).toString()
+    candidate = `${prefix}${randomPin}`
+  }
+  return `${base}-${Date.now().toString().slice(-4)}`
+}
+
 export interface RegisterUserPayload {
   name: string
   email: string
@@ -171,10 +187,13 @@ export async function buildUserSession(user: any): Promise<UserSessionData> {
           const idMatch = Boolean(
             gMgrId &&
               (gMgrId === user.id ||
+                gMgrId === user.uniqueId ||
                 gMgrId === `MGR-${uCleanId.slice(0, 4)}` ||
+                gMgrId === `MGR-${uCleanId.slice(0, 8)}` ||
                 gMgrId === uCleanId ||
                 user.id.includes(gMgrId) ||
-                gMgrId.includes(uCleanId)),
+                gMgrId.includes(uCleanId) ||
+                user.id.startsWith(gMgrId.replace(/^MGR-/, ""))),
           )
           const nameMatch = Boolean(
             gMgrName &&
@@ -522,6 +541,186 @@ export async function registerUser(payload: RegisterUserPayload): Promise<UserSe
       customerData: metaPatch.customerData,
     },
   }
+}
+
+/**
+ * Super Admin user creation endpoint: Authorize devotees, transit pilots, managers, or operations admins.
+ * Fully provisions roles, unique identifiers, and Gaushala manager assignments.
+ */
+export async function adminCreateUser(
+  payload: RegisterUserPayload,
+  adminUser?: any,
+): Promise<UserSessionData> {
+  const emailNorm = (payload.email || "").trim().toLowerCase()
+  const rawDigits = (payload.phone || "").replace(/\D/g, "").slice(-10)
+  const hasValidPhone = rawDigits.length === 10
+  const phoneFormatted = hasValidPhone
+    ? `+91 ${rawDigits}`
+    : `+91 98${Math.floor(10000000 + Math.random() * 90000000)}`
+
+  if (!payload.name || !payload.email) {
+    throw new Error("Full name and email address are required for user creation")
+  }
+
+  const role = payload.role || "customer"
+  const dbRole = mapFrontendToDbRole(role)
+  const feRole = mapDbRoleToFrontend(dbRole)
+
+  const passwordRaw = payload.password && payload.password.length >= 6
+    ? payload.password
+    : "Manager@Gomaa2026!"
+  const passwordHash = hashPassword(passwordRaw)
+
+  // Check if user already exists
+  const existing = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: { equals: emailNorm, mode: "insensitive" } },
+        ...(hasValidPhone ? [{ phone: { contains: rawDigits } }] : []),
+      ],
+    },
+  })
+
+  let user: any
+
+  if (existing) {
+    user = await prisma.user.update({
+      where: { id: existing.id },
+      data: {
+        name: payload.name.trim(),
+        phone: phoneFormatted,
+        role: dbRole as any,
+        password: passwordHash,
+        isActive: true,
+      },
+    })
+  } else {
+    const uniqueId = await generateGuaranteedUniqueId(dbRole, phoneFormatted)
+    user = await prisma.user.create({
+      data: {
+        uniqueId,
+        name: payload.name.trim(),
+        email: emailNorm,
+        phone: phoneFormatted,
+        role: dbRole as any,
+        password: passwordHash,
+        isActive: true,
+      },
+    })
+  }
+
+  // Persist password in memory & metadata
+  saveUserMeta(user.email, { password: passwordRaw })
+  saveUserMeta(user.id, { password: passwordRaw })
+  inMemoryPasswords.set(user.email.toLowerCase(), passwordRaw)
+  inMemoryPasswords.set(user.id, passwordRaw)
+
+  // Ensure wallet exists
+  try {
+    await getOrCreateWallet(user.id)
+  } catch {}
+
+  // Handle Role-Specific Assignments & Metadata
+  if (dbRole === "GOSALA_MANAGER") {
+    const rawGosalas: string[] =
+      Array.isArray(payload.assignedGosalaNames) && payload.assignedGosalaNames.length > 0
+        ? payload.assignedGosalaNames
+        : payload.gosalaName
+        ? [payload.gosalaName]
+        : payload.gosalaId
+        ? [payload.gosalaId]
+        : []
+
+    for (const gNameOrId of rawGosalas) {
+      if (!gNameOrId || gNameOrId === "Unassigned") continue
+      const targetGosala = await prisma.gosala.findFirst({
+        where: {
+          OR: [{ id: gNameOrId }, { name: gNameOrId }],
+        },
+      })
+      if (targetGosala) {
+        // Relieve any prior managers for this Gaushala to enforce 1:1 invariant
+        await prisma.gosalaManagerAssignment.deleteMany({
+          where: {
+            gosalaId: targetGosala.id,
+            NOT: { userId: user.id },
+          },
+        })
+        await prisma.gosalaManagerAssignment.upsert({
+          where: {
+            userId_gosalaId: {
+              userId: user.id,
+              gosalaId: targetGosala.id,
+            },
+          },
+          create: {
+            userId: user.id,
+            gosalaId: targetGosala.id,
+            region: targetGosala.region,
+            status: "Active",
+          },
+          update: {
+            status: "Active",
+          },
+        })
+
+        const canonicalMgrId = user.uniqueId || `MGR-${user.id.slice(0, 8)}`
+        saveGosalaMeta(targetGosala.id, targetGosala.name, {
+          managerId: canonicalMgrId,
+          managerName: user.name,
+          caretaker: user.name,
+          isActingManager: false,
+          actAsManagerMyself: false,
+        })
+      }
+    }
+
+    const canonicalMgrId = user.uniqueId || `MGR-${user.id.slice(0, 8)}`
+    const metaPatch: any = {
+      managerData: {
+        ...(payload.managerData || {}),
+        managerId: canonicalMgrId,
+        assignedDate: new Date().toISOString(),
+      },
+    }
+    saveUserMeta(user.email, metaPatch)
+    saveUserMeta(user.id, metaPatch)
+  } else if (dbRole === "DRIVER") {
+    const metaPatch: any = {
+      driverData: {
+        ...(payload.driverData || {}),
+        status: "Active",
+        joinedDate: new Date().toISOString(),
+      },
+    }
+    saveUserMeta(user.email, metaPatch)
+    saveUserMeta(user.id, metaPatch)
+  } else if (dbRole === "CUSTOMER") {
+    const metaPatch: any = {
+      customerData: {
+        ...(payload.customerData || {}),
+        memberSince: new Date().toLocaleDateString("en-IN", { month: "short", year: "numeric" }),
+        totalBookings: 0,
+      },
+    }
+    saveUserMeta(user.email, metaPatch)
+    saveUserMeta(user.id, metaPatch)
+  }
+
+  const updatedUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    include: {
+      managerAssignments: {
+        include: {
+          gosala: {
+            include: { animals: true },
+          },
+        },
+      },
+    },
+  })
+
+  return buildUserSession(updatedUser || user)
 }
 
 /**

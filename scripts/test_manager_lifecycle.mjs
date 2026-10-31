@@ -7,7 +7,7 @@ async function main() {
   console.log("==========================================")
 
   // 1. Login as Super Admin to get token
-  const saRes = await fetch("http://localhost:8443/api/auth/login", {
+  const saRes = await fetch("http://localhost:8443/api/auth/admin-login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ emailOrPhone: "superadmin@gomaa.in", password: "SuperAdmin@2026!" })

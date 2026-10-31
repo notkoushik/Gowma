@@ -447,6 +447,61 @@ export const api = {
     })
   },
 
+  async getWalletBalance() {
+    return request<{
+      ok: boolean
+      walletId: string
+      userId: string
+      balanceRupees: number
+      balancePaise: string
+      currency: string
+      isActive: boolean
+    }>("/api/wallet/balance")
+  },
+
+  async getWalletTransactions(limit = 20) {
+    return request<{
+      ok: boolean
+      transactions: any[]
+    }>(`/api/wallet/transactions?limit=${limit}`)
+  },
+
+  async adminCreditWallet(payload: {
+    userId?: string
+    email?: string
+    amountRupees: number
+    purpose?: string
+    description?: string
+  }) {
+    return request<{
+      ok: boolean
+      message: string
+      balance: any
+      transactionId?: string
+    }>("/api/wallet/credit", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    })
+  },
+
+  async withdrawWallet(payload: {
+    amountRupees: number
+    mode?: "IMPS" | "RTGS"
+    bankName?: string
+    accountMasked?: string
+    ifsc?: string
+  }) {
+    return request<{
+      ok: boolean
+      message: string
+      balance?: any
+      transactionId?: string
+    }>("/api/wallet/withdraw", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    })
+  },
+
   async getPricingConfig() {
     return request<{ config: PricingConfig }>("/api/pricing-config")
   },

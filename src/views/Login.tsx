@@ -235,6 +235,7 @@ export default function Login({
           const directManager = managers.find(
             (m) =>
               m.id === authRes.user.id ||
+              m.id === authRes.user.uniqueId ||
               (m.email &&
                 m.email.toLowerCase() === authRes.user.email?.toLowerCase()) ||
               (m.name &&

@@ -1490,7 +1490,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setManagers((prev) => [newMgr, ...prev])
       api
         .addManager(newMgr)
-        .then(() => {
+        .then((res: any) => {
+          if (res?.manager) {
+            setManagers((prev) =>
+              prev.map((m) => (m.id === id ? res.manager : m)),
+            )
+          }
           refreshUsers()
           loadBackendState()
         })
