@@ -11,17 +11,22 @@ function hashPassword(password) {
 
 async function seed() {
   try {
-    // 0. Pre-purge obsolete experimental accounts and avoid unique constraint collisions
+    // 0. Safely neutralize conflicting uniqueId assignments on cloud DB
     try {
       const staleEmails = [
         "alt.yq-fs88dj2@yopmail.com",
         "raju@gmail.com",
         "operations@gomaa.in",
       ]
-      await prisma.user.deleteMany({
+      await prisma.user.updateMany({
         where: { email: { in: staleEmails, mode: "insensitive" } },
+        data: { uniqueId: null, isActive: false },
       })
+    } catch (e) {
+      console.warn("[Seed] Neutralize stale notice:", e.message)
+    }
 
+    try {
       const targetUniqueIds = [
         "GMA-SA-0001",
         "GMA-OPS-0101",
@@ -51,7 +56,7 @@ async function seed() {
         data: { uniqueId: null },
       })
     } catch (e) {
-      console.warn("[Seed] Conflict resolution notice:", e.message)
+      console.warn("[Seed] Target uniqueId unbinding notice:", e.message)
     }
 
     const superAdmins = [
@@ -220,41 +225,49 @@ async function seed() {
 
     const opsAdminMap = {}
     for (const adm of operationsAdmins) {
-      let existingAdm = await prisma.user.findFirst({
-        where: { email: { equals: adm.email, mode: "insensitive" } },
-      })
+      try {
+        await prisma.user.updateMany({
+          where: { uniqueId: adm.uniqueId, NOT: { email: adm.email } },
+          data: { uniqueId: null },
+        })
+        let existingAdm = await prisma.user.findFirst({
+          where: { email: { equals: adm.email, mode: "insensitive" } },
+        })
 
-      if (!existingAdm) {
-        existingAdm = await prisma.user.create({
-          data: {
-            id: adm.id,
-            uniqueId: adm.uniqueId,
-            name: adm.name,
-            email: adm.email,
-            phone: adm.phone,
-            role: "OPERATIONS_ADMIN",
-            password: adm.password,
-            isActive: true,
-            metadata: adm.metadata,
-          },
-        })
-        console.log(`[Seed] Created Operations Admin: ${adm.email}`)
-      } else {
-        existingAdm = await prisma.user.update({
-          where: { id: existingAdm.id },
-          data: {
-            uniqueId: adm.uniqueId,
-            name: adm.name,
-            phone: adm.phone,
-            role: "OPERATIONS_ADMIN",
-            isActive: true,
-            password: adm.password,
-            metadata: adm.metadata,
-          },
-        })
-        console.log(`[Seed] Synchronized Operations Admin: ${adm.email}`)
+        if (!existingAdm) {
+          existingAdm = await prisma.user.create({
+            data: {
+              id: adm.id,
+              uniqueId: adm.uniqueId,
+              name: adm.name,
+              email: adm.email,
+              phone: adm.phone,
+              role: "OPERATIONS_ADMIN",
+              password: adm.password,
+              isActive: true,
+              metadata: adm.metadata,
+            },
+          })
+          console.log(`[Seed] Created Operations Admin: ${adm.email}`)
+        } else {
+          existingAdm = await prisma.user.update({
+            where: { id: existingAdm.id },
+            data: {
+              uniqueId: adm.uniqueId,
+              name: adm.name,
+              phone: adm.phone,
+              role: "OPERATIONS_ADMIN",
+              isActive: true,
+              password: adm.password,
+              metadata: adm.metadata,
+            },
+          })
+          console.log(`[Seed] Synchronized Operations Admin: ${adm.email}`)
+        }
+        opsAdminMap[adm.email] = existingAdm
+      } catch (err) {
+        console.warn(`[Seed] Notice on Operations Admin ${adm.email}:`, err.message)
       }
-      opsAdminMap[adm.email] = existingAdm
     }
 
     // 5. Ensure Gaushalas (Gaushala_01, Gaushala_02, Gaushala_03) exist and are governed properly
@@ -391,71 +404,82 @@ async function seed() {
     ]
 
     for (const mDef of defaultManagers) {
-      let mgr = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { email: { equals: mDef.email, mode: "insensitive" } },
-            { id: mDef.id },
-          ],
-        },
-      })
-      if (!mgr) {
-        mgr = await prisma.user.create({
-          data: {
-            id: mDef.id,
-            uniqueId: mDef.uniqueId,
-            name: mDef.name,
-            email: mDef.email,
-            phone: mDef.phone,
-            role: "GOSALA_MANAGER",
-            password: mDef.password,
-            isActive: true,
+      try {
+        await prisma.user.updateMany({
+          where: { uniqueId: mDef.uniqueId, NOT: { email: mDef.email } },
+          data: { uniqueId: null },
+        })
+        let mgr = await prisma.user.findFirst({
+          where: {
+            OR: [
+              { email: { equals: mDef.email, mode: "insensitive" } },
+              { id: mDef.id },
+            ],
           },
         })
-        console.log(`[Seed] Created Manager: ${mDef.name} (${mDef.email}) with ${mDef.uniqueId}`)
-      } else {
-        await prisma.user.update({
-          where: { id: mgr.id },
-          data: {
-            uniqueId: mDef.uniqueId,
-            name: mDef.name,
-            role: "GOSALA_MANAGER",
-            isActive: true,
-            ...(!mgr.password ? { password: mDef.password } : {}),
-          },
-        })
-        console.log(`[Seed] Synchronized Manager: ${mDef.name} (${mDef.email}) with ${mDef.uniqueId}`)
-      }
+        if (!mgr) {
+          mgr = await prisma.user.create({
+            data: {
+              id: mDef.id,
+              uniqueId: mDef.uniqueId,
+              name: mDef.name,
+              email: mDef.email,
+              phone: mDef.phone,
+              role: "GOSALA_MANAGER",
+              password: mDef.password,
+              isActive: true,
+              metadata: mDef.metadata,
+            },
+          })
+          console.log(`[Seed] Created Manager: ${mDef.name} (${mDef.email}) with ${mDef.uniqueId}`)
+        } else {
+          mgr = await prisma.user.update({
+            where: { id: mgr.id },
+            data: {
+              uniqueId: mDef.uniqueId,
+              name: mDef.name,
+              phone: mDef.phone,
+              role: "GOSALA_MANAGER",
+              isActive: true,
+              password: mDef.password,
+              metadata: mDef.metadata,
+            },
+          })
+          console.log(`[Seed] Synchronized Manager: ${mDef.name} (${mDef.email}) with ${mDef.uniqueId}`)
+        }
 
-      // Link to target Gaushala
-      const targetG = await prisma.gosala.findFirst({
-        where: { name: { equals: mDef.targetGosalaName, mode: "insensitive" } },
-      })
-      if (targetG) {
-        // Enforce 1:1 single-custodian invariant
-        await prisma.gosalaManagerAssignment.deleteMany({
-          where: {
-            gosalaId: targetG.id,
-            NOT: { userId: mgr.id },
-          },
+        // Link to target Gaushala
+        const targetG = await prisma.gosala.findFirst({
+          where: { name: { equals: mDef.targetGosalaName, mode: "insensitive" } },
         })
-        await prisma.gosalaManagerAssignment.upsert({
-          where: {
-            userId_gosalaId: {
+        if (targetG) {
+          // Enforce 1:1 single-custodian invariant
+          await prisma.gosalaManagerAssignment.deleteMany({
+            where: {
+              gosalaId: targetG.id,
+              NOT: { userId: mgr.id },
+            },
+          })
+          await prisma.gosalaManagerAssignment.upsert({
+            where: {
+              userId_gosalaId: {
+                userId: mgr.id,
+                gosalaId: targetG.id,
+              },
+            },
+            create: {
               userId: mgr.id,
               gosalaId: targetG.id,
+              region: targetG.region,
+              status: "Active",
             },
-          },
-          create: {
-            userId: mgr.id,
-            gosalaId: targetG.id,
-            region: targetG.region,
-            status: "Active",
-          },
-          update: {
-            status: "Active",
-          },
-        })
+            update: {
+              status: "Active",
+            },
+          })
+        }
+      } catch (err) {
+        console.warn(`[Seed] Notice on Manager ${mDef.email}:`, err.message)
       }
     }
 
