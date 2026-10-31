@@ -477,6 +477,22 @@ async function seed() {
               status: "Active",
             },
           })
+
+          // Update sanctuary metadata with active custodian details
+          await prisma.gosala.update({
+            where: { id: targetG.id },
+            data: {
+              metadata: {
+                ...(typeof targetG.metadata === "object" ? targetG.metadata : {}),
+                managerId: mDef.uniqueId,
+                managerName: mDef.name,
+                caretaker: mDef.name,
+                caretakerPhone: mDef.phone,
+                isActingManager: false,
+                actAsManagerMyself: false,
+              },
+            },
+          })
         }
       } catch (err) {
         console.warn(`[Seed] Notice on Manager ${mDef.email}:`, err.message)
