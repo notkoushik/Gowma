@@ -1056,11 +1056,11 @@ function verifyWebhookSignature(rawBody, signature, secret) {
 
 // server/services/ledgerService.ts
 var LedgerError = class extends Error {
+  code;
   constructor(message, code) {
     super(message);
     this.code = code;
   }
-  code;
 };
 var formatRupees = (paise) => `\u20B9${(Number(paise) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
 var TX_OPTIONS = { timeout: 12e4, maxWait: 2e4 };
@@ -1551,7 +1551,8 @@ async function authenticateOrResolveUser(emailOrPhone, roleHint, password) {
         ...rawDigits.length === 10 ? [
           { phone: { contains: rawDigits } },
           { phone: { equals: `+91 ${rawDigits}` } },
-          { phone: { equals: `+91${rawDigits}` } }
+          { phone: { equals: `+91${rawDigits}` } },
+          { phone: { equals: `+91 ${rawDigits.slice(0, 5)} ${rawDigits.slice(5)}` } }
         ] : []
       ]
     },
@@ -1593,7 +1594,8 @@ async function authenticateAdminUser(emailOrPhone, password) {
         ...rawDigits.length === 10 ? [
           { phone: { contains: rawDigits } },
           { phone: { equals: `+91 ${rawDigits}` } },
-          { phone: { equals: `+91${rawDigits}` } }
+          { phone: { equals: `+91${rawDigits}` } },
+          { phone: { equals: `+91 ${rawDigits.slice(0, 5)} ${rawDigits.slice(5)}` } }
         ] : []
       ]
     },

@@ -334,6 +334,7 @@ export async function authenticateOrResolveUser(
               { phone: { contains: rawDigits } },
               { phone: { equals: `+91 ${rawDigits}` } },
               { phone: { equals: `+91${rawDigits}` } },
+              { phone: { equals: `+91 ${rawDigits.slice(0, 5)} ${rawDigits.slice(5)}` } },
             ]
           : []),
       ],
@@ -392,6 +393,7 @@ export async function authenticateAdminUser(
               { phone: { contains: rawDigits } },
               { phone: { equals: `+91 ${rawDigits}` } },
               { phone: { equals: `+91${rawDigits}` } },
+              { phone: { equals: `+91 ${rawDigits.slice(0, 5)} ${rawDigits.slice(5)}` } },
             ]
           : []),
       ],

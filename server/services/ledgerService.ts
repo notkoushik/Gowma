@@ -42,11 +42,13 @@ export type EntryResult = {
 }
 
 export class LedgerError extends Error {
+  code: "INSUFFICIENT_FUNDS" | "WALLET_INACTIVE" | "INVALID" | "CONFLICT"
   constructor(
     message: string,
-    public code: "INSUFFICIENT_FUNDS" | "WALLET_INACTIVE" | "INVALID" | "CONFLICT",
+    code: "INSUFFICIENT_FUNDS" | "WALLET_INACTIVE" | "INVALID" | "CONFLICT",
   ) {
     super(message)
+    this.code = code
   }
 }
 
