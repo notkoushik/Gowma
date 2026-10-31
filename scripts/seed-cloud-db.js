@@ -11,6 +11,49 @@ function hashPassword(password) {
 
 async function seed() {
   try {
+    // 0. Pre-purge obsolete experimental accounts and avoid unique constraint collisions
+    try {
+      const staleEmails = [
+        "alt.yq-fs88dj2@yopmail.com",
+        "raju@gmail.com",
+        "operations@gomaa.in",
+      ]
+      await prisma.user.deleteMany({
+        where: { email: { in: staleEmails, mode: "insensitive" } },
+      })
+
+      const targetUniqueIds = [
+        "GMA-SA-0001",
+        "GMA-OPS-0101",
+        "GMA-OPS-0102",
+        "GMA-MGR-0101",
+        "GMA-MGR-0201",
+        "GMA-MGR-0301",
+        "GMA-DEV-0223",
+        "GMA-DRV-3001",
+      ]
+      await prisma.user.updateMany({
+        where: {
+          uniqueId: { in: targetUniqueIds },
+          email: {
+            notIn: [
+              "superadmin@gomaa.in",
+              "admin@gomaa.in",
+              "ops.secunderabad@gomaa.in",
+              "manager1@gomaa.in",
+              "manager2@gomaa.in",
+              "manager3@gomaa.in",
+              "devpulseorg@gmail.com",
+              "driver@gomaa.in",
+            ],
+          },
+        },
+        data: { uniqueId: null },
+      })
+    } catch (e) {
+      console.warn("[Seed] Conflict resolution notice:", e.message)
+    }
+
     const superAdmins = [
       {
         id: "USER-SA-SUPERADMIN",
