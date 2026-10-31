@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client"
 const prisma = new PrismaClient()
 
-const BASE_URL = "http://localhost:8443"
+const BASE_URL = process.env.BASE_URL || "http://localhost:8443"
 
 async function runE2ETest() {
   console.log("=============================================================")
