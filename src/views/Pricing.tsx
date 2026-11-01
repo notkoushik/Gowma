@@ -401,25 +401,43 @@ export default function Pricing({
   }, [gosalas, selectedGosalaId])
 
   const filteredGosalas = useMemo(() => {
-    const q = String(gosalaSearch || "").trim().toLowerCase()
+    const q = String(gosalaSearch || "")
+      .trim()
+      .toLowerCase()
     if (!q) return gosalas
     return gosalas.filter(
       (g) =>
-        String(g.name || "").toLowerCase().includes(q) ||
-        String(g.region || "").toLowerCase().includes(q) ||
-        String(g.address || "").toLowerCase().includes(q),
+        String(g.name || "")
+          .toLowerCase()
+          .includes(q) ||
+        String(g.region || "")
+          .toLowerCase()
+          .includes(q) ||
+        String(g.address || "")
+          .toLowerCase()
+          .includes(q),
     )
   }, [gosalas, gosalaSearch])
 
   const activeGosala = useMemo(() => {
     if (!selectedGosalaId) return gosalas[0] || null
-    return gosalas.find((g) => g.id === selectedGosalaId || g.name === selectedGosalaId) || gosalas[0] || null
+    return (
+      gosalas.find(
+        (g) => g.id === selectedGosalaId || g.name === selectedGosalaId,
+      ) ||
+      gosalas[0] ||
+      null
+    )
   }, [gosalas, selectedGosalaId])
 
   // Animals at this Gaushala
   const gosalaAnimals = useMemo(() => {
     if (!activeGosala) return []
-    return animals.filter((a) => String(a.gosala || "").toLowerCase() === String(activeGosala.name || "").toLowerCase())
+    return animals.filter(
+      (a) =>
+        String(a.gosala || "").toLowerCase() ===
+        String(activeGosala.name || "").toLowerCase(),
+    )
   }, [animals, activeGosala])
 
   // Offerings / items at this Gaushala
@@ -437,8 +455,14 @@ export default function Pricing({
     return (
       managers.find(
         (m) =>
-          String(m.gosala || "").toLowerCase() === String(activeGosala.name || "").toLowerCase() ||
-          (m.gosalas && m.gosalas.some((gn) => String(gn || "").toLowerCase() === String(activeGosala.name || "").toLowerCase())) ||
+          String(m.gosala || "").toLowerCase() ===
+            String(activeGosala.name || "").toLowerCase() ||
+          (m.gosalas &&
+            m.gosalas.some(
+              (gn) =>
+                String(gn || "").toLowerCase() ===
+                String(activeGosala.name || "").toLowerCase(),
+            )) ||
           m.id === activeGosala.managerId,
       ) || null
     )
@@ -446,14 +470,34 @@ export default function Pricing({
 
   // Governing Operations Admin details dynamically derived from active sanctuary's assigned Operations Admin
   const governingAdmin = useMemo(() => {
-    const adminEmail = String(activeGosala?.governingAdminEmail || activeGosala?.adminEmail || "").trim().toLowerCase()
-    const adminName = String(activeGosala?.governingAdminName || activeGosala?.adminName || "").trim()
-    const adminId = activeGosala?.adminId || (activeGosala as any)?.governingAdminId
+    const adminEmail = String(
+      activeGosala?.governingAdminEmail || activeGosala?.adminEmail || "",
+    )
+      .trim()
+      .toLowerCase()
+    const adminName = String(
+      activeGosala?.governingAdminName || activeGosala?.adminName || "",
+    ).trim()
+    const adminId =
+      activeGosala?.adminId || (activeGosala as any)?.governingAdminId
 
     const matchedUser = (users || []).find((u) => {
-      if (adminId && (u.id === adminId || (u as any).uniqueId === adminId)) return true
-      if (adminEmail && String(u.email || "").trim().toLowerCase() === adminEmail) return true
-      if (adminName && String(u.name || "").trim().toLowerCase() === adminName.toLowerCase()) return true
+      if (adminId && (u.id === adminId || (u as any).uniqueId === adminId))
+        return true
+      if (
+        adminEmail &&
+        String(u.email || "")
+          .trim()
+          .toLowerCase() === adminEmail
+      )
+        return true
+      if (
+        adminName &&
+        String(u.name || "")
+          .trim()
+          .toLowerCase() === adminName.toLowerCase()
+      )
+        return true
       return false
     })
 
@@ -864,8 +908,7 @@ export default function Pricing({
       commissionType: econCommType,
       customCommissionPct:
         econCommType === "percentage" ? finalCommVal : undefined,
-      customCommissionFlat:
-        econCommType === "fixed" ? finalCommVal : undefined,
+      customCommissionFlat: econCommType === "fixed" ? finalCommVal : undefined,
       commissionValue: finalCommVal,
       taxTreatment: econTaxTreatment,
       customTaxPct: finalTaxPct,
@@ -2551,9 +2594,7 @@ export default function Pricing({
                                     <button
                                       onClick={() => {
                                         setEditingAnimalName(animal.name)
-                                        setEditingAnimalPrice(
-                                          animal.price ?? 0,
-                                        )
+                                        setEditingAnimalPrice(animal.price ?? 0)
                                       }}
                                       className="inline-flex items-center gap-1 px-2.5 py-1 text-[11.5px] font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded transition cursor-pointer"
                                     >
@@ -3043,7 +3084,11 @@ export default function Pricing({
                             {isFlat ? (
                               <div>
                                 <span className="font-mono font-bold text-ink">
-                                  {inr(g.customCommissionFlat || g.commissionValue || 0)}
+                                  {inr(
+                                    g.customCommissionFlat ||
+                                      g.commissionValue ||
+                                      0,
+                                  )}
                                 </span>
                                 <span className="text-[10px] text-ink-faint block font-mono">
                                   Flat / booking

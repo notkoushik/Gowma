@@ -541,6 +541,8 @@ export default function Gaushalas({
     isLoading,
     activeGosalaFilter,
     setActiveGosalaFilter,
+    operationalAdmins = [],
+    assignGosalaAdmin,
   } = useStore()
   const { notify } = useToast()
 
@@ -552,6 +554,17 @@ export default function Gaushalas({
   const [statusFilter, setStatusFilter] = useState<string>("ALL")
   const [portfolioScope, setPortfolioScope] =
     useState<"my_portfolio" | "all_network">("all_network")
+
+  // Governing Operational Admin Form State
+  const [formGoverningAdminId, setFormGoverningAdminId] = useState<string>("USER-SA-001")
+  const [formGoverningAdminEmail, setFormGoverningAdminEmail] = useState<string>("superadmin@gomaa.in")
+  const [formGoverningAdminName, setFormGoverningAdminName] = useState<string>("Super Admin")
+
+  // Quick Reassign Modal State (Super Admin exclusive)
+  const [reassignModalOpen, setReassignModalOpen] = useState(false)
+  const [reassigningGosala, setReassigningGosala] = useState<Gosala | null>(null)
+  const [targetAdminId, setTargetAdminId] = useState<string>("")
+  const [isReassigning, setIsReassigning] = useState(false)
 
   // Selected Gaushala for Professional Profile View
   const [selectedGosalaId, setSelectedGosalaId] = useState<string | null>(
@@ -590,25 +603,48 @@ export default function Gaushalas({
       const myEmail = (authUser?.email || "").toLowerCase().trim()
       const myId = authUser?.userId || (authUser as any)?.id
       const myAllowedIds = new Set(authUser?.gosalaIds || [])
-      const myAllowedNames = new Set((authUser?.gosalaNames || []).map((n) => n.toLowerCase().trim()))
+      const myAllowedNames = new Set(
+        (authUser?.gosalaNames || []).map((n) => n.toLowerCase().trim()),
+      )
 
       return gosalas.filter((g) => {
-        const gEmail = String((g as any).adminEmail || (g as any).governingAdminEmail || "").toLowerCase().trim()
+        const gEmail = String(
+          (g as any).adminEmail || (g as any).governingAdminEmail || "",
+        )
+          .toLowerCase()
+          .trim()
         const gId = (g as any).adminId || (g as any).governingAdminId
         if (myEmail && gEmail === myEmail) return true
         if (myId && gId === myId) return true
         if (myAllowedIds.has(g.id)) return true
-        if (myAllowedNames.has(String(g.name || "").toLowerCase().trim())) return true
+        if (
+          myAllowedNames.has(
+            String(g.name || "")
+              .toLowerCase()
+              .trim(),
+          )
+        )
+          return true
         return false
       })
     }
     if (currentRole === "super_admin") {
       if (portfolioScope === "my_portfolio") {
-        const saEmail = (authUser?.email || "superadmin@gomaa.in").toLowerCase().trim()
+        const saEmail = (authUser?.email || "superadmin@gomaa.in")
+          .toLowerCase()
+          .trim()
         return gosalas.filter((g) => {
-          const gEmail = String((g as any).adminEmail || (g as any).governingAdminEmail || "").toLowerCase().trim()
+          const gEmail = String(
+            (g as any).adminEmail || (g as any).governingAdminEmail || "",
+          )
+            .toLowerCase()
+            .trim()
           const gRole = (g as any).governingAdminRole
-          return gRole === "super_admin" || gEmail === saEmail || (g as any).adminId === "USER-SA-SUPERADMIN"
+          return (
+            gRole === "super_admin" ||
+            gEmail === saEmail ||
+            (g as any).adminId === "USER-SA-SUPERADMIN"
+          )
         })
       }
       return gosalas
@@ -674,15 +710,29 @@ export default function Gaushalas({
   // Filtered Gaushalas
   const filteredGosalas = useMemo(() => {
     return scopedGosalas.filter((g) => {
-      const q = String(searchQuery || "").toLowerCase().trim()
+      const q = String(searchQuery || "")
+        .toLowerCase()
+        .trim()
       const matchesSearch =
         !q ||
-        String(g.name || "").toLowerCase().includes(q) ||
-        String(g.region || "").toLowerCase().includes(q) ||
-        String(g.address || "").toLowerCase().includes(q) ||
-        String(g.caretaker || "").toLowerCase().includes(q) ||
-        String(g.trustRegistrationNo || "").toLowerCase().includes(q) ||
-        String(g.email || (g as any).contactEmail || "").toLowerCase().includes(q)
+        String(g.name || "")
+          .toLowerCase()
+          .includes(q) ||
+        String(g.region || "")
+          .toLowerCase()
+          .includes(q) ||
+        String(g.address || "")
+          .toLowerCase()
+          .includes(q) ||
+        String(g.caretaker || "")
+          .toLowerCase()
+          .includes(q) ||
+        String(g.trustRegistrationNo || "")
+          .toLowerCase()
+          .includes(q) ||
+        String(g.email || (g as any).contactEmail || "")
+          .toLowerCase()
+          .includes(q)
 
       const matchesStatus = statusFilter === "ALL" || g.status === statusFilter
 
@@ -697,7 +747,11 @@ export default function Gaushalas({
     0,
   )
   const scopedHousedCows = animals.filter((a) =>
-    scopedGosalas.some((g) => String(g.name || "").toLowerCase() === String(a.gosala || "").toLowerCase()),
+    scopedGosalas.some(
+      (g) =>
+        String(g.name || "").toLowerCase() ===
+        String(a.gosala || "").toLowerCase(),
+    ),
   )
   const totalResidentCows = scopedHousedCows.length
   const utilizationPct =
@@ -741,11 +795,34 @@ export default function Gaushalas({
     setFormPartnershipNotes("")
     setFormLandAcres("5.5")
     setFormVisitingHours("6:00 AM – 7:30 PM (All 7 Days)")
+    setFormGoverningAdminId(
+      currentRole === "super_admin"
+        ? operationalAdmins[0]?.id || "USER-SA-001"
+        : authUser?.userId || "USER-ADM-101",
+    )
+    setFormGoverningAdminEmail(
+      currentRole === "super_admin"
+        ? operationalAdmins[0]?.email || "superadmin@gomaa.in"
+        : authUser?.email || "admin@gomaa.in",
+    )
+    setFormGoverningAdminName(
+      currentRole === "super_admin"
+        ? operationalAdmins[0]?.name || "Super Admin"
+        : authUser?.name || "Operations Admin",
+    )
     setShowAddModal(true)
   }
 
   const handleOpenEdit = (g: Gosala) => {
     setEditingGosala(g)
+    const gAdminId = (g as any).adminId || "USER-SA-001"
+    const gAdminEmail =
+      (g as any).adminEmail || (g as any).governingAdminEmail || "superadmin@gomaa.in"
+    const gAdminName =
+      (g as any).adminName || (g as any).governingAdminName || "Super Admin"
+    setFormGoverningAdminId(gAdminId)
+    setFormGoverningAdminEmail(gAdminEmail)
+    setFormGoverningAdminName(gAdminName)
     setFormName(g.name || "")
     setFormRegNo(g.trustRegistrationNo || "")
     const reg = g.region || ""
@@ -768,21 +845,27 @@ export default function Gaushalas({
     setFormLandAcres(g.landAcres != null ? String(g.landAcres) : "5.5")
     setFormVisitingHours(g.visitingHours || "6:00 AM – 7:30 PM (All 7 Days)")
     setFormStatus(g.status || "Active")
-    setFormPhoto(g.photo || (g.photos && g.photos[0]) || GOSALA_PHOTO_PRESETS[0].url)
+    setFormPhoto(
+      g.photo || (g.photos && g.photos[0]) || GOSALA_PHOTO_PRESETS[0].url,
+    )
     setFormPhotos(
       g.photos && g.photos.length > 0
         ? g.photos
         : [g.photo || GOSALA_PHOTO_PRESETS[0].url],
     )
-    setFormFacilities(g.facilities && g.facilities.length > 0 ? g.facilities : [GOSALA_FACILITY_OPTIONS[0]])
+    setFormFacilities(
+      g.facilities && g.facilities.length > 0
+        ? g.facilities
+        : [GOSALA_FACILITY_OPTIONS[0]],
+    )
     setFormNotes(g.notes || "")
-    setFormPartnershipTier((g.partnershipTier as any) || "STANDARD")
-    setFormCommissionType((g.commissionType as any) || "percentage")
+    setFormPartnershipTier(g.partnershipTier as any || "STANDARD")
+    setFormCommissionType(g.commissionType as any || "percentage")
     setFormCommissionValue(
       g.customCommissionPct ||
         (g.customCommissionFlat ? g.customCommissionFlat : 10),
     )
-    setFormTaxTreatment((g.taxTreatment as any) || "standard_gst")
+    setFormTaxTreatment(g.taxTreatment as any || "standard_gst")
     setFormBufferMinutes(g.bufferMinutes || 30)
     setFormPartnershipNotes(g.partnershipNotes || "")
     setShowAddModal(true)
@@ -864,8 +947,25 @@ export default function Gaushalas({
         taxTreatment: formTaxTreatment,
         bufferMinutes: formBufferMinutes,
         partnershipNotes: formPartnershipNotes.trim(),
+        ...(currentRole === "super_admin"
+          ? {
+              governingAdminRole:
+                formGoverningAdminId === "USER-SA-001" ||
+                formGoverningAdminId === "USER-SA-SUPERADMIN"
+                  ? "super_admin"
+                  : "admin",
+              governingAdminName: formGoverningAdminName,
+              governingAdminEmail: formGoverningAdminEmail,
+              adminId: formGoverningAdminId,
+              adminName: formGoverningAdminName,
+              adminEmail: formGoverningAdminEmail,
+            }
+          : {}),
       })
-      if (selectedGosalaId === editingGosala.id || selectedGosalaId === editingGosala.name) {
+      if (
+        selectedGosalaId === editingGosala.id ||
+        selectedGosalaId === editingGosala.name
+      ) {
         setSelectedGosalaId(editingGosala.id)
       }
     } else {
@@ -882,19 +982,32 @@ export default function Gaushalas({
         managerName: formCaretaker.trim() || "Dedicated Caretaker",
         caretaker: formCaretaker.trim(),
         governingAdminRole:
-          currentRole === "super_admin" ? "super_admin" : "admin",
+          currentRole === "super_admin"
+            ? formGoverningAdminId === "USER-SA-001" ||
+              formGoverningAdminId === "USER-SA-SUPERADMIN"
+              ? "super_admin"
+              : "admin"
+            : "admin",
         governingAdminName:
           currentRole === "super_admin"
-            ? activeSuperAdminName
+            ? formGoverningAdminName
             : activeAdminName,
+        governingAdminEmail:
+          currentRole === "super_admin"
+            ? formGoverningAdminEmail
+            : authUser?.email || "admin@gomaa.in",
         adminId:
           currentRole === "super_admin"
-            ? authUser?.userId || "USER-SA-001"
+            ? formGoverningAdminId
             : authUser?.userId || "USER-ADM-101",
         adminName:
           currentRole === "super_admin"
-            ? activeSuperAdminName
+            ? formGoverningAdminName
             : activeAdminName,
+        adminEmail:
+          currentRole === "super_admin"
+            ? formGoverningAdminEmail
+            : authUser?.email || "admin@gomaa.in",
         capacity: Number(formCapacity) || 40,
         landAcres: parseFloat(formLandAcres) || 5.0,
         establishedYear: formYear.trim(),
@@ -914,8 +1027,25 @@ export default function Gaushalas({
         taxTreatment: formTaxTreatment,
         bufferMinutes: formBufferMinutes,
         partnershipNotes: formPartnershipNotes.trim(),
+        ...(currentRole === "super_admin"
+          ? {
+              governingAdminRole:
+                formGoverningAdminId === "USER-SA-001" ||
+                formGoverningAdminId === "USER-SA-SUPERADMIN"
+                  ? "super_admin"
+                  : "admin",
+              governingAdminName: formGoverningAdminName,
+              governingAdminEmail: formGoverningAdminEmail,
+              adminId: formGoverningAdminId,
+              adminName: formGoverningAdminName,
+              adminEmail: formGoverningAdminEmail,
+            }
+          : {}),
       })
-      if (selectedGosalaId === editingGosala.id || selectedGosalaId === editingGosala.name) {
+      if (
+        selectedGosalaId === editingGosala.id ||
+        selectedGosalaId === editingGosala.name
+      ) {
         setSelectedGosalaId(editingGosala.id)
       }
     }
@@ -1452,6 +1582,32 @@ export default function Gaushalas({
                       </div>
                     </div>
 
+                    {/* Governing Admin & Boundary Badge */}
+                    <div className="px-3.5 py-1.5 border-t border-line/60 bg-paper-deep/20 flex items-center justify-between text-[11px]">
+                      <span className="text-ink-faint flex items-center gap-1.5 truncate">
+                        <ShieldCheck size={12} className="text-saffron-deep shrink-0" />
+                        <span className="text-ink-soft font-semibold">Admin:</span>
+                        <span className="text-ink truncate">
+                          {(g as any).adminName ||
+                            (g as any).governingAdminName ||
+                            "Super Admin"}
+                        </span>
+                      </span>
+                      {currentRole === "super_admin" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReassigningGosala(g)
+                            setTargetAdminId((g as any).adminId || "USER-SA-001")
+                            setReassignModalOpen(true)
+                          }}
+                          className="text-saffron-deep hover:text-saffron font-medium text-[11px] underline cursor-pointer shrink-0 ml-2"
+                        >
+                          Reassign
+                        </button>
+                      )}
+                    </div>
+
                     {/* Card Footer Actions */}
                     <div className="p-3 border-t border-line bg-paper/30 flex items-center justify-between text-[11.5px]">
                       <span className="text-ink-faint text-[10.5px]">
@@ -1485,6 +1641,120 @@ export default function Gaushalas({
             </div>
           )}
         </>
+      )}
+
+      {/* Super Admin Dedicated Quick Reassign Modal */}
+      {reassignModalOpen && reassigningGosala && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-paper border border-line rounded-lg shadow-xl w-full max-w-md p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={18} className="text-saffron-deep" />
+                <h3 className="font-serif text-[16px] text-ink font-semibold">
+                  Reassign Governing Operational Admin
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setReassignModalOpen(false)
+                  setReassigningGosala(null)
+                }}
+                className="text-ink-faint hover:text-ink cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div>
+              <p className="text-[12px] text-ink-soft">
+                Sanctuary: <strong className="text-ink">{reassigningGosala.name}</strong> ({reassigningGosala.region})
+              </p>
+              <p className="text-[11.5px] text-ink-faint mt-1">
+                Currently Governed by:{" "}
+                <span className="font-semibold text-ink">
+                  {(reassigningGosala as any).adminName ||
+                    (reassigningGosala as any).governingAdminName ||
+                    "Super Admin"}
+                </span>
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-ink">
+                Select New Governing Operational Admin
+              </label>
+              <select
+                value={targetAdminId}
+                onChange={(e) => setTargetAdminId(e.target.value)}
+                className="w-full bg-paper border border-line rounded px-3 py-2 text-[12.5px] text-ink outline-none focus:border-saffron"
+              >
+                <option value="USER-SA-001">
+                  Direct Super Admin Sovereign Oversight (superadmin@gomaa.in)
+                </option>
+                {operationalAdmins.map((adm) => (
+                  <option key={adm.id} value={adm.id}>
+                    {adm.name} — {adm.assignedRegionName || "Free Pool"} ({adm.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="p-3 rounded bg-saffron-soft/20 border border-saffron/20 text-[11px] text-ink-soft leading-relaxed">
+              When saved, this Gaushala and all its animals, bookings, and managers will immediately transition under the new Operational Admin's operational dashboard and wallet splits.
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
+              <button
+                type="button"
+                disabled={isReassigning}
+                onClick={() => {
+                  setReassignModalOpen(false)
+                  setReassigningGosala(null)
+                }}
+                className="px-3.5 py-1.5 text-[12px] font-medium border border-line rounded text-ink-soft hover:text-ink cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isReassigning}
+                onClick={async () => {
+                  if (!reassigningGosala) return
+                  setIsReassigning(true)
+                  try {
+                    const selectedAdm = operationalAdmins.find((a) => a.id === targetAdminId)
+                    await assignGosalaAdmin(
+                      reassigningGosala.id,
+                      targetAdminId,
+                      selectedAdm?.email,
+                      selectedAdm?.name,
+                    )
+                    setReassignModalOpen(false)
+                    setReassigningGosala(null)
+                  } catch (e: any) {
+                    notify(e.message || "Failed to reassign Gaushala", "err")
+                  } finally {
+                    setIsReassigning(false)
+                  }
+                }}
+                className="px-4 py-1.5 text-[12px] font-medium rounded bg-saffron text-white hover:bg-saffron-deep transition cursor-pointer flex items-center gap-1.5"
+              >
+                {isReassigning ? (
+                  <>
+                    <RefreshCw size={13} className="animate-spin" />
+                    <span>Reassigning...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check size={13} />
+                    <span>Confirm Reassignment</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 4. Dedicated Quick Photo Edit Modal */}
@@ -2020,6 +2290,56 @@ export default function Gaushalas({
                           ))}
                         </div>
                       </div>
+
+                      {currentRole === "super_admin" && (
+                        <div className="p-3.5 rounded-lg border border-saffron/30 bg-saffron-soft/20 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[12px] font-semibold text-saffron-deep flex items-center gap-1.5 uppercase tracking-wider">
+                              <ShieldCheck size={14} /> Governing Operational Admin (Territory Oversight)
+                            </label>
+                            <span className="text-[10px] font-mono uppercase bg-saffron/20 text-saffron-deep px-1.5 py-0.5 rounded font-bold">
+                              Super Admin Privilege
+                            </span>
+                          </div>
+                          <select
+                            value={formGoverningAdminId}
+                            onChange={(e) => {
+                              const selId = e.target.value
+                              setFormGoverningAdminId(selId)
+                              if (
+                                selId === "USER-SA-001" ||
+                                selId === "USER-SA-SUPERADMIN"
+                              ) {
+                                setFormGoverningAdminEmail("superadmin@gomaa.in")
+                                setFormGoverningAdminName(
+                                  "Super Admin (Sovereign Portfolio)",
+                                )
+                              } else {
+                                const target = operationalAdmins.find(
+                                  (a) => a.id === selId,
+                                )
+                                if (target) {
+                                  setFormGoverningAdminEmail(target.email)
+                                  setFormGoverningAdminName(target.name)
+                                }
+                              }
+                            }}
+                            className="w-full bg-paper border border-line rounded-md px-3 py-2 text-[13px] text-ink outline-none focus:border-saffron transition"
+                          >
+                            <option value="USER-SA-001">
+                              Direct Super Admin Sovereign Oversight (superadmin@gomaa.in)
+                            </option>
+                            {operationalAdmins.map((adm) => (
+                              <option key={adm.id} value={adm.id}>
+                                {adm.name} — {adm.assignedRegionName || "Free Pool"} ({adm.email})
+                              </option>
+                            ))}
+                          </select>
+                          <p className="text-[11px] text-ink-faint">
+                            Assigning this Gaushala will restrict its visibility, animal registrations, and booking operations exclusively to the selected Operational Admin and their assigned managers.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
 

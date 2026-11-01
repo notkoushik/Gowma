@@ -52,6 +52,16 @@ import {
   findNearestOperationalHub,
 } from "./services/hubService.ts"
 import {
+  getAllOperationalRegions,
+  createOperationalRegion,
+  assignRegionAdmin,
+  getAllOperationalAdmins,
+  toggleOperationalAdminStatus,
+  createOperationalAdmin,
+  executeDataMigration,
+  getMigrationHistory,
+} from "./services/regionalService.ts"
+import {
   searchGooglePlacesApi,
   resolveGoogleMapsLinkOrCoords,
 } from "./services/googlePlacesService.ts"
@@ -468,6 +478,8 @@ function formatManagerUser(user: any): GosalaManager {
 
   return {
     id: formattedMgrId,
+    userId: user.id,
+    rawUserId: user.id,
     name: user.name,
     email: user.email,
     phone: user.phone,
@@ -556,6 +568,7 @@ export async function handleApiRequest(
       pathname === "/api/jobs/settlement-maturity" ||
       pathname === "/api/health" ||
       pathname === "/api/hubs" ||
+      pathname === "/api/regions" ||
       pathname === "/api/places/search" ||
       pathname === "/api/animals" ||
       pathname === "/api/gosalas" ||
@@ -588,6 +601,8 @@ export async function handleApiRequest(
 
   if (
     ((method === "GET" || method === "POST") && pathname === "/api/users") ||
+    pathname.startsWith("/api/operational-admins") ||
+    (method === "POST" && pathname.startsWith("/api/regions")) ||
     (method === "GET" && pathname === "/api/debug/email-status")
   ) {
     const denied = requireRole("super_admin")
@@ -783,6 +798,112 @@ export async function handleApiRequest(
       return { status: 201, body: { ok: true, hub: newHub } }
     } catch (err: any) {
       return { status: 400, body: { ok: false, error: err.message || "Could not register operational hub" } }
+    }
+  }
+
+  // ----------------- REGIONAL GOVERNANCE & DATA MIGRATION API -----------------
+  // GET /api/regions (List all operational regions with assigned admins)
+  if (method === "GET" && pathname === "/api/regions") {
+    try {
+      const regions = await getAllOperationalRegions()
+      return { status: 200, body: { ok: true, regions } }
+    } catch (err: any) {
+      return { status: 500, body: { ok: false, error: err.message } }
+    }
+  }
+
+  // POST /api/regions (Create a new operational region - Super Admin)
+  if (method === "POST" && pathname === "/api/regions") {
+    const denied = requireRole("super_admin", "admin")
+    if (denied) return denied
+
+    try {
+      const newRegion = await createOperationalRegion(body)
+      return { status: 201, body: { ok: true, region: newRegion } }
+    } catch (err: any) {
+      return { status: 400, body: { ok: false, error: err.message || "Failed to create operational region" } }
+    }
+  }
+
+  // POST /api/regions/:id/assign (Appoint / Assign an Operational Admin to a region)
+  const assignRegionMatch = pathname.match(/^\/api\/regions\/([^/]+)\/assign$/)
+  if (method === "POST" && assignRegionMatch) {
+    const denied = requireRole("super_admin")
+    if (denied) return denied
+
+    const regionId = assignRegionMatch[1]
+    try {
+      const updatedRegion = await assignRegionAdmin(regionId, body.adminId || null)
+      return { status: 200, body: { ok: true, region: updatedRegion } }
+    } catch (err: any) {
+      return { status: 400, body: { ok: false, error: err.message || "Failed to assign operational admin to region" } }
+    }
+  }
+
+  // GET /api/operational-admins (List all Operational Admins with full details & banking)
+  if (method === "GET" && pathname === "/api/operational-admins") {
+    const denied = requireRole("super_admin")
+    if (denied) return denied
+
+    try {
+      const admins = await getAllOperationalAdmins()
+      return { status: 200, body: { ok: true, admins } }
+    } catch (err: any) {
+      return { status: 500, body: { ok: false, error: err.message } }
+    }
+  }
+
+  // POST /api/operational-admins (Create a new Operational Admin with banking & optional region)
+  if (method === "POST" && pathname === "/api/operational-admins") {
+    const denied = requireRole("super_admin")
+    if (denied) return denied
+
+    try {
+      const admin = await createOperationalAdmin(body, authUser)
+      return { status: 201, body: { ok: true, admin } }
+    } catch (err: any) {
+      return { status: 400, body: { ok: false, error: err.message || "Failed to create operational admin" } }
+    }
+  }
+
+  // PATCH or PUT /api/operational-admins/:id/status (Activate / Deactivate Operational Admin)
+  const statusAdminMatch = pathname.match(/^\/api\/operational-admins\/([^/]+)\/status$/)
+  if ((method === "PATCH" || method === "PUT") && statusAdminMatch) {
+    const denied = requireRole("super_admin")
+    if (denied) return denied
+
+    const adminId = statusAdminMatch[1]
+    try {
+      const result = await toggleOperationalAdminStatus(adminId, Boolean(body.isActive))
+      return { status: 200, body: { ok: true, ...result } }
+    } catch (err: any) {
+      return { status: 400, body: { ok: false, error: err.message || "Failed to update admin status" } }
+    }
+  }
+
+  // POST /api/operational-admins/migrate (Atomic Data Migration from Old Admin -> New Admin)
+  if (method === "POST" && pathname === "/api/operational-admins/migrate") {
+    const denied = requireRole("super_admin")
+    if (denied) return denied
+
+    try {
+      const result = await executeDataMigration(body, authUser)
+      return { status: 200, body: result }
+    } catch (err: any) {
+      return { status: 400, body: { ok: false, error: err.message || "Failed to execute data migration" } }
+    }
+  }
+
+  // GET /api/operational-admins/migrations (List Migration Audit Trail Certificates)
+  if (method === "GET" && pathname === "/api/operational-admins/migrations") {
+    const denied = requireRole("super_admin")
+    if (denied) return denied
+
+    try {
+      const history = getMigrationHistory()
+      return { status: 200, body: { ok: true, history } }
+    } catch (err: any) {
+      return { status: 500, body: { ok: false, error: err.message } }
     }
   }
 
@@ -1650,36 +1771,47 @@ export async function handleApiRequest(
       if (status) where.status = toPrismaStatus(status)
 
       // Multi-Tenant Role Isolation
-      if (authUser?.role === "manager" && authUser.gosalaNames?.length > 0) {
-        where.OR = authUser.gosalaNames.map((gn) => ({
+      if (authUser?.role === "manager") {
+        const assignments = await prisma.gosalaManagerAssignment.findMany({
+          where: { userId: authUser.userId, status: "Active" },
+          include: { gosala: true },
+        })
+        const dbNames = assignments.map((a: any) => a.gosala?.name).filter(Boolean)
+        const myAssignedNames = Array.from(new Set([...dbNames, ...(authUser.gosalaNames || [])]))
+        if (myAssignedNames.length === 0) {
+          return { status: 200, body: { ok: true, bookings: [] } }
+        }
+        where.OR = myAssignedNames.map((gn) => ({
           gosalaName: { equals: gn, mode: "insensitive" },
         }))
       } else if (authUser?.role === "admin") {
-        const adminEmail = (authUser.email || "").toLowerCase()
-        const adminName = (authUser.name || "").toLowerCase()
-        if (authUser.gosalaNames && authUser.gosalaNames.length > 0) {
-          where.OR = authUser.gosalaNames.map((gn: string) => ({
-            gosalaName: { equals: gn, mode: "insensitive" },
-          }))
-        } else {
-          const allGosalas = await prisma.gosala.findMany({ where: { isActive: true } })
-          const myGosalaNames = allGosalas
-            .filter((g: any) => {
-              const meta = getGosalaMeta(g.id, g.name)
-              const gEmail = (g.adminEmail || meta.governingAdminEmail || "").toLowerCase()
-              const gName = (g.adminName || meta.governingAdminName || meta.adminName || "").toLowerCase()
-              const emailMatch = Boolean(gEmail && gEmail === adminEmail)
-              const nameMatch = Boolean(adminName && (gName === adminName || gName.includes(adminName)))
-              const idMatch = Boolean(authUser.userId && g.adminId === authUser.userId)
-              return emailMatch || nameMatch || idMatch
-            })
-            .map((g: any) => g.name)
-          if (myGosalaNames.length > 0) {
-            where.OR = myGosalaNames.map((gn: string) => ({
-              gosalaName: { equals: gn, mode: "insensitive" },
-            }))
-          }
+        const adminEmail = (authUser.email || "").toLowerCase().trim()
+        const adminId = authUser.userId || ""
+
+        // Query active Gaushalas governed strictly by this Operations Admin in the database
+        const allGosalas = await prisma.gosala.findMany({ where: { isActive: true } })
+        const myGosalaNames = allGosalas
+          .filter((g: any) => {
+            const meta = (g.metadata && typeof g.metadata === "object") ? (g.metadata as any) : getGosalaMeta(g.id, g.name)
+            const gEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase().trim()
+            const gAdminId = g.adminId || meta.adminId
+
+            // Deny if assigned to another admin
+            if (gAdminId && adminId && gAdminId !== adminId) return false
+            if (gEmail && adminEmail && gEmail !== adminEmail) return false
+
+            const idMatch = Boolean(adminId && gAdminId === adminId)
+            const emailMatch = Boolean(adminEmail && gEmail === adminEmail)
+            return idMatch || emailMatch
+          })
+          .map((g: any) => g.name)
+
+        if (myGosalaNames.length === 0) {
+          return { status: 200, body: { ok: true, bookings: [] } }
         }
+        where.OR = myGosalaNames.map((gn: string) => ({
+          gosalaName: { equals: gn, mode: "insensitive" },
+        }))
       } else if (authUser?.role === "super_admin") {
         // Super Admin has complete info across all Operations Admins and Gaushalas!
         if (query.get("gosala")) {
@@ -2385,13 +2517,16 @@ export async function handleApiRequest(
     /^\/api\/bookings\/([^/]+)\/advance-stage$/,
   )
   if (method === "POST" && advanceStageMatch) {
-    const denied = requireRole("driver", "admin", "super_admin")
+    const denied = requireRole("driver", "admin", "super_admin", "manager")
     if (denied) return denied
     const id = advanceStageMatch[1]
 
     try {
       const b = await prisma.booking.findUnique({ where: { id } })
       if (!b) return { status: 404, body: { error: "Booking not found" } }
+      if (authUser?.role === "manager" && !canAccessBooking(authUser, b as any)) {
+        return { status: 403, body: { error: "Access denied: booking belongs to another Gaushala" } }
+      }
 
       if ((b as any).driverStage === 5 && !(b as any).handoverOtpVerified) {
         return {
@@ -2439,12 +2574,15 @@ export async function handleApiRequest(
     /^\/api\/bookings\/([^/]+)\/(set-stage|driver-stage)$/,
   )
   if (method === "POST" && setStageMatch) {
-    const denied = requireRole("driver", "admin", "super_admin")
+    const denied = requireRole("driver", "admin", "super_admin", "manager")
     if (denied) return denied
     const id = setStageMatch[1]
     const targetStage = typeof body.stage === "number" ? body.stage : 4
     const b = await prisma.booking.findUnique({ where: { id } })
     if (!b) return { status: 404, body: { error: "Booking not found" } }
+    if (authUser?.role === "manager" && !canAccessBooking(authUser, b as any)) {
+      return { status: 403, body: { error: "Access denied: booking belongs to another Gaushala" } }
+    }
 
     const status =
       targetStage >= 9
@@ -2477,7 +2615,7 @@ export async function handleApiRequest(
   // POST /api/bookings/:id/verify-handover-otp
   const verifyOtpMatch = pathname.match(/^\/api\/bookings\/([^/]+)\/verify-handover-otp$/)
   if (method === "POST" && verifyOtpMatch) {
-    const denied = requireRole("driver", "admin", "super_admin")
+    const denied = requireRole("driver", "admin", "super_admin", "manager")
     if (denied) return denied
     const id = verifyOtpMatch[1]
     const submittedOtp = String(body.otp || "").trim()
@@ -2562,7 +2700,7 @@ export async function handleApiRequest(
   // POST /api/bookings/:id/telemetry
   const telemetryMatch = pathname.match(/^\/api\/bookings\/([^/]+)\/telemetry$/)
   if (method === "POST" && telemetryMatch) {
-    const denied = requireRole("driver", "admin", "super_admin")
+    const denied = requireRole("driver", "admin", "super_admin", "manager")
     if (denied) return denied
     const id = telemetryMatch[1]
     const tick: GpsTickPayload = {
@@ -2792,30 +2930,41 @@ export async function handleApiRequest(
             u.email?.toLowerCase() === authUser.email?.toLowerCase(),
         )
       } else if (authUser?.role === "admin") {
-        const adminEmail = (authUser.email || "").toLowerCase()
-        const adminName = (authUser.name || "").toLowerCase()
+        const adminEmail = (authUser.email || "").toLowerCase().trim()
         const adminId = authUser.userId || ""
 
-        // Get Gaushalas under this Operations Admin
+        // Get Gaushalas strictly governed by this Operations Admin
         const allGosalas = await prisma.gosala.findMany({ where: { isActive: true } })
         const myGosalaIds = allGosalas
           .filter((g: any) => {
-            const meta = getGosalaMeta(g.id, g.name)
-            const gEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase()
-            const gName = (g.adminName || meta.governingAdminName || meta.adminName || "").toLowerCase()
-            const idMatch = Boolean(adminId && (g.adminId === adminId || meta.adminId === adminId))
-            const emailMatch = Boolean(adminEmail && (gEmail === adminEmail || gEmail.includes(adminEmail)))
-            const nameMatch = Boolean(adminName && (gName === adminName || gName.includes(adminName)))
-            return idMatch || emailMatch || nameMatch
+            const meta = (g.metadata && typeof g.metadata === "object") ? (g.metadata as any) : getGosalaMeta(g.id, g.name)
+            const gEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase().trim()
+            const gAdminId = g.adminId || meta.adminId
+
+            // Deny if assigned to another admin
+            if (gAdminId && adminId && gAdminId !== adminId) return false
+            if (gEmail && adminEmail && gEmail !== adminEmail) return false
+
+            const idMatch = Boolean(adminId && gAdminId === adminId)
+            const emailMatch = Boolean(adminEmail && gEmail === adminEmail)
+            return idMatch || emailMatch
           })
           .map((g: any) => g.id)
 
-        managerUsers = managerUsers.filter((u: any) => {
-          // Unassigned managers are available to be appointed by this Operations Admin
-          if (!u.managerAssignments || u.managerAssignments.length === 0) return true
-          // Or assigned to this Operations Admin's Gaushala
-          return u.managerAssignments.some((ma: any) => myGosalaIds.includes(ma.gosalaId))
-        })
+        if (myGosalaIds.length === 0) {
+          return { status: 200, body: { managers: [] } }
+        }
+
+        // Operational Admin can ONLY see managers assigned to their maintained Gaushalas (with whom they share money)
+        managerUsers = managerUsers
+          .filter((u: any) => {
+            if (!u.managerAssignments || u.managerAssignments.length === 0) return false
+            return u.managerAssignments.some((ma: any) => myGosalaIds.includes(ma.gosalaId))
+          })
+          .map((u: any) => ({
+            ...u,
+            managerAssignments: (u.managerAssignments || []).filter((ma: any) => myGosalaIds.includes(ma.gosalaId)),
+          }))
       } else if (authUser?.role === "super_admin") {
         const portfolioFilter = query.get("portfolio") || query.get("admin")
         if (portfolioFilter && portfolioFilter !== "All" && portfolioFilter !== "all") {
@@ -3420,7 +3569,44 @@ export async function handleApiRequest(
   // GET /api/settlements
   if (method === "GET" && pathname === "/api/settlements") {
     try {
+      let allowedGosalaNames: string[] | null = null
+
+      if (authUser?.role === "manager") {
+        const assignments = await prisma.gosalaManagerAssignment.findMany({
+          where: { userId: authUser.userId, status: "Active" },
+          include: { gosala: true },
+        })
+        const dbNames = assignments.map((a: any) => a.gosala?.name).filter(Boolean)
+        const myAssigned = Array.from(new Set([...dbNames, ...(authUser.gosalaNames || [])]))
+        if (myAssigned.length === 0) {
+          return { status: 200, body: { settlements: [] } }
+        }
+        allowedGosalaNames = myAssigned
+      } else if (authUser?.role === "admin") {
+        const adminEmail = (authUser.email || "").toLowerCase().trim()
+        const adminId = authUser.userId || ""
+        const allGosalas = await prisma.gosala.findMany({ where: { isActive: true } })
+        const myGosalaNames = allGosalas
+          .filter((g: any) => {
+            const meta = (g.metadata && typeof g.metadata === "object") ? (g.metadata as any) : getGosalaMeta(g.id, g.name)
+            const gEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase().trim()
+            const gAdminId = g.adminId || meta.adminId
+
+            if (gAdminId && adminId && gAdminId !== adminId) return false
+            if (gEmail && adminEmail && gEmail !== adminEmail) return false
+
+            return Boolean((adminId && gAdminId === adminId) || (adminEmail && gEmail === adminEmail))
+          })
+          .map((g: any) => g.name)
+
+        if (myGosalaNames.length === 0) {
+          return { status: 200, body: { settlements: [] } }
+        }
+        allowedGosalaNames = myGosalaNames
+      }
+
       const batches = await prisma.settlementBatch.findMany({
+        where: allowedGosalaNames ? { gosalaName: { in: allowedGosalaNames } } : {},
         orderBy: { createdAt: "desc" },
       })
       return { status: 200, body: { settlements: batches.map(formatSettlement) } }
@@ -3661,15 +3847,27 @@ export async function handleApiRequest(
       // Multi-tenant isolation based on JWT authUser
       let scopedGosalas = formatted
       if (authUser?.role === "manager") {
+        const mgrUserId = authUser.userId || ""
+        const mgrEmail = (authUser.email || "").toLowerCase().trim()
+        const mgrName = (authUser.name || "").toLowerCase().trim()
+
         scopedGosalas = formatted.filter((g: any) => {
-          const idMatch = authUser.gosalaIds?.includes(g.id)
-          const nameMatch = authUser.gosalaNames?.some((gn: string) =>
-            g.name.trim().toLowerCase() === gn.trim().toLowerCase()
-          )
+          if (g.isActingManager || g.actAsManagerMyself) return false
+
           const mgrMatch = g.assignedManagers?.some((m: any) =>
-            m.rawUserId === authUser.userId || m.id === authUser.userId || m.email?.toLowerCase() === authUser.email?.toLowerCase()
+            (m.rawUserId && m.rawUserId === mgrUserId) ||
+            (m.id && m.id === mgrUserId) ||
+            (m.email && m.email.toLowerCase().trim() === mgrEmail)
           )
-          return idMatch || nameMatch || mgrMatch
+          const metaMatch = Boolean(
+            (g.managerId && (g.managerId === mgrUserId || g.managerId === `MGR-${mgrUserId.slice(0, 4)}`)) ||
+            (g.managerName && mgrName && g.managerName.toLowerCase().trim() === mgrName)
+          )
+          const idMatch = Boolean(authUser.gosalaIds?.includes(g.id))
+          const nameMatch = Boolean(authUser.gosalaNames?.some((gn: string) =>
+            g.name.trim().toLowerCase() === gn.trim().toLowerCase()
+          ))
+          return mgrMatch || metaMatch || idMatch || nameMatch
         })
       } else if (authUser?.role === "admin") {
         const allowedIds = new Set(authUser.gosalaIds || [])
@@ -3679,13 +3877,23 @@ export async function handleApiRequest(
 
         // Strict isolation: only Gaushalas assigned to or governed by this Operations Admin
         scopedGosalas = formatted.filter((g: any) => {
+          const gGovEmail = String(g.governingAdminEmail || g.adminEmail || "").trim().toLowerCase()
+          const gAdminId = String(g.adminId || "").trim().toLowerCase()
+
+          // If another admin is explicitly assigned, strictly deny (even if an old JWT had this ID)
+          if (gAdminId && userId && gAdminId !== userId) return false
+          if (gGovEmail && userEmail && gGovEmail !== userEmail) return false
+
           const idMatch = allowedIds.has(g.id)
           const nameMatch = allowedNames.has(String(g.name).trim().toLowerCase())
-          const gGovEmail = String(g.governingAdminEmail || g.adminEmail || "").trim().toLowerCase()
           const govEmailMatch = Boolean(userEmail && gGovEmail === userEmail)
-          const gAdminId = String(g.adminId || "").trim().toLowerCase()
           const adminIdMatch = Boolean(userId && gAdminId === userId)
-          return idMatch || nameMatch || govEmailMatch || adminIdMatch
+
+          if (!gAdminId && !gGovEmail) {
+            return idMatch || nameMatch
+          }
+
+          return adminIdMatch || govEmailMatch
         })
       } else if (authUser?.role === "super_admin") {
         // Super Admin has global oversight across all Operations Admins and Gaushalas!
@@ -3936,24 +4144,48 @@ export async function handleApiRequest(
       const finalLat = latitude !== undefined ? Number(latitude) : lat !== undefined ? Number(lat) : undefined
       const finalLng = longitude !== undefined ? Number(longitude) : lng !== undefined ? Number(lng) : undefined
 
-      const callerAdminName = restMeta.governingAdminName || restMeta.adminName || body.governingAdminName || body.adminName
-      const callerAdminEmail = restMeta.governingAdminEmail || restMeta.adminEmail || body.governingAdminEmail || body.adminEmail
-      const callerAdminId = restMeta.adminId || body.adminId
-
-      const isActing = body.actAsManagerMyself !== undefined
-        ? Boolean(body.actAsManagerMyself)
-        : restMeta.isActingManager !== undefined
-        ? Boolean(restMeta.isActingManager)
-        : undefined
-
+      const isSuper = authUser?.role === "super_admin"
       const currentMeta = (existing.metadata && typeof existing.metadata === "object")
         ? { ...(existing.metadata as any) }
         : getGosalaMeta(existing.id, existing.name)
 
-      const effectiveAdminName = callerAdminName || existing.adminName || currentMeta.governingAdminName || authUser?.name || "Operations Admin"
-      const effectiveAdminEmail = callerAdminEmail || existing.adminEmail || currentMeta.governingAdminEmail || authUser?.email || "admin@gomaa.in"
-      const effectiveAdminRole = restMeta.governingAdminRole || currentMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin")
-      const effectiveAdminId = callerAdminId || existing.adminId || currentMeta.adminId || authUser?.userId || "USER-ADM-101"
+      let effectiveAdminName = existing.adminName || currentMeta.governingAdminName || "Operations Admin"
+      let effectiveAdminEmail = existing.adminEmail || currentMeta.governingAdminEmail || "admin@gomaa.in"
+      let effectiveAdminRole = currentMeta.governingAdminRole || "admin"
+      let effectiveAdminId = existing.adminId || currentMeta.adminId || "USER-ADM-101"
+
+      if (isSuper) {
+        // Super Admin can reassign governing Operational Admin
+        const reqAdminId = body.adminId || restMeta.adminId
+        const reqAdminEmail = body.adminEmail || restMeta.adminEmail || body.governingAdminEmail || restMeta.governingAdminEmail
+        const reqAdminName = body.adminName || restMeta.adminName || body.governingAdminName || restMeta.governingAdminName
+
+        if (reqAdminId === "USER-SA-001" || reqAdminId === "USER-SA-SUPERADMIN" || reqAdminEmail === "superadmin@gomaa.in") {
+          effectiveAdminId = "USER-SA-001"
+          effectiveAdminEmail = "superadmin@gomaa.in"
+          effectiveAdminName = "Super Admin"
+          effectiveAdminRole = "super_admin"
+        } else if (reqAdminId || reqAdminEmail) {
+          const targetUser = await prisma.user.findFirst({
+            where: {
+              OR: [
+                ...(reqAdminId ? [{ id: reqAdminId }] : []),
+                ...(reqAdminEmail ? [{ email: reqAdminEmail }] : []),
+              ],
+            },
+          })
+          if (targetUser) {
+            effectiveAdminId = targetUser.id
+            effectiveAdminEmail = targetUser.email
+            effectiveAdminName = targetUser.name
+            effectiveAdminRole = targetUser.role === "SUPER_ADMIN" ? "super_admin" : "admin"
+          } else {
+            if (reqAdminId) effectiveAdminId = reqAdminId
+            if (reqAdminEmail) effectiveAdminEmail = reqAdminEmail
+            if (reqAdminName) effectiveAdminName = reqAdminName
+          }
+        }
+      }
 
       const metaPatch: any = {
         ...currentMeta,
@@ -4073,9 +4305,9 @@ export async function handleApiRequest(
           bufferMinutes: body.bufferMinutes !== undefined ? Number(body.bufferMinutes) : undefined,
           partnershipNotes: body.partnershipNotes !== undefined ? String(body.partnershipNotes) : undefined,
           metadata: metaPatch, // ATOMICALLY PERSIST TO POSTGRESQL!
-          ...(callerAdminId ? { adminId: callerAdminId } : {}),
-          ...(callerAdminEmail ? { adminEmail: callerAdminEmail } : {}),
-          ...(callerAdminName ? { adminName: callerAdminName } : {}),
+          adminId: effectiveAdminId,
+          adminEmail: effectiveAdminEmail,
+          adminName: effectiveAdminName,
         },
       })
 
@@ -4160,6 +4392,104 @@ export async function handleApiRequest(
       return { status: 200, body: { ok: true, gosala: mergedUpdated } }
     } catch (err: any) {
       return { status: 500, body: { error: err.message || "Failed to update Gaushala" } }
+    }
+  }
+
+  // PATCH /api/gosalas/:id/admin - Super Admin dedicated Gaushala assignment to Operational Admin
+  const patchGosalaAdminMatch = pathname.match(/^\/api\/gosalas\/([^/]+)\/admin$/)
+  if ((method === "PATCH" || method === "POST") && patchGosalaAdminMatch) {
+    if (!authUser || authUser.role !== "super_admin") {
+      return {
+        status: 403,
+        body: { ok: false, error: "Only Super Admin can reassign a Gaushala's governing Operational Admin" },
+      }
+    }
+    const rawId = patchGosalaAdminMatch[1]
+    const decodedId = decodeURIComponent(rawId)
+    try {
+      const existing = await prisma.gosala.findFirst({
+        where: {
+          OR: [
+            { id: rawId },
+            { id: decodedId },
+            { name: decodedId },
+            { name: { equals: decodedId, mode: "insensitive" } },
+          ],
+        },
+      })
+      if (!existing) {
+        return { status: 404, body: { ok: false, error: "Gaushala not found" } }
+      }
+
+      const { adminId, adminEmail, adminName } = body
+      if (!adminId && !adminEmail) {
+        return { status: 400, body: { ok: false, error: "Target adminId or adminEmail is required" } }
+      }
+
+      let newAdminId = adminId
+      let newAdminEmail = adminEmail
+      let newAdminName = adminName
+      let newAdminRole = "admin"
+
+      if (adminId === "USER-SA-001" || adminId === "USER-SA-SUPERADMIN" || adminEmail === "superadmin@gomaa.in") {
+        newAdminId = "USER-SA-001"
+        newAdminEmail = "superadmin@gomaa.in"
+        newAdminName = "Super Admin"
+        newAdminRole = "super_admin"
+      } else {
+        const targetUser = await prisma.user.findFirst({
+          where: {
+            OR: [
+              ...(adminId ? [{ id: adminId }] : []),
+              ...(adminEmail ? [{ email: adminEmail }] : []),
+            ],
+          },
+        })
+        if (targetUser) {
+          newAdminId = targetUser.id
+          newAdminEmail = targetUser.email
+          newAdminName = targetUser.name
+          newAdminRole = targetUser.role === "SUPER_ADMIN" ? "super_admin" : "admin"
+        }
+      }
+
+      const currentMeta = (existing.metadata && typeof existing.metadata === "object")
+        ? { ...(existing.metadata as any) }
+        : getGosalaMeta(existing.id, existing.name)
+
+      const metaPatch = {
+        ...currentMeta,
+        adminId: newAdminId,
+        adminEmail: newAdminEmail,
+        adminName: newAdminName,
+        governingAdminEmail: newAdminEmail,
+        governingAdminName: newAdminName,
+        governingAdminRole: newAdminRole,
+      }
+
+      const updated = await prisma.gosala.update({
+        where: { id: existing.id },
+        data: {
+          adminId: newAdminId,
+          adminEmail: newAdminEmail,
+          adminName: newAdminName,
+          metadata: metaPatch,
+        },
+      })
+
+      saveGosalaMeta(updated.id, updated.name, metaPatch)
+
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          gosala: { ...updated, ...metaPatch },
+          message: `Gaushala '${existing.name}' successfully assigned to Operational Admin '${newAdminName || newAdminEmail}'`,
+        },
+      }
+    } catch (err: any) {
+      console.error("[PATCH /api/gosalas/:id/admin] Error:", err?.message)
+      return { status: 500, body: { ok: false, error: err?.message || "Failed to reassign Gaushala" } }
     }
   }
 
@@ -4304,30 +4634,41 @@ export async function handleApiRequest(
       // Multi-tenant role scoping
       let finalAnimals = mapped
       if (authUser?.role === "manager") {
-        const allowedGosalas = (authUser.gosalaNames || []).map((s: string) => s.toLowerCase().trim())
-        if (allowedGosalas.length > 0) {
+        const assignments = await prisma.gosalaManagerAssignment.findMany({
+          where: { userId: authUser.userId, status: "Active" },
+          include: { gosala: true },
+        })
+        const dbNames = assignments.map((a: any) => a.gosala?.name?.toLowerCase().trim()).filter(Boolean)
+        const allowedGosalas = Array.from(new Set([...dbNames, ...(authUser.gosalaNames || []).map((s: string) => s.toLowerCase().trim())]))
+        if (allowedGosalas.length === 0) {
+          finalAnimals = []
+        } else {
           finalAnimals = finalAnimals.filter((a: any) => {
             const gName = (a.gosala || "").toLowerCase().trim()
             return allowedGosalas.includes(gName)
           })
         }
       } else if (authUser?.role === "admin") {
-        const adminEmail = (authUser.email || "").toLowerCase()
-        const adminName = (authUser.name || "").toLowerCase()
+        const adminEmail = (authUser.email || "").toLowerCase().trim()
         const adminId = authUser.userId || ""
 
-        const myGosalaNames = (authUser.gosalaNames && authUser.gosalaNames.length > 0)
-          ? authUser.gosalaNames.map((s: string) => s.toLowerCase().trim())
-          : (await prisma.gosala.findMany({ where: { isActive: true } }))
-              .filter((g: any) => {
-                const meta = getGosalaMeta(g.id, g.name)
-                const gEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase()
-                const gName = (g.adminName || meta.governingAdminName || meta.adminName || "").toLowerCase()
-                return (g.adminId === adminId) || (gEmail && gEmail === adminEmail) || (gName && gName.includes(adminName))
-              })
-              .map((g: any) => g.name.toLowerCase().trim())
+        const allGosalas = await prisma.gosala.findMany({ where: { isActive: true } })
+        const myGosalaNames = allGosalas
+          .filter((g: any) => {
+            const meta = (g.metadata && typeof g.metadata === "object") ? (g.metadata as any) : getGosalaMeta(g.id, g.name)
+            const gEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase().trim()
+            const gAdminId = g.adminId || meta.adminId
 
-        if (myGosalaNames.length > 0) {
+            if (gAdminId && adminId && gAdminId !== adminId) return false
+            if (gEmail && adminEmail && gEmail !== adminEmail) return false
+
+            return Boolean((adminId && gAdminId === adminId) || (adminEmail && gEmail === adminEmail))
+          })
+          .map((g: any) => g.name.toLowerCase().trim())
+
+        if (myGosalaNames.length === 0) {
+          finalAnimals = []
+        } else {
           finalAnimals = finalAnimals.filter((a: any) => {
             const gName = (a.gosala || "").toLowerCase().trim()
             return myGosalaNames.includes(gName)
@@ -4478,15 +4819,43 @@ export async function handleApiRequest(
 
       // Multi-Tenant Isolation:
       // Scope strictly to the requester's assigned Gaushala(s) for Managers and Operations Admins
-      if (authUser?.role === "manager" && authUser.gosalaNames?.length > 0) {
+      if (authUser?.role === "manager") {
+        const assignments = await prisma.gosalaManagerAssignment.findMany({
+          where: { userId: authUser.userId, status: "Active" },
+          include: { gosala: true },
+        })
+        const dbNames = assignments.map((a: any) => a.gosala?.name).filter(Boolean)
+        const myAssignedNames = Array.from(new Set([...dbNames, ...(authUser.gosalaNames || [])]))
+        if (myAssignedNames.length === 0) {
+          return { status: 200, body: { ok: true, vets: [] } }
+        }
         where.OR = [
-          ...authUser.gosalaNames.map((gn) => ({ gosala: { name: { equals: gn, mode: "insensitive" as const } } })),
-          ...authUser.gosalaNames.map((gn) => ({ assignedGosalas: { has: gn } })),
+          ...myAssignedNames.map((gn) => ({ gosala: { name: { equals: gn, mode: "insensitive" as const } } })),
+          ...myAssignedNames.map((gn) => ({ assignedGosalas: { has: gn } })),
         ]
-      } else if (authUser?.role === "admin" && authUser.gosalaNames?.length > 0) {
+      } else if (authUser?.role === "admin") {
+        const adminEmail = (authUser.email || "").toLowerCase().trim()
+        const adminId = authUser.userId || ""
+        const allGosalas = await prisma.gosala.findMany({ where: { isActive: true } })
+        const myGosalaNames = allGosalas
+          .filter((g: any) => {
+            const meta = (g.metadata && typeof g.metadata === "object") ? (g.metadata as any) : getGosalaMeta(g.id, g.name)
+            const gEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase().trim()
+            const gAdminId = g.adminId || meta.adminId
+
+            if (gAdminId && adminId && gAdminId !== adminId) return false
+            if (gEmail && adminEmail && gEmail !== adminEmail) return false
+
+            return Boolean((adminId && gAdminId === adminId) || (adminEmail && gEmail === adminEmail))
+          })
+          .map((g: any) => g.name)
+
+        if (myGosalaNames.length === 0) {
+          return { status: 200, body: { ok: true, vets: [] } }
+        }
         where.OR = [
-          ...authUser.gosalaNames.map((gn) => ({ gosala: { name: { equals: gn, mode: "insensitive" as const } } })),
-          ...authUser.gosalaNames.map((gn) => ({ assignedGosalas: { has: gn } })),
+          ...myGosalaNames.map((gn) => ({ gosala: { name: { equals: gn, mode: "insensitive" as const } } })),
+          ...myGosalaNames.map((gn) => ({ assignedGosalas: { has: gn } })),
         ]
       } else if (gosalaQuery) {
         where.OR = [

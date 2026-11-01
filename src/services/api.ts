@@ -336,14 +336,23 @@ export const api = {
     return request<{ bookings: Booking[] }>("/api/bookings")
   },
 
-  async createBooking(booking: Booking, holdId?: string, payment?: RazorpayProof) {
+  async createBooking(
+    booking: Booking,
+    holdId?: string,
+    payment?: RazorpayProof,
+  ) {
     return request<{ booking: Booking }>("/api/bookings", {
       method: "POST",
-      body: JSON.stringify({ booking, holdId, quoteToken: (booking as any).quoteToken, payment }),
+      body: JSON.stringify({
+        booking,
+        holdId,
+        quoteToken: (booking as any).quoteToken,
+        payment,
+      }),
     })
   },
 
-  async createRazorpayOrder(params: { quoteToken: string; holdId: string }) {
+  async createRazorpayOrder(params: { quoteToken: string holdId: string }) {
     return request<{
       ok: boolean
       orderId: string
@@ -636,6 +645,22 @@ export const api = {
     })
   },
 
+  async assignGosalaAdmin(
+    gosalaId: string,
+    adminId: string,
+    adminEmail?: string,
+    adminName?: string,
+  ) {
+    return request<{
+      ok: boolean
+      gosala: any
+      message?: string
+    }>(`/api/gosalas/${encodeURIComponent(gosalaId)}/admin`, {
+      method: "PATCH",
+      body: JSON.stringify({ adminId, adminEmail, adminName }),
+    })
+  },
+
   async deleteGosala(id: string) {
     return request<{
       ok: boolean
@@ -803,5 +828,102 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ input }),
     })
+  },
+
+  // Regional Governance & Operational Admins
+  async getRegions() {
+    return request<{
+      ok: boolean
+      regions: any[]
+    }>("/api/regions")
+  },
+
+  async createRegion(data: {
+    state: string
+    district: string
+    name?: string
+    zone?: string
+    defaultMaxRadiusKm?: number
+    pincodePrefixes?: string[]
+    assignedAdminId?: string | null
+  }) {
+    return request<{
+      ok: boolean
+      region: any
+    }>("/api/regions", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+  },
+
+  async assignRegionAdmin(regionId: string, adminId: string | null) {
+    return request<{
+      ok: boolean
+      region: any
+    }>(`/api/regions/${encodeURIComponent(regionId)}/assign`, {
+      method: "POST",
+      body: JSON.stringify({ adminId }),
+    })
+  },
+
+  async getOperationalAdmins() {
+    return request<{
+      ok: boolean
+      admins: any[]
+    }>("/api/operational-admins")
+  },
+
+  async createOperationalAdmin(data: {
+    name: string
+    email: string
+    phone: string
+    password?: string
+    designation?: string
+    department?: string
+    bankDetails?: any
+    assignedRegionId?: string
+  }) {
+    return request<{
+      ok: boolean
+      admin: any
+    }>("/api/operational-admins", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+  },
+
+  async toggleOperationalAdminStatus(adminId: string, isActive: boolean) {
+    return request<{
+      ok: boolean
+      adminId: string
+      isActive: boolean
+    }>(`/api/operational-admins/${encodeURIComponent(adminId)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ isActive }),
+    })
+  },
+
+  async migrateOperationalAdminData(data: {
+    sourceAdminId: string
+    targetAdminId: string
+    deactivateSource?: boolean
+    transferRegion?: boolean
+    targetBankDetails?: any
+    notes?: string
+  }) {
+    return request<{
+      ok: boolean
+      certificate: any
+    }>("/api/operational-admins/migrate", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+  },
+
+  async getMigrationHistory() {
+    return request<{
+      ok: boolean
+      history: any[]
+    }>("/api/operational-admins/migrations")
   },
 }

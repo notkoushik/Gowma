@@ -410,7 +410,9 @@ export default function GaushalaProfileView({
 
   // Filtered resident cattle for search
   const filteredHerd = useMemo(() => {
-    const q = String(herdSearchQuery || "").toLowerCase().trim()
+    const q = String(herdSearchQuery || "")
+      .toLowerCase()
+      .trim()
     if (!q) return residentCattle
     return residentCattle.filter(
       (c) =>

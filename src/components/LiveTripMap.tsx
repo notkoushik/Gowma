@@ -39,7 +39,7 @@ export default function LiveTripMap({
   viewerRole = "CUSTOMER",
 }: LiveTripMapProps) {
   // Real-time stage listener via WebSocket (zero GPS polling traffic)
-  const { isConnected } = useRealtime({ bookingId })
+  const { isConnected, lastGpsTick } = useRealtime({ bookingId })
 
   const isDriver = viewerRole === "DRIVER"
   const isEnRoute = stageIndex >= 3 && stageIndex < 5
@@ -58,6 +58,14 @@ export default function LiveTripMap({
     const cleanPickup = pickupLocation || "Gaushala Sanctuary"
     const cleanDrop = dropLocation || "Devotee Venue"
 
+    if (lastGpsTick && lastGpsTick.lat && lastGpsTick.lng) {
+      if (isDriver) {
+        const targetDestination = stageIndex < 3 ? cleanPickup : cleanDrop
+        return `https://www.google.com/maps/dir/?api=1&origin=${lastGpsTick.lat},${lastGpsTick.lng}&destination=${encodeURIComponent(targetDestination)}`
+      }
+      return `https://www.google.com/maps/dir/?api=1&origin=${lastGpsTick.lat},${lastGpsTick.lng}&destination=${encodeURIComponent(cleanDrop)}`
+    }
+
     if (isDriver) {
       // Driver heads to sanctuary first (stages 0-2), then to devotee (stages 3+)
       const targetDestination = stageIndex < 3 ? cleanPickup : cleanDrop
@@ -66,7 +74,7 @@ export default function LiveTripMap({
 
     // Customer & Managers view full transit corridor
     return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(cleanPickup)}&destination=${encodeURIComponent(cleanDrop)}`
-  }, [pickupLocation, dropLocation, isDriver, stageIndex])
+  }, [pickupLocation, dropLocation, isDriver, stageIndex, lastGpsTick])
 
   // Milestone progression definition
   const milestones = [
@@ -124,7 +132,7 @@ export default function LiveTripMap({
                       ? "Cattle Ambulance En Route"
                       : "Dispatch & Route Scheduled"}
             </div>
-            <div className="text-[11px] text-ink-faint flex items-center gap-1.5">
+            <div className="text-[11px] text-ink-faint flex items-center gap-1.5 flex-wrap">
               <span>{driverName}</span>
               <span>•</span>
               <span>{distanceKm} km transit</span>
@@ -134,6 +142,15 @@ export default function LiveTripMap({
                   <span className="inline-flex items-center gap-1 text-[10px] text-forest font-mono">
                     <span className="h-1.5 w-1.5 rounded-full bg-forest animate-pulse" />
                     Live Sync
+                  </span>
+                </>
+              )}
+              {lastGpsTick?.lat && lastGpsTick?.lng && (
+                <>
+                  <span>•</span>
+                  <span className="inline-flex items-center gap-1 text-[10px] text-saffron-deep font-mono font-semibold">
+                    <Navigation size={10} className="text-saffron-deep animate-pulse" />
+                    GPS: {lastGpsTick.lat.toFixed(4)}, {lastGpsTick.lng.toFixed(4)}
                   </span>
                 </>
               )}

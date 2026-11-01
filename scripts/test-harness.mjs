@@ -51,6 +51,9 @@ export class TestHarness {
   }
 
   mapFrontendToDbRole(role) {
+    if (["SUPER_ADMIN", "OPERATIONS_ADMIN", "GOSALA_MANAGER", "DRIVER", "CUSTOMER"].includes(role)) {
+      return role
+    }
     switch (role) {
       case "super_admin":
         return "SUPER_ADMIN"

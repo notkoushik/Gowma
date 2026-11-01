@@ -1168,7 +1168,7 @@ function MobileCustomer({
   const [gosalaProfileId, setGosalaProfileId] = useState<string | null>(null)
   const [gosalaProfileDist, setGosalaProfileDist] =
     useState<number | undefined>(undefined)
-  const [flow, setFlow] = useState<{ animal: Animal; gosala: Gosala } | null>(
+  const [flow, setFlow] = useState<{ animal: Animal gosala: Gosala } | null>(
     null,
   )
   const [editProfileOpen, setEditProfileOpen] = useState(false)
@@ -1187,12 +1187,19 @@ function MobileCustomer({
       ? myBookings.find((b) => b.id === selectedTrackBookingId)
       : null) ||
     myBookings.find((b) => b.status === "In Service") ||
+    myBookings.find(
+      (b) =>
+        typeof b.driverStage === "number" &&
+        b.driverStage > 0 &&
+        b.status !== "Completed" &&
+        b.status !== "Rejected",
+    ) ||
     myBookings.find((b) => b.status === "Confirmed" && b.driver) ||
     myBookings.find((b) => b.status === "Confirmed") ||
     myBookings.find((b) => b.status === "Under Review") ||
     myBookings[0]
 
-  const tabs: { id: Tab; label: string; icon: typeof Home }[] = [
+  const tabs: { id: Tab label: string icon: typeof Home }[] = [
     { id: "discover", label: "Discover", icon: Compass },
     { id: "bookings", label: "Bookings", icon: Ticket },
     { id: "track", label: "Track", icon: Truck },
@@ -1270,10 +1277,14 @@ function MobileCustomer({
                   <div className="overflow-y-auto divide-y divide-line/60 p-1 flex-1">
                     {notifications.length === 0 ? (
                       <div className="p-8 text-center text-ink-faint text-[12.5px]">
-                        <Bell size={24} className="mx-auto text-ink-faint/40 mb-2" />
+                        <Bell
+                          size={24}
+                          className="mx-auto text-ink-faint/40 mb-2"
+                        />
                         No notifications yet.
                         <div className="text-[11px] text-ink-faint/70 mt-1">
-                          Booking approvals, driver assignments, and transit updates appear here.
+                          Booking approvals, driver assignments, and transit
+                          updates appear here.
                         </div>
                       </div>
                     ) : (

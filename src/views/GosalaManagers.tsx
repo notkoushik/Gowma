@@ -875,10 +875,18 @@ export default function GosalaManagers() {
   }, [gosalas, currentRole, adminPortfolioFilter, activeAdminName, authUser])
 
   const scopedManagers = useMemo(() => {
+    if (currentRole === "manager") {
+      return managers.filter(
+        (m) =>
+          m.id === authUser?.userId ||
+          m.email?.toLowerCase() === authUser?.email?.toLowerCase(),
+      )
+    }
     if (currentRole === "admin") {
+      // Operations Admin only sees managers assigned to their maintained Gaushalas (with whom they share money)
       return managers.filter((m) => {
         const assigned = getManagerAssignedGosalas(m)
-        if (assigned.length === 0) return true
+        if (assigned.length === 0) return false
         return assigned.some((gName) =>
           scopedGosalas.some(
             (sg) => sg.name.toLowerCase() === gName.toLowerCase(),
@@ -3290,7 +3298,8 @@ export default function GosalaManagers() {
                   Credit Manager Wallet
                 </h3>
                 <p className="text-[12px] text-ink-soft mt-0.5">
-                  Direct operational credit &amp; test funds with anti-replay ledger tracking.
+                  Direct operational credit &amp; test funds with anti-replay
+                  ledger tracking.
                 </p>
               </div>
               <button
@@ -3308,7 +3317,9 @@ export default function GosalaManagers() {
               {/* Manager Badge */}
               <div className="p-3 bg-paper rounded-lg border border-line text-[12.5px] space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-ink">{creditingManager.name}</span>
+                  <span className="font-semibold text-ink">
+                    {creditingManager.name}
+                  </span>
                   <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-paper-deep border border-line text-ink-soft">
                     {creditingManager.id}
                   </span>
@@ -3317,7 +3328,10 @@ export default function GosalaManagers() {
                   {creditingManager.email}
                 </div>
                 <div className="text-[11.5px] text-emerald-700 font-medium">
-                  Gaushala: {creditingManager.gosalas?.join(", ") || creditingManager.gosala || "Assigned Sanctuary"}
+                  Gaushala:{" "}
+                  {creditingManager.gosalas?.join(", ") ||
+                    creditingManager.gosala ||
+                    "Assigned Sanctuary"}
                 </div>
               </div>
 
@@ -3368,10 +3382,18 @@ export default function GosalaManagers() {
                   disabled={creditingInProgress}
                   className="w-full px-3 py-2 bg-paper border border-line rounded-lg text-[12.5px] font-medium text-ink focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
-                  <option value="OPERATIONAL_TEST">Operational Test Credit (Testing End-to-End Flow)</option>
-                  <option value="ADJUSTMENT">Super Admin Ledger Adjustment</option>
-                  <option value="PUJA_COMMISSION">Manual Seva Commission Settlement</option>
-                  <option value="INCENTIVE">Gaushala Custodian Performance Incentive</option>
+                  <option value="OPERATIONAL_TEST">
+                    Operational Test Credit (Testing End-to-End Flow)
+                  </option>
+                  <option value="ADJUSTMENT">
+                    Super Admin Ledger Adjustment
+                  </option>
+                  <option value="PUJA_COMMISSION">
+                    Manual Seva Commission Settlement
+                  </option>
+                  <option value="INCENTIVE">
+                    Gaushala Custodian Performance Incentive
+                  </option>
                 </select>
               </div>
 
@@ -4007,7 +4029,9 @@ export default function GosalaManagers() {
                   }
                 } else if (newUserRole === "manager") {
                   payload.gosalaName = newUserGosala
-                  payload.assignedGosalaNames = newUserGosala ? [newUserGosala] : []
+                  payload.assignedGosalaNames = newUserGosala
+                    ? [newUserGosala]
+                    : []
                 }
                 const createdUser = await addUser(payload)
                 if (!createdUser) {

@@ -98,17 +98,28 @@ function mapLedgerError(err: any): HandlerResponse {
   return fail(500, "Something went wrong while handling the wallet request")
 }
 
-/** Gaushalas this user may act for. Super Admin: all. Admin: those they govern or are scoped to. */
+/** Gaushalas this user may act for. Super Admin: all. Admin: those they govern. Manager: those they manage. */
 async function gosalasFor(user: JwtPayload) {
   if (user.role === "super_admin") return prisma.gosala.findMany({ where: { isActive: true }, orderBy: { name: "asc" } })
-  const scoped = [...(user.gosalaIds || []), ...(user.gosalaNames || [])]
-  return prisma.gosala.findMany({
-    where: {
-      isActive: true,
-      OR: [{ adminId: user.userId }, ...(scoped.length ? [{ id: { in: scoped } }, { name: { in: scoped } }] : [])],
-    },
-    orderBy: { name: "asc" },
-  })
+  if (user.role === "admin") {
+    const adminEmail = (user.email || "").toLowerCase().trim()
+    const allGosalas = await prisma.gosala.findMany({ where: { isActive: true }, orderBy: { name: "asc" } })
+    return allGosalas.filter((g: any) => {
+      const gEmail = (g.adminEmail || "").toLowerCase().trim()
+      const gAdminId = g.adminId
+      if (gAdminId && user.userId && gAdminId !== user.userId) return false
+      if (gEmail && adminEmail && gEmail !== adminEmail) return false
+      return Boolean((user.userId && gAdminId === user.userId) || (adminEmail && gEmail === adminEmail))
+    })
+  }
+  if (user.role === "manager") {
+    const assignments = await prisma.gosalaManagerAssignment.findMany({
+      where: { userId: user.userId, status: "Active" },
+      include: { gosala: true },
+    })
+    return assignments.map((a: any) => a.gosala).filter(Boolean)
+  }
+  return []
 }
 
 async function walletSummary(userId: string, role: JwtPayload["role"]) {

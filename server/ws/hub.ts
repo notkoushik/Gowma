@@ -163,7 +163,7 @@ class WebSocketHub {
 
   private canPublishTelemetry(ws: WebSocket, channel: string, payload: any) {
     const identity = this.identities.get(ws)
-    return !!identity && (identity.role === "driver" || identity.role === "admin" || identity.role === "super_admin") &&
+    return !!identity && (identity.role === "driver" || identity.role === "admin" || identity.role === "super_admin" || identity.role === "manager") &&
       this.clients.get(ws)?.has(channel) === true &&
       typeof payload.lat === "number" && typeof payload.lng === "number" &&
       payload.lat >= -90 && payload.lat <= 90 && payload.lng >= -180 && payload.lng <= 180

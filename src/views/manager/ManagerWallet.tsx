@@ -109,7 +109,12 @@ export default function ManagerWallet() {
     api
       .getWalletBalance()
       .then((res) => {
-        if (isMounted && res && res.ok && typeof res.balanceRupees === "number") {
+        if (
+          isMounted &&
+          res &&
+          res.ok &&
+          typeof res.balanceRupees === "number"
+        ) {
           setDbBalance(res.balanceRupees)
         }
       })
@@ -202,10 +207,7 @@ export default function ManagerWallet() {
         "ok",
       )
     } catch (err: any) {
-      notify(
-        `Withdrawal failed: ${err?.message || "Internal error"}`,
-        "danger",
-      )
+      notify(`Withdrawal failed: ${err?.message || "Internal error"}`, "danger")
     } finally {
       setProcessingWithdrawal(false)
     }

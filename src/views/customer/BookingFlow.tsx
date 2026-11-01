@@ -182,16 +182,16 @@ export default function BookingFlow({
   onClose,
   onPlace,
   onComplete,
+  /** Saves the booking on the server once Razorpay has captured the payment */
+  /** Called when the customer leaves the success screen */
 }: {
   animal: Animal
   gosala: Gosala
   onClose: () => void
-  /** Saves the booking on the server once Razorpay has captured the payment */
   onPlace: (
     summary: import("../CustomerApp").BookingSummary,
     payment: RazorpayProof,
   ) => Promise<void>
-  /** Called when the customer leaves the success screen */
   onComplete: () => void
 }) {
   const { pricingConfig, checkAnimalAvailability, profiles, authUser } =
@@ -599,8 +599,9 @@ export default function BookingFlow({
     attempt()
       .catch((err) => {
         if (/\b409\b/.test(String(err?.message))) throw err
-        return new Promise<Awaited<ReturnType<typeof attempt>>>((resolve, reject) =>
-          setTimeout(() => attempt().then(resolve, reject), 800),
+        return new Promise<Awaited<ReturnType<typeof attempt>>>(
+          (resolve, reject) =>
+            setTimeout(() => attempt().then(resolve, reject), 800),
         )
       })
       .then((res) => {
@@ -633,7 +634,15 @@ export default function BookingFlow({
     return () => {
       active = false
     }
-  }, [step, slot, animal.name, selectedDateStr, duration, devoteeName, holdRetry])
+  }, [
+    step,
+    slot,
+    animal.name,
+    selectedDateStr,
+    duration,
+    devoteeName,
+    holdRetry,
+  ])
 
   // Hold timer countdown in step 5
   useEffect(() => {
@@ -867,9 +876,9 @@ export default function BookingFlow({
             Payment verified
           </h2>
           <p className="text-[13px] text-ink-soft mt-2 leading-relaxed">
-            Your payment is confirmed and your booking is now with the
-            gaushala manager for review. We'll email you (and show it under
-            Track) as soon as it is confirmed.
+            Your payment is confirmed and your booking is now with the gaushala
+            manager for review. We'll email you (and show it under Track) as
+            soon as it is confirmed.
           </p>
           <div className="mt-6 rounded-sm border border-line bg-card p-4 text-left space-y-2 text-[13px]">
             {[

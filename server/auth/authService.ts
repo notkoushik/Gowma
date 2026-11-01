@@ -173,10 +173,12 @@ export function getAuthUserFromHeader(authHeader?: string | string[]): JwtPayloa
  */
 export async function buildUserSession(user: any): Promise<UserSessionData> {
   // Resolve assigned Gaushalas strictly verifying active custody
-  const assignedGosalas = (user.managerAssignments || [])
-    .filter((a: any) => {
-      if (!a.gosala) return false
-      if (user.role === "GOSALA_MANAGER") {
+  let assignedGosalas: { id: string; name: string }[] = []
+
+  if (user.role === "GOSALA_MANAGER") {
+    assignedGosalas = (user.managerAssignments || [])
+      .filter((a: any) => {
+        if (!a.gosala) return false
         const meta = getGosalaMeta(a.gosala.id, a.gosala.name)
         if (meta.isActingManager || meta.actAsManagerMyself) return false
         const gMgrId = meta.managerId || ""
@@ -202,28 +204,30 @@ export async function buildUserSession(user: any): Promise<UserSessionData> {
           )
           return idMatch || nameMatch
         }
-      }
-      return true
-    })
-    .map((a: any) => ({
-      id: a.gosala.id,
-      name: a.gosala.name,
-    }))
-
-  // If Operations Admin, link their specific portfolio Gaushalas dynamically
-  if (user.role === "OPERATIONS_ADMIN") {
+        return true
+      })
+      .map((a: any) => ({
+        id: a.gosala.id,
+        name: a.gosala.name,
+      }))
+  } else if (user.role === "OPERATIONS_ADMIN") {
     try {
-      const adminEmail = (user.email || "").toLowerCase()
-      const adminName = (user.name || "").toLowerCase()
+      const adminEmail = (user.email || "").toLowerCase().trim()
+      const adminId = user.id || ""
       const allGosalas = await prisma.gosala.findMany({ where: { isActive: true } })
       allGosalas.forEach((g: any) => {
-        const meta = getGosalaMeta(g.id, g.name)
-        const govEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase()
-        const govName = (g.adminName || meta.governingAdminName || meta.adminName || "").toLowerCase()
+        const meta = (g.metadata && typeof g.metadata === "object") ? (g.metadata as any) : getGosalaMeta(g.id, g.name)
+        const govEmail = (g.adminEmail || meta.governingAdminEmail || meta.adminEmail || "").toLowerCase().trim()
+        const gAdminId = g.adminId || meta.adminId
+
+        // If another admin is explicitly assigned, do not match
+        if (gAdminId && adminId && gAdminId !== adminId) return
+        if (govEmail && adminEmail && govEmail !== adminEmail) return
+
         const isDirectMatch =
-          (g.adminId && g.adminId === user.id) ||
-          (govEmail && govEmail === adminEmail) ||
-          (govName && govName.includes(adminName))
+          Boolean(adminId && gAdminId === adminId) ||
+          Boolean(adminEmail && govEmail === adminEmail)
+
         if (isDirectMatch) {
           if (!assignedGosalas.some((x: any) => x.id === g.id)) {
             assignedGosalas.push({ id: g.id, name: g.name })

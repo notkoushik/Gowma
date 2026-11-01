@@ -405,15 +405,11 @@ export default function Settlements() {
                 </div>
                 <div className="flex justify-between text-saffron-deep">
                   <span>GOMAA Platform Fee ({defaultCommPct}%):</span>
-                  <span className="font-mono">
-                    −{inr(totalCommission)}
-                  </span>
+                  <span className="font-mono">−{inr(totalCommission)}</span>
                 </div>
                 <div className="pt-2 border-t border-forest/20 flex justify-between font-bold text-forest text-[15px]">
                   <span>Total Net Disbursed ({defaultGaushalaPct}%):</span>
-                  <span className="font-mono">
-                    {inr(totalPayable)}
-                  </span>
+                  <span className="font-mono">{inr(totalPayable)}</span>
                 </div>
               </div>
 

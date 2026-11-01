@@ -28,6 +28,80 @@ import { api, type RazorpayProof } from "../services/api"
 
 export type { Gosala } from "../data/gosalas"
 
+/* ---------------- Regional Governance & Data Migration Types ---------------- */
+export type OperationalRegion = {
+  id: string
+  state: string
+  district: string
+  name: string
+  zone: "North" | "South" | "East" | "West" | "Central" | "Rural"
+  defaultMaxRadiusKm: number
+  pincodePrefixes: string[]
+  assignedAdminId?: string | null
+  assignedAdminName?: string | null
+  assignedAdminEmail?: string | null
+  assignedAdminPhone?: string | null
+  assignedAt?: string | null
+  status: "Active" | "Inactive"
+  createdAt: string
+  isCustom?: boolean
+}
+
+export type OperationalAdminBankDetails = {
+  accountHolder: string
+  bankName: string
+  accountNumber: string
+  ifscCode: string
+  upiId?: string
+  branchName?: string
+  isVerified?: boolean
+}
+
+export type OperationalAdmin = {
+  id: string
+  uniqueId?: string
+  name: string
+  email: string
+  phone: string
+  role: "admin"
+  dbRole: "OPERATIONS_ADMIN"
+  isActive: boolean
+  assignedRegion?: OperationalRegion | null
+  assignedRegionId?: string | null
+  assignedRegionName?: string | null
+  bankDetails?: OperationalAdminBankDetails
+  assignedGosalaNames: string[]
+  assignedGosalaCount: number
+  assignedManagerCount: number
+  activeBookingsCount: number
+  department?: string
+  designation?: string
+  createdAt?: string
+  isFree: boolean
+}
+
+export type DataMigrationRecord = {
+  id: string
+  timestamp: string
+  sourceAdminId: string
+  sourceAdminName: string
+  sourceAdminEmail: string
+  targetAdminId: string
+  targetAdminName: string
+  targetAdminEmail: string
+  regionId?: string
+  regionName: string
+  transferredGosalas: string[]
+  transferredManagersCount: number
+  transferredBookingsCount: number
+  sourceDeactivated: boolean
+  bankingHandoverStatus: "COMPLETED" | "PENDING_VERIFICATION"
+  targetBankDetailsSummary: string
+  operatorRole: string
+  operatorName: string
+  notes?: string
+}
+
 /* ---------------- Professional Toasts & Alerts ---------------- */
 export type ToastTone = "ok" | "info" | "danger" | "warn" | "err"
 export type Toast = {
@@ -147,7 +221,11 @@ type Store = {
   updateProfile: (role: RoleId, updates: Partial<RoleProfile>) => Promise<void>
   currentRole: RoleId | null
   setCurrentRole: (r: RoleId | null) => void
-  createBooking: (b: Booking, holdId?: string, payment?: RazorpayProof) => Promise<void>
+  createBooking: (
+    b: Booking,
+    holdId?: string,
+    payment?: RazorpayProof,
+  ) => Promise<void>
   managerDecide: (
     id: string,
     confirm: boolean,
@@ -252,6 +330,23 @@ type Store = {
   addUser: (userData: any) => Promise<any>
   updateUser: (id: string, updates: any) => Promise<any>
   deleteUser: (id: string) => Promise<any>
+  operationalAdmins: OperationalAdmin[]
+  regions: OperationalRegion[]
+  migrationHistory: DataMigrationRecord[]
+  refreshOperationalAdmins: () => Promise<OperationalAdmin[]>
+  refreshRegions: () => Promise<OperationalRegion[]>
+  refreshMigrationHistory: () => Promise<DataMigrationRecord[]>
+  addOperationalAdmin: (data: any) => Promise<any>
+  toggleOperationalAdminStatus: (id: string, isActive: boolean) => Promise<void>
+  addRegion: (data: any) => Promise<any>
+  assignRegionAdmin: (regionId: string, adminId: string | null) => Promise<any>
+  assignGosalaAdmin: (
+    gosalaId: string,
+    adminId: string,
+    adminEmail?: string,
+    adminName?: string,
+  ) => Promise<any>
+  migrateOperationalAdminData: (data: any) => Promise<any>
 }
 
 const StoreCtx = createContext<Store | null>(null)
@@ -321,6 +416,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   })
   const [authUser, setAuthUser] = useState<any | null>(null)
   const [users, setUsers] = useState<any[]>([])
+  const [operationalAdmins, setOperationalAdmins] =
+    useState<OperationalAdmin[]>([])
+  const [regions, setRegions] = useState<OperationalRegion[]>([])
+  const [migrationHistory, setMigrationHistory] =
+    useState<DataMigrationRecord[]>([])
   const [toasts, setToasts] = useState<Toast[]>([])
   const [notifications, setNotifications] = useState<AppNotification[]>([])
 
@@ -515,11 +615,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           : null
 
       // Step 1: Public operational catalog (safe for unauthenticated visitors)
-      const [gosalaRes, prRes, animalRes, vetRes] = await Promise.all([
+      const [gosalaRes, prRes, animalRes, vetRes, regRes] = await Promise.all([
         api.getGosalas().catch(() => null),
         api.getPricingConfig().catch(() => null),
         api.getAnimals().catch(() => null),
         api.getVets().catch(() => null),
+        api.getRegions().catch(() => null),
       ])
 
       if (gosalaRes?.gosalas && Array.isArray(gosalaRes.gosalas)) {
@@ -534,6 +635,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (vetRes?.vets && Array.isArray(vetRes.vets)) {
         setVets(vetRes.vets)
       }
+      if (regRes?.regions && Array.isArray(regRes.regions)) {
+        setRegions(regRes.regions)
+      }
 
       // If no valid auth token is stored, do not dispatch protected admin/user calls that trigger 401s
       if (!token) {
@@ -542,6 +646,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setSettlements([])
         setManagers([])
         setUsers([])
+        setOperationalAdmins([])
+        setMigrationHistory([])
         return
       }
 
@@ -555,22 +661,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const isSuper = role === "super_admin"
 
       // Step 3: Protected rosters & admin data
-      const [bkRes, stRes, mgRes, profRes, usersRes, schedRes] =
-        await Promise.all([
-          api.getBookings().catch(() => null),
-          api.getSettlements().catch(() => null),
-          api.getManagers().catch(() => null),
-          api.getProfiles().catch(() => null),
-          isSuper
-            ? api.getUsers().catch(() => null)
-            : Promise.resolve(null),
-          api.getSettlementSchedule().catch(() => null),
-        ])
+      const [
+        bkRes,
+        stRes,
+        mgRes,
+        profRes,
+        usersRes,
+        schedRes,
+        opsAdminsRes,
+        migHistoryRes,
+      ] = await Promise.all([
+        api.getBookings().catch(() => null),
+        api.getSettlements().catch(() => null),
+        api.getManagers().catch(() => null),
+        api.getProfiles().catch(() => null),
+        isSuper ? api.getUsers().catch(() => null) : Promise.resolve(null),
+        api.getSettlementSchedule().catch(() => null),
+        isSuper
+          ? api.getOperationalAdmins().catch(() => null)
+          : Promise.resolve(null),
+        isSuper
+          ? api.getMigrationHistory().catch(() => null)
+          : Promise.resolve(null),
+      ])
 
       if (isSuper && usersRes?.ok && Array.isArray(usersRes.users)) {
         setUsers(usersRes.users)
       } else {
         setUsers([])
+      }
+      if (isSuper && opsAdminsRes?.ok && Array.isArray(opsAdminsRes.admins)) {
+        setOperationalAdmins(opsAdminsRes.admins)
+      } else {
+        setOperationalAdmins([])
+      }
+      if (
+        isSuper &&
+        migHistoryRes?.ok &&
+        Array.isArray(migHistoryRes.history)
+      ) {
+        setMigrationHistory(migHistoryRes.history)
+      } else {
+        setMigrationHistory([])
       }
       if (bkRes?.bookings && Array.isArray(bkRes.bookings)) {
         const sanitized = bkRes.bookings.map((b: any) => ({
@@ -1759,6 +1891,187 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [notify],
   )
 
+  const refreshOperationalAdmins = useCallback(async () => {
+    try {
+      const res = await api.getOperationalAdmins()
+      if (res?.ok && Array.isArray(res.admins)) {
+        setOperationalAdmins(res.admins)
+        return res.admins
+      }
+    } catch {}
+    return []
+  }, [])
+
+  const refreshRegions = useCallback(async () => {
+    try {
+      const res = await api.getRegions()
+      if (res?.ok && Array.isArray(res.regions)) {
+        setRegions(res.regions)
+        return res.regions
+      }
+    } catch {}
+    return []
+  }, [])
+
+  const refreshMigrationHistory = useCallback(async () => {
+    try {
+      const res = await api.getMigrationHistory()
+      if (res?.ok && Array.isArray(res.history)) {
+        setMigrationHistory(res.history)
+        return res.history
+      }
+    } catch {}
+    return []
+  }, [])
+
+  const addRegion = useCallback(
+    async (regionData: any) => {
+      try {
+        const res = await api.createRegion(regionData)
+        if (res?.ok && res.region) {
+          setRegions((prev) => [res.region, ...prev])
+          notify(
+            `Operational region '${res.region.name}' successfully established`,
+            "ok",
+          )
+          refreshOperationalAdmins()
+          return res.region
+        }
+      } catch (err: any) {
+        notify(err.message || "Failed to create region", "err")
+        throw err
+      }
+    },
+    [notify, refreshOperationalAdmins],
+  )
+
+  const assignRegionAdmin = useCallback(
+    async (regionId: string, adminId: string | null) => {
+      try {
+        const res = await api.assignRegionAdmin(regionId, adminId)
+        if (res?.ok && res.region) {
+          setRegions((prev) =>
+            prev.map((r) => (r.id === regionId ? res.region : r)),
+          )
+          await refreshOperationalAdmins()
+          notify(
+            adminId
+              ? "Operational Admin appointed to region successfully"
+              : "Region unassigned from Operational Admin",
+            "ok",
+          )
+          return res.region
+        }
+      } catch (err: any) {
+        notify(err.message || "Failed to assign admin to region", "err")
+        throw err
+      }
+    },
+    [notify, refreshOperationalAdmins],
+  )
+
+  const addOperationalAdmin = useCallback(
+    async (adminData: any) => {
+      try {
+        const res = await api.createOperationalAdmin(adminData)
+        if (res?.ok && res.admin) {
+          setOperationalAdmins((prev) => [res.admin, ...prev])
+          await refreshRegions()
+          notify(
+            `Operational Admin '${res.admin.name}' successfully onboarded with verified settlement account`,
+            "ok",
+          )
+          return res.admin
+        }
+      } catch (err: any) {
+        notify(err.message || "Failed to create operational admin", "err")
+        throw err
+      }
+    },
+    [notify, refreshRegions],
+  )
+
+  const toggleOperationalAdminStatus = useCallback(
+    async (adminId: string, isActive: boolean) => {
+      try {
+        const res = await api.toggleOperationalAdminStatus(adminId, isActive)
+        if (res?.ok) {
+          setOperationalAdmins((prev) =>
+            prev.map((a) => (a.id === adminId ? { ...a, isActive } : a)),
+          )
+          notify(
+            isActive
+              ? "Operational Admin activated successfully"
+              : "Operational Admin deactivated · Territory pending reassignment or migration",
+            isActive ? "ok" : "warn",
+          )
+        }
+      } catch (err: any) {
+        notify(err.message || "Failed to update admin status", "err")
+        throw err
+      }
+    },
+    [notify],
+  )
+
+  const migrateOperationalAdminData = useCallback(
+    async (data: any) => {
+      try {
+        const res = await api.migrateOperationalAdminData(data)
+        if (res?.ok && res.certificate) {
+          setMigrationHistory((prev) => [res.certificate, ...prev])
+          await Promise.all([
+            refreshOperationalAdmins(),
+            refreshRegions(),
+            refreshGosalas(),
+          ])
+          notify(
+            `Data migration complete · ${res.certificate.transferredGosalas?.length || 0} Gaushalas transferred to ${res.certificate.targetAdminName}`,
+            "ok",
+          )
+          return res.certificate
+        }
+      } catch (err: any) {
+        notify(err.message || "Failed to execute data migration", "err")
+        throw err
+      }
+    },
+    [notify, refreshOperationalAdmins, refreshRegions, refreshGosalas],
+  )
+
+  const assignGosalaAdmin = useCallback(
+    async (
+      gosalaId: string,
+      adminId: string,
+      adminEmail?: string,
+      adminName?: string,
+    ) => {
+      try {
+        const res = await api.assignGosalaAdmin(
+          gosalaId,
+          adminId,
+          adminEmail,
+          adminName,
+        )
+        if (res?.ok && res.gosala) {
+          setGosalas((prev) =>
+            prev.map((g) => (g.id === gosalaId ? { ...g, ...res.gosala } : g)),
+          )
+          await Promise.all([refreshGosalas(), refreshOperationalAdmins()])
+          notify(
+            res.message || "Gaushala reassigned to Operational Admin successfully",
+            "ok",
+          )
+          return res.gosala
+        }
+      } catch (err: any) {
+        notify(err.message || "Failed to reassign Gaushala", "err")
+        throw err
+      }
+    },
+    [notify, refreshGosalas, refreshOperationalAdmins],
+  )
+
   const store = useMemo(
     () => ({
       bookings,
@@ -1828,6 +2141,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addUser,
       updateUser,
       deleteUser,
+      operationalAdmins,
+      regions,
+      migrationHistory,
+      refreshOperationalAdmins,
+      refreshRegions,
+      refreshMigrationHistory,
+      addOperationalAdmin,
+      toggleOperationalAdminStatus,
+      addRegion,
+      assignRegionAdmin,
+      assignGosalaAdmin,
+      migrateOperationalAdminData,
     }),
     [
       bookings,
@@ -1896,6 +2221,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addUser,
       updateUser,
       deleteUser,
+      operationalAdmins,
+      regions,
+      migrationHistory,
+      refreshOperationalAdmins,
+      refreshRegions,
+      refreshMigrationHistory,
+      addOperationalAdmin,
+      toggleOperationalAdminStatus,
+      addRegion,
+      assignRegionAdmin,
+      assignGosalaAdmin,
+      migrateOperationalAdminData,
     ],
   )
 

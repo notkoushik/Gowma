@@ -37,7 +37,9 @@ export default function AdminLogin({
 
     const cleanIdentifier = identifierInput.trim()
     if (!cleanIdentifier) {
-      setAuthError("Please enter your Administrative Email, Phone, or Unique ID.")
+      setAuthError(
+        "Please enter your Administrative Email, Phone, or Unique ID.",
+      )
       setIsSubmitting(false)
       return
     }
@@ -53,10 +55,14 @@ export default function AdminLogin({
 
       if (res.ok && res.token && res.user) {
         setAuthSession(res.token, res.user)
-        const userRole = (res.user.role as RoleId) || "super_admin"
+        const userRole = res.user.role as RoleId || "super_admin"
 
         notify(
-          `Welcome, ${res.user.name}. Clearance granted for ${userRole === "super_admin" ? "Super Admin Platform Governance" : "Operations Administration"}.`,
+          `Welcome, ${res.user.name}. Clearance granted for ${
+            userRole === "super_admin"
+              ? "Super Admin Platform Governance"
+              : "Operations Administration"
+          }.`,
           "ok",
         )
 
@@ -120,9 +126,16 @@ export default function AdminLogin({
           {/* Rate Limit Warning Banner */}
           {rateLimitLocked && (
             <div className="mb-5 p-3.5 bg-rose-950/60 border border-rose-800/80 rounded text-xs text-rose-200 flex items-start gap-2.5">
-              <AlertTriangle size={16} className="text-rose-400 shrink-0 mt-0.5" />
+              <AlertTriangle
+                size={16}
+                className="text-rose-400 shrink-0 mt-0.5"
+              />
               <div>
-                <span className="font-semibold">Security Throttle Engaged:</span> Multiple failed administrative attempts detected. Rate-limiting is actively protecting this terminal.
+                <span className="font-semibold">
+                  Security Throttle Engaged:
+                </span>{" "}
+                Multiple failed administrative attempts detected. Rate-limiting
+                is actively protecting this terminal.
               </div>
             </div>
           )}
@@ -149,7 +162,10 @@ export default function AdminLogin({
                   disabled={isSubmitting || rateLimitLocked}
                   className="w-full bg-slate-950 border border-slate-700 rounded px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors pl-10"
                 />
-                <Mail size={16} className="absolute left-3.5 top-3 text-slate-500" />
+                <Mail
+                  size={16}
+                  className="absolute left-3.5 top-3 text-slate-500"
+                />
               </div>
             </div>
 
@@ -168,7 +184,10 @@ export default function AdminLogin({
                   disabled={isSubmitting || rateLimitLocked}
                   className="w-full bg-slate-950 border border-slate-700 rounded px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors pl-10 pr-10"
                 />
-                <Lock size={16} className="absolute left-3.5 top-3 text-slate-500" />
+                <Lock
+                  size={16}
+                  className="absolute left-3.5 top-3 text-slate-500"
+                />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
@@ -202,7 +221,8 @@ export default function AdminLogin({
               <span>Strict Role-Based Access Control (RBAC) Enforced</span>
             </p>
             <p>
-              Non-administrative users (Devotees, Drivers, Managers) cannot authenticate through this gateway.
+              Non-administrative users (Devotees, Drivers, Managers) cannot
+              authenticate through this gateway.
             </p>
           </div>
         </div>
@@ -210,7 +230,8 @@ export default function AdminLogin({
 
       {/* Footer Audit Information */}
       <div className="bg-slate-900/60 border-t border-slate-800/80 px-4 py-3 text-center text-xs text-slate-500">
-        GOMAA Vedic Cow Sanctuary Platform · Security Subsystem 2026 · All access logged & monitored
+        GOMAA Vedic Cow Sanctuary Platform · Security Subsystem 2026 · All
+        access logged & monitored
       </div>
     </div>
   )
