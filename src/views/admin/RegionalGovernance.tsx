@@ -76,9 +76,10 @@ export default function RegionalGovernance({
     refreshMigrationHistory,
   } = useStore()
 
-  // Active Tab
-  const [activeTab, setActiveTab] =
-    useState<"all" | "free" | "regions" | "migrations" | "gaushalas">(initialSector)
+  // Active Tab - Default to "regions" (Districts & Ops Admins)
+  const [activeTab, setActiveTab] = useState<
+    "all" | "free" | "regions" | "migrations" | "gaushalas"
+  >(initialSector && initialSector !== "all" ? initialSector : "regions")
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState("")
@@ -106,7 +107,9 @@ export default function RegionalGovernance({
     useState<string>("USER-SA-001")
   const [isGosalaAssigning, setIsGosalaAssigning] = useState(false)
 
-  // Pre-selected source admin for migration
+  // Pre-selected district/source admin for migration
+  const [migDistrictTarget, setMigDistrictTarget] =
+    useState<OperationalRegion | null>(null)
   const [preselectedSourceAdminId, setPreselectedSourceAdminId] =
     useState<string>("")
 
@@ -393,8 +396,11 @@ export default function RegionalGovernance({
     }
   }
 
-  // Open Migration Wizard
-  const handleOpenMigrationWizard = (sourceId?: string) => {
+  // Open Change District Ops Admin Wizard
+  const handleOpenMigrationWizard = (
+    sourceId?: string,
+    targetRegion?: OperationalRegion,
+  ) => {
     setMigStep(1)
     setMigSuccessCert(null)
     setMigTermsAccepted(true)
@@ -402,9 +408,12 @@ export default function RegionalGovernance({
     setMigNotes("")
     setMigDeactivateSource(true)
     setMigTransferRegion(true)
+    setMigDistrictTarget(targetRegion || null)
 
     if (sourceId) {
       setMigSourceAdminId(sourceId)
+    } else if (targetRegion?.assignedAdminId) {
+      setMigSourceAdminId(targetRegion.assignedAdminId)
     } else if (operationalAdmins.length > 0) {
       const activeWithPortfolio = operationalAdmins.find(
         (a) => a.isActive && (a.assignedRegionId || a.assignedGosalaCount > 0),
@@ -517,14 +526,14 @@ export default function RegionalGovernance({
 
   return (
     <div className="space-y-6">
-      {/* KPI Stats Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
+      {/* KPI Stats Overview: 1 District = 1 Ops Admin */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
         <div className="bg-card border border-line rounded-sm p-4 shadow-2xs">
           <div className="flex items-center justify-between text-ink-faint mb-1.5">
             <span className="text-[11.5px] uppercase font-mono tracking-wider">
-              Operational Hubs
+              Districts Covered
             </span>
-            <Globe size={16} className="text-forest" />
+            <MapPin size={16} className="text-saffron-deep" />
           </div>
           <div className="font-serif text-[26px] font-semibold text-ink leading-tight">
             {regions.length}
@@ -532,7 +541,7 @@ export default function RegionalGovernance({
           <div className="text-[11px] text-ink-faint mt-1 flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-forest" />
             <span>
-              {regions.filter((r) => r.assignedAdminId).length} appointed
+              {regions.filter((r) => r.assignedAdminId).length} with active Ops Admin
             </span>
           </div>
         </div>
@@ -540,17 +549,17 @@ export default function RegionalGovernance({
         <div className="bg-card border border-line rounded-sm p-4 shadow-2xs">
           <div className="flex items-center justify-between text-ink-faint mb-1.5">
             <span className="text-[11.5px] uppercase font-mono tracking-wider">
-              Regional Admins
+              Active District Admins
             </span>
-            <Users size={16} className="text-saffron-deep" />
+            <Users size={16} className="text-emerald-700" />
           </div>
-          <div className="font-serif text-[26px] font-semibold text-ink leading-tight">
-            {operationalAdmins.length}
+          <div className="font-serif text-[26px] font-semibold text-emerald-800 leading-tight">
+            {operationalAdmins.filter((a) => a.isActive).length}
           </div>
           <div className="text-[11px] text-ink-faint mt-1 flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
             <span>
-              {operationalAdmins.filter((a) => a.isActive).length} active
+              {operationalAdmins.filter((a) => a.isActive && a.assignedRegionId).length} managing districts
             </span>
           </div>
         </div>
@@ -558,7 +567,7 @@ export default function RegionalGovernance({
         <div className="bg-card border border-line rounded-sm p-4 shadow-2xs">
           <div className="flex items-center justify-between text-ink-faint mb-1.5">
             <span className="text-[11.5px] uppercase font-mono tracking-wider">
-              Free Admins Pool
+              Available in Free Pool
             </span>
             <UserCheck size={16} className="text-amber-600" />
           </div>
@@ -566,14 +575,14 @@ export default function RegionalGovernance({
             {freeOperationalAdmins.length}
           </div>
           <div className="text-[11px] text-ink-faint mt-1">
-            Available for immediate appointment
+            Ready for district appointment
           </div>
         </div>
 
         <div className="bg-card border border-line rounded-sm p-4 shadow-2xs">
           <div className="flex items-center justify-between text-ink-faint mb-1.5">
             <span className="text-[11.5px] uppercase font-mono tracking-wider">
-              Gaushalas Governed
+              Gaushalas Supervised
             </span>
             <Building2 size={16} className="text-forest" />
           </div>
@@ -581,22 +590,7 @@ export default function RegionalGovernance({
             {gosalas.length}
           </div>
           <div className="text-[11px] text-ink-faint mt-1">
-            Across {regions.length} operational zones
-          </div>
-        </div>
-
-        <div className="bg-card border border-line rounded-sm p-4 shadow-2xs col-span-2 md:col-span-1">
-          <div className="flex items-center justify-between text-ink-faint mb-1.5">
-            <span className="text-[11.5px] uppercase font-mono tracking-wider">
-              Data Migrations
-            </span>
-            <ArrowRightLeft size={16} className="text-indigo-600" />
-          </div>
-          <div className="font-serif text-[26px] font-semibold text-indigo-700 leading-tight">
-            {migrationHistory.length}
-          </div>
-          <div className="text-[11px] text-ink-faint mt-1">
-            Audited portfolio handovers
+            Across {regions.length} Indian districts
           </div>
         </div>
       </div>
@@ -607,16 +601,14 @@ export default function RegionalGovernance({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="font-serif text-[20px] font-semibold text-ink">
-                Regional Operations &amp; Admin Governance
+                District Operations &amp; Regional Governance
               </h2>
               <span className="font-mono text-[10px] bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full font-bold">
-                SUPER ADMIN
+                1 DISTRICT = 1 OPS ADMIN
               </span>
             </div>
             <p className="text-[12.5px] text-ink-faint mt-1">
-              Appoint operational admins to Indian regions, manage active
-              status, and execute verified portfolio &amp; banking data
-              migration.
+              Each Indian district is assigned exactly one Operational Admin who oversees all Gaushalas in that district.
             </p>
           </div>
 
@@ -624,10 +616,10 @@ export default function RegionalGovernance({
             <button
               onClick={() => handleOpenMigrationWizard()}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-sm text-[12.5px] font-medium bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white transition shadow-xs cursor-pointer"
-              title="Change Regional Manager and transfer territory, Gaushalas, and banking payouts"
+              title="Change District Ops Admin and transfer Gaushalas & banking payouts"
             >
               <ArrowRightLeft size={14} />
-              <span>Change Regional Manager</span>
+              <span>Change District Admin</span>
             </button>
 
             <button
@@ -646,7 +638,7 @@ export default function RegionalGovernance({
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-sm text-[12.5px] font-medium bg-saffron hover:bg-saffron-deep text-white transition shadow-xs cursor-pointer"
             >
               <MapPin size={14} />
-              <span>Add Region</span>
+              <span>Add District</span>
             </button>
           </div>
         </div>
@@ -659,8 +651,8 @@ export default function RegionalGovernance({
                 1
               </span>
               <div>
-                <span className="font-semibold text-ink block">Add Region</span>
-                <span className="text-ink-faint text-[11px]">Select State &amp; District</span>
+                <span className="font-semibold text-ink block">Add District</span>
+                <span className="text-ink-faint text-[11px]">Pick State &amp; District from Indian directory</span>
               </div>
             </div>
 
@@ -671,8 +663,8 @@ export default function RegionalGovernance({
                 2
               </span>
               <div>
-                <span className="font-semibold text-ink block">Appoint Manager</span>
-                <span className="text-ink-faint text-[11px]">Pick candidate from Free Admin Pool</span>
+                <span className="font-semibold text-ink block">Appoint District Admin</span>
+                <span className="text-ink-faint text-[11px]">1 Ops Admin takes care of all Gaushalas in that district</span>
               </div>
             </div>
 
@@ -683,8 +675,8 @@ export default function RegionalGovernance({
                 3
               </span>
               <div>
-                <span className="font-semibold text-indigo-950 block">Change Manager (Handover)</span>
-                <span className="text-ink-faint text-[11px]">1-click transfer of Gaushalas &amp; Bank payouts</span>
+                <span className="font-semibold text-indigo-950 block">Change District Admin</span>
+                <span className="text-ink-faint text-[11px]">1-click handover transfers all Gaushalas &amp; payouts</span>
               </div>
             </div>
           </div>
@@ -693,40 +685,6 @@ export default function RegionalGovernance({
         {/* Navigation Tabs */}
         <div className="flex border-b border-line bg-card px-4 sm:px-5 gap-6 text-[13px] font-medium overflow-x-auto">
           <button
-            onClick={() => setActiveTab("all")}
-            className={`py-3 transition-colors relative cursor-pointer flex items-center gap-2 ${
-              activeTab === "all"
-                ? "text-saffron-deep font-semibold"
-                : "text-ink-soft hover:text-ink"
-            }`}
-          >
-            <span>All Regional Admins</span>
-            <span className="font-mono text-[10.5px] px-1.5 py-0.2 rounded-full bg-paper-deep text-ink-soft">
-              {operationalAdmins.length}
-            </span>
-            {activeTab === "all" && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-saffron" />
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab("free")}
-            className={`py-3 transition-colors relative cursor-pointer flex items-center gap-2 ${
-              activeTab === "free"
-                ? "text-saffron-deep font-semibold"
-                : "text-ink-soft hover:text-ink"
-            }`}
-          >
-            <span>Free / Unassigned Admins</span>
-            <span className="font-mono text-[10.5px] px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 font-bold">
-              {freeOperationalAdmins.length}
-            </span>
-            {activeTab === "free" && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-saffron" />
-            )}
-          </button>
-
-          <button
             onClick={() => setActiveTab("regions")}
             className={`py-3 transition-colors relative cursor-pointer flex items-center gap-2 ${
               activeTab === "regions"
@@ -734,7 +692,7 @@ export default function RegionalGovernance({
                 : "text-ink-soft hover:text-ink"
             }`}
           >
-            <span>Operational Regions &amp; Hubs</span>
+            <span>Districts &amp; Ops Admins</span>
             <span className="font-mono text-[10.5px] px-1.5 py-0.2 rounded-full bg-paper-deep text-ink-soft">
               {regions.length}
             </span>
@@ -744,18 +702,23 @@ export default function RegionalGovernance({
           </button>
 
           <button
-            onClick={() => setActiveTab("migrations")}
+            onClick={() => setActiveTab("all")}
             className={`py-3 transition-colors relative cursor-pointer flex items-center gap-2 ${
-              activeTab === "migrations"
+              activeTab === "all"
                 ? "text-saffron-deep font-semibold"
                 : "text-ink-soft hover:text-ink"
             }`}
           >
-            <span>Migration History &amp; Audit</span>
-            <span className="font-mono text-[10.5px] px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-900 font-bold">
-              {migrationHistory.length}
+            <span>Ops Admins Directory</span>
+            <span className="font-mono text-[10.5px] px-1.5 py-0.2 rounded-full bg-paper-deep text-ink-soft">
+              {operationalAdmins.length}
             </span>
-            {activeTab === "migrations" && (
+            {freeOperationalAdmins.length > 0 && (
+              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 font-bold">
+                {freeOperationalAdmins.length} Free
+              </span>
+            )}
+            {activeTab === "all" && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-saffron" />
             )}
           </button>
@@ -768,11 +731,28 @@ export default function RegionalGovernance({
                 : "text-ink-soft hover:text-ink"
             }`}
           >
-            <span>Gaushala Assignments</span>
+            <span>Gaushalas by District</span>
             <span className="font-mono text-[10.5px] px-1.5 py-0.2 rounded-full bg-forest-soft text-forest-deep font-bold">
               {gosalas.length}
             </span>
             {activeTab === "gaushalas" && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-saffron" />
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab("migrations")}
+            className={`py-3 transition-colors relative cursor-pointer flex items-center gap-2 ${
+              activeTab === "migrations"
+                ? "text-saffron-deep font-semibold"
+                : "text-ink-soft hover:text-ink"
+            }`}
+          >
+            <span>Handover History</span>
+            <span className="font-mono text-[10.5px] px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-900 font-bold">
+              {migrationHistory.length}
+            </span>
+            {activeTab === "migrations" && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-saffron" />
             )}
           </button>
@@ -956,109 +936,116 @@ export default function RegionalGovernance({
               <div className="p-12 text-center text-ink-faint">
                 <MapPin size={32} className="mx-auto mb-2 opacity-30" />
                 <p className="font-serif text-[16px] text-ink">
-                  No Operational Regions Found
+                  No Districts Found
                 </p>
                 <p className="text-[12.5px] max-w-md mx-auto mt-1">
-                  Click "Add Region" to create an operational hub covering any
-                  Indian State &amp; District.
+                  Click "Add District" to register an Indian State &amp; District under operational coverage.
                 </p>
               </div>
             ) : (
-              filteredRegions.map((reg) => (
-                <div
-                  key={reg.id}
-                  className="p-4 sm:p-5 hover:bg-paper-light transition flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
-                >
-                  <div className="space-y-1.5 flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-serif text-[16px] font-semibold text-ink">
-                        {reg.name}
-                      </span>
-                      <span className="font-mono text-[10.5px] bg-paper-deep border border-line px-2 py-0.5 rounded text-ink-soft">
-                        {reg.zone} Zone
-                      </span>
-                      <span className="font-mono text-[10.5px] bg-paper-deep border border-line px-2 py-0.5 rounded text-ink-soft">
-                        Radius: {reg.defaultMaxRadiusKm} km
-                      </span>
-                      {reg.isCustom && (
-                        <span className="text-[10px] font-bold text-saffron-deep bg-saffron-soft px-1.5 py-0.5 rounded">
-                          CUSTOM
+              filteredRegions.map((reg) => {
+                const districtGosalas = gosalas.filter(
+                  (g) =>
+                    (g.region &&
+                      (g.region.toLowerCase().includes(reg.district.toLowerCase()) ||
+                       g.region.toLowerCase().includes(reg.name.toLowerCase()))) ||
+                    (reg.assignedAdminId && g.adminId === reg.assignedAdminId),
+                )
+
+                return (
+                  <div
+                    key={reg.id}
+                    className="p-4 sm:p-5 hover:bg-paper-light transition flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
+                  >
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-serif text-[17px] font-semibold text-ink">
+                          {reg.district}
                         </span>
-                      )}
+                        <span className="text-[13px] text-ink-soft font-medium">
+                          ({reg.state})
+                        </span>
+                        <span className="font-mono text-[10px] bg-paper-deep border border-line px-2 py-0.5 rounded text-ink-faint font-semibold uppercase">
+                          1 District = 1 Ops Admin
+                        </span>
+                      </div>
+
+                      {/* Gaushalas in this district */}
+                      <div className="text-[12.5px] text-ink-soft flex items-center gap-1.5 flex-wrap">
+                        <Building2 size={13} className="text-forest shrink-0" />
+                        <span className="font-medium text-ink">
+                          {districtGosalas.length} {districtGosalas.length === 1 ? "Gaushala" : "Gaushalas"}:
+                        </span>
+                        <span className="text-ink-soft">
+                          {districtGosalas.length > 0
+                            ? districtGosalas.map((g) => g.name).slice(0, 3).join(", ") + (districtGosalas.length > 3 ? "…" : "")
+                            : "No Gaushalas registered in this district yet"}
+                        </span>
+                      </div>
+
+                      {/* District Ops Admin status */}
+                      <div className="pt-1 flex items-center gap-2 flex-wrap text-[12px]">
+                        <span className="text-ink-faint">District Ops Admin:</span>
+                        {reg.assignedAdminId ? (
+                          <span className="inline-flex items-center gap-1.5 font-medium text-emerald-950 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                            <CheckCircle2
+                              size={12}
+                              className="text-emerald-700"
+                            />
+                            <span className="font-semibold">
+                              {reg.assignedAdminName || "Operational Admin"}
+                            </span>
+                            <span className="text-[11px] text-emerald-700/80">
+                              ({reg.assignedAdminEmail})
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-amber-800 bg-amber-50 border border-amber-300 px-2.5 py-0.5 rounded-full font-medium">
+                            <AlertTriangle size={12} />
+                            <span>Vacant · No Ops Admin Appointed</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="text-[13px] text-ink-soft flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-ink">
-                        {reg.district}, {reg.state}
-                      </span>
-                      {reg.pincodePrefixes?.length > 0 && (
-                        <span className="text-[11.5px] text-ink-faint font-mono">
-                          (PINs: {reg.pincodePrefixes.slice(0, 3).join(", ")}
-                          {reg.pincodePrefixes.length > 3 ? "…" : ""})
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="pt-1 flex items-center gap-2 flex-wrap text-[12px]">
-                      <span className="text-ink-faint">Appointed Admin:</span>
+                    <div className="shrink-0 flex items-center gap-2">
                       {reg.assignedAdminId ? (
-                        <span className="inline-flex items-center gap-1.5 font-medium text-emerald-900 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                          <CheckCircle2
-                            size={12}
-                            className="text-emerald-700"
-                          />
-                          <span>
-                            {reg.assignedAdminName || "Operational Admin"}
-                          </span>
-                          <span className="text-[11px] text-emerald-700/80">
-                            ({reg.assignedAdminEmail})
-                          </span>
-                        </span>
+                        <>
+                          <button
+                            onClick={() =>
+                              handleOpenMigrationWizard(
+                                reg.assignedAdminId || undefined,
+                                reg,
+                              )
+                            }
+                            className="px-3 py-1.5 rounded-sm bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-900 text-[12px] font-medium flex items-center gap-1.5 transition cursor-pointer"
+                            title="Change Ops Admin and transfer all Gaushalas in this district"
+                          >
+                            <ArrowRightLeft size={13} className="text-indigo-600" />
+                            <span>Change District Admin</span>
+                          </button>
+                          <button
+                            onClick={() => handleOpenAssignModal(reg)}
+                            className="px-2.5 py-1.5 rounded-sm border border-line bg-card hover:bg-paper-deep text-[11.5px] font-medium text-ink-soft hover:text-ink flex items-center gap-1 transition cursor-pointer"
+                            title="Quick reassign without data migration"
+                          >
+                            <UserCheck size={12} className="text-ink-faint" />
+                            <span>Quick Swap</span>
+                          </button>
+                        </>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-amber-800 bg-amber-50 border border-amber-300 px-2.5 py-0.5 rounded-full font-medium">
-                          <AlertTriangle size={12} />
-                          <span>Vacant · Needs Operational Admin</span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="shrink-0 flex items-center gap-2">
-                    {reg.assignedAdminId ? (
-                      <>
-                        <button
-                          onClick={() =>
-                            handleOpenMigrationWizard(
-                              reg.assignedAdminId || undefined,
-                            )
-                          }
-                          className="px-3 py-1.5 rounded-sm bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-900 text-[12px] font-medium flex items-center gap-1.5 transition cursor-pointer"
-                          title="Change manager and handover region, gaushalas, and banking"
-                        >
-                          <ArrowRightLeft size={13} className="text-indigo-600" />
-                          <span>Change Manager</span>
-                        </button>
                         <button
                           onClick={() => handleOpenAssignModal(reg)}
-                          className="px-2.5 py-1.5 rounded-sm border border-line bg-card hover:bg-paper-deep text-[11.5px] font-medium text-ink-soft hover:text-ink flex items-center gap-1 transition cursor-pointer"
-                          title="Direct reassign without full handover"
+                          className="px-3 py-1.5 rounded-sm bg-forest hover:bg-forest/90 text-white text-[12px] font-medium flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
                         >
-                          <UserCheck size={12} className="text-ink-faint" />
-                          <span>Reassign</span>
+                          <UserCheck size={13} />
+                          <span>Appoint Ops Admin</span>
                         </button>
-                      </>
-                    ) : (
-                      <button
-                        onClick={() => handleOpenAssignModal(reg)}
-                        className="px-3 py-1.5 rounded-sm bg-forest hover:bg-forest/90 text-white text-[12px] font-medium flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
-                      >
-                        <UserCheck size={13} />
-                        <span>Appoint Admin</span>
-                      </button>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         ) : activeTab === "gaushalas" ? (
@@ -1352,7 +1339,7 @@ export default function RegionalGovernance({
       </Panel>
 
       {/* ========================================================================= */}
-      {/* MODAL 1: ADD REGION (WITH STATE -> DISTRICT CASCADING)                   */}
+      {/* MODAL 1: ADD DISTRICT (SIMPLE: STATE -> DISTRICT -> OPS ADMIN)            */}
       {/* ========================================================================= */}
       {addRegionModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/50 backdrop-blur-xs animate-in fade-in">
@@ -1360,9 +1347,14 @@ export default function RegionalGovernance({
             <div className="px-5 py-4 border-b border-line flex items-center justify-between bg-paper">
               <div className="flex items-center gap-2">
                 <MapPin size={18} className="text-saffron-deep" />
-                <h3 className="font-serif text-[17px] font-semibold text-ink">
-                  Add Operational Region
-                </h3>
+                <div>
+                  <h3 className="font-serif text-[17px] font-semibold text-ink">
+                    Add District
+                  </h3>
+                  <p className="text-[11.5px] text-ink-faint">
+                    1 District = 1 Ops Admin. Select State and District to add under Gomaa operational care.
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setAddRegionModalOpen(false)}
@@ -1383,7 +1375,7 @@ export default function RegionalGovernance({
                   value={newRegState}
                   onChange={(e) => handleStateChange(e.target.value)}
                   required
-                  className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] text-ink outline-none focus:border-saffron"
+                  className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] text-ink outline-none focus:border-saffron font-medium"
                 >
                   <option value="">Select Indian State / UT (36 Total)</option>
                   {allStatesList.map((st) => (
@@ -1405,7 +1397,7 @@ export default function RegionalGovernance({
                   onChange={(e) => handleDistrictChange(e.target.value)}
                   disabled={!newRegState}
                   required
-                  className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] text-ink outline-none focus:border-saffron disabled:opacity-50"
+                  className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] text-ink outline-none focus:border-saffron disabled:opacity-50 font-medium"
                 >
                   <option value="">
                     {!newRegState
@@ -1420,91 +1412,31 @@ export default function RegionalGovernance({
                 </select>
               </div>
 
-              {/* Step 3: Region / Hub Name */}
+              {/* Step 3: Appoint Operational Admin */}
               <div>
                 <label className="block text-[12px] font-medium text-ink mb-1">
-                  3. Operational Belt / Region Title{" "}
-                  <span className="text-red-600">*</span>
-                </label>
-                <input
-                  value={newRegName}
-                  onChange={(e) => setNewRegName(e.target.value)}
-                  required
-                  placeholder="e.g. North Bengaluru Gaushala Cluster"
-                  className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] text-ink outline-none focus:border-saffron"
-                />
-              </div>
-
-              {/* Geographic Zone & Operational Radius */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[12px] font-medium text-ink mb-1">
-                    Geographic Zone
-                  </label>
-                  <select
-                    value={newRegZone}
-                    onChange={(e) => setNewRegZone(e.target.value as any)}
-                    className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] text-ink outline-none focus:border-saffron"
-                  >
-                    <option value="South">South Zone</option>
-                    <option value="North">North Zone</option>
-                    <option value="West">West Zone</option>
-                    <option value="East">East Zone</option>
-                    <option value="Central">Central Zone</option>
-                    <option value="Rural">Rural Belt</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[12px] font-medium text-ink mb-1">
-                    Max Delivery Radius (km)
-                  </label>
-                  <input
-                    type="number"
-                    min={10}
-                    max={150}
-                    value={newRegRadius}
-                    onChange={(e) => setNewRegRadius(Number(e.target.value))}
-                    className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] text-ink outline-none focus:border-saffron font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Pincode Prefixes */}
-              <div>
-                <label className="block text-[12px] font-medium text-ink mb-1">
-                  Postal Pincode Prefixes (Comma-separated)
-                </label>
-                <input
-                  value={newRegPincodes}
-                  onChange={(e) => setNewRegPincodes(e.target.value)}
-                  placeholder="e.g. 560001, 560034, 560076"
-                  className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] text-ink outline-none focus:border-saffron font-mono"
-                />
-              </div>
-
-              {/* Appoint Operational Admin */}
-              <div>
-                <label className="block text-[12px] font-medium text-ink mb-1">
-                  Appoint Operational Admin (Optional)
+                  3. Appoint District Ops Admin (1 District = 1 Admin)
                 </label>
                 <select
                   value={newRegAssignAdminId}
                   onChange={(e) => setNewRegAssignAdminId(e.target.value)}
-                  className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] text-ink outline-none focus:border-saffron"
+                  className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] text-ink outline-none focus:border-saffron font-medium"
                 >
-                  <option value="">Leave Unassigned (Free Region)</option>
+                  <option value="">Leave Unassigned for Now (Appoint Later)</option>
                   {operationalAdmins
                     .filter((a) => a.isActive)
                     .map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.name} ({a.email}){" "}
                         {a.isFree
-                          ? "— [FREE IN POOL]"
-                          : "— [Currently assigned]"}
+                          ? "— [AVAILABLE IN FREE POOL]"
+                          : `— [Currently managing ${a.assignedRegionName || "another district"}]`}
                       </option>
                     ))}
                 </select>
+                <p className="text-[11px] text-ink-faint mt-1">
+                  This Ops Admin will exclusively take care of all Gaushalas in this district.
+                </p>
               </div>
 
               <div className="pt-3 border-t border-line flex items-center justify-end gap-2">
@@ -1520,12 +1452,12 @@ export default function RegionalGovernance({
                   disabled={
                     isSubmittingRegion || !newRegState || !newRegDistrict
                   }
-                  className="px-5 py-2 rounded-sm bg-saffron hover:bg-saffron-deep text-white text-[12.5px] font-medium transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  className="px-5 py-2 rounded-sm bg-saffron hover:bg-saffron-deep text-white text-[12.5px] font-medium transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-2xs"
                 >
                   {isSubmittingRegion && (
                     <RefreshCw size={14} className="animate-spin" />
                   )}
-                  <span>Establish Region</span>
+                  <span>Establish District</span>
                 </button>
               </div>
             </form>
@@ -1796,9 +1728,14 @@ export default function RegionalGovernance({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/50 backdrop-blur-xs animate-in fade-in">
           <div className="bg-card border border-line rounded-md shadow-2xl max-w-md w-full">
             <div className="px-5 py-4 border-b border-line flex items-center justify-between bg-paper">
-              <h3 className="font-serif text-[17px] font-semibold text-ink">
-                Appoint Admin to Region
-              </h3>
+              <div>
+                <h3 className="font-serif text-[17px] font-semibold text-ink">
+                  Appoint District Ops Admin
+                </h3>
+                <p className="text-[11.5px] text-ink-faint">
+                  1 District = 1 Ops Admin. Assign an admin to oversee all Gaushalas in this district.
+                </p>
+              </div>
               <button
                 onClick={() => setAssignModalOpen(false)}
                 className="text-ink-faint hover:text-ink p-1 rounded cursor-pointer"
@@ -1808,16 +1745,15 @@ export default function RegionalGovernance({
             </div>
 
             <div className="p-5 space-y-4 text-[13px]">
-              <div>
-                <span className="text-ink-faint text-[12px] block">
-                  Region:
+              <div className="p-3 bg-paper rounded border border-line">
+                <span className="text-ink-faint text-[11px] uppercase font-mono block">
+                  District:
                 </span>
-                <span className="font-semibold text-ink text-[15px]">
-                  {selectedRegionForAssign.name}
+                <span className="font-serif font-semibold text-ink text-[16px]">
+                  {selectedRegionForAssign.district}
                 </span>
                 <span className="text-ink-soft block text-[12px]">
-                  {selectedRegionForAssign.district},{" "}
-                  {selectedRegionForAssign.state}
+                  {selectedRegionForAssign.state} ({selectedRegionForAssign.name})
                 </span>
               </div>
 
@@ -1875,10 +1811,10 @@ export default function RegionalGovernance({
                 </div>
                 <div>
                   <h3 className="font-serif text-[17px] font-semibold text-ink">
-                    Change Regional Manager (Handover)
+                    Change District Ops Admin
                   </h3>
                   <p className="text-[11.5px] text-ink-faint">
-                    Instantly transfer regional territory, Gaushalas, and banking payouts to a new manager
+                    1 District = 1 Operational Admin. Handover district supervision, Gaushalas, and devotee settlements.
                   </p>
                 </div>
               </div>
@@ -1898,7 +1834,7 @@ export default function RegionalGovernance({
                   <div className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
                     <span className="text-ink">
-                      Handing over <strong>{sourceAdminObj?.assignedRegionName || "Regional Zone"}</strong> from{" "}
+                      Handing over <strong>{migDistrictTarget ? `${migDistrictTarget.district} District` : (sourceAdminObj?.assignedRegionName || "District")}</strong> from{" "}
                       <strong className="text-red-900">{sourceAdminObj?.name || "Current Admin"}</strong> to{" "}
                       <strong className="text-emerald-900">{targetAdminObj?.name || "New Admin"}</strong>
                     </span>
@@ -2152,7 +2088,7 @@ export default function RegionalGovernance({
                       ) : (
                         <>
                           <CheckCircle2 size={15} />
-                          <span>Confirm &amp; Complete Handover</span>
+                          <span>Confirm &amp; Transfer District</span>
                         </>
                       )}
                     </button>
