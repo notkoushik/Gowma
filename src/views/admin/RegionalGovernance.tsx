@@ -25,6 +25,8 @@ import {
   RefreshCw,
   Sparkles,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   UserCheck,
   UserX,
   Phone,
@@ -158,6 +160,7 @@ export default function RegionalGovernance({
   const [migTargetBankIfsc, setMigTargetBankIfsc] = useState("")
   const [migTargetBankUpi, setMigTargetBankUpi] = useState("")
   const [isMigrating, setIsMigrating] = useState(false)
+  const [showScopeDetails, setShowScopeDetails] = useState(false)
   const [migSuccessCert, setMigSuccessCert] =
     useState<DataMigrationRecord | null>(null)
 
@@ -394,7 +397,8 @@ export default function RegionalGovernance({
   const handleOpenMigrationWizard = (sourceId?: string) => {
     setMigStep(1)
     setMigSuccessCert(null)
-    setMigTermsAccepted(false)
+    setMigTermsAccepted(true)
+    setShowScopeDetails(false)
     setMigNotes("")
     setMigDeactivateSource(true)
     setMigTransferRegion(true)
@@ -402,13 +406,16 @@ export default function RegionalGovernance({
     if (sourceId) {
       setMigSourceAdminId(sourceId)
     } else if (operationalAdmins.length > 0) {
-      setMigSourceAdminId(operationalAdmins[0].id)
+      const activeWithPortfolio = operationalAdmins.find(
+        (a) => a.isActive && (a.assignedRegionId || a.assignedGosalaCount > 0),
+      )
+      setMigSourceAdminId(activeWithPortfolio?.id || operationalAdmins[0].id)
     }
 
-    // Default target admin to another active admin
-    const candidateTarget = operationalAdmins.find(
-      (a) => a.id !== sourceId && a.isActive,
-    )
+    // Default target admin to a free admin if available, or another active admin
+    const candidateTarget =
+      freeOperationalAdmins.find((a) => a.id !== sourceId) ||
+      operationalAdmins.find((a) => a.id !== sourceId && a.isActive)
     if (candidateTarget) {
       setMigTargetAdminId(candidateTarget.id)
       setMigTargetBankHolder(
@@ -617,10 +624,10 @@ export default function RegionalGovernance({
             <button
               onClick={() => handleOpenMigrationWizard()}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-sm text-[12.5px] font-medium bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white transition shadow-xs cursor-pointer"
-              title="Launch Atomic Data Migration Wizard"
+              title="Change Regional Manager and transfer territory, Gaushalas, and banking payouts"
             >
               <ArrowRightLeft size={14} />
-              <span>Data Migration Wizard</span>
+              <span>Change Regional Manager</span>
             </button>
 
             <button
@@ -641,6 +648,45 @@ export default function RegionalGovernance({
               <MapPin size={14} />
               <span>Add Region</span>
             </button>
+          </div>
+        </div>
+
+        {/* Visual 3-Step Lifecycle Guide: Clean & Instant Understanding */}
+        <div className="bg-gradient-to-r from-paper via-paper-light to-paper-deep/60 border-b border-line px-4 sm:px-5 py-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-[12px]">
+            <div className="flex items-center gap-2.5">
+              <span className="h-6 w-6 rounded-full bg-saffron text-white font-bold flex items-center justify-center text-[11px] shadow-2xs">
+                1
+              </span>
+              <div>
+                <span className="font-semibold text-ink block">Add Region</span>
+                <span className="text-ink-faint text-[11px]">Select State &amp; District</span>
+              </div>
+            </div>
+
+            <div className="hidden sm:block text-ink-faint font-mono text-xs">──►</div>
+
+            <div className="flex items-center gap-2.5">
+              <span className="h-6 w-6 rounded-full bg-forest text-white font-bold flex items-center justify-center text-[11px] shadow-2xs">
+                2
+              </span>
+              <div>
+                <span className="font-semibold text-ink block">Appoint Manager</span>
+                <span className="text-ink-faint text-[11px]">Pick candidate from Free Admin Pool</span>
+              </div>
+            </div>
+
+            <div className="hidden sm:block text-ink-faint font-mono text-xs">──►</div>
+
+            <div className="flex items-center gap-2.5">
+              <span className="h-6 w-6 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-[11px] shadow-2xs">
+                3
+              </span>
+              <div>
+                <span className="font-semibold text-indigo-950 block">Change Manager (Handover)</span>
+                <span className="text-ink-faint text-[11px]">1-click transfer of Gaushalas &amp; Bank payouts</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -978,17 +1024,38 @@ export default function RegionalGovernance({
                   </div>
 
                   <div className="shrink-0 flex items-center gap-2">
-                    <button
-                      onClick={() => handleOpenAssignModal(reg)}
-                      className="px-3 py-1.5 rounded-sm border border-line bg-card hover:bg-paper-deep text-[12px] font-medium text-ink flex items-center gap-1.5 transition cursor-pointer"
-                    >
-                      <UserCheck size={13} className="text-forest" />
-                      <span>
-                        {reg.assignedAdminId
-                          ? "Reassign Admin"
-                          : "Appoint Admin"}
-                      </span>
-                    </button>
+                    {reg.assignedAdminId ? (
+                      <>
+                        <button
+                          onClick={() =>
+                            handleOpenMigrationWizard(
+                              reg.assignedAdminId || undefined,
+                            )
+                          }
+                          className="px-3 py-1.5 rounded-sm bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-900 text-[12px] font-medium flex items-center gap-1.5 transition cursor-pointer"
+                          title="Change manager and handover region, gaushalas, and banking"
+                        >
+                          <ArrowRightLeft size={13} className="text-indigo-600" />
+                          <span>Change Manager</span>
+                        </button>
+                        <button
+                          onClick={() => handleOpenAssignModal(reg)}
+                          className="px-2.5 py-1.5 rounded-sm border border-line bg-card hover:bg-paper-deep text-[11.5px] font-medium text-ink-soft hover:text-ink flex items-center gap-1 transition cursor-pointer"
+                          title="Direct reassign without full handover"
+                        >
+                          <UserCheck size={12} className="text-ink-faint" />
+                          <span>Reassign</span>
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => handleOpenAssignModal(reg)}
+                        className="px-3 py-1.5 rounded-sm bg-forest hover:bg-forest/90 text-white text-[12px] font-medium flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+                      >
+                        <UserCheck size={13} />
+                        <span>Appoint Admin</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               ))
@@ -1267,14 +1334,14 @@ export default function RegionalGovernance({
                       )}
                     </button>
 
-                    {/* Migrate Data Button */}
+                    {/* Change Regional Manager Button */}
                     <button
                       onClick={() => handleOpenMigrationWizard(admin.id)}
                       className="px-3 py-1.5 rounded-sm bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-900 text-[12px] font-medium flex items-center gap-1.5 transition cursor-pointer"
-                      title="Migrate portfolio and banking dealing to new admin"
+                      title="Change regional manager and transfer portfolio & banking to new admin"
                     >
                       <ArrowRightLeft size={13} className="text-indigo-600" />
-                      <span>Migrate Data</span>
+                      <span>Change Regional Manager</span>
                     </button>
                   </div>
                 </div>
@@ -1795,24 +1862,23 @@ export default function RegionalGovernance({
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 4: 5-STEP DATA MIGRATION & BUSINESS SEPARATION WIZARD              */}
+      {/* MODAL 4: INSTANT & VISUAL REGIONAL MANAGER HANDOVER BOARD                 */}
       {/* ========================================================================= */}
       {migrationModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-card border border-line rounded-md shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto">
+          <div className="bg-card border border-line rounded-md shadow-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto">
             {/* Header */}
             <div className="px-5 py-4 border-b border-line flex items-center justify-between bg-paper">
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-full bg-indigo-100 text-indigo-900 flex items-center justify-center font-bold">
-                  <ArrowRightLeft size={16} />
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-full bg-indigo-100 text-indigo-900 flex items-center justify-center font-bold shadow-2xs">
+                  <ArrowRightLeft size={17} />
                 </div>
                 <div>
                   <h3 className="font-serif text-[17px] font-semibold text-ink">
-                    Operational Admin Data Migration &amp; Handover
+                    Change Regional Manager (Handover)
                   </h3>
                   <p className="text-[11.5px] text-ink-faint">
-                    Clean business separation, banking re-routing, and portfolio
-                    handover
+                    Instantly transfer regional territory, Gaushalas, and banking payouts to a new manager
                   </p>
                 </div>
               </div>
@@ -1824,397 +1890,275 @@ export default function RegionalGovernance({
               </button>
             </div>
 
-            {/* Stepper Progress Bar */}
-            <div className="px-5 py-3 border-b border-line bg-card flex items-center justify-between text-[11.5px] font-medium">
-              {[
-                { step: 1, label: "1. Admins Selection" },
-                { step: 2, label: "2. Data Audit Scope" },
-                { step: 3, label: "3. Banking & Covenants" },
-                { step: 4, label: "4. Execution" },
-                { step: 5, label: "5. Certificate" },
-              ].map((s) => (
-                <div
-                  key={s.step}
-                  className={`flex items-center gap-1.5 ${
-                    migStep === s.step
-                      ? "text-indigo-600 font-bold"
-                      : migStep > s.step
-                        ? "text-forest"
-                        : "text-ink-faint"
-                  }`}
-                >
-                  <span
-                    className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                      migStep === s.step
-                        ? "bg-indigo-600 text-white"
-                        : migStep > s.step
-                          ? "bg-forest text-white"
-                          : "bg-paper-deep text-ink-faint"
-                    }`}
-                  >
-                    {migStep > s.step ? "✓" : s.step}
+            {/* VISUAL HANDOVER BOARD (When not viewing completed certificate) */}
+            {migStep !== 5 && (
+              <>
+                {/* Visual Context Banner */}
+                <div className="p-3.5 bg-gradient-to-r from-paper to-paper-deep border-b border-line flex flex-wrap items-center justify-between gap-2 text-[12px]">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+                    <span className="text-ink">
+                      Handing over <strong>{sourceAdminObj?.assignedRegionName || "Regional Zone"}</strong> from{" "}
+                      <strong className="text-red-900">{sourceAdminObj?.name || "Current Admin"}</strong> to{" "}
+                      <strong className="text-emerald-900">{targetAdminObj?.name || "New Admin"}</strong>
+                    </span>
+                  </div>
+                  <span className="font-mono text-[10.5px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
+                    Zero Data Loss
                   </span>
-                  <span className="hidden sm:inline">{s.label}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* STEP 1: SELECT OLD & NEW ADMIN */}
-            {migStep === 1 && (
-              <div className="p-5 space-y-5">
-                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded text-[12.5px] text-amber-900 leading-relaxed">
-                  <strong>Zero-Data-Loss Protocol:</strong> Selecting the Old
-                  Operational Admin will identify all registered Gaushalas,
-                  Managers, active Bookings, and Banking settlement routes in
-                  their portfolio to be seamlessly transferred to the New Admin.
                 </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-[12.5px] font-medium text-ink mb-1">
-                      Source Operational Admin (Old Admin being replaced)
-                    </label>
-                    <select
-                      value={migSourceAdminId}
-                      onChange={(e) => setMigSourceAdminId(e.target.value)}
-                      className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] text-ink outline-none focus:border-indigo-500 font-medium"
-                    >
-                      <option value="">Select Old Operational Admin</option>
-                      {operationalAdmins.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name} ({a.email}) — [
-                          {a.assignedRegionName || "No Region"} |{" "}
-                          {a.assignedGosalaCount} Gaushalas]
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                <div className="p-5 space-y-4">
+                  {/* Side-by-Side Manager Comparison & Handover Board */}
+                  <div className="grid grid-cols-1 md:grid-cols-11 gap-3 items-center">
+                    {/* Outgoing Admin Card (Col 1-5) */}
+                    <div className="md:col-span-5 border border-red-200 bg-red-50/40 rounded-sm p-4 space-y-3">
+                      <div className="flex items-center justify-between pb-2 border-b border-red-200/80">
+                        <span className="font-mono text-[10.5px] uppercase font-bold text-red-800 bg-red-100 px-2 py-0.5 rounded">
+                          Outgoing Manager
+                        </span>
+                        <span className="text-[11px] text-red-700 font-medium">To be replaced</span>
+                      </div>
 
-                  <div>
-                    <label className="block text-[12.5px] font-medium text-ink mb-1">
-                      Target Operational Admin (New Appointed Admin who takes
-                      over)
-                    </label>
-                    <select
-                      value={migTargetAdminId}
-                      onChange={(e) => setMigTargetAdminId(e.target.value)}
-                      className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[13px] text-ink outline-none focus:border-indigo-500 font-medium"
-                    >
-                      <option value="">Select New Appointed Admin</option>
-                      {operationalAdmins
-                        .filter((a) => a.id !== migSourceAdminId && a.isActive)
-                        .map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.name} ({a.email}) —{" "}
-                            {a.isFree ? "[FREE IN POOL]" : "[ACTIVE ADMIN]"}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                </div>
+                      <div>
+                        <label className="block text-[11.5px] font-medium text-ink-soft mb-1">
+                          Select Current Manager:
+                        </label>
+                        <select
+                          value={migSourceAdminId}
+                          onChange={(e) => setMigSourceAdminId(e.target.value)}
+                          className="w-full bg-card border border-red-200 rounded-sm px-2.5 py-1.5 text-[12.5px] text-ink outline-none focus:border-red-400 font-medium"
+                        >
+                          {operationalAdmins.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.name} — [{a.assignedRegionName || "No Region"} | {a.assignedGosalaCount} Gaushalas]
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                <div className="pt-4 border-t border-line flex items-center justify-end gap-2">
-                  <button
-                    onClick={() => setMigrationModalOpen(false)}
-                    className="px-4 py-2 rounded-sm border border-line bg-card hover:bg-paper-deep text-[12.5px] font-medium text-ink cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (!migSourceAdminId || !migTargetAdminId) {
-                        notify(
-                          "Please select both source and target admins",
-                          "err",
-                        )
-                        return
-                      }
-                      setMigStep(2)
-                    }}
-                    disabled={!migSourceAdminId || !migTargetAdminId}
-                    className="px-5 py-2 rounded-sm bg-indigo-600 hover:bg-indigo-700 text-white text-[12.5px] font-medium transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                  >
-                    <span>Proceed to Audit Scope</span>
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 2: DEEP DATA AUDIT EXAMINATION */}
-            {migStep === 2 && (
-              <div className="p-5 space-y-4">
-                <div className="border border-line rounded p-4 bg-paper/50 space-y-3">
-                  <div className="flex items-center justify-between border-b border-line pb-2">
-                    <span className="font-serif text-[15px] font-semibold text-ink">
-                      Portfolio Audit Scope for Handover
-                    </span>
-                    <span className="text-[11px] font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-bold">
-                      0 Integrity Conflicts Detected
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 text-center py-2">
-                    <div className="p-2.5 bg-card border border-line rounded">
-                      <div className="font-serif text-[20px] font-bold text-ink">
-                        {gaushalasInScope.length}
-                      </div>
-                      <div className="text-[11px] text-ink-faint">
-                        Gaushalas in Scope
-                      </div>
-                    </div>
-                    <div className="p-2.5 bg-card border border-line rounded">
-                      <div className="font-serif text-[20px] font-bold text-ink">
-                        {sourceAdminObj?.assignedManagerCount ||
-                          gaushalasInScope.length}
-                      </div>
-                      <div className="text-[11px] text-ink-faint">
-                        Managers to Reassign
-                      </div>
-                    </div>
-                    <div className="p-2.5 bg-card border border-line rounded">
-                      <div className="font-serif text-[20px] font-bold text-ink">
-                        {sourceAdminObj?.activeBookingsCount || 0}
-                      </div>
-                      <div className="text-[11px] text-ink-faint">
-                        Bookings in Triage
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="text-[11.5px] font-medium text-ink-soft block mb-1.5">
-                      Gaushala Facilities Transferring:
-                    </span>
-                    <div className="max-h-36 overflow-y-auto space-y-1 divide-y divide-line/60 text-[12px]">
-                      {gaushalasInScope.length === 0 ? (
-                        <div className="p-3 text-center text-ink-faint italic">
-                          No Gaushalas currently mapped directly to this admin.
-                          Territory assignment and future registrations will be
-                          migrated.
+                      {/* Details summary */}
+                      <div className="bg-card/90 border border-red-100 rounded p-2.5 space-y-1.5 text-[11.5px]">
+                        <div className="flex justify-between">
+                          <span className="text-ink-faint">Governed Hub:</span>
+                          <span className="font-medium text-ink">{sourceAdminObj?.assignedRegionName || "None"}</span>
                         </div>
-                      ) : (
-                        gaushalasInScope.map((g) => (
-                          <div
-                            key={g.id}
-                            className="py-1.5 flex items-center justify-between"
-                          >
-                            <span className="font-medium text-ink">
-                              {g.name}
-                            </span>
-                            <span className="text-ink-faint font-mono text-[11px]">
-                              {g.region}
-                            </span>
-                          </div>
-                        ))
-                      )}
+                        <div className="flex justify-between">
+                          <span className="text-ink-faint">Gaushalas Supervised:</span>
+                          <span className="font-bold text-red-900">{gaushalasInScope.length} Facilities</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-ink-faint">Gaushala Managers:</span>
+                          <span className="font-medium text-ink">{sourceAdminObj?.assignedManagerCount || gaushalasInScope.length} Staff</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-ink-faint">Current Bank Route:</span>
+                          <span className="font-mono text-[10.5px] text-ink-soft truncate max-w-[160px]" title={sourceAdminObj?.bankDetails?.bankName}>
+                            {sourceAdminObj?.bankDetails?.bankName || "SBI"} (••{sourceAdminObj?.bankDetails?.accountNumber?.slice(-4) || "00"})
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-[11px] text-red-800 bg-red-100/70 p-2 rounded border border-red-200">
+                        <UserX size={13} className="shrink-0 text-red-600" />
+                        <span>Account will be deactivated upon handover</span>
+                      </div>
+                    </div>
+
+                    {/* Center Transfer Bridge Arrow (Col 6) */}
+                    <div className="md:col-span-1 flex flex-row md:flex-col items-center justify-center py-2 md:py-0">
+                      <div className="h-9 w-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shadow-2xs border border-indigo-200">
+                        <ArrowRightLeft size={16} />
+                      </div>
+                      <span className="text-[10px] font-mono text-indigo-600 uppercase font-semibold mt-1 hidden md:block">
+                        Transfer
+                      </span>
+                    </div>
+
+                    {/* Incoming Admin Card (Col 7-11) */}
+                    <div className="md:col-span-5 border border-emerald-200 bg-emerald-50/40 rounded-sm p-4 space-y-3">
+                      <div className="flex items-center justify-between pb-2 border-b border-emerald-200/80">
+                        <span className="font-mono text-[10.5px] uppercase font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
+                          New Appointed Manager
+                        </span>
+                        <span className="text-[11px] text-emerald-700 font-medium">Takes over</span>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11.5px] font-medium text-ink-soft mb-1">
+                          Select Replacement Manager:
+                        </label>
+                        <select
+                          value={migTargetAdminId}
+                          onChange={(e) => setMigTargetAdminId(e.target.value)}
+                          className="w-full bg-card border border-emerald-200 rounded-sm px-2.5 py-1.5 text-[12.5px] text-ink outline-none focus:border-emerald-500 font-medium"
+                        >
+                          <option value="">Select Candidate</option>
+                          {operationalAdmins
+                            .filter((a) => a.id !== migSourceAdminId && a.isActive)
+                            .map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.name} — {a.isFree ? "[FREE IN POOL]" : "[ACTIVE ADMIN]"}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+
+                      {/* Details summary */}
+                      <div className="bg-card/90 border border-emerald-100 rounded p-2.5 space-y-1.5 text-[11.5px]">
+                        <div className="flex justify-between">
+                          <span className="text-ink-faint">Assumed Territory:</span>
+                          <span className="font-medium text-ink">{sourceAdminObj?.assignedRegionName || "Regional Zone"}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-ink-faint">Gaushalas Assigned:</span>
+                          <span className="font-bold text-emerald-900">+{gaushalasInScope.length} Facilities</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-ink-faint">New Bank Route:</span>
+                          <span className="font-mono text-[10.5px] text-emerald-900 font-semibold truncate max-w-[160px]" title={migTargetBankName}>
+                            {migTargetBankName} (••{migTargetBankAccount?.slice(-4) || "4819"})
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-ink-faint">IFSC Routing:</span>
+                          <span className="font-mono text-[10.5px] text-ink-soft">{migTargetBankIfsc || "SBIN0001042"}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-[11px] text-emerald-800 bg-emerald-100/70 p-2 rounded border border-emerald-200">
+                        <CheckCircle2 size={13} className="shrink-0 text-emerald-700" />
+                        <span>Devotee booking payouts will route to this bank</span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="pt-3 border-t border-line flex items-center justify-between">
-                  <button
-                    onClick={() => setMigStep(1)}
-                    className="px-4 py-2 rounded-sm border border-line bg-card hover:bg-paper-deep text-[12.5px] font-medium text-ink cursor-pointer"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={() => setMigStep(3)}
-                    className="px-5 py-2 rounded-sm bg-indigo-600 hover:bg-indigo-700 text-white text-[12.5px] font-medium transition cursor-pointer flex items-center gap-1.5"
-                  >
-                    <span>Banking &amp; Separation Dealing</span>
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 3: BANKING DETAILS & BUSINESS SEPARATION DEALING */}
-            {migStep === 3 && (
-              <div className="p-5 space-y-4">
-                <div className="border border-line rounded p-4 bg-paper/60 space-y-3">
-                  <span className="font-serif text-[15px] font-semibold text-ink block">
-                    Banking Details Transition &amp; Separation
-                  </span>
-
-                  {/* Side-by-Side Banking Compare */}
-                  <div className="grid grid-cols-2 gap-3 text-[12px]">
-                    <div className="p-3 bg-red-50/70 border border-red-200 rounded space-y-1">
-                      <span className="font-mono text-[10.5px] font-bold text-red-800 uppercase block">
-                        Old Admin Banking (De-routing)
+                  {/* Transfer Assets Summary Pills */}
+                  <div className="p-3 bg-paper rounded border border-line flex flex-wrap items-center justify-between gap-2 text-[11.5px]">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-ink">Assets Transferring:</span>
+                      <span className="bg-card border border-line px-2 py-0.5 rounded font-mono text-ink">
+                        {gaushalasInScope.length} Gaushalas
                       </span>
-                      <div className="font-medium text-ink">
-                        {sourceAdminObj?.bankDetails?.accountHolder ||
-                          sourceAdminObj?.name}
-                      </div>
-                      <div className="text-ink-faint">
-                        {sourceAdminObj?.bankDetails?.bankName}
-                      </div>
-                      <div className="font-mono text-[11px]">
-                        A/C: {sourceAdminObj?.bankDetails?.accountNumber}
-                      </div>
-                      <div className="font-mono text-[11px]">
-                        IFSC: {sourceAdminObj?.bankDetails?.ifscCode}
-                      </div>
-                    </div>
-
-                    <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded space-y-1">
-                      <span className="font-mono text-[10.5px] font-bold text-emerald-800 uppercase block">
-                        New Admin Banking (Active Routing)
+                      <span className="bg-card border border-line px-2 py-0.5 rounded font-mono text-ink">
+                        {sourceAdminObj?.assignedRegionName || "1 Territory"}
                       </span>
-                      <div className="font-medium text-ink">
-                        {migTargetBankHolder}
-                      </div>
-                      <div className="text-ink-faint">{migTargetBankName}</div>
-                      <div className="font-mono text-[11px]">
-                        A/C: {migTargetBankAccount || "••••4819"}
-                      </div>
-                      <div className="font-mono text-[11px]">
-                        IFSC: {migTargetBankIfsc || "SBIN0001042"}
-                      </div>
+                      <span className="bg-card border border-line px-2 py-0.5 rounded font-mono text-emerald-800 font-semibold">
+                        Devotee Payouts
+                      </span>
                     </div>
-                  </div>
-
-                  {/* Separation Covenants */}
-                  <div className="p-3 bg-card border border-line rounded text-[12px] space-y-2">
-                    <span className="font-semibold text-ink block">
-                      Binding Business Separation Covenants:
+                    <span className="text-ink-faint text-[11px]">
+                      Historical audit trails &amp; ledger entries remain permanently preserved.
                     </span>
-                    <ul className="list-disc pl-4 space-y-1 text-ink-soft text-[11.5px] leading-relaxed">
-                      <li>
-                        Old Operational Admin relinquishes administrative
-                        authority and login clearance over this regional
-                        portfolio.
-                      </li>
-                      <li>
-                        All unreleased escrow, forthcoming devotee booking
-                        settlements, and platform split commissions will be
-                        routed exclusively to the New Admin's verified bank
-                        account.
-                      </li>
-                      <li>
-                        Past historical disbursement records remain permanently
-                        archived under the Super Admin Master Treasury ledger.
-                      </li>
-                    </ul>
                   </div>
 
-                  {/* Mandatory Acknowledgement Checkbox */}
-                  <label className="flex items-start gap-2.5 pt-1 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={migTermsAccepted}
-                      onChange={(e) => setMigTermsAccepted(e.target.checked)}
-                      className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span className="text-[12px] text-ink font-medium leading-snug">
-                      I confirm and authorize the complete business separation,
-                      banking routing transition, and portfolio transfer from{" "}
-                      <strong>{sourceAdminObj?.name}</strong> to{" "}
-                      <strong>{targetAdminObj?.name}</strong>.
-                    </span>
-                  </label>
-                </div>
-
-                <div className="pt-3 border-t border-line flex items-center justify-between">
-                  <button
-                    onClick={() => setMigStep(2)}
-                    className="px-4 py-2 rounded-sm border border-line bg-card hover:bg-paper-deep text-[12.5px] font-medium text-ink cursor-pointer"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={() => setMigStep(4)}
-                    disabled={!migTermsAccepted}
-                    className="px-5 py-2 rounded-sm bg-indigo-600 hover:bg-indigo-700 text-white text-[12.5px] font-medium transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                  >
-                    <span>Finalize &amp; Execute</span>
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 4: EXECUTION & PROGRESS */}
-            {migStep === 4 && (
-              <div className="p-5 space-y-4">
-                <div className="p-4 border border-line rounded bg-paper/50 space-y-3">
-                  <span className="font-serif text-[15px] font-semibold text-ink block">
-                    Pre-Execution Transition Checklist
-                  </span>
-
-                  <div className="space-y-2 text-[12.5px]">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={migTransferRegion}
-                        onChange={(e) => setMigTransferRegion(e.target.checked)}
-                        className="rounded text-indigo-600"
-                      />
-                      <span>
-                        Transfer Regional Territory Assignment to{" "}
-                        <strong>{targetAdminObj?.name}</strong>
+                  {/* Collapsible Accordion: Gaushalas List & Memo */}
+                  <div className="border border-line rounded bg-card overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setShowScopeDetails(!showScopeDetails)}
+                      className="w-full flex items-center justify-between px-3.5 py-2.5 text-[12px] font-medium text-ink hover:bg-paper cursor-pointer transition"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Building2 size={14} className="text-forest" />
+                        <span>
+                          {showScopeDetails ? "Hide" : "View"} {gaushalasInScope.length} Transferring Gaushala Facilities &amp; Handover Notes
+                        </span>
                       </span>
-                    </label>
+                      {showScopeDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </button>
 
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={migDeactivateSource}
-                        onChange={(e) =>
-                          setMigDeactivateSource(e.target.checked)
-                        }
-                        className="rounded text-indigo-600"
-                      />
-                      <span>
-                        Deactivate Old Operational Admin (
-                        <strong>{sourceAdminObj?.name}</strong>) upon handover
-                      </span>
-                    </label>
-                  </div>
+                    {showScopeDetails && (
+                      <div className="p-3.5 border-t border-line space-y-3 bg-paper/30">
+                        {/* Gaushalas List */}
+                        <div className="max-h-36 overflow-y-auto space-y-1 divide-y divide-line/60 text-[11.5px]">
+                          {gaushalasInScope.length === 0 ? (
+                            <div className="p-2 text-center text-ink-faint italic">
+                              No Gaushalas currently mapped directly to this admin. Territory assignment and future registrations will transfer.
+                            </div>
+                          ) : (
+                            gaushalasInScope.map((g) => (
+                              <div key={g.id} className="py-1 flex items-center justify-between">
+                                <span className="font-medium text-ink">{g.name}</span>
+                                <span className="text-ink-faint font-mono text-[10.5px]">{g.region}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
 
-                  <div>
-                    <label className="block text-[12px] font-medium text-ink mb-1">
-                      Administrative Handover Notes / Memo:
-                    </label>
-                    <textarea
-                      value={migNotes}
-                      onChange={(e) => setMigNotes(e.target.value)}
-                      placeholder="e.g. Regular regional tenure rotation approved by Captain."
-                      rows={2}
-                      className="w-full bg-card border border-line rounded-sm px-3 py-1.5 text-[12.5px] text-ink outline-none"
-                    />
-                  </div>
-                </div>
+                        {/* Checkboxes */}
+                        <div className="pt-2 border-t border-line/60 space-y-1.5 text-[12px]">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={migTransferRegion}
+                              onChange={(e) => setMigTransferRegion(e.target.checked)}
+                              className="rounded text-indigo-600"
+                            />
+                            <span className="text-ink">
+                              Transfer Regional Territory ({sourceAdminObj?.assignedRegionName || "Assigned Hub"}) to <strong>{targetAdminObj?.name}</strong>
+                            </span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={migDeactivateSource}
+                              onChange={(e) => setMigDeactivateSource(e.target.checked)}
+                              className="rounded text-indigo-600"
+                            />
+                            <span className="text-ink">
+                              Deactivate outgoing admin account (<strong>{sourceAdminObj?.name}</strong>) upon handover
+                            </span>
+                          </label>
+                        </div>
 
-                <div className="pt-3 border-t border-line flex items-center justify-between">
-                  <button
-                    onClick={() => setMigStep(3)}
-                    disabled={isMigrating}
-                    className="px-4 py-2 rounded-sm border border-line bg-card hover:bg-paper-deep text-[12.5px] font-medium text-ink cursor-pointer"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={handleExecuteMigration}
-                    disabled={isMigrating}
-                    className="px-6 py-2.5 rounded-sm bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white text-[13px] font-semibold transition cursor-pointer shadow-sm flex items-center gap-2"
-                  >
-                    {isMigrating ? (
-                      <>
-                        <RefreshCw size={14} className="animate-spin" />
-                        <span>Migrating Records &amp; Routing…</span>
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 size={15} />
-                        <span>Confirm &amp; Execute Data Migration</span>
-                      </>
+                        {/* Handover Memo */}
+                        <div>
+                          <label className="block text-[11px] font-medium text-ink-soft mb-1">
+                            Handover Memo / Administrative Record (Optional):
+                          </label>
+                          <input
+                            type="text"
+                            value={migNotes}
+                            onChange={(e) => setMigNotes(e.target.value)}
+                            placeholder="e.g. Regular regional rotation approved by Super Admin."
+                            className="w-full bg-card border border-line rounded-sm px-2.5 py-1.5 text-[12px] text-ink outline-none"
+                          />
+                        </div>
+                      </div>
                     )}
-                  </button>
+                  </div>
+
+                  {/* Footer Buttons */}
+                  <div className="pt-3 border-t border-line flex items-center justify-end gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setMigrationModalOpen(false)}
+                      className="px-4 py-2 rounded-sm border border-line bg-card hover:bg-paper-deep text-[12.5px] font-medium text-ink cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExecuteMigration}
+                      disabled={isMigrating || !migSourceAdminId || !migTargetAdminId || migSourceAdminId === migTargetAdminId}
+                      className="px-6 py-2 rounded-sm bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white text-[13px] font-semibold transition cursor-pointer shadow-sm flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {isMigrating ? (
+                        <>
+                          <RefreshCw size={14} className="animate-spin" />
+                          <span>Executing Handover…</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 size={15} />
+                          <span>Confirm &amp; Complete Handover</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </>
             )}
 
             {/* STEP 5: MIGRATION CERTIFICATE */}
