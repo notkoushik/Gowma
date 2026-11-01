@@ -4583,7 +4583,17 @@ async function getAllOperationalRegions() {
     }
   } catch (e) {
   }
-  return combined;
+  const districtMap = /* @__PURE__ */ new Map();
+  for (const r of combined) {
+    const key = `${(r.state || "").toLowerCase()}::${(r.district || "").toLowerCase()}`;
+    const existing = districtMap.get(key);
+    if (!existing) {
+      districtMap.set(key, r);
+    } else if (!existing.assignedAdminId && r.assignedAdminId) {
+      districtMap.set(key, r);
+    }
+  }
+  return Array.from(districtMap.values());
 }
 async function createOperationalRegion(payload) {
   ensureRegionsLoaded();
@@ -4611,6 +4621,34 @@ async function createOperationalRegion(payload) {
       assignedAdminEmail = admin.email;
       assignedAdminPhone = admin.phone;
     }
+  }
+  const existingIdx = customRegionsCache.findIndex(
+    (c) => c.state.toLowerCase() === cleanState.toLowerCase() && c.district.toLowerCase() === cleanDistrict.toLowerCase()
+  );
+  if (existingIdx !== -1) {
+    const existing = customRegionsCache[existingIdx];
+    existing.name = cleanName;
+    existing.zone = zone;
+    if (payload.assignedAdminId) {
+      existing.assignedAdminId = payload.assignedAdminId;
+      existing.assignedAdminName = assignedAdminName;
+      existing.assignedAdminEmail = assignedAdminEmail;
+      existing.assignedAdminPhone = assignedAdminPhone;
+      existing.assignedAt = (/* @__PURE__ */ new Date()).toISOString();
+    }
+    persistCustomRegions();
+    if (payload.assignedAdminId) {
+      saveUserMeta(payload.assignedAdminId, {
+        assignedRegion: {
+          id: existing.id,
+          state: existing.state,
+          district: existing.district,
+          name: existing.name,
+          zone: existing.zone
+        }
+      });
+    }
+    return existing;
   }
   const newRegion = {
     id: regionId,
