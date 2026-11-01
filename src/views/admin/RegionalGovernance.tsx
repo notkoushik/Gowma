@@ -233,9 +233,9 @@ export default function RegionalGovernance({
     })
   }, [operationalAdmins, activeTab, statusFilter, stateFilter, searchQuery])
 
-  // Filtered Regions
+  // Filtered Regions (Deduplicated strictly: 1 District = 1 Entry)
   const filteredRegions = useMemo(() => {
-    return regions.filter((r) => {
+    const list = regions.filter((r) => {
       if (
         stateFilter !== "ALL" &&
         r.state.toLowerCase() !== stateFilter.toLowerCase()
@@ -251,6 +251,18 @@ export default function RegionalGovernance({
         (r.assignedAdminName && r.assignedAdminName.toLowerCase().includes(q))
       )
     })
+
+    const districtMap = new Map<string, OperationalRegion>()
+    for (const r of list) {
+      const key = `${(r.state || "").toLowerCase()}::${(r.district || "").toLowerCase()}`
+      const existing = districtMap.get(key)
+      if (!existing) {
+        districtMap.set(key, r)
+      } else if (!existing.assignedAdminId && r.assignedAdminId) {
+        districtMap.set(key, r)
+      }
+    }
+    return Array.from(districtMap.values())
   }, [regions, stateFilter, searchQuery])
 
   // Filtered Gaushalas

@@ -213,7 +213,20 @@ export async function getAllOperationalRegions(): Promise<OperationalRegion[]> {
     }
   } catch (e) {}
 
-  return combined
+  // Strictly enforce 1 District = 1 Entry across all operational regions
+  const districtMap = new Map<string, OperationalRegion>()
+  for (const r of combined) {
+    const key = `${(r.state || "").toLowerCase()}::${(r.district || "").toLowerCase()}`
+    const existing = districtMap.get(key)
+    if (!existing) {
+      districtMap.set(key, r)
+    } else if (!existing.assignedAdminId && r.assignedAdminId) {
+      // Prioritize the entry that has an active appointed admin
+      districtMap.set(key, r)
+    }
+  }
+
+  return Array.from(districtMap.values())
 }
 
 /**
@@ -262,6 +275,39 @@ export async function createOperationalRegion(payload: {
       assignedAdminEmail = admin.email
       assignedAdminPhone = admin.phone
     }
+  }
+
+  // Strictly enforce 1 District = 1 Entry: update existing district if already present
+  const existingIdx = customRegionsCache.findIndex(
+    (c) =>
+      c.state.toLowerCase() === cleanState.toLowerCase() &&
+      c.district.toLowerCase() === cleanDistrict.toLowerCase(),
+  )
+
+  if (existingIdx !== -1) {
+    const existing = customRegionsCache[existingIdx]
+    existing.name = cleanName
+    existing.zone = zone
+    if (payload.assignedAdminId) {
+      existing.assignedAdminId = payload.assignedAdminId
+      existing.assignedAdminName = assignedAdminName
+      existing.assignedAdminEmail = assignedAdminEmail
+      existing.assignedAdminPhone = assignedAdminPhone
+      existing.assignedAt = new Date().toISOString()
+    }
+    persistCustomRegions()
+    if (payload.assignedAdminId) {
+      saveUserMeta(payload.assignedAdminId, {
+        assignedRegion: {
+          id: existing.id,
+          state: existing.state,
+          district: existing.district,
+          name: existing.name,
+          zone: existing.zone,
+        },
+      })
+    }
+    return existing
   }
 
   const newRegion: OperationalRegion = {
