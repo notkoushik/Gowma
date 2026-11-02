@@ -277,6 +277,7 @@ type Store = {
     durationMin?: number,
   ) => SlotCheckResult
   addAnimal: (animal: Animal) => void
+  verifyAnimal: (name: string, approved: boolean, reason?: string) => void
   updateAnimal: (name: string, patch: Partial<Animal>) => void
   deleteAnimal: (name: string) => void
   refreshAnimals: () => Promise<Animal[]>
@@ -889,14 +890,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addAnimal = useCallback(
     (newAnimal: Animal) => {
+      const isSuperAdmin = currentRole === "super_admin"
+      const enrichedAnimal: Animal = {
+        ...newAnimal,
+        approvalStatus: isSuperAdmin ? "APPROVED" : "PENDING_SUPER_ADMIN",
+        status: isSuperAdmin ? (newAnimal.status || "Available") : "Under Audit",
+        submittedByRole: isSuperAdmin ? undefined : (authUser?.role || currentRole),
+        submittedByName: isSuperAdmin ? undefined : (authUser?.name || profiles?.manager?.name || "Gaushala Custodian"),
+        ...(isSuperAdmin
+          ? {
+              approvedBy: authUser?.name || "Super Admin",
+              approvedAt: new Date().toISOString(),
+            }
+          : {}),
+      }
+
       setAnimals((prev) => {
         const filtered = prev.filter(
-          (a) => a.name.toLowerCase() !== newAnimal.name.toLowerCase(),
+          (a) => a.name.toLowerCase() !== enrichedAnimal.name.toLowerCase(),
         )
-        return [newAnimal, ...filtered]
+        return [enrichedAnimal, ...filtered]
       })
       api
-        .createAnimal(newAnimal)
+        .createAnimal(enrichedAnimal)
         .then(() => {
           refreshAnimals().catch(() => {})
         })
@@ -906,9 +922,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
             err,
           )
         })
-      notify(`Added ${newAnimal.name} to ${newAnimal.gosala}!`, "ok")
+      if (isSuperAdmin) {
+        notify(`Added and certified ${enrichedAnimal.name} in ${enrichedAnimal.gosala}!`, "ok")
+      } else {
+        notify(`Submitted ${enrichedAnimal.name} photos & dossier for Super Admin verification!`, "ok")
+      }
     },
-    [notify, refreshAnimals],
+    [notify, refreshAnimals, currentRole, authUser, profiles],
+  )
+
+  const verifyAnimal = useCallback(
+    (name: string, approved: boolean, reason?: string) => {
+      setAnimals((prev) =>
+        prev.map((a) => {
+          if (a.name.toLowerCase() !== name.toLowerCase()) return a
+          return {
+            ...a,
+            approvalStatus: approved ? "APPROVED" : "REJECTED",
+            status: approved ? "Available" : "Under Audit",
+            approvedBy: approved ? (authUser?.name || "Super Admin") : undefined,
+            approvedAt: approved ? new Date().toISOString() : undefined,
+            rejectionReason: approved ? undefined : (reason || "Photo quality or medical dossier rejected"),
+          }
+        }),
+      )
+      api
+        .verifyAnimal(name, approved, reason)
+        .then(() => {
+          refreshAnimals().catch(() => {})
+        })
+        .catch((err) => {
+          console.warn("api.verifyAnimal background error:", err)
+        })
+      notify(
+        approved
+          ? `✓ ${name} verified and officially authorized into the sanctuary herd!`
+          : `Rejected onboarding for ${name}: ${reason || "Photos unverified"}`,
+        approved ? "ok" : "warn",
+      )
+    },
+    [notify, refreshAnimals, authUser],
   )
 
   const updateAnimal = useCallback(
@@ -1461,6 +1514,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const assignDriver = useCallback(
     (id: string, driver: string) => {
+      const target = bookings.find((b) => b.id === id)
+      if (target) {
+        const st = String(target.status).toUpperCase()
+        if (st === "REJECTED" || st === "CANCELLED" || st === "REFUNDED" || st === "DECLINED") {
+          notify(`Cannot assign transportation: booking is ${target.status.toLowerCase()}. No further actions permitted.`, "warn")
+          return
+        }
+      }
+
       const driverPhone = profiles?.driver?.phone || "+91 98490 23456"
       const driverVehiclePlate =
         profiles?.driver?.driverData?.vehicleNumber || "TS 09 EA 4402"
@@ -1506,6 +1568,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         driverPhone: string
       },
     ) => {
+      const target = bookings.find((b) => b.id === bookingId)
+      if (target) {
+        const st = String(target.status).toUpperCase()
+        if (st === "REJECTED" || st === "CANCELLED" || st === "REFUNDED" || st === "DECLINED") {
+          notify(`Cannot book Porter transportation: booking is ${target.status.toLowerCase()}. No further actions permitted.`, "warn")
+          return
+        }
+      }
+
       const porterBookingId = `POR-PUN-${Math.floor(10000 + Math.random() * 90000)}`
       patch(bookingId, (b) => ({
         ...b,
@@ -2161,6 +2232,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateAnimalWelfareConfig,
       checkAnimalAvailability,
       addAnimal,
+      verifyAnimal,
       updateAnimal,
       deleteAnimal,
       refreshAnimals,
@@ -2252,6 +2324,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateAnimalWelfareConfig,
       checkAnimalAvailability,
       addAnimal,
+      verifyAnimal,
       updateAnimal,
       deleteAnimal,
       refreshAnimals,

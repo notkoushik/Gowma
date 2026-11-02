@@ -2572,7 +2572,7 @@ export async function handleApiRequest(
     /^\/api\/bookings\/([^/]+)\/assign-driver$/,
   )
   if (method === "POST" && assignDriverMatch) {
-    const denied = requireRole("admin", "super_admin")
+    const denied = requireRole("admin", "super_admin", "manager")
     if (denied) return denied
     const id = assignDriverMatch[1]
     const driverName = body.driver || body.driverName
@@ -2580,6 +2580,24 @@ export async function handleApiRequest(
     const driverId = body.driverId
 
     try {
+      const b = await prisma.booking.findUnique({ where: { id } })
+      if (!b) return { status: 404, body: { error: "Booking not found" } }
+
+      // Invariant: Once declined/cancelled, no further operational actions or transit can be booked
+      const st = String(b.status).toUpperCase()
+      if (st === "REJECTED" || st === "CANCELLED" || st === "REFUNDED" || st === "DECLINED") {
+        return {
+          status: 400,
+          body: {
+            error: "Cannot assign transportation or driver: this booking has been declined or cancelled. No further actions permitted.",
+          },
+        }
+      }
+
+      if (authUser?.role === "manager" && !canAccessBooking(authUser, b as any)) {
+        return { status: 403, body: { error: "Access denied: booking belongs to another Gaushala" } }
+      }
+
       const driver = await prisma.user.findFirst({
         where: {
           OR: [
@@ -2641,6 +2659,12 @@ export async function handleApiRequest(
     try {
       const b = await prisma.booking.findUnique({ where: { id } })
       if (!b) return { status: 404, body: { error: "Booking not found" } }
+
+      const st = String(b.status).toUpperCase()
+      if (st === "REJECTED" || st === "CANCELLED" || st === "REFUNDED" || st === "DECLINED") {
+        return { status: 400, body: { error: "Cannot advance transit for a cancelled or declined booking." } }
+      }
+
       if (authUser?.role === "manager" && !canAccessBooking(authUser, b as any)) {
         return { status: 403, body: { error: "Access denied: booking belongs to another Gaushala" } }
       }
@@ -2697,6 +2721,12 @@ export async function handleApiRequest(
     const targetStage = typeof body.stage === "number" ? body.stage : 4
     const b = await prisma.booking.findUnique({ where: { id } })
     if (!b) return { status: 404, body: { error: "Booking not found" } }
+
+    const st = String(b.status).toUpperCase()
+    if (st === "REJECTED" || st === "CANCELLED" || st === "REFUNDED" || st === "DECLINED") {
+      return { status: 400, body: { error: "Cannot set transit stage: booking is cancelled or declined." } }
+    }
+
     if (authUser?.role === "manager" && !canAccessBooking(authUser, b as any)) {
       return { status: 403, body: { error: "Access denied: booking belongs to another Gaushala" } }
     }
@@ -5003,9 +5033,30 @@ export async function handleApiRequest(
   // POST /api/animals
   if (method === "POST" && pathname === "/api/animals") {
     try {
-      const animalData = body.animal || body
-      if (!animalData.name) {
+      const rawData = body.animal || body
+      if (!rawData.name) {
         return { status: 400, body: { error: "Animal name is required" } }
+      }
+
+      // Bovine Photo Verification Invariant:
+      // When added by Manager or Ops Admin, status is "Under Audit" and approvalStatus is "PENDING_SUPER_ADMIN"
+      // until Super Admin reviews photos and authorizes entry into the sanctuary herd.
+      const isSuperAdmin = authUser?.role === "super_admin"
+      const approvalStatus = isSuperAdmin ? "APPROVED" : "PENDING_SUPER_ADMIN"
+      const status = isSuperAdmin ? (rawData.status || "Available") : "Under Audit"
+
+      const animalData = {
+        ...rawData,
+        approvalStatus,
+        status,
+        submittedByRole: isSuperAdmin ? undefined : (authUser?.role || "manager"),
+        submittedByName: isSuperAdmin ? undefined : (authUser?.name || "Gaushala Custodian"),
+        ...(isSuperAdmin
+          ? {
+              approvedBy: authUser?.name || "Super Admin",
+              approvedAt: new Date().toISOString(),
+            }
+          : {}),
       }
 
       // 1. Persist rich metadata to disk
@@ -5044,14 +5095,24 @@ export async function handleApiRequest(
             ageYears: animalData.ageYears || 5,
             healthStatus: animalData.status === "Available" ? "HEALTHY" : "RESTING",
             price: animalData.price || 3500,
-            isActive: true,
+            isActive: isSuperAdmin,
+            metadata: {
+              approvalStatus,
+              submittedByRole: animalData.submittedByRole,
+              submittedByName: animalData.submittedByName,
+            },
           },
           update: {
             breed: animalData.breed || undefined,
             ageYears: animalData.ageYears || undefined,
             healthStatus: animalData.status === "Available" ? "HEALTHY" : undefined,
             price: animalData.price || undefined,
-            isActive: true,
+            isActive: isSuperAdmin,
+            metadata: {
+              approvalStatus,
+              submittedByRole: animalData.submittedByRole,
+              submittedByName: animalData.submittedByName,
+            },
           },
         })
       } catch (dbErr) {
@@ -5067,6 +5128,58 @@ export async function handleApiRequest(
     } catch (err: any) {
       return { status: 500, body: { error: err.message || "Failed to persist animal" } }
     }
+  }
+
+  // POST /api/animals/:name/verify (Super Admin Photo Review & Herd Approval)
+  const verifyAnimalMatch = pathname.match(/^\/api\/animals\/([^/]+)\/verify$/)
+  if (method === "POST" && verifyAnimalMatch) {
+    const denied = requireRole("super_admin")
+    if (denied) return denied
+    const name = decodeURIComponent(verifyAnimalMatch[1])
+    const { approved, reason } = body
+
+    const existing = serverAnimals.get(name) || getAnimalMeta(name) || { name }
+    const updated = {
+      ...existing,
+      approvalStatus: approved ? "APPROVED" : "REJECTED",
+      status: approved ? "Available" : "Under Audit",
+      approvedBy: approved ? (authUser?.name || "Super Admin") : undefined,
+      approvedAt: approved ? new Date().toISOString() : undefined,
+      rejectionReason: approved ? undefined : (reason || "Photographs did not meet Super Admin verification criteria"),
+    }
+
+    saveAnimalMeta(name, updated)
+    serverAnimals.set(name, updated)
+
+    try {
+      await prisma.animal.updateMany({
+        where: {
+          OR: [
+            { id: name },
+            { name: { equals: name, mode: "insensitive" as const } },
+          ],
+        },
+        data: {
+          isActive: Boolean(approved),
+          healthStatus: approved ? "HEALTHY" : "RESTING",
+          metadata: {
+            approvalStatus: approved ? "APPROVED" : "REJECTED",
+            approvedBy: approved ? (authUser?.name || "Super Admin") : undefined,
+            rejectionReason: approved ? undefined : (reason || "Photographs did not meet Super Admin verification criteria"),
+          },
+        },
+      })
+    } catch (e) {
+      console.warn("DB update warning in animal verify:", e)
+    }
+
+    wsHub.broadcastToChannel("channel:animals", "ANIMAL_VERIFIED", {
+      animal: updated,
+      approved: Boolean(approved),
+      timestamp: new Date().toISOString(),
+    })
+
+    return { status: 200, body: { ok: true, animal: updated } }
   }
 
   // PUT /api/animals/:name
@@ -5282,25 +5395,62 @@ export async function handleApiRequest(
     }
   }
   if (method === "POST" && pathname === "/api/slots/toggle-block") {
-    const { animal, date, time } = body
+    const { animal, date, time, reason } = body
     const existing = await prisma.animalScheduleBlock.findFirst({
-      where: { animalName: animal, date, timeSlot: time },
+      where: {
+        OR: [
+          { animalName: { equals: animal, mode: "insensitive" as const } },
+          { animalId: animal },
+        ],
+        date,
+        timeSlot: time,
+      },
     })
     if (existing) {
       await prisma.animalScheduleBlock.delete({ where: { id: existing.id } })
-      return { status: 200, body: { unblocked: true } }
+      return { status: 200, body: { ok: true, blocked: false, unblocked: true } }
     } else {
-      const a = await prisma.animal.findFirst({ where: { name: animal } })
-      await prisma.animalScheduleBlock.create({
-        data: {
-          animalId: a?.id || "",
-          animalName: animal,
-          date,
-          timeSlot: time,
-          reason: "Manual operational block",
+      let a = await prisma.animal.findFirst({
+        where: {
+          OR: [
+            { id: animal },
+            { name: { equals: animal, mode: "insensitive" as const } },
+          ],
         },
       })
-      return { status: 200, body: { blocked: true } }
+      if (!a) {
+        const fallbackGosala =
+          (await prisma.gosala.findFirst()) ||
+          (await prisma.gosala.create({
+            data: {
+              name: "Vedic Gosala",
+              region: "General Zone",
+              address: "Sanctuary",
+            },
+          }))
+        a = await prisma.animal.create({
+          data: {
+            name: animal,
+            type: "COW",
+            gosalaId: fallbackGosala.id,
+            price: 2500,
+            healthStatus: "HEALTHY",
+            isActive: true,
+          },
+        })
+      }
+
+      await prisma.animalScheduleBlock.create({
+        data: {
+          animalId: a.id,
+          animalName: a.name || animal,
+          date,
+          timeSlot: time,
+          reason: reason || "Manager manual operational block",
+          blockedById: authUser?.userId,
+        },
+      })
+      return { status: 200, body: { ok: true, blocked: true, unblocked: false } }
     }
   }
 

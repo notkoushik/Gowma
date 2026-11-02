@@ -219,7 +219,11 @@ function ReviewCard({
               </span>
 
               {/* Assigned Transport Badge */}
-              {b.driver ? (
+              {b.status === "Rejected" || b.status === "Cancelled" || b.status === "Refunded" ? (
+                <span className="inline-flex items-center gap-1 text-[10.5px] font-mono text-ink-faint bg-paper-deep px-1.5 py-0.5 rounded border border-line">
+                  Transit Locked (Closed)
+                </span>
+              ) : b.driver ? (
                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-forest bg-forest-soft px-1.5 py-0.5 rounded">
                   <Truck size={12} /> {b.driver}
                 </span>
@@ -482,21 +486,28 @@ function ReviewCard({
               </div>
 
               <div className="flex items-center gap-2 self-start md:self-auto">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onOpenDriverModal(b)
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-line rounded bg-paper hover:bg-paper-deep text-ink transition-colors cursor-pointer"
-                >
-                  <Truck size={14} className="text-forest" />
-                  <span>
-                    {b.driver
-                      ? `Driver: ${b.driver}`
-                      : "Assign Driver / Porter"}
-                  </span>
-                </button>
+                {b.status === "Rejected" || b.status === "Cancelled" || b.status === "Refunded" ? (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-medium border border-line rounded bg-paper-deep text-ink-faint">
+                    <X size={13} className="text-danger" />
+                    <span>Transit Disabled ({b.status})</span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpenDriverModal(b)
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-line rounded bg-paper hover:bg-paper-deep text-ink transition-colors cursor-pointer"
+                  >
+                    <Truck size={14} className="text-forest" />
+                    <span>
+                      {b.driver
+                        ? `Driver: ${b.driver}`
+                        : "Assign Driver / Porter"}
+                    </span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1973,7 +1984,11 @@ export default function Queue({
                               b.driver ? "text-forest" : "text-amber-600"
                             }
                           />
-                          {b.driver ? (
+                          {b.status === "Rejected" || b.status === "Cancelled" || b.status === "Refunded" ? (
+                            <span className="text-[11px] text-ink-faint font-mono">
+                              No Transit (Booking Closed)
+                            </span>
+                          ) : b.driver ? (
                             <span className="font-medium text-forest">
                               Driver: {b.driver}
                             </span>

@@ -566,6 +566,16 @@ export const api = {
     })
   },
 
+  async verifyAnimal(name: string, approved: boolean, reason?: string) {
+    return request<{ ok: boolean; animal: any }>(
+      `/api/animals/${encodeURIComponent(name)}/verify`,
+      {
+        method: "POST",
+        body: JSON.stringify({ approved, reason }),
+      },
+    )
+  },
+
   async setTripStage(id: string, stage: number) {
     return request<{ booking: Booking }>(`/api/bookings/${id}/set-stage`, {
       method: "POST",

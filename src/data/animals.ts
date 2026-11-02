@@ -1,4 +1,6 @@
-export type AnimalOperationalStatus = "Available" | "In Transit" | "In Seva" | "Resting Buffer" | "Vet Care" | "Heat Hold" | "Recovering"
+export type AnimalOperationalStatus = "Available" | "In Transit" | "In Seva" | "Resting Buffer" | "Vet Care" | "Heat Hold" | "Recovering" | "Under Audit"
+
+export type AnimalApprovalStatus = "PENDING_SUPER_ADMIN" | "APPROVED" | "REJECTED"
 
 export type AnimalVetInfo = {
   doctorName: string
@@ -64,6 +66,12 @@ export type Animal = {
   vetInfo?: AnimalVetInfo
   dietInfo?: AnimalDietInfo
   customDetails?: AnimalCustomDetail[]
+  approvalStatus?: AnimalApprovalStatus
+  submittedByRole?: string
+  submittedByName?: string
+  approvedBy?: string
+  approvedAt?: string
+  rejectionReason?: string
 }
 
 // 0 hardcoded animals - populated strictly through user registrations and backend database sync

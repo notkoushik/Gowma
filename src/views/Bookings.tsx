@@ -104,8 +104,9 @@ function Drawer({
       m.status === "Active",
   )
   const isShelterUnassigned = !assignedActiveManager
+  const isClosed = b.status === "Rejected" || b.status === "Cancelled" || b.status === "Refunded"
 
-  const needsDriver = b.status === "Confirmed" && !b.driver
+  const needsDriver = !isClosed && b.status === "Confirmed" && !b.driver
   const chargeableKm = Math.max(0, b.distanceKm - 5)
   const commission = Math.round(
     (b.base + b.extraTime) * (b.commissionPct / 100),
@@ -429,8 +430,21 @@ function Drawer({
 
         {/* Action Button Strip */}
         <div className="sticky bottom-0 bg-card/95 backdrop-blur border-t border-line px-5 py-4">
+          {/* Case 0: Cancelled or Declined Booking - Permanently Locked */}
+          {isClosed && (
+            <div className="p-3 bg-paper-deep rounded border border-line text-center text-[12px] text-ink-soft space-y-1">
+              <div className="font-semibold text-danger flex items-center justify-center gap-1.5">
+                <AlertCircle size={14} />
+                <span>Booking {b.status}</span>
+              </div>
+              <p className="text-ink-faint text-[11px]">
+                This booking has been {b.status.toLowerCase()}. All transportation booking, driver dispatch, and operational actions are permanently disabled.
+              </p>
+            </div>
+          )}
+
           {/* Case 1: Phase-1 Feasibility Review (Payment Verified) */}
-          {isAwaitingFeasibility && (
+          {!isClosed && isAwaitingFeasibility && (
             <div className="space-y-2.5">
               <div className="flex gap-2">
                 <button
@@ -470,7 +484,7 @@ function Drawer({
           )}
 
           {/* Case 2: Phase-2 Operations Admin Final Confirmation (Admin Review) */}
-          {canActAdmin && (
+          {!isClosed && canActAdmin && (
             <div className="flex gap-3">
               <button
                 onClick={() =>
