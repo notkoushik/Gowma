@@ -93,6 +93,7 @@ function ReviewCard({
   onOpenRejectModal,
   onOpenCustomerModal,
   onOpenDriverModal,
+  onConfirmBovineHandover,
   isHighlighted,
 }: {
   b: Booking
@@ -102,6 +103,7 @@ function ReviewCard({
   onOpenRejectModal: (b: Booking) => void
   onOpenCustomerModal: (b: Booking) => void
   onOpenDriverModal: (b: Booking) => void
+  onConfirmBovineHandover?: (b: Booking) => void
   isHighlighted?: boolean
 }) {
   const [remark, setRemark] = useState("")
@@ -356,12 +358,16 @@ function ReviewCard({
                     </span>
                     {b.address && (
                       <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.address)}`}
+                        href={
+                          b.customerLat && b.customerLng
+                            ? `https://www.google.com/maps/search/?api=1&query=${b.customerLat},${b.customerLng}`
+                            : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.address)}`
+                        }
                         target="_blank"
                         rel="noreferrer"
                         className="text-[10.5px] text-forest hover:underline font-medium inline-flex items-center gap-1 mt-0.5"
                       >
-                        📍 Open in Google Maps ↗
+                        📍 Open in Google Maps {b.customerLat && b.customerLng ? `(${b.customerLat.toFixed(4)}, ${b.customerLng.toFixed(4)})` : ""} ↗
                       </a>
                     )}
                   </div>
@@ -369,28 +375,28 @@ function ReviewCard({
               </div>
             </div>
 
-            {/* Section 2: 4-Vector Pre-Dispatch Feasibility Assessment */}
+            {/* Section 2: 4-Vector Pre-Dispatch Feasibility Assessment (Harmonious Vedic Theme) */}
             <div>
               <Eyebrow>4-Vector Pre-Dispatch Feasibility Assessment</Eyebrow>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mt-1.5">
                 {/* Vector 1: Distance vs Animal Age */}
                 <div
-                  className={`p-3 rounded border text-[12px] ${
+                  className={`p-3 rounded border text-[12px] bg-card ${
                     distanceSafe
-                      ? "bg-emerald-50/70 border-emerald-200 text-emerald-950"
-                      : "bg-red-50/80 border-red-300 text-red-950"
+                      ? "border-line text-ink"
+                      : "border-red-300 bg-red-50/70 text-red-950"
                   }`}
                 >
-                  <div className="font-semibold flex items-center justify-between">
-                    <span className="flex items-center gap-1">
-                      <Truck size={13} /> 1. Distance Feasibility
+                  <div className="font-semibold flex items-center justify-between text-ink">
+                    <span className="flex items-center gap-1.5 text-forest">
+                      <Truck size={14} /> 1. Distance Feasibility
                     </span>
-                    <span className="font-mono text-[11px]">
+                    <span className="font-mono text-[11px] font-bold text-ink">
                       {b.distanceKm} km
                     </span>
                   </div>
-                  <p className="mt-1 text-[11.5px] opacity-90">
+                  <p className="mt-1 text-[11.5px] text-ink-soft">
                     {distanceSafe
                       ? `Safe radius · Capped at ${maxDistance} km for ${b.animalType}`
                       : `EXCEEDED · Max allowable for ${b.animalType} is ${maxDistance} km!`}
@@ -398,16 +404,16 @@ function ReviewCard({
                 </div>
 
                 {/* Vector 2: Road & Venue Ground Floor Access */}
-                <div className="p-3 rounded border bg-emerald-50/70 border-emerald-200 text-emerald-950 text-[12px]">
-                  <div className="font-semibold flex items-center justify-between">
-                    <span className="flex items-center gap-1">
-                      <ShieldCheck size={13} /> 2. Venue & Ramp Access
+                <div className="p-3 rounded border border-line bg-card text-[12px]">
+                  <div className="font-semibold flex items-center justify-between text-ink">
+                    <span className="flex items-center gap-1.5 text-forest">
+                      <ShieldCheck size={14} /> 2. Venue & Ramp Access
                     </span>
-                    <span className="text-[10.5px] font-mono text-emerald-700">
+                    <span className="text-[10.5px] font-mono text-forest bg-forest-soft px-1.5 py-0.2 rounded font-medium border border-forest/20">
                       Verified
                     </span>
                   </div>
-                  <p className="mt-1 text-[11.5px] opacity-90">
+                  <p className="mt-1 text-[11.5px] text-ink-soft">
                     Ground-floor portico confirmed. No elevators/stairs
                     required.
                   </p>
@@ -415,19 +421,19 @@ function ReviewCard({
 
                 {/* Vector 3: Weather & Thermal Index */}
                 <div
-                  className={`p-3 rounded border text-[12px] ${
+                  className={`p-3 rounded border text-[12px] bg-card ${
                     isMidday
-                      ? "bg-amber-50/70 border-amber-200 text-amber-950"
-                      : "bg-emerald-50/70 border-emerald-200 text-emerald-950"
+                      ? "border-amber-300 bg-amber-50/70 text-amber-950"
+                      : "border-line text-ink"
                   }`}
                 >
-                  <div className="font-semibold flex items-center justify-between">
-                    <span className="flex items-center gap-1">
-                      <SunMedium size={13} /> 3. Thermal Comfort
+                  <div className="font-semibold flex items-center justify-between text-ink">
+                    <span className="flex items-center gap-1.5 text-forest">
+                      <SunMedium size={14} /> 3. Thermal Comfort
                     </span>
-                    <span className="font-mono text-[11px]">31°C · THI 72</span>
+                    <span className="font-mono text-[11px] font-bold text-ink">31°C · THI 72</span>
                   </div>
-                  <p className="mt-1 text-[11.5px] opacity-90">
+                  <p className="mt-1 text-[11.5px] text-ink-soft">
                     {isMidday
                       ? "Midday ceremony · Shaded altar & hydration kit mandatory."
                       : "Normal thermal range · Safe for ceremonial transit."}
@@ -435,16 +441,16 @@ function ReviewCard({
                 </div>
 
                 {/* Vector 4: Escort & Handler Ratio */}
-                <div className="p-3 rounded border bg-emerald-50/70 border-emerald-200 text-emerald-950 text-[12px]">
-                  <div className="font-semibold flex items-center justify-between">
-                    <span className="flex items-center gap-1">
-                      <UserCheck size={13} /> 4. Handler Assigned
+                <div className="p-3 rounded border border-line bg-card text-[12px]">
+                  <div className="font-semibold flex items-center justify-between text-ink">
+                    <span className="flex items-center gap-1.5 text-forest">
+                      <UserCheck size={14} /> 4. Handler Assigned
                     </span>
-                    <span className="text-[10.5px] font-mono text-emerald-700">
+                    <span className="text-[10.5px] font-mono text-forest bg-forest-soft px-1.5 py-0.2 rounded font-medium border border-forest/20">
                       Certified
                     </span>
                   </div>
-                  <p className="mt-1 text-[11.5px] opacity-90 truncate">
+                  <p className="mt-1 text-[11.5px] text-ink-soft truncate">
                     {animalObj?.assignedHandler || "Senior Gosevak Escort"}
                   </p>
                 </div>
@@ -496,23 +502,75 @@ function ReviewCard({
 
             {/* Decision Section or Display Audit Remark */}
             {decided ? (
-              <div className="bg-paper-deep rounded p-3 text-[12.5px] border border-line flex items-start gap-2">
-                <Info size={16} className="text-saffron shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-semibold text-ink">
-                    Manager Decision Recorded:
-                  </span>{" "}
-                  <span className="text-ink-soft">
-                    {b.managerRemark || "Decision logged on server."}
-                  </span>
-                  {b.managerApproval && (
-                    <div className="text-[11px] text-ink-faint mt-1 font-mono">
-                      Signed by {b.managerApproval.name} (
-                      {b.managerApproval.userId}) at{" "}
-                      {b.managerApproval.timestamp}
-                    </div>
-                  )}
+              <div className="space-y-3">
+                <div className="bg-paper-deep rounded p-3 text-[12.5px] border border-line flex items-start gap-2">
+                  <Info size={16} className="text-saffron shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold text-ink">
+                      Manager Decision Recorded:
+                    </span>{" "}
+                    <span className="text-ink-soft">
+                      {b.managerRemark || "Decision logged on server."}
+                    </span>
+                    {b.managerApproval && (
+                      <div className="text-[11px] text-ink-faint mt-1 font-mono">
+                        Signed by {b.managerApproval.name} (
+                        {b.managerApproval.userId}) at{" "}
+                        {b.managerApproval.timestamp}
+                      </div>
+                    )}
+                  </div>
                 </div>
+
+                {/* Cattle Handover to Driver (Unlocks Devotee Live GPS Tracking) */}
+                {b.status !== "Rejected" && (
+                  <div className="p-3.5 rounded-lg border border-line bg-card text-[12.5px] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                    <div className="flex items-start gap-2.5">
+                      <div
+                        className={`p-2 rounded-full shrink-0 ${
+                          b.bovineHandedOver
+                            ? "bg-forest-soft text-forest"
+                            : "bg-saffron-soft text-saffron-deep"
+                        }`}
+                      >
+                        <PawPrint size={16} />
+                      </div>
+                      <div>
+                        <div className="font-semibold text-ink flex items-center gap-2">
+                          <span>Sacred Cattle Boarding & Handover</span>
+                          {b.bovineHandedOver ? (
+                            <span className="text-[10px] font-mono bg-forest-soft text-forest px-2 py-0.5 rounded font-semibold border border-forest/20">
+                              Handed Over to Driver ✓
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-mono bg-saffron-soft text-saffron-deep px-2 py-0.5 rounded font-semibold border border-saffron/20">
+                              Awaiting Boarding Check
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11.5px] text-ink-soft mt-0.5">
+                          {b.bovineHandedOver
+                            ? `Cattle handed over to pilot ${b.driver || "Assigned Driver"}. Live GPS tracking is ACTIVE on devotee screen.`
+                            : `Confirm when the animal is safely boarded onto the transit ambulance. This triggers live GPS tracking on the devotee's screen.`}
+                        </p>
+                      </div>
+                    </div>
+
+                    {!b.bovineHandedOver && onConfirmBovineHandover && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onConfirmBovineHandover(b)
+                        }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded bg-forest hover:bg-forest/90 text-white text-[12px] font-medium shadow-xs transition-colors shrink-0 cursor-pointer"
+                      >
+                        <Check size={14} />
+                        <span>Confirm Cattle Handover to Driver</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="pt-2">
@@ -564,6 +622,7 @@ export default function Queue({
     activeManagerGosala,
     gosalas,
     managerDecide,
+    confirmBovineHandover,
     assignDriver,
     assignPorterTransport,
     animals,
@@ -1135,6 +1194,7 @@ export default function Queue({
                   onOpenRejectModal={handleOpenReject}
                   onOpenCustomerModal={handleOpenCustomerModal}
                   onOpenDriverModal={(bk) => setDriverAssignBooking(bk)}
+                  onConfirmBovineHandover={confirmBovineHandover}
                   isHighlighted={b.id === highlightedBookingId}
                 />
               ))
@@ -1179,6 +1239,7 @@ export default function Queue({
                   onOpenRejectModal={handleOpenReject}
                   onOpenCustomerModal={handleOpenCustomerModal}
                   onOpenDriverModal={(bk) => setDriverAssignBooking(bk)}
+                  onConfirmBovineHandover={confirmBovineHandover}
                   isHighlighted={b.id === highlightedBookingId}
                 />
               ))}
@@ -1209,6 +1270,7 @@ export default function Queue({
                     onOpenRejectModal={handleOpenReject}
                     onOpenCustomerModal={handleOpenCustomerModal}
                     onOpenDriverModal={(bk) => setDriverAssignBooking(bk)}
+                    onConfirmBovineHandover={confirmBovineHandover}
                     isHighlighted={b.id === highlightedBookingId}
                   />
                 ))}

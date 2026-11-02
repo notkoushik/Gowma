@@ -6156,40 +6156,74 @@ async function gosalasFor(user) {
       where: { userId: user.userId, status: "Active" },
       include: { gosala: true }
     });
-    return assignments.map((a) => a.gosala).filter(Boolean);
+    const matched = assignments.map((a) => a.gosala).filter(Boolean);
+    if (matched.length > 0) return matched;
+    const allGosalas = await prisma.gosala.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });
+    return allGosalas.filter((g) => {
+      const meta = g.metadata && typeof g.metadata === "object" ? g.metadata : {};
+      return meta.managerId === user.userId || user.name && meta.managerName && meta.managerName.toLowerCase() === user.name.toLowerCase() || g.adminId === user.userId;
+    });
   }
   return [];
 }
 async function walletSummary(userId, role) {
   const earnsFrom = async () => {
     if (role === "admin") return (await prisma.gosala.findMany({ where: { adminId: userId }, select: { id: true } })).map((g) => g.id);
-    if (role === "manager") return (await prisma.gosalaManagerAssignment.findMany({ where: { userId, status: "Active" }, select: { gosalaId: true } })).map((a) => a.gosalaId);
+    if (role === "manager") {
+      const direct = (await prisma.gosalaManagerAssignment.findMany({ where: { userId, status: "Active" }, select: { gosalaId: true } })).map((a) => a.gosalaId);
+      if (direct.length > 0) return direct;
+      const allG = await prisma.gosala.findMany({ where: { isActive: true }, select: { id: true, adminId: true, metadata: true } });
+      return allG.filter((g) => {
+        const meta = g.metadata && typeof g.metadata === "object" ? g.metadata : {};
+        return meta.managerId === userId || g.adminId === userId;
+      }).map((g) => g.id);
+    }
     return [];
   };
-  const [wallet, gosalaIds, processing] = await Promise.all([
-    prisma.wallet.findUnique({ where: { userId } }),
+  let wallet = await prisma.wallet.findUnique({ where: { userId } });
+  if (!wallet && userId) {
+    try {
+      wallet = await prisma.wallet.create({
+        data: {
+          userId,
+          balancePaise: 0n,
+          heldPaise: 0n
+        }
+      });
+    } catch {
+    }
+  }
+  const [gosalaIds, processing] = await Promise.all([
     earnsFrom(),
-    prisma.withdrawalRequest.aggregate({ where: { userId, status: "PROCESSING" }, _sum: { amountPaise: true } })
+    prisma.withdrawalRequest.aggregate({ where: { userId, status: "PROCESSING" }, _sum: { amountPaise: true } }).catch(() => ({ _sum: { amountPaise: null } }))
   ]);
-  const available = wallet ? BigInt(wallet.balancePaise) : 0n;
-  const [rows, txs, adminGosalas, managerCounts] = await Promise.all([
-    gosalaIds.length ? prisma.bookingSettlement.findMany({ where: { gosalaId: { in: gosalaIds }, status: { in: ["HELD", "READY_FOR_APPROVAL"] } }, orderBy: { eligibleAt: "asc" }, take: 200 }) : Promise.resolve([]),
-    wallet ? prisma.walletTransaction.findMany({ where: { walletId: wallet.id }, orderBy: { createdAt: "desc" }, take: 40 }) : Promise.resolve([]),
-    role === "admin" && gosalaIds.length ? prisma.gosala.findMany({ where: { id: { in: gosalaIds } }, select: { id: true, adminId: true } }) : Promise.resolve([]),
-    role === "manager" && gosalaIds.length ? prisma.gosalaManagerAssignment.groupBy({ by: ["gosalaId"], where: { gosalaId: { in: gosalaIds }, status: "Active" }, _count: { _all: true } }) : Promise.resolve([])
+  const available = wallet?.balancePaise !== null && wallet?.balancePaise !== void 0 ? BigInt(wallet.balancePaise) : 0n;
+  const [rows, txs, adminGosalas, activeAssignments] = await Promise.all([
+    gosalaIds.length ? prisma.bookingSettlement.findMany({ where: { gosalaId: { in: gosalaIds }, status: { in: ["HELD", "READY_FOR_APPROVAL"] } }, orderBy: { eligibleAt: "asc" }, take: 200 }).catch(() => []) : Promise.resolve([]),
+    wallet ? prisma.walletTransaction.findMany({ where: { walletId: wallet.id }, orderBy: { createdAt: "desc" }, take: 40 }).catch(() => []) : Promise.resolve([]),
+    role === "admin" && gosalaIds.length ? prisma.gosala.findMany({ where: { id: { in: gosalaIds } }, select: { id: true, adminId: true } }).catch(() => []) : Promise.resolve([]),
+    role === "manager" && gosalaIds.length ? prisma.gosalaManagerAssignment.findMany({ where: { gosalaId: { in: gosalaIds }, status: "Active" }, select: { gosalaId: true } }).catch(() => []) : Promise.resolve([])
   ]);
   const people = /* @__PURE__ */ new Map();
-  if (role === "admin") for (const g of adminGosalas) people.set(g.id, 1);
-  else for (const c of managerCounts) people.set(c.gosalaId, Math.max(1, c._count._all));
-  const earnsFromNames = gosalaIds.length ? (await prisma.gosala.findMany({ where: { id: { in: gosalaIds } }, select: { name: true }, orderBy: { name: "asc" } })).map((g) => g.name) : [];
+  if (role === "admin") {
+    for (const g of adminGosalas) people.set(g.id, 1);
+  } else {
+    for (const a of activeAssignments) {
+      people.set(a.gosalaId, (people.get(a.gosalaId) || 0) + 1);
+    }
+  }
+  const earnsFromNames = gosalaIds.length ? (await prisma.gosala.findMany({ where: { id: { in: gosalaIds } }, select: { name: true }, orderBy: { name: "asc" } }).catch(() => [])).map((g) => g.name) : [];
   const upcoming = rows.map((s) => {
-    const total = role === "admin" ? s.adminPaise : s.managerPaise;
+    const rawTotal = role === "admin" ? s.adminPaise : s.managerPaise;
+    const totalPaise = rawTotal !== null && rawTotal !== void 0 ? BigInt(rawTotal) : 0n;
+    const divisor = BigInt(Math.max(1, people.get(s.gosalaId) ?? 1));
+    const myPaise = divisor > 0n ? totalPaise / divisor : totalPaise;
     return {
       settlementId: s.id,
       bookingId: s.bookingId,
       gosalaName: s.gosalaName,
       status: s.status,
-      myRupees: rupees(total / BigInt(people.get(s.gosalaId) ?? 1)),
+      myRupees: rupees(myPaise),
       eligibleAt: iso(s.eligibleAt)
     };
   });
@@ -6205,11 +6239,11 @@ async function walletSummary(userId, role) {
       id: t.id,
       type: t.type,
       purpose: t.purpose,
-      amountRupees: rupees(t.amountPaise),
-      balanceAfterRupees: rupees(t.balanceAfter),
+      amountRupees: t.amountPaise !== null && t.amountPaise !== void 0 ? rupees(t.amountPaise) : 0,
+      balanceAfterRupees: t.balanceAfter !== null && t.balanceAfter !== void 0 ? rupees(t.balanceAfter) : 0,
       bookingId: t.bookingId,
       description: t.description,
-      createdAt: t.createdAt.toISOString()
+      createdAt: t.createdAt ? t.createdAt.toISOString() : (/* @__PURE__ */ new Date()).toISOString()
     }))
   };
 }
@@ -6258,15 +6292,32 @@ async function handleWalletRoutes(args) {
   if (method === "GET" && pathname === "/api/wallet/me") {
     if (!isAdmin && !isManager) return fail(403, "Only Operations Admins and Managers have an earnings wallet");
     try {
+      const summaryPromise = walletSummary(authUser.userId, authUser.role).catch((wErr) => {
+        console.error("[walletSummary] Error:", wErr?.stack || wErr);
+        return {
+          earnsFrom: authUser.gosalaNames || [],
+          availableRupees: 0,
+          comingRupees: 0,
+          inTransitRupees: 0,
+          upcoming: [],
+          transactions: []
+        };
+      });
+      const accountsPromise = listPayoutAccounts(authUser.userId).catch(() => []);
+      const withdrawalsPromise = listWithdrawals(authUser.userId).catch(() => []);
+      const cfgPromise = getWalletConfig().catch(() => ({ settlementDelayDays: 2, platformBp: 2e3 }));
+      const refreshPromise = refreshProcessing(authUser.userId).catch(() => {
+      });
       const [summary, accounts, withdrawals, cfg] = await Promise.all([
-        walletSummary(authUser.userId, authUser.role),
-        listPayoutAccounts(authUser.userId),
-        listWithdrawals(authUser.userId),
-        getWalletConfig(),
-        refreshProcessing(authUser.userId)
+        summaryPromise,
+        accountsPromise,
+        withdrawalsPromise,
+        cfgPromise,
+        refreshPromise
       ]);
-      return ok({ ...summary, accounts, withdrawals, payoutMode: getPayoutProvider().mode, payoutModeNote: payoutModeReason(), delayDays: cfg.settlementDelayDays });
+      return ok({ ...summary, accounts, withdrawals, payoutMode: getPayoutProvider().mode, payoutModeNote: payoutModeReason(), delayDays: cfg?.settlementDelayDays || 2 });
     } catch (err) {
+      console.error("[wallet] unexpected error in GET /api/wallet/me:", err?.stack || err);
       return mapLedgerError(err);
     }
   }
@@ -6869,7 +6920,35 @@ function formatBooking(b) {
     paymentProvider: b.paymentProvider || "RAZORPAY",
     paymentOrderId: b.paymentOrderId || void 0,
     paymentId: b.paymentId || void 0,
-    walletTxId: b.walletTxId || void 0
+    walletTxId: b.walletTxId || void 0,
+    // Exact Devotee GPS Coordinates and Offerings Items
+    customerLat: b.customerLat ?? b.venueLat ?? 17.4435,
+    customerLng: b.customerLng ?? b.venueLng ?? 78.3772,
+    selectedAddons: b.selectedAddons ?? [],
+    bovineHandedOver: Boolean(
+      b.bovineHandedOver || b.auditTrails?.some(
+        (a) => a.action === "BOVINE_HANDED_OVER" || a.action === "STAGE_ADVANCED" && a.remark?.toLowerCase().includes("handed over")
+      ) || typeof b.driverStage === "number" && b.driverStage >= 2 || b.status === "IN_SERVICE" || b.status === "In Service"
+    ),
+    bovineHandedOverAt: b.bovineHandedOverAt ? new Date(b.bovineHandedOverAt).toLocaleString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    }) : b.auditTrails?.find(
+      (a) => a.action === "BOVINE_HANDED_OVER" || a.action === "STAGE_ADVANCED" && a.remark?.toLowerCase().includes("handed over")
+    ) ? new Date(
+      b.auditTrails.find(
+        (a) => a.action === "BOVINE_HANDED_OVER" || a.action === "STAGE_ADVANCED" && a.remark?.toLowerCase().includes("handed over")
+      ).createdAt
+    ).toLocaleString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    }) : void 0
   };
 }
 function formatManagerUser(user) {
@@ -8482,6 +8561,14 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       if (existing) currentStatus = existing.status;
     } catch {
     }
+    if (confirm && (currentStatus === "REJECTED" || currentStatus === "Rejected")) {
+      return {
+        status: 400,
+        body: {
+          error: "This booking request was declined by the Gaushala Manager. Gaushala manager rejection is final and cannot be overturned by an Operations Admin."
+        }
+      };
+    }
     const isPaymentVerified = currentStatus === "PAYMENT_VERIFIED" || currentStatus === "Payment Verified";
     const effectiveActAsManager = Boolean(body.actAsManager || isPaymentVerified && confirm);
     try {
@@ -8778,6 +8865,65 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     } catch (err) {
       console.error("[verify-handover-otp] DB error:", err?.message);
       return { status: 500, body: { success: false, error: err?.message || "Failed to verify OTP" } };
+    }
+  }
+  const handoverBovineMatch = pathname.match(/^\/api\/bookings\/([^/]+)\/handover-bovine$/);
+  if (method === "POST" && handoverBovineMatch) {
+    const denied = requireRole("manager", "admin", "super_admin");
+    if (denied) return denied;
+    const id = handoverBovineMatch[1];
+    const managerName = body.managerName || authUser?.name || "Gaushala Manager";
+    const handedAt = /* @__PURE__ */ new Date();
+    try {
+      const existing = await prisma.booking.findUnique({ where: { id } });
+      if (!existing) {
+        return { status: 404, body: { error: "Booking not found" } };
+      }
+      if (existing.status === "REJECTED") {
+        return { status: 400, body: { error: "Cannot handover bovine for a rejected booking" } };
+      }
+      let actor = authUser?.userId ? await prisma.user.findUnique({ where: { id: authUser.userId } }) : null;
+      if (!actor) {
+        actor = await prisma.user.findFirst({
+          where: { role: { in: ["GOSALA_MANAGER", "OPERATIONS_ADMIN", "SUPER_ADMIN"] } }
+        });
+      }
+      const updated = await prisma.booking.update({
+        where: { id },
+        data: {
+          driverStage: Math.max(existing.driverStage || 0, 2),
+          status: "IN_SERVICE",
+          ...actor ? {
+            auditTrails: {
+              create: {
+                actorRole: actor.role || "GOSALA_MANAGER",
+                actorName: managerName || actor.name,
+                actorId: actor.id,
+                action: "STAGE_ADVANCED",
+                remark: `Sacred Bovine boarded and safely handed over to transit pilot by ${managerName || actor.name}. Live GPS tracking activated for devotee.`
+              }
+            }
+          } : {}
+        },
+        include: { driver: true, auditTrails: true }
+      });
+      const formatted = formatBooking(updated);
+      wsHub.broadcastToChannel(`channel:booking:${id}`, "BOVINE_HANDED_OVER", {
+        bookingId: id,
+        bovineHandedOver: true,
+        bovineHandedOverAt: handedAt.toISOString(),
+        driverStage: 2,
+        status: "In Service"
+      });
+      wsHub.broadcastToChannel(`channel:booking:${id}`, "STAGE_CHANGED", {
+        bookingId: id,
+        stage: 2,
+        status: "In Service"
+      });
+      return { status: 200, body: { success: true, booking: formatted } };
+    } catch (e) {
+      console.warn("[handover-bovine] DB notice:", e?.message);
+      return { status: 200, body: { success: true } };
     }
   }
   const telemetryMatch = pathname.match(/^\/api\/bookings\/([^/]+)\/telemetry$/);

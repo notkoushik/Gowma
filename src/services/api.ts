@@ -426,6 +426,16 @@ export const api = {
     })
   },
 
+  async handoverBovine(id: string, managerName?: string) {
+    return request<{
+      success: boolean
+      booking: Booking
+    }>(`/api/bookings/${id}/handover-bovine`, {
+      method: "POST",
+      body: JSON.stringify({ managerName }),
+    })
+  },
+
   async getManagers() {
     return request<{ managers: GosalaManager[] }>("/api/managers")
   },

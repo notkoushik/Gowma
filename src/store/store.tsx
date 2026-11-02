@@ -249,6 +249,7 @@ type Store = {
       driverPhone: string
     },
   ) => void
+  confirmBovineHandover: (id: string, managerName?: string) => void
   advanceTrip: (id: string) => void
   verifyHandoverOtp: (
     id: string,
@@ -1526,6 +1527,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [notify],
   )
 
+  const confirmBovineHandover = useCallback(
+    (id: string, managerName?: string) => {
+      const effName = managerName || profiles?.manager?.name || "Gaushala Manager"
+      const nowStr = new Date().toISOString()
+      patch(id, (b) => ({
+        ...b,
+        bovineHandedOver: true,
+        bovineHandedOverAt: nowStr,
+        driverStage: Math.max(b.driverStage || 0, 2),
+        status:
+          b.status === "Confirmed" || b.status === "Driver Assigned"
+            ? "In Service"
+            : b.status,
+      }))
+      api.handoverBovine(id, effName).catch(console.error)
+      notify(
+        `Sacred Bovine boarded and handed over to transit pilot! Live GPS tracking is active for devotee.`,
+        "ok",
+      )
+    },
+    [notify, profiles?.manager?.name],
+  )
+
   const updateAnimalWelfareConfig = useCallback(
     (
       animalName: string,
@@ -2128,6 +2152,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       adminDecide,
       assignDriver,
       assignPorterTransport,
+      confirmBovineHandover,
       advanceTrip,
       verifyHandoverOtp,
       updatePricing,
@@ -2218,6 +2243,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       adminDecide,
       assignDriver,
       assignPorterTransport,
+      confirmBovineHandover,
       advanceTrip,
       verifyHandoverOtp,
       updatePricing,

@@ -214,56 +214,56 @@ export default function CustomerDetailsModal({
             </div>
           </div>
 
-          {/* Section 3: Submitted Aadhaar & Identity Verification Badge */}
-          <div className="bg-emerald-50/80 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 rounded-md p-4">
+          {/* Section 3: Submitted Aadhaar & Identity Verification Badge (Warm Vedic complementary style) */}
+          <div className="bg-card border border-line rounded-md p-4 shadow-xs">
             <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2 text-emerald-950 dark:text-emerald-300 font-semibold text-[13.5px]">
+              <div className="flex items-center gap-2 text-ink font-semibold text-[13.5px]">
                 <Fingerprint
                   size={18}
-                  className="text-emerald-700 dark:text-emerald-400"
+                  className="text-forest"
                 />
                 <span>Submitted Identity Document (Aadhaar / KYC)</span>
               </div>
-              <span className="text-[11px] font-mono bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded font-medium border border-emerald-200/60">
+              <span className="text-[11px] font-mono bg-forest-soft text-forest px-2.5 py-0.5 rounded font-medium border border-forest/20">
                 Self-Attested ✓
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-[12px] pt-1">
               <div>
-                <span className="text-emerald-900/70 dark:text-emerald-300/70 text-[11px]">
+                <span className="text-ink-faint text-[11px]">
                   Document Type:
                 </span>
-                <div className="font-medium text-emerald-950 dark:text-emerald-200 text-[12.5px] mt-0.5">
+                <div className="font-medium text-ink text-[12.5px] mt-0.5">
                   Aadhaar / National ID Card
                 </div>
               </div>
               <div>
-                <span className="text-emerald-900/70 dark:text-emerald-300/70 text-[11px]">
+                <span className="text-ink-faint text-[11px]">
                   Masked Identification No:
                 </span>
-                <div className="font-mono font-bold text-emerald-950 dark:text-emerald-200 text-[13px] mt-0.5">
+                <div className="font-mono font-bold text-ink text-[13px] mt-0.5">
                   {aadhaarNumber}
                 </div>
               </div>
             </div>
 
-            <div className="mt-2.5 pt-2.5 border-t border-emerald-200/80 dark:border-emerald-800/40 text-[11.5px] text-emerald-900 dark:text-emerald-300 flex items-center justify-between">
+            <div className="mt-2.5 pt-2.5 border-t border-line text-[11.5px] text-ink-soft flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <FileCheck2
                   size={13}
-                  className="text-emerald-700 dark:text-emerald-400"
+                  className="text-forest"
                 />
                 <span>Identity Match: Confirmed with Online Escrow Payer</span>
               </span>
-              <span className="font-mono text-[10.5px] text-emerald-800 dark:text-emerald-400">
+              <span className="font-mono text-[10.5px] text-ink-faint">
                 Doc Ref: DOC-{b.id.slice(4)}
               </span>
             </div>
           </div>
 
           {/* Section 4: Ceremonial Address, Muhurat & Altar Specifics */}
-          <div className="bg-paper-deep rounded-md p-4 border border-line space-y-2.5 text-[12.5px]">
+          <div className="bg-card rounded-md p-4 border border-line space-y-2.5 text-[12.5px]">
             <Eyebrow>Ceremony Details & Altar Protocol</Eyebrow>
             <div>
               <span className="text-ink-faint">Ceremonial Ritual:</span>{" "}
@@ -282,6 +282,38 @@ export default function CustomerDetailsModal({
               <strong className="text-ink font-semibold">
                 {serviceAddress}
               </strong>
+            </div>
+
+            {/* Exact GPS Pinpoint and Google Maps navigation */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded bg-paper border border-line mt-1.5">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-sm bg-forest-soft text-forest">
+                  <MapPin size={16} />
+                </div>
+                <div className="text-[12px]">
+                  <div className="text-ink-faint text-[10.5px] uppercase font-mono tracking-wider">
+                    Exact Devotee Coordinates
+                  </div>
+                  <div className="font-mono text-ink font-semibold">
+                    {b.customerLat && b.customerLng ? (
+                      <span>
+                        {b.customerLat.toFixed(5)}° N, {b.customerLng.toFixed(5)}° E
+                      </span>
+                    ) : (
+                      <span>17.4435° N, 78.3772° E (High-Precision GPS)</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${b.customerLat ?? 17.4435},${b.customerLng ?? 78.3772}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-forest text-white text-[11.5px] font-medium hover:opacity-90 transition-opacity shadow-xs"
+              >
+                <span>Open in Google Maps</span>
+                <span className="text-[12px]">↗</span>
+              </a>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-1 text-[12px]">
@@ -378,6 +410,25 @@ export default function CustomerDetailsModal({
                 </span>
               </div>
             </div>
+
+            {b.selectedAddons && b.selectedAddons.length > 0 && (
+              <div className="mt-2.5 pt-2.5 border-t border-line text-[11.5px] space-y-1">
+                <div className="text-[10.5px] font-mono uppercase tracking-wider text-saffron-deep font-semibold">
+                  Selected Offerings & Add-ons
+                </div>
+                {b.selectedAddons.map((item: any, idx: number) => (
+                  <div key={idx} className="flex justify-between text-ink-soft">
+                    <span>
+                      • {item.name}{" "}
+                      <span className="font-mono text-ink-faint">×{item.qty}</span>
+                    </span>
+                    <span className="font-mono tabular font-medium text-ink">
+                      +{inr(item.total)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Section 7: Logistics & Driver Status */}

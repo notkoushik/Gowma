@@ -83,6 +83,10 @@ export type BookingSummary = {
   extraUnitRateSnapshot?: number
   commissionSnapshot?: number
   commissionPct?: number
+  customerLat?: number | null
+  customerLng?: number | null
+  selectedAddons?: Array<{ id: string; name: string; qty: number; price: number; total: number }>
+  pairSurcharge?: number
 }
 
 export type MyBooking = {
@@ -106,6 +110,12 @@ export type MyBooking = {
   driverRating?: number | null
   driverTotalTrips?: number | null
   driverAvatar?: string | null
+  managerRemark?: string
+  bovineHandedOver?: boolean
+  bovineHandedOverAt?: string | null
+  customerLat?: number | null
+  customerLng?: number | null
+  selectedAddons?: Array<any>
 }
 
 export function makeBooking(
@@ -177,6 +187,9 @@ export function makeBooking(
     extraUnitRateSnapshot: s.extraUnitRateSnapshot ?? 500,
     commissionSnapshot: commAmount,
     quoteToken: s.quoteToken,
+    customerLat: s.customerLat ?? null,
+    customerLng: s.customerLng ?? null,
+    selectedAddons: s.selectedAddons ?? [],
     createdAt: new Date().toLocaleString("en-IN", {
       day: "numeric",
       month: "short",
@@ -222,6 +235,12 @@ export function toMyBooking(b: Booking): MyBooking {
     driverRating: b.driverRating,
     driverTotalTrips: b.driverTotalTrips,
     driverAvatar: b.driverAvatar,
+    managerRemark: b.managerRemark,
+    bovineHandedOver: b.bovineHandedOver,
+    bovineHandedOverAt: b.bovineHandedOverAt,
+    customerLat: b.customerLat,
+    customerLng: b.customerLng,
+    selectedAddons: b.selectedAddons,
   }
 }
 
@@ -1127,9 +1146,11 @@ function Track({
       <CustomerTrackingDossier
         booking={booking}
         customerCoords={
-          deviceLocation.lat && deviceLocation.lng
-            ? [deviceLocation.lat, deviceLocation.lng]
-            : null
+          booking.customerLat && booking.customerLng
+            ? [booking.customerLat, booking.customerLng]
+            : deviceLocation.lat && deviceLocation.lng
+              ? [deviceLocation.lat, deviceLocation.lng]
+              : null
         }
         layoutMode="compact"
         heightClass="h-56"

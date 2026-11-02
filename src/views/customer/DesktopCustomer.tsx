@@ -1184,9 +1184,11 @@ function TrackView({
       <CustomerTrackingDossier
         booking={booking}
         customerCoords={
-          deviceLocation.lat && deviceLocation.lng
-            ? [deviceLocation.lat, deviceLocation.lng]
-            : null
+          booking.customerLat && booking.customerLng
+            ? [booking.customerLat, booking.customerLng]
+            : deviceLocation.lat && deviceLocation.lng
+              ? [deviceLocation.lat, deviceLocation.lng]
+              : null
         }
         layoutMode="wide"
         heightClass="h-[380px]"

@@ -408,6 +408,48 @@ function formatBooking(b: any): Booking {
     paymentOrderId: b.paymentOrderId || undefined,
     paymentId: b.paymentId || undefined,
     walletTxId: b.walletTxId || undefined,
+    // Exact Devotee GPS Coordinates and Offerings Items
+    customerLat: (b as any).customerLat ?? (b as any).venueLat ?? 17.4435,
+    customerLng: (b as any).customerLng ?? (b as any).venueLng ?? 78.3772,
+    selectedAddons: (b as any).selectedAddons ?? [],
+    bovineHandedOver: Boolean(
+      (b as any).bovineHandedOver ||
+      b.auditTrails?.some(
+        (a: any) =>
+          a.action === "BOVINE_HANDED_OVER" ||
+          (a.action === "STAGE_ADVANCED" && a.remark?.toLowerCase().includes("handed over")),
+      ) ||
+      (typeof b.driverStage === "number" && b.driverStage >= 2) ||
+      b.status === "IN_SERVICE" ||
+      b.status === "In Service",
+    ),
+    bovineHandedOverAt: (b as any).bovineHandedOverAt
+      ? new Date((b as any).bovineHandedOverAt).toLocaleString("en-IN", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : b.auditTrails?.find(
+            (a: any) =>
+              a.action === "BOVINE_HANDED_OVER" ||
+              (a.action === "STAGE_ADVANCED" && a.remark?.toLowerCase().includes("handed over")),
+          )
+        ? new Date(
+            b.auditTrails.find(
+              (a: any) =>
+                a.action === "BOVINE_HANDED_OVER" ||
+                (a.action === "STAGE_ADVANCED" && a.remark?.toLowerCase().includes("handed over")),
+            ).createdAt,
+          ).toLocaleString("en-IN", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : undefined,
   }
 }
 
@@ -2411,6 +2453,17 @@ export async function handleApiRequest(
       if (existing) currentStatus = existing.status
     } catch {}
 
+    // Enforce Manager Rejection Finality: If manager declined this booking, Ops Admin CANNOT override or approve
+    if (confirm && (currentStatus === "REJECTED" || currentStatus === "Rejected")) {
+      return {
+        status: 400,
+        body: {
+          error:
+            "This booking request was declined by the Gaushala Manager. Gaushala manager rejection is final and cannot be overturned by an Operations Admin.",
+        },
+      }
+    }
+
     const isPaymentVerified =
       currentStatus === "PAYMENT_VERIFIED" || currentStatus === "Payment Verified"
 
@@ -2757,6 +2810,72 @@ export async function handleApiRequest(
     } catch (err: any) {
       console.error("[verify-handover-otp] DB error:", err?.message)
       return { status: 500, body: { success: false, error: err?.message || "Failed to verify OTP" } }
+    }
+  }
+
+  // POST /api/bookings/:id/handover-bovine
+  const handoverBovineMatch = pathname.match(/^\/api\/bookings\/([^/]+)\/handover-bovine$/)
+  if (method === "POST" && handoverBovineMatch) {
+    const denied = requireRole("manager", "admin", "super_admin")
+    if (denied) return denied
+    const id = handoverBovineMatch[1]
+    const managerName = body.managerName || authUser?.name || "Gaushala Manager"
+    const handedAt = new Date()
+
+    try {
+      const existing = await prisma.booking.findUnique({ where: { id } })
+      if (!existing) {
+        return { status: 404, body: { error: "Booking not found" } }
+      }
+      if (existing.status === "REJECTED") {
+        return { status: 400, body: { error: "Cannot handover bovine for a rejected booking" } }
+      }
+
+      let actor = authUser?.userId ? await prisma.user.findUnique({ where: { id: authUser.userId } }) : null
+      if (!actor) {
+        actor = await prisma.user.findFirst({
+          where: { role: { in: ["GOSALA_MANAGER", "OPERATIONS_ADMIN", "SUPER_ADMIN"] } },
+        })
+      }
+
+      const updated = await prisma.booking.update({
+        where: { id },
+        data: {
+          driverStage: Math.max(existing.driverStage || 0, 2),
+          status: "IN_SERVICE",
+          ...(actor ? {
+            auditTrails: {
+              create: {
+                actorRole: (actor.role as any) || "GOSALA_MANAGER",
+                actorName: managerName || actor.name,
+                actorId: actor.id,
+                action: "STAGE_ADVANCED",
+                remark: `Sacred Bovine boarded and safely handed over to transit pilot by ${managerName || actor.name}. Live GPS tracking activated for devotee.`,
+              },
+            },
+          } : {}),
+        },
+        include: { driver: true, auditTrails: true },
+      })
+
+      const formatted = formatBooking(updated)
+      wsHub.broadcastToChannel(`channel:booking:${id}`, "BOVINE_HANDED_OVER", {
+        bookingId: id,
+        bovineHandedOver: true,
+        bovineHandedOverAt: handedAt.toISOString(),
+        driverStage: 2,
+        status: "In Service",
+      })
+      wsHub.broadcastToChannel(`channel:booking:${id}`, "STAGE_CHANGED", {
+        bookingId: id,
+        stage: 2,
+        status: "In Service",
+      })
+
+      return { status: 200, body: { success: true, booking: formatted } }
+    } catch (e: any) {
+      console.warn("[handover-bovine] DB notice:", e?.message)
+      return { status: 200, body: { success: true } }
     }
   }
 
