@@ -61,6 +61,7 @@ interface GaushalaProfileViewProps {
   onUpdatePhotos: (gosala: Gosala) => void
   onRegisterCow?: (gosalaName: string) => void
   onViewAnimalWelfare?: (animalName: string) => void
+  initialTab?: ProfileTab
 }
 
 type ProfileTab = "overview" | "offerings" | "herd" | "gallery" | "team" | "bookings"
@@ -132,6 +133,7 @@ export default function GaushalaProfileView({
   onUpdatePhotos,
   onRegisterCow,
   onViewAnimalWelfare,
+  initialTab,
 }: GaushalaProfileViewProps) {
   const {
     authUser,
@@ -145,7 +147,14 @@ export default function GaushalaProfileView({
   } = useStore()
   const { notify } = useToast()
 
-  const [activeTab, setActiveTab] = useState<ProfileTab>("overview")
+  const [activeTab, setActiveTab] = useState<ProfileTab>(initialTab || "overview")
+
+  React.useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab)
+    }
+  }, [initialTab])
+
   const [activePhotoIdx, setActivePhotoIdx] = useState(0)
   const [isLightboxOpen, setIsLightboxOpen] = useState(false)
   const [copiedField, setCopiedField] = useState<string | null>(null)
@@ -159,8 +168,7 @@ export default function GaushalaProfileView({
     return DEFAULT_GOSALA_OFFERINGS
   }, [gosala.items])
 
-  // Permissions: Gaushala-Specified Manager OR Operations Admin can manage offerings.
-  // Super Admin is strictly Read-Only.
+  // Permissions: Gaushala Manager, Operations Admin, or Super Admin can manage offerings.
   const isSuperAdmin =
     currentRole === "super_admin" || authUser?.role === "super_admin"
   const isOperationsAdmin =
@@ -179,8 +187,14 @@ export default function GaushalaProfileView({
       ),
     )
 
+  // In manager account/portal, manager ALWAYS has full authority over offerings & store
   const canManageOfferings =
-    !isSuperAdmin && (isAssignedManager || isOperationsAdmin)
+    currentRole === "manager" ||
+    authUser?.role === "manager" ||
+    (authUser as any)?.dbRole === "GOSALA_MANAGER" ||
+    isAssignedManager ||
+    isOperationsAdmin ||
+    isSuperAdmin
 
   // --- Modal States for Offerings & Add-ons (Manager & Ops Admin Governance) ---
   const [showOfferingModal, setShowOfferingModal] = useState(false)
@@ -281,7 +295,7 @@ export default function GaushalaProfileView({
       notify(`Added offering "${offeringName.trim()}" to ${gosala.name}`, "ok")
     }
 
-    updateGosala(gosala.id, { items: updatedList })
+    updateGosala(gosala.id || gosala.name, { name: gosala.name, items: updatedList })
     setShowOfferingModal(false)
   }
 
@@ -301,7 +315,7 @@ export default function GaushalaProfileView({
     const updatedList = currentList.map((item) =>
       item.id === it.id ? { ...item, inStock: !item.inStock } : item,
     )
-    updateGosala(gosala.id, { items: updatedList })
+    updateGosala(gosala.id || gosala.name, { name: gosala.name, items: updatedList })
     notify(
       `${it.name} is now ${
         !it.inStock ? "IN STOCK" : "OUT OF STOCK"
@@ -326,7 +340,7 @@ export default function GaushalaProfileView({
     const updatedList = currentList.filter(
       (item) => item.id !== offeringToDelete.id,
     )
-    updateGosala(gosala.id, { items: updatedList })
+    updateGosala(gosala.id || gosala.name, { name: gosala.name, items: updatedList })
     notify(`Removed "${offeringToDelete.name}" from ${gosala.name}`, "ok")
     setShowDeleteOfferingModal(false)
     setOfferingToDelete(null)

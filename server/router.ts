@@ -4403,8 +4403,25 @@ export async function handleApiRequest(
         const allowedIds = new Set(authUser.gosalaIds || [])
         const allowedNames = new Set((authUser.gosalaNames || []).map((n) => n.trim().toLowerCase()))
         const existingName = (existing.name || "").trim().toLowerCase()
+        const userId = (authUser.userId || "").trim().toLowerCase()
+        const userEmail = (authUser.email || "").trim().toLowerCase()
 
-        const isAssigned = allowedIds.has(existing.id) || allowedNames.has(existingName)
+        const hasDbAssignment = Boolean(await prisma.gosalaManagerAssignment.findFirst({
+          where: {
+            gosalaId: existing.id,
+            userId: authUser.userId,
+          },
+        }))
+
+        const isAssigned =
+          allowedIds.has(existing.id) ||
+          allowedNames.has(existingName) ||
+          hasDbAssignment ||
+          Boolean(
+            (currentMeta.managerId && (currentMeta.managerId.toLowerCase() === userId || currentMeta.managerId.toLowerCase() === `mgr-${userId.slice(0, 4)}`)) ||
+            (currentMeta.managerName && authUser.name && currentMeta.managerName.toLowerCase().trim() === authUser.name.toLowerCase().trim())
+          )
+
         if (!isAssigned) {
           return { status: 403, body: { ok: false, error: "Gaushala outside your custodian assignment" } }
         }
