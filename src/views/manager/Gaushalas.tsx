@@ -32,6 +32,10 @@ import {
   FileText,
   Crown,
   Globe,
+  UserCheck,
+  UserPlus,
+  Shield,
+  AlertTriangle,
 } from "lucide-react"
 import { useStore, useToast, type Gosala } from "../../store/store"
 import { Skeleton } from "../../components/common/Skeleton"
@@ -530,6 +534,7 @@ export default function Gaushalas({
 }) {
   const {
     gosalas,
+    managers = [],
     animals,
     addGosala,
     updateGosala,
@@ -678,6 +683,13 @@ export default function Gaushalas({
   const [formPhone, setFormPhone] = useState("")
   const [formEmail, setFormEmail] = useState("")
   const [formCaretaker, setFormCaretaker] = useState("")
+  // Unified Gaushala Custodian & Manager Assignment states
+  const [formCustodianMode, setFormCustodianMode] = useState<"existing" | "new" | "acting">("existing")
+  const [formSelectedManagerId, setFormSelectedManagerId] = useState<string>("")
+  const [newMgrName, setNewMgrName] = useState("")
+  const [newMgrPhone, setNewMgrPhone] = useState("+91 98200 44120")
+  const [newMgrEmail, setNewMgrEmail] = useState("")
+  const [newMgrPassword, setNewMgrPassword] = useState("Mgr@Gomaa2026!")
   const [formCapacity, setFormCapacity] = useState("40")
   const [formYear, setFormYear] = useState("2024")
   const [formStatus, setFormStatus] = useState<GosalaStatus>("Active")
@@ -771,7 +783,20 @@ export default function Gaushalas({
     setFormLng(78.3615)
     setFormPhone("+91 98230 44910")
     setFormEmail("trust@gomaa.in")
-    setFormCaretaker("Rameshwar Shastri (Senior Gosevak)")
+    // Initialize Custodian selection
+    if (managers && managers.length > 0) {
+      setFormCustodianMode("existing")
+      setFormSelectedManagerId(managers[0].id)
+      setFormCaretaker(managers[0].name)
+    } else {
+      setFormCustodianMode("new")
+      setFormSelectedManagerId("")
+      setFormCaretaker("")
+    }
+    setNewMgrName("")
+    setNewMgrPhone("+91 98200 44120")
+    setNewMgrEmail("")
+    setNewMgrPassword("Mgr@Gomaa2026!")
     setFormCapacity("45")
     setFormYear(String(new Date().getFullYear()))
     setFormStatus("Active")
@@ -840,6 +865,40 @@ export default function Gaushalas({
     setFormPhone(g.contactPhone || "")
     setFormEmail(g.email || (g as any).contactEmail || "")
     setFormCaretaker(g.caretaker || g.managerName || "")
+
+    // Resolve custodian mode and selection for existing gaushala
+    const isActing = Boolean(
+      g.isActingManager ||
+      (g.managerName && g.managerName.toLowerCase().includes("acting")) ||
+      (g.caretaker && g.caretaker.toLowerCase().includes("acting"))
+    )
+    if (isActing) {
+      setFormCustodianMode("acting")
+      setFormSelectedManagerId("")
+    } else {
+      const matchedMgr = managers.find((m) =>
+        (g.managerId && (m.id === g.managerId || m.id.replace(/^MGR-/, "") === g.managerId.replace(/^MGR-/, ""))) ||
+        (g.managerName && m.name.toLowerCase() === g.managerName.toLowerCase()) ||
+        (g.caretaker && m.name.toLowerCase() === g.caretaker.toLowerCase())
+      )
+      if (matchedMgr) {
+        setFormCustodianMode("existing")
+        setFormSelectedManagerId(matchedMgr.id)
+        setFormCaretaker(matchedMgr.name)
+      } else if (managers.length > 0) {
+        setFormCustodianMode("existing")
+        setFormSelectedManagerId(managers[0].id)
+        setFormCaretaker(g.caretaker || managers[0].name)
+      } else {
+        setFormCustodianMode("acting")
+        setFormSelectedManagerId("")
+      }
+    }
+    setNewMgrName("")
+    setNewMgrPhone("+91 98200 44120")
+    setNewMgrEmail("")
+    setNewMgrPassword("Mgr@Gomaa2026!")
+
     setFormCapacity(String(g.capacity || 40))
     setFormYear(g.establishedYear || "2018")
     setFormLandAcres(g.landAcres != null ? String(g.landAcres) : "5.5")
@@ -917,6 +976,48 @@ export default function Gaushalas({
       ? customRegion.trim() || "Regional Hub"
       : formRegion
 
+    // Determine effective custodian details based on custodian mode
+    let effectiveManagerName = "None (Admin Acting)"
+    let effectiveManagerId = ""
+    let effectiveCaretaker = formCaretaker.trim()
+    let isActing = false
+    let newManagerPayload:
+      | { name: string; phone?: string; email?: string; password?: string }
+      | undefined = undefined
+
+    if (formCustodianMode === "acting") {
+      isActing = true
+      effectiveManagerName = `${activeAdminName} (Acting Manager)`
+      effectiveManagerId = ""
+      effectiveCaretaker = `${activeAdminName} (Acting Custodian)`
+    } else if (formCustodianMode === "new") {
+      if (!newMgrName.trim()) {
+        notify("Please provide the new manager's full name", "warn")
+        return
+      }
+      effectiveManagerName = newMgrName.trim()
+      effectiveCaretaker = newMgrName.trim()
+      newManagerPayload = {
+        name: newMgrName.trim(),
+        phone: newMgrPhone.trim() || "+91 98200 44120",
+        email:
+          newMgrEmail.trim() ||
+          `${newMgrName.toLowerCase().replace(/[^a-z0-9]/g, ".")}@gomaa.in`,
+        password: newMgrPassword.trim() || "Mgr@Gomaa2026!",
+      }
+    } else {
+      // "existing"
+      const chosenMgr = managers.find((m) => m.id === formSelectedManagerId)
+      if (chosenMgr) {
+        effectiveManagerName = chosenMgr.name
+        effectiveManagerId = chosenMgr.id
+        effectiveCaretaker = chosenMgr.name
+      } else {
+        effectiveManagerName = formCaretaker.trim() || "Dedicated Caretaker"
+        effectiveCaretaker = formCaretaker.trim() || "Dedicated Caretaker"
+      }
+    }
+
     if (editingGosala) {
       updateGosala(editingGosala.id, {
         name: formName.trim(),
@@ -927,7 +1028,11 @@ export default function Gaushalas({
         lng: formLng,
         contactPhone: formPhone.trim(),
         email: formEmail.trim(),
-        caretaker: formCaretaker.trim(),
+        caretaker: effectiveCaretaker,
+        managerId: effectiveManagerId,
+        managerName: effectiveManagerName,
+        isActingManager: isActing,
+        newManager: newManagerPayload,
         capacity: Number(formCapacity) || 40,
         landAcres: parseFloat(formLandAcres) || 5.0,
         establishedYear: formYear.trim(),
@@ -978,9 +1083,11 @@ export default function Gaushalas({
         lng: formLng,
         contactPhone: formPhone.trim(),
         email: formEmail.trim(),
-        managerId: "",
-        managerName: formCaretaker.trim() || "Dedicated Caretaker",
-        caretaker: formCaretaker.trim(),
+        managerId: effectiveManagerId,
+        managerName: effectiveManagerName,
+        caretaker: effectiveCaretaker,
+        isActingManager: isActing,
+        newManager: newManagerPayload,
         governingAdminRole:
           currentRole === "super_admin"
             ? formGoverningAdminId === "USER-SA-001" ||
@@ -1498,20 +1605,115 @@ export default function Gaushalas({
                           </div>
                         </div>
 
-                        {/* Lead Gosevak / Caretaker */}
-                        <div className="p-2.5 rounded bg-paper-deep/60 border border-line flex items-center justify-between gap-2">
-                          <div className="text-[11px]">
-                            <span className="text-ink-faint block">
-                              Caretaker in-charge
-                            </span>
-                            <span className="font-medium text-ink">
-                              {g.caretaker}
-                            </span>
-                          </div>
-                          <span className="text-[10px] font-mono bg-paper px-2 py-0.5 rounded border border-line text-ink-faint">
-                            On-Site
-                          </span>
-                        </div>
+                        {/* Sanctuary Custodian & Manager Health Card */}
+                        {(() => {
+                          const isActing = Boolean(
+                            g.isActingManager ||
+                            (g.managerName && g.managerName.toLowerCase().includes("acting")) ||
+                            (g.caretaker && g.caretaker.toLowerCase().includes("acting"))
+                          )
+                          const hasManager = Boolean(
+                            !isActing && (
+                              g.managerId ||
+                              (g.managerName && !g.managerName.toLowerCase().includes("acting") && !g.managerName.toLowerCase().includes("none")) ||
+                              (g.caretaker && !g.caretaker.toLowerCase().includes("acting") && !g.caretaker.toLowerCase().includes("none"))
+                            )
+                          )
+
+                          if (hasManager) {
+                            return (
+                              <div className="p-2.5 rounded-lg bg-emerald-500/5 border border-emerald-500/20 flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-7 h-7 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+                                    <UserCheck size={14} />
+                                  </div>
+                                  <div className="text-[11px] min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-semibold text-emerald-800 truncate">
+                                        {g.managerName || g.caretaker}
+                                      </span>
+                                      <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-700 font-medium shrink-0">
+                                        Manager Bound
+                                      </span>
+                                    </div>
+                                    <span className="text-ink-faint block truncate text-[10.5px]">
+                                      Receives bookings & desk dispatch
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEdit(g)}
+                                  className="text-[10.5px] px-2 py-1 rounded border border-emerald-500/30 bg-paper hover:bg-emerald-50 text-emerald-700 font-medium shrink-0 transition"
+                                >
+                                  Change
+                                </button>
+                              </div>
+                            )
+                          }
+
+                          if (isActing) {
+                            return (
+                              <div className="p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/25 flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-7 h-7 rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+                                    <Shield size={14} />
+                                  </div>
+                                  <div className="text-[11px] min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-semibold text-amber-900 truncate">
+                                        Admin Acting Custody
+                                      </span>
+                                      <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-800 font-medium shrink-0">
+                                        Supervised
+                                      </span>
+                                    </div>
+                                    <span className="text-ink-faint block truncate text-[10.5px]">
+                                      Managed directly by Regional Admin
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEdit(g)}
+                                  className="text-[10.5px] px-2 py-1 rounded border border-amber-500/30 bg-paper hover:bg-amber-50 text-amber-800 font-semibold shrink-0 transition"
+                                >
+                                  + Appoint
+                                </button>
+                              </div>
+                            )
+                          }
+
+                          return (
+                            <div className="p-2.5 rounded-lg bg-rose-500/5 border border-rose-500/25 flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-7 h-7 rounded-full bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0">
+                                  <AlertTriangle size={14} />
+                                </div>
+                                <div className="text-[11px] min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-semibold text-rose-900 truncate">
+                                      No Custodian Assigned
+                                    </span>
+                                    <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-rose-500/15 text-rose-700 font-medium shrink-0">
+                                      Action Needed
+                                    </span>
+                                  </div>
+                                  <span className="text-rose-700/80 block truncate text-[10.5px]">
+                                    Link manager to enable bookings
+                                  </span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEdit(g)}
+                                className="text-[10.5px] px-2 py-1 rounded border border-rose-500/30 bg-rose-50 hover:bg-rose-100 text-rose-800 font-bold shrink-0 transition"
+                              >
+                                Link Now
+                              </button>
+                            </div>
+                          )
+                        })()}
 
                         {/* Facilities / Amenities Tags */}
                         <div>
@@ -2226,33 +2428,229 @@ export default function Gaushalas({
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
-                            Lead Gosevak / Chief Caretaker *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            value={formCaretaker}
-                            onChange={(e) => setFormCaretaker(e.target.value)}
-                            placeholder="e.g. Rameshwar Shastri"
-                            className="w-full bg-paper border border-line rounded-md px-3 py-2 text-[13px] text-ink outline-none focus:border-forest transition"
-                          />
+                      {/* Sanctuary Manager & Shed Custodian Connection Card */}
+                      <div className="p-4 rounded-xl border border-line bg-paper-deep/40 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-lg bg-forest-soft flex items-center justify-center text-forest shrink-0">
+                            <UserCheck size={16} />
+                          </div>
+                          <div>
+                            <h4 className="text-[13px] font-semibold text-ink">
+                              Sanctuary Manager & Shed Custodian
+                            </h4>
+                            <p className="text-[11px] text-ink-faint">
+                              Connect who receives customer bookings, conducts pre-dispatch checks, and gets puja payouts.
+                            </p>
+                          </div>
                         </div>
 
-                        <div>
-                          <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
-                            Established Year
-                          </label>
-                          <input
-                            type="text"
-                            value={formYear}
-                            onChange={(e) => setFormYear(e.target.value)}
-                            placeholder="e.g. 2018"
-                            className="w-full bg-paper border border-line rounded-md px-3 py-2 text-[13px] text-ink font-mono outline-none focus:border-forest transition"
-                          />
+                        {/* 3-Way Custody Mode Selector */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                          {/* Option 1: Existing Manager */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFormCustodianMode("existing")
+                              if (managers && managers.length > 0 && !formSelectedManagerId) {
+                                setFormSelectedManagerId(managers[0].id)
+                                setFormCaretaker(managers[0].name)
+                              }
+                            }}
+                            className={`p-2.5 rounded-lg border text-left transition flex flex-col justify-between ${
+                              formCustodianMode === "existing"
+                                ? "bg-forest-soft/30 border-forest text-forest shadow-xs"
+                                : "bg-paper border-line text-ink hover:border-forest/40"
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <UserCheck size={14} className={formCustodianMode === "existing" ? "text-forest" : "text-ink-faint"} />
+                              <span className="text-[12px] font-semibold">Choose Existing</span>
+                            </div>
+                            <span className="text-[10.5px] text-ink-faint block leading-tight">
+                              From {managers?.length || 0} registered manager{(managers?.length || 0) === 1 ? "" : "s"}
+                            </span>
+                          </button>
+
+                          {/* Option 2: Add New Manager */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFormCustodianMode("new")
+                              if (!newMgrName) setNewMgrName("")
+                            }}
+                            className={`p-2.5 rounded-lg border text-left transition flex flex-col justify-between ${
+                              formCustodianMode === "new"
+                                ? "bg-gold-soft/30 border-gold text-gold shadow-xs"
+                                : "bg-paper border-line text-ink hover:border-gold/40"
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <UserPlus size={14} className={formCustodianMode === "new" ? "text-gold" : "text-ink-faint"} />
+                              <span className="text-[12px] font-semibold">+ Add New Manager</span>
+                            </div>
+                            <span className="text-[10.5px] text-ink-faint block leading-tight">
+                              Create login &amp; wallet now
+                            </span>
+                          </button>
+
+                          {/* Option 3: Admin Acting */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFormCustodianMode("acting")
+                              setFormCaretaker(`${activeAdminName} (Acting Custodian)`)
+                            }}
+                            className={`p-2.5 rounded-lg border text-left transition flex flex-col justify-between ${
+                              formCustodianMode === "acting"
+                                ? "bg-amber-500/10 border-amber-500 text-amber-700 shadow-xs"
+                                : "bg-paper border-line text-ink hover:border-amber-400/40"
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <Shield size={14} className={formCustodianMode === "acting" ? "text-amber-600" : "text-ink-faint"} />
+                              <span className="text-[12px] font-semibold">Admin Acting</span>
+                            </div>
+                            <span className="text-[10.5px] text-ink-faint block leading-tight">
+                              Direct admin supervision
+                            </span>
+                          </button>
                         </div>
+
+                        {/* Sub-Form Based on Custody Mode */}
+                        {formCustodianMode === "existing" && (
+                          <div className="pt-2">
+                            {managers && managers.length > 0 ? (
+                              <div className="space-y-1.5">
+                                <label className="block text-[11px] font-semibold text-ink uppercase tracking-wider">
+                                  Select Registered Gaushala Manager *
+                                </label>
+                                <select
+                                  value={formSelectedManagerId}
+                                  onChange={(e) => {
+                                    setFormSelectedManagerId(e.target.value)
+                                    const m = managers.find((mgr) => mgr.id === e.target.value)
+                                    if (m) setFormCaretaker(m.name)
+                                  }}
+                                  className="w-full bg-paper border border-line rounded-md px-3 py-2 text-[13px] text-ink outline-none focus:border-forest transition"
+                                >
+                                  {managers.map((mgr) => (
+                                    <option key={mgr.id} value={mgr.id}>
+                                      {mgr.name} ({mgr.phone || mgr.email}) {mgr.gosala ? `— Current: ${mgr.gosala}` : "— Available"}
+                                    </option>
+                                  ))}
+                                </select>
+                                <p className="text-[11px] text-ink-faint">
+                                  ✓ This manager will receive pre-dispatch requests and puja payouts for this sanctuary.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="p-3 rounded-lg border border-line bg-paper text-[12px] flex items-center justify-between">
+                                <span className="text-ink-soft">No registered managers found in system yet.</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setFormCustodianMode("new")}
+                                  className="text-forest font-semibold hover:underline flex items-center gap-1"
+                                >
+                                  <UserPlus size={13} /> + Create First Manager
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {formCustodianMode === "new" && (
+                          <div className="pt-2 space-y-2.5">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                              <div>
+                                <label className="block text-[11px] font-semibold text-ink uppercase tracking-wider mb-1">
+                                  New Manager Full Name *
+                                </label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={newMgrName}
+                                  onChange={(e) => {
+                                    setNewMgrName(e.target.value)
+                                    setFormCaretaker(e.target.value)
+                                  }}
+                                  placeholder="e.g. Rameshwar Shastri"
+                                  className="w-full bg-paper border border-line rounded-md px-3 py-2 text-[13px] text-ink outline-none focus:border-forest transition"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[11px] font-semibold text-ink uppercase tracking-wider mb-1">
+                                  Mobile Phone (OTP / Transit login) *
+                                </label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={newMgrPhone}
+                                  onChange={(e) => setNewMgrPhone(e.target.value)}
+                                  placeholder="+91 98200 44120"
+                                  className="w-full bg-paper border border-line rounded-md px-3 py-2 text-[13px] text-ink font-mono outline-none focus:border-forest transition"
+                                />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                              <div>
+                                <label className="block text-[11px] font-semibold text-ink uppercase tracking-wider mb-1">
+                                  Manager Login Email (Optional)
+                                </label>
+                                <input
+                                  type="email"
+                                  value={newMgrEmail}
+                                  onChange={(e) => setNewMgrEmail(e.target.value)}
+                                  placeholder="rameshwar@gomaa.in"
+                                  className="w-full bg-paper border border-line rounded-md px-3 py-2 text-[13px] text-ink outline-none focus:border-forest transition"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[11px] font-semibold text-ink uppercase tracking-wider mb-1">
+                                  Initial Login Password *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={newMgrPassword}
+                                  onChange={(e) => setNewMgrPassword(e.target.value)}
+                                  placeholder="Mgr@Gomaa2026!"
+                                  className="w-full bg-paper border border-line rounded-md px-3 py-2 text-[13px] text-ink font-mono outline-none focus:border-forest transition"
+                                />
+                              </div>
+                            </div>
+                            <div className="p-2 rounded bg-forest-soft/40 border border-forest/20 text-[11px] text-forest flex items-center gap-1.5">
+                              <UserCheck size={13} className="shrink-0" />
+                              <span>
+                                Upon saving, a secure Manager account and custodial wallet will be instantly created and bound to this Gaushala.
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {formCustodianMode === "acting" && (
+                          <div className="p-3 rounded-lg bg-amber-50 border border-amber-200/80 text-[11.5px] text-amber-900 flex items-start gap-2">
+                            <Shield size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-semibold text-amber-950">Direct Admin Acting Custody Active</p>
+                              <p className="text-amber-800 text-[11px] mt-0.5">
+                                As regional admin ({activeAdminName}), incoming booking requests and pre-dispatch bovine health verifications will route to your desk until you assign a dedicated manager.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Established Year */}
+                      <div>
+                        <label className="block text-[12px] font-semibold text-ink uppercase tracking-wider mb-1">
+                          Established Year
+                        </label>
+                        <input
+                          type="text"
+                          value={formYear}
+                          onChange={(e) => setFormYear(e.target.value)}
+                          placeholder="e.g. 2018"
+                          className="w-full bg-paper border border-line rounded-md px-3 py-2 text-[13px] text-ink font-mono outline-none focus:border-forest transition"
+                        />
                       </div>
 
                       <div>

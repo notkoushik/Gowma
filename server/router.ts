@@ -17,6 +17,7 @@ import { issueQuote, verifyQuote } from "./services/quoteService.ts"
 import crypto from "node:crypto"
 import { createPaymentOrder, verifyCapturedPayment, verifyWebhookSignature } from "./services/razorpayService.ts"
 import {
+  getOrCreateWallet,
   getWalletBalance,
   creditWallet,
   debitWallet,
@@ -4134,7 +4135,10 @@ export async function handleApiRequest(
       const finalLat = latitude !== undefined ? Number(latitude) : lat !== undefined ? Number(lat) : null
       const finalLng = longitude !== undefined ? Number(longitude) : lng !== undefined ? Number(lng) : null
 
-      const isActing = Boolean(body.actAsManagerMyself) || Boolean(restMeta.isActingManager) || (!restMeta.managerId && !restMeta.managerName)
+      let isActing = Boolean(body.actAsManagerMyself) || Boolean(restMeta.isActingManager) || (!restMeta.managerId && !restMeta.managerName && !body.newManager)
+      if (body.newManager && body.newManager.name) {
+        isActing = false
+      }
       const finalGovRole = restMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin")
       const callerAdminName = restMeta.governingAdminName || authUser?.name || "Operations Admin"
       const callerAdminEmail = restMeta.governingAdminEmail || authUser?.email || "admin@gomaa.in"
@@ -4171,7 +4175,35 @@ export async function handleApiRequest(
 
       // Attempt to resolve chosen manager user in database if not acting
       let resolvedMgrUser: any = null
-      if (!isActing && (restMeta.managerId || restMeta.managerName || restMeta.caretaker)) {
+
+      // 1. Auto-create new manager on the spot if requested
+      if (body.newManager && body.newManager.name) {
+        try {
+          const nm = body.newManager
+          const mgrEmail = nm.email?.trim() || `${nm.name.toLowerCase().replace(/[^a-z0-9]/g, ".")}@gomaa.in`
+          let createdMgr = await prisma.user.findFirst({ where: { email: mgrEmail } })
+          if (!createdMgr) {
+            const rawPw = nm.password || "Mgr@Gomaa2026!"
+            createdMgr = await prisma.user.create({
+              data: {
+                name: nm.name.trim(),
+                phone: nm.phone?.trim() || "+91 98200 00000",
+                email: mgrEmail,
+                role: "GOSALA_MANAGER",
+                password: hashPassword(rawPw),
+                isActive: true,
+              },
+            })
+            await getOrCreateWallet(createdMgr.id)
+          }
+          resolvedMgrUser = createdMgr
+        } catch (err) {
+          console.warn("Could not auto-create manager in POST /api/gosalas:", err)
+        }
+      }
+
+      // 2. Resolve existing manager if not already auto-created
+      if (!resolvedMgrUser && !isActing && (restMeta.managerId || restMeta.managerName || restMeta.caretaker)) {
         try {
           const mgrKey = restMeta.managerId || restMeta.managerName || restMeta.caretaker
           const cleanMgrKey = typeof mgrKey === "string" && mgrKey.startsWith("MGR-") ? mgrKey.replace(/^MGR-/, "") : mgrKey
@@ -4186,31 +4218,41 @@ export async function handleApiRequest(
               ],
             },
           })
-          if (resolvedMgrUser) {
-            await prisma.gosalaManagerAssignment.deleteMany({
-              where: {
-                gosalaId: created.id,
-                NOT: { userId: resolvedMgrUser.id },
-              },
-            })
-            await prisma.gosalaManagerAssignment.upsert({
-              where: {
-                userId_gosalaId: {
-                  userId: resolvedMgrUser.id,
-                  gosalaId: created.id,
-                },
-              },
-              create: {
+        } catch (e) {
+          console.warn("Could not find manager user in POST gosalas:", e)
+        }
+      }
+
+      if (resolvedMgrUser) {
+        isActing = false
+      }
+
+      // 3. Bind manager assignment if manager is resolved and not acting
+      if (resolvedMgrUser && !isActing) {
+        try {
+          await prisma.gosalaManagerAssignment.deleteMany({
+            where: {
+              gosalaId: created.id,
+              NOT: { userId: resolvedMgrUser.id },
+            },
+          })
+          await prisma.gosalaManagerAssignment.upsert({
+            where: {
+              userId_gosalaId: {
                 userId: resolvedMgrUser.id,
                 gosalaId: created.id,
-                region: created.region,
-                status: "Active",
               },
-              update: {
-                status: "Active",
-              },
-            })
-          }
+            },
+            create: {
+              userId: resolvedMgrUser.id,
+              gosalaId: created.id,
+              region: created.region,
+              status: "Active",
+            },
+            update: {
+              status: "Active",
+            },
+          })
         } catch (e) {
           console.warn("Could not sync manager assignment in POST gosalas:", e)
         }
@@ -4430,21 +4472,44 @@ export async function handleApiRequest(
       }
 
       // Link manager in database if provided and not acting as manager
-      if (isActing !== true && (restMeta.managerId || restMeta.managerName || restMeta.caretaker)) {
+      if (isActing !== true) {
         try {
-          const mgrKey = restMeta.managerId || restMeta.managerName || restMeta.caretaker
-          const cleanMgrKey = typeof mgrKey === "string" && mgrKey.startsWith("MGR-") ? mgrKey.replace(/^MGR-/, "") : mgrKey
-          const mgrUser = await prisma.user.findFirst({
-            where: {
-              OR: [
-                { id: mgrKey },
-                { id: cleanMgrKey },
-                { id: { startsWith: cleanMgrKey } },
-                { name: { equals: restMeta.managerName || restMeta.caretaker, mode: "insensitive" } },
-                { email: mgrKey },
-              ],
-            },
-          })
+          let mgrUser: any = null
+          if (body.newManager && body.newManager.name) {
+            const nm = body.newManager
+            const mgrEmail = nm.email?.trim() || `${nm.name.toLowerCase().replace(/[^a-z0-9]/g, ".")}@gomaa.in`
+            mgrUser = await prisma.user.findFirst({ where: { email: mgrEmail } })
+            if (!mgrUser) {
+              const rawPw = nm.password || "Mgr@Gomaa2026!"
+              mgrUser = await prisma.user.create({
+                data: {
+                  name: nm.name.trim(),
+                  phone: nm.phone?.trim() || "+91 98200 00000",
+                  email: mgrEmail,
+                  role: "GOSALA_MANAGER",
+                  password: hashPassword(rawPw),
+                  isActive: true,
+                },
+              })
+              await getOrCreateWallet(mgrUser.id)
+            }
+          }
+
+          if (!mgrUser && (restMeta.managerId || restMeta.managerName || restMeta.caretaker)) {
+            const mgrKey = restMeta.managerId || restMeta.managerName || restMeta.caretaker
+            const cleanMgrKey = typeof mgrKey === "string" && mgrKey.startsWith("MGR-") ? mgrKey.replace(/^MGR-/, "") : mgrKey
+            mgrUser = await prisma.user.findFirst({
+              where: {
+                OR: [
+                  { id: mgrKey },
+                  { id: cleanMgrKey },
+                  { id: { startsWith: cleanMgrKey } },
+                  { name: { equals: restMeta.managerName || restMeta.caretaker, mode: "insensitive" } },
+                  { email: mgrKey },
+                ],
+              },
+            })
+          }
           if (mgrUser) {
             metaPatch.managerId = mgrUser.id
             metaPatch.managerName = mgrUser.name
