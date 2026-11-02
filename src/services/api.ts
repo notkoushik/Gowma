@@ -182,7 +182,7 @@ export const api = {
       typeof window !== "undefined"
         ? localStorage.getItem("gomaa_auth_role")
         : null
-    if (role && role !== "admin" && role !== "super_admin") {
+    if (role && role !== "admin" && role !== "super_admin" && role !== "manager") {
       return { ok: true, users: [] }
     }
     return request<{

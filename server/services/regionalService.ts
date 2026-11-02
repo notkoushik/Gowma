@@ -216,12 +216,20 @@ export async function getAllOperationalRegions(): Promise<OperationalRegion[]> {
   // Strictly enforce 1 District = 1 Entry across all operational regions
   const districtMap = new Map<string, OperationalRegion>()
   for (const r of combined) {
-    const key = `${(r.state || "").toLowerCase()}::${(r.district || "").toLowerCase()}`
+    const cleanState = (r.state || "").trim().toLowerCase()
+    const cleanDistrict = (r.district || "").trim().toLowerCase()
+    if (!cleanState || !cleanDistrict) continue
+    const key = `${cleanState}::${cleanDistrict}`
     const existing = districtMap.get(key)
     if (!existing) {
       districtMap.set(key, r)
     } else if (!existing.assignedAdminId && r.assignedAdminId) {
-      // Prioritize the entry that has an active appointed admin
+      districtMap.set(key, r)
+    } else if (
+      r.assignedAdminId &&
+      r.assignedAt &&
+      (!existing.assignedAt || r.assignedAt > existing.assignedAt)
+    ) {
       districtMap.set(key, r)
     }
   }

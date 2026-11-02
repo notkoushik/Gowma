@@ -600,7 +600,6 @@ export async function handleApiRequest(
   }
 
   if (
-    ((method === "GET" || method === "POST") && pathname === "/api/users") ||
     pathname.startsWith("/api/operational-admins") ||
     (method === "POST" && pathname.startsWith("/api/regions")) ||
     (method === "GET" && pathname === "/api/debug/email-status")
@@ -937,18 +936,76 @@ export async function handleApiRequest(
   }
 
   // ----------------- USER DIRECTORY & ACCESS CONTROL API -----------------
-  // GET /api/users (Admin User Management)
+  // GET /api/users (User Management with multi-tenant role scoping)
   if (method === "GET" && pathname === "/api/users") {
+    if (!authUser || (authUser.role !== "super_admin" && authUser.role !== "admin" && authUser.role !== "manager")) {
+      return { status: 403, body: { ok: false, error: "Insufficient privileges to access user directory" } }
+    }
     try {
-      const users = await getAllUsers()
-      return { status: 200, body: { ok: true, users } }
+      const allUsers = await getAllUsers()
+      let scopedUsers = allUsers
+
+      if (authUser.role === "manager") {
+        const mgrGosalaNames = new Set((authUser.gosalaNames || []).map((n: string) => n.toLowerCase().trim()))
+        scopedUsers = allUsers.filter((u: any) => {
+          if (u.id === authUser.userId) return true
+          const gBase = (u.driverData?.gosalaBase || u.customerData?.gosalaBase || "").toLowerCase().trim()
+          const assignedNames = (u.assignedGosalaNames || []).map((n: string) => n.toLowerCase().trim())
+          const matchesGosala = (gBase && mgrGosalaNames.has(gBase)) || assignedNames.some((n: string) => mgrGosalaNames.has(n))
+          // Managers see drivers, customers/devotees in their Gaushala
+          return (u.role === "driver" || u.role === "customer" || (u as any).dbRole === "DRIVER" || (u as any).dbRole === "CUSTOMER") && (matchesGosala || mgrGosalaNames.size === 0)
+        })
+      } else if (authUser.role === "admin") {
+        const adminGosalaNames = new Set((authUser.gosalaNames || []).map((n: string) => n.toLowerCase().trim()))
+        scopedUsers = allUsers.filter((u: any) => {
+          if (u.id === authUser.userId) return true
+          if (u.role === "super_admin" || (u as any).dbRole === "SUPER_ADMIN") return false
+          const gBase = (u.driverData?.gosalaBase || u.customerData?.gosalaBase || "").toLowerCase().trim()
+          const assignedNames = (u.assignedGosalaNames || []).map((n: string) => n.toLowerCase().trim())
+          const matchesGosala = (gBase && adminGosalaNames.has(gBase)) || assignedNames.some((n: string) => adminGosalaNames.has(n))
+          return matchesGosala || adminGosalaNames.size === 0
+        })
+      }
+
+      return { status: 200, body: { ok: true, users: scopedUsers } }
     } catch (err: any) {
       return { status: 500, body: { ok: false, error: err.message } }
     }
   }
 
-  // POST /api/users (Admin Create User)
+  // POST /api/users (User Creation: Super Admin, Ops Admin, and Gaushala Manager)
   if (method === "POST" && pathname === "/api/users") {
+    if (!authUser || (authUser.role !== "super_admin" && authUser.role !== "admin" && authUser.role !== "manager")) {
+      return { status: 403, body: { ok: false, error: "Insufficient privileges to create user" } }
+    }
+
+    const targetRole = (body.role || "customer").toLowerCase()
+
+    // Role-based privilege boundaries
+    if (authUser.role === "manager") {
+      // Manager can strictly create Drivers and Devotees (Customers) for their Gaushala
+      if (targetRole !== "driver" && targetRole !== "customer") {
+        return { status: 403, body: { ok: false, error: "Gaushala Managers can only register Transit Pilots (Drivers) and Devotees" } }
+      }
+      const primaryGosala = authUser.gosalaNames?.[0] || "My Gaushala"
+      if (targetRole === "driver") {
+        body.driverData = {
+          ...(body.driverData || {}),
+          gosalaBase: body.driverData?.gosalaBase || primaryGosala,
+        }
+      } else if (targetRole === "customer") {
+        body.customerData = {
+          ...(body.customerData || {}),
+          gosalaBase: body.customerData?.gosalaBase || primaryGosala,
+        }
+      }
+    } else if (authUser.role === "admin") {
+      // Ops Admin cannot create Super Admin
+      if (targetRole === "super_admin" || (body as any).dbRole === "SUPER_ADMIN") {
+        return { status: 403, body: { ok: false, error: "Operations Admins cannot provision Super Admin accounts" } }
+      }
+    }
+
     try {
       const session = await adminCreateUser(body, authUser)
       return { status: 201, body: { ok: true, user: session.user } }
@@ -960,6 +1017,9 @@ export async function handleApiRequest(
   // PUT /api/users/:id
   const putUserMatch = pathname.match(/^\/api\/users\/([^/]+)$/)
   if (method === "PUT" && putUserMatch) {
+    if (!authUser || (authUser.role !== "super_admin" && authUser.role !== "admin" && authUser.role !== "manager")) {
+      return { status: 403, body: { ok: false, error: "Insufficient privileges to update user" } }
+    }
     const id = putUserMatch[1]
     try {
       const updated = await updateUser(id, body)
@@ -971,6 +1031,9 @@ export async function handleApiRequest(
 
   // DELETE /api/users/:id
   if (method === "DELETE" && putUserMatch) {
+    if (!authUser || (authUser.role !== "super_admin" && authUser.role !== "admin" && authUser.role !== "manager")) {
+      return { status: 403, body: { ok: false, error: "Insufficient privileges to remove user" } }
+    }
     const id = putUserMatch[1]
     try {
       await deleteUser(id)
@@ -3812,8 +3875,24 @@ export async function handleApiRequest(
           basePairPrice: g.basePairPrice ?? meta.basePairPrice ?? 4800,
           partnershipTier: g.partnershipTier ?? meta.partnershipTier ?? "STANDARD",
           commissionType: g.commissionType ?? meta.commissionType ?? "PERCENTAGE",
-          commissionValue: g.commissionValue ?? meta.commissionValue ?? meta.customCommissionPct ?? 20,
-          customCommissionPct: g.commissionValue ?? meta.customCommissionPct,
+          commissionValue:
+            g.commissionValue !== null && g.commissionValue !== undefined
+              ? Number(g.commissionValue)
+              : meta.commissionValue !== null && meta.commissionValue !== undefined
+                ? Number(meta.commissionValue)
+                : meta.customCommissionPct !== null && meta.customCommissionPct !== undefined
+                  ? Number(meta.customCommissionPct)
+                  : undefined,
+          customCommissionPct:
+            g.commissionValue !== null && g.commissionValue !== undefined
+              ? Number(g.commissionValue)
+              : meta.customCommissionPct !== null && meta.customCommissionPct !== undefined
+                ? Number(meta.customCommissionPct)
+                : undefined,
+          managerSharePct:
+            meta.managerSharePct !== null && meta.managerSharePct !== undefined
+              ? Number(meta.managerSharePct)
+              : 70,
           taxTreatment: g.taxTreatment ?? meta.taxTreatment ?? "STANDARD_GST",
           customTaxPct: g.customTaxPct ?? meta.customTaxPct,
           bufferMinutes: g.bufferMinutes ?? meta.bufferMinutes ?? 30,
@@ -4078,16 +4157,29 @@ export async function handleApiRequest(
     const rawId = putGosalaMatch[1]
     const decodedId = decodeURIComponent(rawId)
     try {
-      const existing = await prisma.gosala.findFirst({
+      let existing = await prisma.gosala.findFirst({
         where: {
           OR: [
             { id: rawId },
             { id: decodedId },
             { name: decodedId },
             { name: { equals: decodedId, mode: "insensitive" } },
+            ...(body?.name ? [{ name: String(body.name).trim() }, { name: { equals: String(body.name).trim(), mode: "insensitive" as const } }] : []),
           ],
         },
       })
+      if (!existing && body?.name) {
+        existing = await prisma.gosala.create({
+          data: {
+            name: String(body.name).trim(),
+            region: String(body.region || "Cyberabad / Gachibowli").trim(),
+            address: String(body.address || "Heritage Corridor").trim(),
+            contactPhone: body.contactPhone || "+91 98000 00000",
+            contactEmail: body.email || body.contactEmail || "trust@gomaa.in",
+            isActive: true,
+          },
+        })
+      }
       if (!existing) {
         return { status: 404, body: { error: "Gaushala not found" } }
       }
@@ -4199,6 +4291,12 @@ export async function handleApiRequest(
         adminEmail: effectiveAdminEmail,
         adminId: effectiveAdminId,
       }
+
+      const callerAdminName = authUser?.name || "Admin"
+      const callerAdminId = authUser?.userId || "USER-SA-001"
+      const isActing = body.actAsManagerMyself !== undefined
+        ? Boolean(body.actAsManagerMyself)
+        : (body.isActingManager !== undefined ? Boolean(body.isActingManager) : undefined)
 
       if (isActing === true) {
         metaPatch.isActingManager = true
@@ -4372,6 +4470,31 @@ export async function handleApiRequest(
         } catch {}
       }
 
+      if (parsedCommValue !== undefined) {
+        metaPatch.customCommissionPct = parsedCommValue
+        metaPatch.commissionValue = parsedCommValue
+      }
+      if (body.managerSharePct !== undefined) {
+        metaPatch.managerSharePct = Number(body.managerSharePct)
+      }
+
+      // Synchronize SplitPolicy for automated billing / settlement engine
+      if (parsedCommValue !== undefined || body.managerSharePct !== undefined) {
+        try {
+          const platformBp = Math.round((parsedCommValue ?? 20) * 100)
+          const gaushalaShareBp = Math.max(0, 10000 - platformBp)
+          const managerRatio = Number(body.managerSharePct ?? metaPatch.managerSharePct ?? 70) / 100
+          const managerBp = Math.round(gaushalaShareBp * managerRatio)
+          await prisma.splitPolicy.upsert({
+            where: { policyKey: existing.id },
+            update: { managerBp, approvedById: authUser?.userId || "USER-SA-001" },
+            create: { policyKey: existing.id, gosalaId: existing.id, managerBp, approvedById: authUser?.userId || "USER-SA-001" },
+          })
+        } catch (spErr) {
+          console.warn("[PUT /api/gosalas/:id] SplitPolicy sync notice:", spErr)
+        }
+      }
+
       saveGosalaMeta(updated.id, updated.name, metaPatch)
 
       const mergedUpdated = {
@@ -4387,6 +4510,9 @@ export async function handleApiRequest(
         lng: updated.longitude !== null && updated.longitude !== undefined ? Number(updated.longitude) : metaPatch.lng,
         latitude: updated.latitude,
         longitude: updated.longitude,
+        customCommissionPct: parsedCommValue !== undefined ? parsedCommValue : metaPatch.customCommissionPct,
+        commissionValue: parsedCommValue !== undefined ? parsedCommValue : (updated.commissionValue !== null ? Number(updated.commissionValue) : undefined),
+        managerSharePct: Number(body.managerSharePct ?? metaPatch.managerSharePct ?? 70),
       }
 
       return { status: 200, body: { ok: true, gosala: mergedUpdated } }

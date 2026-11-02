@@ -77,6 +77,9 @@ export default function ManagerDevotees({
   const [driverVehicleType, setDriverVehicleType] = useState(
     "Tata 407 (Hydraulic Cattle Bed)",
   )
+  const [isCustomVan, setIsCustomVan] = useState(false)
+  const [customVanCompany, setCustomVanCompany] = useState("")
+  const [customVanModel, setCustomVanModel] = useState("")
   const [driverLicenseNo, setDriverLicenseNo] = useState("DL-")
   const [driverGosalaBase, setDriverGosalaBase] = useState(currentGosalaName)
   const [driverPassword, setDriverPassword] = useState("Pilot@2025")
@@ -237,6 +240,11 @@ export default function ManagerDevotees({
 
     setIsSubmitting(true)
     try {
+      const finalVehicleType =
+        isCustomVan && customVanCompany.trim()
+          ? `${customVanCompany.trim()} ${customVanModel.trim() || "Cattle Carrier"}`
+          : driverVehicleType.trim() || "Tata 407 (Hydraulic Cattle Bed)"
+
       const payload = {
         name: driverName.trim(),
         email: driverEmail.trim(),
@@ -245,8 +253,8 @@ export default function ManagerDevotees({
         password: driverPassword.trim(),
         driverData: {
           vehicleNumber: driverVehiclePlate.trim() || "TS-09-UA-1088",
-          vehicleType:
-            driverVehicleType.trim() || "Tata 407 (Hydraulic Cattle Bed)",
+          vehicleType: finalVehicleType,
+          vehicleCompany: isCustomVan ? customVanCompany.trim() : undefined,
           licenseNumber: driverLicenseNo.trim() || "DL-PENDING",
           gosalaBase: driverGosalaBase || currentGosalaName,
           status: "Available",
@@ -264,8 +272,7 @@ export default function ManagerDevotees({
           roleTitle: "Transit Pilot (Driver)",
           password: driverPassword.trim(),
           vehicleNumber: driverVehiclePlate.trim() || "TS-09-UA-1088",
-          vehicleType:
-            driverVehicleType.trim() || "Tata 407 (Hydraulic Cattle Bed)",
+          vehicleType: finalVehicleType,
           licenseNumber: driverLicenseNo.trim(),
           gosalaBase: driverGosalaBase || currentGosalaName,
         })
@@ -275,6 +282,9 @@ export default function ManagerDevotees({
         setDriverEmail("")
         setDriverVehiclePlate("TS-09-UA-")
         setDriverLicenseNo("DL-")
+        setCustomVanCompany("")
+        setCustomVanModel("")
+        setIsCustomVan(false)
         setDriverPassword(generateRandomPassword("Pilot"))
       }
     } catch (err: any) {
@@ -980,27 +990,96 @@ export default function ManagerDevotees({
               </div>
 
               <div>
-                <label className="block text-[12px] font-medium text-ink-soft mb-1">
-                  Vehicle Model / Cattle Rig Specification
-                </label>
-                <select
-                  value={driverVehicleType}
-                  onChange={(e) => setDriverVehicleType(e.target.value)}
-                  className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[12.5px] text-ink outline-none focus:border-forest transition"
-                >
-                  <option value="Tata 407 (Hydraulic Cattle Bed)">
-                    Tata 407 (Hydraulic Cattle Bed)
-                  </option>
-                  <option value="Mahindra Bolero Maxi Truck (Padded Bovine Rig)">
-                    Mahindra Bolero Maxi Truck (Padded Bovine Rig)
-                  </option>
-                  <option value="Ashok Leyland Dost (Sacred Transit Van)">
-                    Ashok Leyland Dost (Sacred Transit Van)
-                  </option>
-                  <option value="Eicher Pro 2049 (Low-Floor Bovine Carrier)">
-                    Eicher Pro 2049 (Low-Floor Bovine Carrier)
-                  </option>
-                </select>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[12px] font-medium text-ink-soft">
+                    Vehicle Model / Cattle Rig Specification *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomVan(!isCustomVan)
+                      if (!isCustomVan && !customVanCompany) {
+                        setCustomVanCompany("Force Motors")
+                        setCustomVanModel("Traveller Cattle Van")
+                      }
+                    }}
+                    className="text-[11px] text-forest hover:underline font-semibold cursor-pointer"
+                  >
+                    {isCustomVan ? "← Choose Standard Preset" : "+ Add Custom Van / Company"}
+                  </button>
+                </div>
+
+                {!isCustomVan ? (
+                  <select
+                    value={driverVehicleType}
+                    onChange={(e) => {
+                      if (e.target.value === "__CUSTOM__") {
+                        setIsCustomVan(true)
+                        setCustomVanCompany("")
+                        setCustomVanModel("")
+                      } else {
+                        setDriverVehicleType(e.target.value)
+                      }
+                    }}
+                    className="w-full bg-paper border border-line rounded-sm px-3 py-2 text-[12.5px] text-ink outline-none focus:border-forest transition"
+                  >
+                    <option value="Tata 407 (Hydraulic Cattle Bed)">
+                      Tata Motors — Tata 407 (Hydraulic Cattle Bed)
+                    </option>
+                    <option value="Mahindra Bolero Maxi Truck (Padded Bovine Rig)">
+                      Mahindra — Bolero Maxi Truck (Padded Bovine Rig)
+                    </option>
+                    <option value="Ashok Leyland Dost (Sacred Transit Van)">
+                      Ashok Leyland — Dost (Sacred Transit Van)
+                    </option>
+                    <option value="Eicher Pro 2049 (Low-Floor Bovine Carrier)">
+                      Eicher — Pro 2049 (Low-Floor Bovine Carrier)
+                    </option>
+                    <option value="Force Motors Traveller (Special Cattle Ambulance)">
+                      Force Motors — Traveller (Special Cattle Ambulance)
+                    </option>
+                    <option value="Isuzu D-Max (Heavy Cattle Rig)">
+                      Isuzu — D-Max (Heavy Cattle Rig)
+                    </option>
+                    <option value="__CUSTOM__">
+                      ➕ + Add Custom Van Company / Model...
+                    </option>
+                  </select>
+                ) : (
+                  <div className="p-3 bg-paper rounded border border-forest/30 space-y-2.5">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-medium text-ink-soft mb-1">
+                          Van Manufacturer / Company *
+                        </label>
+                        <input
+                          type="text"
+                          required={isCustomVan}
+                          value={customVanCompany}
+                          onChange={(e) => setCustomVanCompany(e.target.value)}
+                          placeholder="e.g. Force Motors, Isuzu, Swaraj"
+                          className="w-full bg-card border border-line rounded px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-forest"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-ink-soft mb-1">
+                          Model / Rig Type *
+                        </label>
+                        <input
+                          type="text"
+                          required={isCustomVan}
+                          value={customVanModel}
+                          onChange={(e) => setCustomVanModel(e.target.value)}
+                          placeholder="e.g. Traveller 3350 Padded Rig"
+                          className="w-full bg-card border border-line rounded px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-forest"
+                        />
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-forest font-medium">
+                      ✓ Will register as: <strong>{customVanCompany.trim() || "[Company]"} {customVanModel.trim() || "[Model]"}</strong>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>

@@ -1013,12 +1013,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
             : [data.photo || GOSALA_PHOTO_PRESETS[0].url],
       }
       setGosalas((prev) => [newGosala, ...prev])
-      api.createGosala(newGosala).catch((err) => {
-        console.warn(
-          "api.createGosala background error (using local state):",
-          err,
-        )
-      })
+      api
+        .createGosala(newGosala)
+        .then((res) => {
+          if (res?.gosala?.id) {
+            setGosalas((prev) =>
+              prev.map((g) =>
+                g.name.toLowerCase() === newGosala.name.toLowerCase()
+                  ? { ...g, ...res.gosala, id: res.gosala.id }
+                  : g,
+              ),
+            )
+          }
+        })
+        .catch((err) => {
+          console.warn(
+            "api.createGosala background error (using local state):",
+            err,
+          )
+        })
       notify(
         `Gaushala "${newGosala.name}" successfully registered under your management!`,
         "ok",
@@ -1031,7 +1044,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateGosala = useCallback(
     (id: string, patch: Partial<Gosala>) => {
       setGosalas((prev) =>
-        prev.map((g) => (g.id === id ? { ...g, ...patch } : g)),
+        prev.map((g) =>
+          g.id === id || (patch.name && g.name.toLowerCase() === patch.name.toLowerCase())
+            ? { ...g, ...patch }
+            : g,
+        ),
       )
 
       // Dynamic synchronization: cascade category base price changes to herd members of that type
@@ -1084,12 +1101,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
         )
       }
 
-      api.updateGosala(id, patch).catch((err) => {
-        console.warn(
-          "api.updateGosala background error (using local state):",
-          err,
-        )
-      })
+      api
+        .updateGosala(id, patch)
+        .then((res) => {
+          if (res?.gosala) {
+            setGosalas((prev) =>
+              prev.map((g) =>
+                g.id === id || (res.gosala.name && g.name.toLowerCase() === res.gosala.name.toLowerCase())
+                  ? { ...g, ...res.gosala }
+                  : g,
+              ),
+            )
+          }
+        })
+        .catch((err) => {
+          console.warn(
+            "api.updateGosala background error (using local state):",
+            err,
+          )
+        })
       notify("Gaushala facility details updated successfully", "ok")
     },
     [notify],
@@ -1929,7 +1959,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         const res = await api.createRegion(regionData)
         if (res?.ok && res.region) {
-          setRegions((prev) => [res.region, ...prev])
+          setRegions((prev) => {
+            const cleanState = (res.region.state || "").trim().toLowerCase()
+            const cleanDistrict = (res.region.district || "").trim().toLowerCase()
+            const filtered = prev.filter(
+              (r) =>
+                !(
+                  (r.state || "").trim().toLowerCase() === cleanState &&
+                  (r.district || "").trim().toLowerCase() === cleanDistrict
+                ),
+            )
+            return [res.region, ...filtered]
+          })
           notify(
             `Operational region '${res.region.name}' successfully established`,
             "ok",

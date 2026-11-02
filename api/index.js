@@ -4585,11 +4585,16 @@ async function getAllOperationalRegions() {
   }
   const districtMap = /* @__PURE__ */ new Map();
   for (const r of combined) {
-    const key = `${(r.state || "").toLowerCase()}::${(r.district || "").toLowerCase()}`;
+    const cleanState = (r.state || "").trim().toLowerCase();
+    const cleanDistrict = (r.district || "").trim().toLowerCase();
+    if (!cleanState || !cleanDistrict) continue;
+    const key = `${cleanState}::${cleanDistrict}`;
     const existing = districtMap.get(key);
     if (!existing) {
       districtMap.set(key, r);
     } else if (!existing.assignedAdminId && r.assignedAdminId) {
+      districtMap.set(key, r);
+    } else if (r.assignedAdminId && r.assignedAt && (!existing.assignedAt || r.assignedAt > existing.assignedAt)) {
       districtMap.set(key, r);
     }
   }
@@ -5267,10 +5272,27 @@ async function getManagerBpFor(gosalaId) {
 async function recordBookingPayment(booking) {
   await ensureSystemWallets();
   const cfg = await getWalletConfig();
+  let platformBp = cfg.platformBp;
+  try {
+    const g = await prisma.gosala.findFirst({
+      where: {
+        OR: [
+          ...booking.gosalaId ? [{ id: booking.gosalaId }] : [],
+          ...booking.gosalaName ? [{ name: booking.gosalaName }] : []
+        ]
+      },
+      select: { commissionValue: true }
+    });
+    if (g && g.commissionValue !== null && g.commissionValue !== void 0) {
+      platformBp = Math.round(Number(g.commissionValue) * 100);
+    }
+  } catch {
+  }
   const policy = await getManagerBpFor(booking.gosalaId);
   const grossPaise = BigInt(Math.round(booking.totalAmount * 100));
   const taxPaise = BigInt(Math.round(booking.taxFee * 100));
-  const shares = computeShares(grossPaise, taxPaise, cfg.platformBp, policy.managerBp);
+  const effectiveManagerBp = Math.min(policy.managerBp, Math.max(0, BP_TOTAL - platformBp));
+  const shares = computeShares(grossPaise, taxPaise, platformBp, effectiveManagerBp);
   const paidAt = booking.paymentCapturedAt ?? booking.createdAt ?? /* @__PURE__ */ new Date();
   const source = booking.paymentProvider === "WALLET" ? "WALLET" : "RAZORPAY";
   return runLedgerTx(async (tx) => {
@@ -6937,7 +6959,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     const denied = requireRole("customer", "admin", "super_admin");
     if (denied) return denied;
   }
-  if ((method === "GET" || method === "POST") && pathname === "/api/users" || pathname.startsWith("/api/operational-admins") || method === "POST" && pathname.startsWith("/api/regions") || method === "GET" && pathname === "/api/debug/email-status") {
+  if (pathname.startsWith("/api/operational-admins") || method === "POST" && pathname.startsWith("/api/regions") || method === "GET" && pathname === "/api/debug/email-status") {
     const denied = requireRole("super_admin");
     if (denied) return denied;
   }
@@ -7203,14 +7225,63 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     }
   }
   if (method === "GET" && pathname === "/api/users") {
+    if (!authUser || authUser.role !== "super_admin" && authUser.role !== "admin" && authUser.role !== "manager") {
+      return { status: 403, body: { ok: false, error: "Insufficient privileges to access user directory" } };
+    }
     try {
-      const users = await getAllUsers();
-      return { status: 200, body: { ok: true, users } };
+      const allUsers = await getAllUsers();
+      let scopedUsers = allUsers;
+      if (authUser.role === "manager") {
+        const mgrGosalaNames = new Set((authUser.gosalaNames || []).map((n) => n.toLowerCase().trim()));
+        scopedUsers = allUsers.filter((u) => {
+          if (u.id === authUser.userId) return true;
+          const gBase = (u.driverData?.gosalaBase || u.customerData?.gosalaBase || "").toLowerCase().trim();
+          const assignedNames = (u.assignedGosalaNames || []).map((n) => n.toLowerCase().trim());
+          const matchesGosala = gBase && mgrGosalaNames.has(gBase) || assignedNames.some((n) => mgrGosalaNames.has(n));
+          return (u.role === "driver" || u.role === "customer" || u.dbRole === "DRIVER" || u.dbRole === "CUSTOMER") && (matchesGosala || mgrGosalaNames.size === 0);
+        });
+      } else if (authUser.role === "admin") {
+        const adminGosalaNames = new Set((authUser.gosalaNames || []).map((n) => n.toLowerCase().trim()));
+        scopedUsers = allUsers.filter((u) => {
+          if (u.id === authUser.userId) return true;
+          if (u.role === "super_admin" || u.dbRole === "SUPER_ADMIN") return false;
+          const gBase = (u.driverData?.gosalaBase || u.customerData?.gosalaBase || "").toLowerCase().trim();
+          const assignedNames = (u.assignedGosalaNames || []).map((n) => n.toLowerCase().trim());
+          const matchesGosala = gBase && adminGosalaNames.has(gBase) || assignedNames.some((n) => adminGosalaNames.has(n));
+          return matchesGosala || adminGosalaNames.size === 0;
+        });
+      }
+      return { status: 200, body: { ok: true, users: scopedUsers } };
     } catch (err) {
       return { status: 500, body: { ok: false, error: err.message } };
     }
   }
   if (method === "POST" && pathname === "/api/users") {
+    if (!authUser || authUser.role !== "super_admin" && authUser.role !== "admin" && authUser.role !== "manager") {
+      return { status: 403, body: { ok: false, error: "Insufficient privileges to create user" } };
+    }
+    const targetRole = (body.role || "customer").toLowerCase();
+    if (authUser.role === "manager") {
+      if (targetRole !== "driver" && targetRole !== "customer") {
+        return { status: 403, body: { ok: false, error: "Gaushala Managers can only register Transit Pilots (Drivers) and Devotees" } };
+      }
+      const primaryGosala = authUser.gosalaNames?.[0] || "My Gaushala";
+      if (targetRole === "driver") {
+        body.driverData = {
+          ...body.driverData || {},
+          gosalaBase: body.driverData?.gosalaBase || primaryGosala
+        };
+      } else if (targetRole === "customer") {
+        body.customerData = {
+          ...body.customerData || {},
+          gosalaBase: body.customerData?.gosalaBase || primaryGosala
+        };
+      }
+    } else if (authUser.role === "admin") {
+      if (targetRole === "super_admin" || body.dbRole === "SUPER_ADMIN") {
+        return { status: 403, body: { ok: false, error: "Operations Admins cannot provision Super Admin accounts" } };
+      }
+    }
     try {
       const session = await adminCreateUser(body, authUser);
       return { status: 201, body: { ok: true, user: session.user } };
@@ -7220,6 +7291,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   }
   const putUserMatch = pathname.match(/^\/api\/users\/([^/]+)$/);
   if (method === "PUT" && putUserMatch) {
+    if (!authUser || authUser.role !== "super_admin" && authUser.role !== "admin" && authUser.role !== "manager") {
+      return { status: 403, body: { ok: false, error: "Insufficient privileges to update user" } };
+    }
     const id = putUserMatch[1];
     try {
       const updated = await updateUser(id, body);
@@ -7229,6 +7303,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     }
   }
   if (method === "DELETE" && putUserMatch) {
+    if (!authUser || authUser.role !== "super_admin" && authUser.role !== "admin" && authUser.role !== "manager") {
+      return { status: 403, body: { ok: false, error: "Insufficient privileges to remove user" } };
+    }
     const id = putUserMatch[1];
     try {
       await deleteUser(id);
@@ -9630,8 +9707,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           basePairPrice: g.basePairPrice ?? meta.basePairPrice ?? 4800,
           partnershipTier: g.partnershipTier ?? meta.partnershipTier ?? "STANDARD",
           commissionType: g.commissionType ?? meta.commissionType ?? "PERCENTAGE",
-          commissionValue: g.commissionValue ?? meta.commissionValue ?? meta.customCommissionPct ?? 20,
-          customCommissionPct: g.commissionValue ?? meta.customCommissionPct,
+          commissionValue: g.commissionValue !== null && g.commissionValue !== void 0 ? Number(g.commissionValue) : meta.commissionValue !== null && meta.commissionValue !== void 0 ? Number(meta.commissionValue) : meta.customCommissionPct !== null && meta.customCommissionPct !== void 0 ? Number(meta.customCommissionPct) : void 0,
+          customCommissionPct: g.commissionValue !== null && g.commissionValue !== void 0 ? Number(g.commissionValue) : meta.customCommissionPct !== null && meta.customCommissionPct !== void 0 ? Number(meta.customCommissionPct) : void 0,
+          managerSharePct: meta.managerSharePct !== null && meta.managerSharePct !== void 0 ? Number(meta.managerSharePct) : 70,
           taxTreatment: g.taxTreatment ?? meta.taxTreatment ?? "STANDARD_GST",
           customTaxPct: g.customTaxPct ?? meta.customTaxPct,
           bufferMinutes: g.bufferMinutes ?? meta.bufferMinutes ?? 30,
@@ -9729,11 +9807,11 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       }
       const finalLat = latitude !== void 0 ? Number(latitude) : lat !== void 0 ? Number(lat) : null;
       const finalLng = longitude !== void 0 ? Number(longitude) : lng !== void 0 ? Number(lng) : null;
-      const isActing2 = Boolean(body.actAsManagerMyself) || Boolean(restMeta.isActingManager) || !restMeta.managerId && !restMeta.managerName;
+      const isActing = Boolean(body.actAsManagerMyself) || Boolean(restMeta.isActingManager) || !restMeta.managerId && !restMeta.managerName;
       const finalGovRole = restMeta.governingAdminRole || (authUser?.role === "super_admin" ? "super_admin" : "admin");
-      const callerAdminName2 = restMeta.governingAdminName || authUser?.name || "Operations Admin";
+      const callerAdminName = restMeta.governingAdminName || authUser?.name || "Operations Admin";
       const callerAdminEmail = restMeta.governingAdminEmail || authUser?.email || "admin@gomaa.in";
-      const callerAdminId2 = restMeta.adminId || authUser?.userId || "USER-ADM-101";
+      const callerAdminId = restMeta.adminId || authUser?.userId || "USER-ADM-101";
       const created = await prisma.gosala.upsert({
         where: { name: name.trim() },
         create: {
@@ -9745,9 +9823,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           latitude: finalLat,
           longitude: finalLng,
           isActive: true,
-          adminId: callerAdminId2,
+          adminId: callerAdminId,
           adminEmail: callerAdminEmail,
-          adminName: callerAdminName2
+          adminName: callerAdminName
         },
         update: {
           region: region.trim(),
@@ -9757,13 +9835,13 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           latitude: finalLat,
           longitude: finalLng,
           isActive: true,
-          adminId: callerAdminId2,
+          adminId: callerAdminId,
           adminEmail: callerAdminEmail,
-          adminName: callerAdminName2
+          adminName: callerAdminName
         }
       });
       let resolvedMgrUser = null;
-      if (!isActing2 && (restMeta.managerId || restMeta.managerName || restMeta.caretaker)) {
+      if (!isActing && (restMeta.managerId || restMeta.managerName || restMeta.caretaker)) {
         try {
           const mgrKey = restMeta.managerId || restMeta.managerName || restMeta.caretaker;
           const cleanMgrKey = typeof mgrKey === "string" && mgrKey.startsWith("MGR-") ? mgrKey.replace(/^MGR-/, "") : mgrKey;
@@ -9807,19 +9885,19 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           console.warn("Could not sync manager assignment in POST gosalas:", e);
         }
       }
-      const finalMgrName = isActing2 ? `${callerAdminName2} (Acting Manager)` : resolvedMgrUser?.name || restMeta.managerName || "None (Admin Acting)";
-      const finalMgrId = isActing2 ? callerAdminId2 : resolvedMgrUser?.id || restMeta.managerId || "";
-      const finalCaretaker = isActing2 ? `${callerAdminName2} (Acting Custodian)` : restMeta.caretaker || resolvedMgrUser?.name || "Dedicated Gosevak Caretaker";
+      const finalMgrName = isActing ? `${callerAdminName} (Acting Manager)` : resolvedMgrUser?.name || restMeta.managerName || "None (Admin Acting)";
+      const finalMgrId = isActing ? callerAdminId : resolvedMgrUser?.id || restMeta.managerId || "";
+      const finalCaretaker = isActing ? `${callerAdminName} (Acting Custodian)` : restMeta.caretaker || resolvedMgrUser?.name || "Dedicated Gosevak Caretaker";
       saveGosalaMeta(created.id, created.name, {
         ...restMeta,
         lat: finalLat !== null ? finalLat : void 0,
         lng: finalLng !== null ? finalLng : void 0,
         governingAdminRole: finalGovRole,
-        governingAdminName: callerAdminName2,
+        governingAdminName: callerAdminName,
         governingAdminEmail: callerAdminEmail,
-        adminName: callerAdminName2,
-        adminId: callerAdminId2,
-        isActingManager: isActing2,
+        adminName: callerAdminName,
+        adminId: callerAdminId,
+        isActingManager: isActing,
         managerName: finalMgrName,
         managerId: finalMgrId,
         caretaker: finalCaretaker
@@ -9854,16 +9932,29 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     const rawId = putGosalaMatch[1];
     const decodedId = decodeURIComponent(rawId);
     try {
-      const existing = await prisma.gosala.findFirst({
+      let existing = await prisma.gosala.findFirst({
         where: {
           OR: [
             { id: rawId },
             { id: decodedId },
             { name: decodedId },
-            { name: { equals: decodedId, mode: "insensitive" } }
+            { name: { equals: decodedId, mode: "insensitive" } },
+            ...body?.name ? [{ name: String(body.name).trim() }, { name: { equals: String(body.name).trim(), mode: "insensitive" } }] : []
           ]
         }
       });
+      if (!existing && body?.name) {
+        existing = await prisma.gosala.create({
+          data: {
+            name: String(body.name).trim(),
+            region: String(body.region || "Cyberabad / Gachibowli").trim(),
+            address: String(body.address || "Heritage Corridor").trim(),
+            contactPhone: body.contactPhone || "+91 98000 00000",
+            contactEmail: body.email || body.contactEmail || "trust@gomaa.in",
+            isActive: true
+          }
+        });
+      }
       if (!existing) {
         return { status: 404, body: { error: "Gaushala not found" } };
       }
@@ -9955,6 +10046,9 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         adminEmail: effectiveAdminEmail,
         adminId: effectiveAdminId
       };
+      const callerAdminName = authUser?.name || "Admin";
+      const callerAdminId = authUser?.userId || "USER-SA-001";
+      const isActing = body.actAsManagerMyself !== void 0 ? Boolean(body.actAsManagerMyself) : body.isActingManager !== void 0 ? Boolean(body.isActingManager) : void 0;
       if (isActing === true) {
         metaPatch.isActingManager = true;
         metaPatch.managerName = `${callerAdminName} (Acting Manager)`;
@@ -10115,6 +10209,28 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         } catch {
         }
       }
+      if (parsedCommValue !== void 0) {
+        metaPatch.customCommissionPct = parsedCommValue;
+        metaPatch.commissionValue = parsedCommValue;
+      }
+      if (body.managerSharePct !== void 0) {
+        metaPatch.managerSharePct = Number(body.managerSharePct);
+      }
+      if (parsedCommValue !== void 0 || body.managerSharePct !== void 0) {
+        try {
+          const platformBp = Math.round((parsedCommValue ?? 20) * 100);
+          const gaushalaShareBp = Math.max(0, 1e4 - platformBp);
+          const managerRatio = Number(body.managerSharePct ?? metaPatch.managerSharePct ?? 70) / 100;
+          const managerBp = Math.round(gaushalaShareBp * managerRatio);
+          await prisma.splitPolicy.upsert({
+            where: { policyKey: existing.id },
+            update: { managerBp, approvedById: authUser?.userId || "USER-SA-001" },
+            create: { policyKey: existing.id, gosalaId: existing.id, managerBp, approvedById: authUser?.userId || "USER-SA-001" }
+          });
+        } catch (spErr) {
+          console.warn("[PUT /api/gosalas/:id] SplitPolicy sync notice:", spErr);
+        }
+      }
       saveGosalaMeta(updated.id, updated.name, metaPatch);
       const mergedUpdated = {
         ...updated,
@@ -10128,7 +10244,10 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         lat: updated.latitude !== null && updated.latitude !== void 0 ? Number(updated.latitude) : metaPatch.lat,
         lng: updated.longitude !== null && updated.longitude !== void 0 ? Number(updated.longitude) : metaPatch.lng,
         latitude: updated.latitude,
-        longitude: updated.longitude
+        longitude: updated.longitude,
+        customCommissionPct: parsedCommValue !== void 0 ? parsedCommValue : metaPatch.customCommissionPct,
+        commissionValue: parsedCommValue !== void 0 ? parsedCommValue : updated.commissionValue !== null ? Number(updated.commissionValue) : void 0,
+        managerSharePct: Number(body.managerSharePct ?? metaPatch.managerSharePct ?? 70)
       };
       return { status: 200, body: { ok: true, gosala: mergedUpdated } };
     } catch (err) {

@@ -76,10 +76,16 @@ export default function RegionalGovernance({
     refreshMigrationHistory,
   } = useStore()
 
-  // Active Tab - Default to "regions" (Districts & Ops Admins)
+  // Active Tab - Syncs seamlessly with sidebar initialSector
   const [activeTab, setActiveTab] = useState<
     "all" | "free" | "regions" | "migrations" | "gaushalas"
-  >(initialSector && initialSector !== "all" ? initialSector : "regions")
+  >(initialSector || "regions")
+
+  useEffect(() => {
+    if (initialSector) {
+      setActiveTab(initialSector)
+    }
+  }, [initialSector])
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState("")
@@ -254,11 +260,21 @@ export default function RegionalGovernance({
 
     const districtMap = new Map<string, OperationalRegion>()
     for (const r of list) {
-      const key = `${(r.state || "").toLowerCase()}::${(r.district || "").toLowerCase()}`
+      const cleanState = (r.state || "").trim().toLowerCase()
+      const cleanDistrict = (r.district || "").trim().toLowerCase()
+      if (!cleanState || !cleanDistrict) continue
+      const key = `${cleanState}::${cleanDistrict}`
       const existing = districtMap.get(key)
       if (!existing) {
         districtMap.set(key, r)
       } else if (!existing.assignedAdminId && r.assignedAdminId) {
+        districtMap.set(key, r)
+      } else if (
+        r.assignedAdminId &&
+        r.assignedAt &&
+        (!existing.assignedAt || r.assignedAt > existing.assignedAt)
+      ) {
+        // Keep the most recently appointed admin for this single district
         districtMap.set(key, r)
       }
     }
