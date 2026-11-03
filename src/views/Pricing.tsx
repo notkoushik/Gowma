@@ -401,25 +401,43 @@ export default function Pricing({
   }, [gosalas, selectedGosalaId])
 
   const filteredGosalas = useMemo(() => {
-    const q = String(gosalaSearch || "").trim().toLowerCase()
+    const q = String(gosalaSearch || "")
+      .trim()
+      .toLowerCase()
     if (!q) return gosalas
     return gosalas.filter(
       (g) =>
-        String(g.name || "").toLowerCase().includes(q) ||
-        String(g.region || "").toLowerCase().includes(q) ||
-        String(g.address || "").toLowerCase().includes(q),
+        String(g.name || "")
+          .toLowerCase()
+          .includes(q) ||
+        String(g.region || "")
+          .toLowerCase()
+          .includes(q) ||
+        String(g.address || "")
+          .toLowerCase()
+          .includes(q),
     )
   }, [gosalas, gosalaSearch])
 
   const activeGosala = useMemo(() => {
     if (!selectedGosalaId) return gosalas[0] || null
-    return gosalas.find((g) => g.id === selectedGosalaId || g.name === selectedGosalaId) || gosalas[0] || null
+    return (
+      gosalas.find(
+        (g) => g.id === selectedGosalaId || g.name === selectedGosalaId,
+      ) ||
+      gosalas[0] ||
+      null
+    )
   }, [gosalas, selectedGosalaId])
 
   // Animals at this Gaushala
   const gosalaAnimals = useMemo(() => {
     if (!activeGosala) return []
-    return animals.filter((a) => String(a.gosala || "").toLowerCase() === String(activeGosala.name || "").toLowerCase())
+    return animals.filter(
+      (a) =>
+        String(a.gosala || "").toLowerCase() ===
+        String(activeGosala.name || "").toLowerCase(),
+    )
   }, [animals, activeGosala])
 
   // Offerings / items at this Gaushala
@@ -437,8 +455,14 @@ export default function Pricing({
     return (
       managers.find(
         (m) =>
-          String(m.gosala || "").toLowerCase() === String(activeGosala.name || "").toLowerCase() ||
-          (m.gosalas && m.gosalas.some((gn) => String(gn || "").toLowerCase() === String(activeGosala.name || "").toLowerCase())) ||
+          String(m.gosala || "").toLowerCase() ===
+            String(activeGosala.name || "").toLowerCase() ||
+          (m.gosalas &&
+            m.gosalas.some(
+              (gn) =>
+                String(gn || "").toLowerCase() ===
+                String(activeGosala.name || "").toLowerCase(),
+            )) ||
           m.id === activeGosala.managerId,
       ) || null
     )
@@ -446,14 +470,34 @@ export default function Pricing({
 
   // Governing Operations Admin details dynamically derived from active sanctuary's assigned Operations Admin
   const governingAdmin = useMemo(() => {
-    const adminEmail = String(activeGosala?.governingAdminEmail || activeGosala?.adminEmail || "").trim().toLowerCase()
-    const adminName = String(activeGosala?.governingAdminName || activeGosala?.adminName || "").trim()
-    const adminId = activeGosala?.adminId || (activeGosala as any)?.governingAdminId
+    const adminEmail = String(
+      activeGosala?.governingAdminEmail || activeGosala?.adminEmail || "",
+    )
+      .trim()
+      .toLowerCase()
+    const adminName = String(
+      activeGosala?.governingAdminName || activeGosala?.adminName || "",
+    ).trim()
+    const adminId =
+      activeGosala?.adminId || (activeGosala as any)?.governingAdminId
 
     const matchedUser = (users || []).find((u) => {
-      if (adminId && (u.id === adminId || (u as any).uniqueId === adminId)) return true
-      if (adminEmail && String(u.email || "").trim().toLowerCase() === adminEmail) return true
-      if (adminName && String(u.name || "").trim().toLowerCase() === adminName.toLowerCase()) return true
+      if (adminId && (u.id === adminId || (u as any).uniqueId === adminId))
+        return true
+      if (
+        adminEmail &&
+        String(u.email || "")
+          .trim()
+          .toLowerCase() === adminEmail
+      )
+        return true
+      if (
+        adminName &&
+        String(u.name || "")
+          .trim()
+          .toLowerCase() === adminName.toLowerCase()
+      )
+        return true
       return false
     })
 
@@ -811,6 +855,7 @@ export default function Pricing({
   const [econTier, setEconTier] = useState<PartnershipTier>("STANDARD")
   const [econCommType, setEconCommType] = useState<CommissionType>("percentage")
   const [econCommValue, setEconCommValue] = useState<number | "">(20)
+  const [econManagerSharePct, setEconManagerSharePct] = useState<number>(70)
   const [econTaxTreatment, setEconTaxTreatment] =
     useState<TaxTreatment>("standard_gst")
   const [econCustomTaxPct, setEconCustomTaxPct] = useState<number | "">(5)
@@ -820,19 +865,22 @@ export default function Pricing({
   const handleOpenEditEconomics = (g: Gosala) => {
     if (!isSuperAdmin) return
     setEconTargetGosala(g)
-    setEconTier(
-      g.partnershipTier ||
-        (g.customCommissionPct !== undefined &&
-        g.customCommissionPct < commission
-          ? "PREFERRED"
-          : "STANDARD"),
-    )
-    setEconCommType(g.commissionType || "percentage")
-    setEconCommValue(
+    const effectiveCommVal =
       g.commissionType === "fixed"
         ? (g.customCommissionFlat ?? 400)
-        : (g.customCommissionPct ?? commission),
+        : (g.customCommissionPct !== undefined && g.customCommissionPct !== null
+          ? Number(g.customCommissionPct)
+          : (g.commissionValue !== undefined && g.commissionValue !== null
+            ? Number(g.commissionValue)
+            : commission))
+
+    setEconTier(
+      g.partnershipTier ||
+        (effectiveCommVal < commission ? "PREFERRED" : "STANDARD"),
     )
+    setEconCommType(g.commissionType || "percentage")
+    setEconCommValue(effectiveCommVal)
+    setEconManagerSharePct((g as any).managerSharePct ?? 70)
     setEconTaxTreatment(g.taxTreatment || "standard_gst")
     setEconCustomTaxPct(g.customTaxPct ?? taxPct)
     setEconBufferMin(g.bufferMinutes ?? bufferMin)
@@ -860,13 +908,14 @@ export default function Pricing({
               : Number(econCustomTaxPct)
 
     updateGosala(econTargetGosala.id, {
+      name: econTargetGosala.name,
       partnershipTier: econTier,
       commissionType: econCommType,
       customCommissionPct:
         econCommType === "percentage" ? finalCommVal : undefined,
-      customCommissionFlat:
-        econCommType === "fixed" ? finalCommVal : undefined,
+      customCommissionFlat: econCommType === "fixed" ? finalCommVal : undefined,
       commissionValue: finalCommVal,
+      managerSharePct: econManagerSharePct,
       taxTreatment: econTaxTreatment,
       customTaxPct: finalTaxPct,
       bufferMinutes: econBufferMin === "" ? 30 : Number(econBufferMin),
@@ -874,7 +923,7 @@ export default function Pricing({
     })
     setEconModalOpen(false)
     notify(
-      `Updated customized settlement economics for ${econTargetGosala.name}`,
+      `Updated customized settlement economics (${100 - finalCommVal}/${finalCommVal} Split) for ${econTargetGosala.name}`,
       "ok",
     )
   }
@@ -2551,9 +2600,7 @@ export default function Pricing({
                                     <button
                                       onClick={() => {
                                         setEditingAnimalName(animal.name)
-                                        setEditingAnimalPrice(
-                                          animal.price ?? 0,
-                                        )
+                                        setEditingAnimalPrice(animal.price ?? 0)
                                       }}
                                       className="inline-flex items-center gap-1 px-2.5 py-1 text-[11.5px] font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded transition cursor-pointer"
                                     >
@@ -2973,10 +3020,19 @@ export default function Pricing({
                     </tr>
                   ) : (
                     filteredCommGosalas.map((g) => {
-                      const commPct = g.customCommissionPct ?? commission
-                      const isSubsidized =
-                        g.customCommissionPct !== undefined &&
-                        g.customCommissionPct < commission
+                      const hasOverride =
+                        (g.customCommissionPct !== undefined && g.customCommissionPct !== null) ||
+                        (g.commissionValue !== undefined && g.commissionValue !== null)
+                      const commPct =
+                        g.customCommissionPct !== undefined && g.customCommissionPct !== null
+                          ? Number(g.customCommissionPct)
+                          : g.commissionValue !== undefined && g.commissionValue !== null
+                            ? Number(g.commissionValue)
+                            : commission
+                      const gaushalaSharePct = 100 - commPct
+                      const mgrRatio = Number((g as any).managerSharePct ?? 70)
+                      const adminRatio = 100 - mgrRatio
+                      const isSubsidized = hasOverride && commPct < commission
                       const isFlat = g.commissionType === "fixed"
                       const tier =
                         g.partnershipTier ||
@@ -3043,7 +3099,11 @@ export default function Pricing({
                             {isFlat ? (
                               <div>
                                 <span className="font-mono font-bold text-ink">
-                                  {inr(g.customCommissionFlat || g.commissionValue || 0)}
+                                  {inr(
+                                    g.customCommissionFlat ||
+                                      g.commissionValue ||
+                                      0,
+                                  )}
                                 </span>
                                 <span className="text-[10px] text-ink-faint block font-mono">
                                   Flat / booking
@@ -3061,16 +3121,21 @@ export default function Pricing({
                                   >
                                     {commPct}%
                                   </span>
-                                  {isSubsidized && (
+                                  {hasOverride && commPct !== commission && (
                                     <span className="text-[10px] font-mono px-1.5 py-0.2 bg-emerald-100 text-emerald-900 rounded font-semibold">
-                                      -{commission - commPct}% off
+                                      {commPct < commission
+                                        ? `-${commission - commPct}% off`
+                                        : `+${commPct - commission}%`}
                                     </span>
                                   )}
                                 </div>
                                 <span className="text-[10.5px] text-ink-faint block">
-                                  {g.customCommissionPct !== undefined
+                                  {hasOverride
                                     ? "Individual Override"
                                     : "Master Default"}
+                                </span>
+                                <span className="text-[10px] text-emerald-800 font-mono block mt-0.5">
+                                  Gaushala {gaushalaSharePct}% ({mgrRatio}% Mgr / {adminRatio}% Ops)
                                 </span>
                               </div>
                             )}
@@ -4052,248 +4117,324 @@ export default function Pricing({
       {/* ========================================================================= */}
       {econModalOpen && econTargetGosala && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-card border border-amber-300 rounded-sm w-full max-w-lg p-6 shadow-xl space-y-4">
+          <div className="bg-card border border-amber-300 rounded-md w-full max-w-lg p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <div className="flex items-center gap-2">
-                <BadgePercent size={20} className="text-amber-600" />
-                <h3 className="font-serif text-[17px] font-semibold text-ink">
-                  Configure Sanctuary Economics &amp; Commission
-                </h3>
+                <div className="h-8 w-8 rounded-full bg-amber-100 text-amber-900 flex items-center justify-center font-bold">
+                  <BadgePercent size={18} />
+                </div>
+                <div>
+                  <h3 className="font-serif text-[17px] font-semibold text-ink">
+                    Commission &amp; Revenue Split
+                  </h3>
+                  <p className="text-[11.5px] text-ink-faint">
+                    Simple percentage split between the Gaushala and Gomaa Platform
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setEconModalOpen(false)}
-                className="text-ink-faint hover:text-ink transition cursor-pointer"
+                className="text-ink-faint hover:text-ink transition cursor-pointer p-1 rounded"
               >
                 <X size={16} />
               </button>
             </div>
 
-            <div className="text-[12px] text-amber-900 bg-amber-50 border border-amber-200/80 rounded px-3 py-2 flex items-center justify-between">
+            <div className="text-[12.5px] text-amber-950 bg-amber-50/80 border border-amber-200 rounded px-3.5 py-2.5 flex items-center justify-between">
               <div>
-                <strong>{econTargetGosala.name}</strong>
-                <span className="text-ink-faint text-[11px] block">
+                <strong className="text-[13px] text-ink block">{econTargetGosala.name}</strong>
+                <span className="text-ink-faint text-[11.5px]">
                   {econTargetGosala.region}
                 </span>
               </div>
-              <span className="font-mono text-[10.5px] bg-white text-amber-950 px-2 py-0.5 rounded border border-amber-200">
+              <span className="font-mono text-[10.5px] bg-white text-amber-950 px-2 py-0.5 rounded border border-amber-300 font-semibold">
                 {econTargetGosala.trustRegistrationNo || "AWBI Trust"}
               </span>
             </div>
 
-            {/* Quick 1-Click Policy Presets */}
-            <div className="bg-paper p-3 rounded border border-line space-y-1.5">
-              <span className="text-[10.5px] font-mono uppercase text-ink-faint block">
-                Quick Apply Sovereign Presets:
+            {/* VISUAL REVENUE SPLIT BOARD - SIMPLE NUMBERS */}
+            <div className="p-4 bg-paper rounded border border-line space-y-3">
+              <span className="font-mono text-[10.5px] font-bold text-ink-faint uppercase tracking-wider block text-center">
+                Revenue Split Breakdown
               </span>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEconTier("PREFERRED")
-                    setEconCommType("percentage")
-                    setEconCommValue(8)
-                    setEconTaxTreatment("section_80g_exempt")
-                    setEconCustomTaxPct(0)
-                    setEconBufferMin(30)
-                    setEconNotes(
-                      "Close Partner Sanctuary - Subsidized 8% preferential commission",
-                    )
+
+              <div className="grid grid-cols-2 gap-3 text-center">
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-sm">
+                  <span className="text-[11px] font-mono uppercase text-emerald-800 font-bold block">
+                    Gaushala Payout
+                  </span>
+                  <div className="font-serif text-[32px] font-bold text-emerald-900 leading-tight">
+                    {Math.max(0, 100 - Number(econCommValue || 0))}%
+                  </div>
+                  <span className="text-[11px] text-emerald-700 block mt-0.5">
+                    Direct Bank Settlement
+                  </span>
+                </div>
+
+                <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-sm">
+                  <span className="text-[11px] font-mono uppercase text-indigo-800 font-bold block">
+                    Platform Fee
+                  </span>
+                  <div className="font-serif text-[32px] font-bold text-indigo-900 leading-tight">
+                    {Number(econCommValue || 0)}%
+                  </div>
+                  <span className="text-[11px] text-indigo-700 block mt-0.5">
+                    Gomaa Commission
+                  </span>
+                </div>
+              </div>
+
+              {/* Dual-color Proportion Bar */}
+              <div className="h-3.5 rounded-full bg-indigo-200 overflow-hidden flex shadow-inner">
+                <div
+                  className="bg-emerald-600 transition-all duration-300"
+                  style={{
+                    width: `${Math.max(0, Math.min(100, 100 - Number(econCommValue || 0)))}%`,
                   }}
-                  className="px-2.5 py-1 text-[11px] bg-emerald-50 text-emerald-800 border border-emerald-300 rounded font-medium hover:bg-emerald-100 transition cursor-pointer flex items-center gap-1"
-                >
-                  <Star size={11} className="fill-emerald-700" />
-                  <span>Preferred Partner (8% Comm, 0% Tax)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEconTier("CHARITABLE")
-                    setEconCommType("percentage")
-                    setEconCommValue(5)
-                    setEconTaxTreatment("section_80g_exempt")
-                    setEconCustomTaxPct(0)
-                    setEconBufferMin(45)
-                    setEconNotes(
-                      "Charitable Welfare Trust - Subsidized 5% seva rate",
-                    )
+                  title={`Gaushala: ${100 - Number(econCommValue || 0)}%`}
+                />
+                <div
+                  className="bg-indigo-600 transition-all duration-300"
+                  style={{
+                    width: `${Math.max(0, Math.min(100, Number(econCommValue || 0)))}%`,
                   }}
-                  className="px-2.5 py-1 text-[11px] bg-indigo-50 text-indigo-800 border border-indigo-200 rounded font-medium hover:bg-indigo-100 transition cursor-pointer"
-                >
-                  Charitable Seva (5% Comm)
-                </button>
+                  title={`Platform: ${Number(econCommValue || 0)}%`}
+                />
+              </div>
+
+              {/* Live Real-Money Example: Instantly clear for any admin */}
+              <div className="pt-1 flex items-center justify-between text-[12px] bg-white/70 p-2 rounded border border-line/60">
+                <span className="text-ink-faint">
+                  On a <strong>₹1,000</strong> booking:
+                </span>
+                <span className="font-medium text-ink">
+                  Gaushala gets <strong className="text-emerald-800 font-mono">₹{Math.round(1000 * ((100 - Number(econCommValue || 0)) / 100))}</strong>
+                  {" • "}
+                  Platform retains <strong className="text-indigo-800 font-mono">₹{Math.round(1000 * (Number(econCommValue || 0) / 100))}</strong>
+                </span>
+              </div>
+            </div>
+
+            {/* Quick 1-Click Split Presets (Simple Numbers) */}
+            <div className="space-y-1.5">
+              <label className="block text-[11.5px] font-medium text-ink-soft">
+                Quick 1-Click Split Presets (Gaushala / Platform):
+              </label>
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => {
+                    setEconCommValue(20)
                     setEconTier("STANDARD")
-                    setEconCommType("percentage")
-                    setEconCommValue(commission)
                     setEconTaxTreatment("standard_gst")
-                    setEconCustomTaxPct(taxPct)
-                    setEconBufferMin(bufferMin)
-                    setEconNotes("Standard Platform Affiliate")
                   }}
-                  className="px-2.5 py-1 text-[11px] bg-paper-deep text-ink-soft border border-line rounded font-medium hover:text-ink transition cursor-pointer"
+                  className={`p-2.5 rounded border text-center transition cursor-pointer ${
+                    Number(econCommValue) === 20
+                      ? "bg-amber-100/70 border-amber-400 text-amber-950 font-bold shadow-2xs"
+                      : "bg-card border-line hover:bg-paper text-ink"
+                  }`}
                 >
-                  Standard Default ({commission}%)
+                  <div className="text-[13px] font-semibold">80 / 20 Split</div>
+                  <div className="text-[10.5px] text-ink-faint">Standard Default</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEconCommValue(10)
+                    setEconTier("PREFERRED")
+                    setEconTaxTreatment("section_80g_exempt")
+                  }}
+                  className={`p-2.5 rounded border text-center transition cursor-pointer ${
+                    Number(econCommValue) === 10
+                      ? "bg-emerald-100/70 border-emerald-400 text-emerald-950 font-bold shadow-2xs"
+                      : "bg-card border-line hover:bg-paper text-ink"
+                  }`}
+                >
+                  <div className="text-[13px] font-semibold">90 / 10 Split</div>
+                  <div className="text-[10.5px] text-emerald-700">Preferred Partner</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEconCommValue(5)
+                    setEconTier("CHARITABLE")
+                    setEconTaxTreatment("section_80g_exempt")
+                  }}
+                  className={`p-2.5 rounded border text-center transition cursor-pointer ${
+                    Number(econCommValue) === 5
+                      ? "bg-indigo-100/70 border-indigo-400 text-indigo-950 font-bold shadow-2xs"
+                      : "bg-card border-line hover:bg-paper text-ink"
+                  }`}
+                >
+                  <div className="text-[13px] font-semibold">95 / 5 Split</div>
+                  <div className="text-[10.5px] text-indigo-700">Charitable Seva</div>
                 </button>
               </div>
             </div>
 
-            <div className="space-y-3.5">
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Partnership Tier">
-                  <select
-                    value={econTier}
-                    onChange={(e) =>
-                      setEconTier(e.target.value as PartnershipTier)
-                    }
-                    className={inputCls}
-                  >
-                    <option value="PREFERRED">
-                      ★ Preferred Partner (Low Commission)
-                    </option>
-                    <option value="CHARITABLE">
-                      Charitable Seva Trust (Subsidized)
-                    </option>
-                    <option value="STANDARD">
-                      Standard Platform Affiliate
-                    </option>
-                    <option value="COMMERCIAL">Commercial Enterprise</option>
-                    <option value="CUSTOM">Bilateral Custom Slab</option>
-                  </select>
-                </Field>
-
-                <Field label="Commission Model">
-                  <select
-                    value={econCommType}
-                    onChange={(e) =>
-                      setEconCommType(e.target.value as CommissionType)
-                    }
-                    className={inputCls}
-                  >
-                    <option value="percentage">Percentage % Proportion</option>
-                    <option value="fixed">Fixed Flat ₹ per booking</option>
-                  </select>
-                </Field>
+            {/* Custom Commission Input & Slider */}
+            <div className="space-y-2 p-3 bg-paper/50 rounded border border-line">
+              <div className="flex items-center justify-between">
+                <label className="text-[12px] font-medium text-ink">
+                  Platform Commission (Gomaa Cut):
+                </label>
+                <span className="font-mono text-[14px] font-bold text-indigo-700">
+                  {Number(econCommValue || 0)}%
+                </span>
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Field
-                  label={
-                    econCommType === "fixed"
-                      ? "Flat Commission"
-                      : "Commission Percentage"
-                  }
-                  hint={econCommType === "fixed" ? "₹ INR" : "% Cut"}
-                >
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={0}
+                  max={50}
+                  step={1}
+                  value={Number(econCommValue || 0)}
+                  onChange={(e) => setEconCommValue(Number(e.target.value))}
+                  className="flex-1 accent-indigo-600 cursor-pointer"
+                />
+                <div className="w-20">
                   <input
                     type="number"
+                    min={0}
+                    max={100}
                     value={econCommValue}
-                    placeholder="20"
                     onChange={(e) =>
                       setEconCommValue(
                         e.target.value === "" ? "" : Number(e.target.value),
                       )
                     }
-                    className={inputCls}
+                    className="w-full bg-card border border-line rounded px-2 py-1 text-[13px] font-mono text-center outline-none focus:border-amber-400 font-semibold"
                   />
-                </Field>
+                </div>
+                <span className="text-ink-faint text-[12px]">%</span>
+              </div>
+            </div>
 
-                <Field label="Rest Buffer Between Bookings" hint="minutes">
-                  <input
-                    type="number"
-                    value={econBufferMin}
-                    placeholder="30"
-                    onChange={(e) =>
-                      setEconBufferMin(
-                        e.target.value === "" ? "" : Number(e.target.value),
-                      )
-                    }
-                    className={inputCls}
-                  />
-                </Field>
+            {/* INTERNAL GAUSHALA SHARE RATIO (MANAGER vs DISTRICT OPS ADMIN) */}
+            <div className="space-y-2.5 p-3.5 bg-paper rounded border border-emerald-200/80">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[12px] font-semibold text-emerald-950 block">
+                    Gaushala Internal Payout Ratio
+                  </span>
+                  <span className="text-[11px] text-emerald-800">
+                    How the {Math.max(0, 100 - Number(econCommValue || 0))}% Gaushala payout is shared between Custodian & Regional Ops Admin
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="font-mono text-[13px] font-bold text-emerald-900">
+                    {econManagerSharePct}% Mgr / {100 - econManagerSharePct}% Admin
+                  </span>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Trust Tax Treatment">
-                  <select
-                    value={econTaxTreatment}
-                    onChange={(e) =>
-                      setEconTaxTreatment(e.target.value as TaxTreatment)
-                    }
-                    className={inputCls}
+              {/* Ratio Preset Buttons */}
+              <div className="grid grid-cols-4 gap-1.5 pt-1">
+                {[
+                  { label: "70 / 30", sub: "Standard", mgr: 70 },
+                  { label: "80 / 20", sub: "Caretaker Seva", mgr: 80 },
+                  { label: "50 / 50", sub: "Equal Split", mgr: 50 },
+                  { label: "100% Mgr", sub: "Direct Custody", mgr: 100 },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => setEconManagerSharePct(item.mgr)}
+                    className={`p-1.5 rounded text-center transition cursor-pointer border ${
+                      econManagerSharePct === item.mgr
+                        ? "bg-emerald-100 border-emerald-400 text-emerald-950 font-bold"
+                        : "bg-card border-line hover:bg-paper-deep text-ink text-[11px]"
+                    }`}
                   >
-                    <option value="section_80g_exempt">
-                      Section 80G Exempt (0% Tax)
-                    </option>
-                    <option value="reduced_charity_gst">
-                      Concessional Charity GST (5%)
-                    </option>
-                    <option value="standard_gst">
-                      Standard Commercial GST (18%)
-                    </option>
-                    <option value="custom_rate">Custom Tax Percentage</option>
-                  </select>
-                </Field>
+                    <div className="text-[11.5px] font-semibold">{item.label}</div>
+                    <div className="text-[9.5px] text-ink-faint leading-tight">{item.sub}</div>
+                  </button>
+                ))}
+              </div>
 
-                {econTaxTreatment === "custom_rate" ? (
-                  <Field label="Custom Tax %" hint="%">
-                    <input
-                      type="number"
-                      value={econCustomTaxPct}
-                      placeholder="5"
-                      onChange={(e) =>
-                        setEconCustomTaxPct(
-                          e.target.value === "" ? "" : Number(e.target.value),
-                        )
-                      }
-                      className={inputCls}
-                    />
-                  </Field>
-                ) : (
-                  <div className="flex flex-col justify-end pb-2">
-                    <span className="text-[11.5px] text-ink-faint">
-                      Effective Tax:{" "}
-                      <strong className="text-ink font-mono">
-                        {econTaxTreatment === "section_80g_exempt"
-                          ? "0% (Exempt)"
-                          : econTaxTreatment === "reduced_charity_gst"
-                            ? "5%"
-                            : "18%"}
-                      </strong>
+              {/* Ratio Slider */}
+              <div className="flex items-center gap-3 pt-1">
+                <span className="text-[11px] font-medium text-emerald-900 shrink-0">
+                  Manager:
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={econManagerSharePct}
+                  onChange={(e) => setEconManagerSharePct(Number(e.target.value))}
+                  className="flex-1 accent-emerald-600 cursor-pointer"
+                />
+                <span className="font-mono text-[12px] font-bold text-emerald-800 w-12 text-right">
+                  {econManagerSharePct}%
+                </span>
+              </div>
+
+              {/* Exact ₹1000 End-to-End Simulation Breakdown */}
+              <div className="p-2.5 bg-white/80 rounded border border-emerald-200 text-[11.5px] space-y-1">
+                <div className="font-medium text-ink flex items-center justify-between">
+                  <span>On a typical <strong>₹1,000</strong> booking:</span>
+                  <span className="font-mono font-bold text-indigo-800">
+                    Platform Fee: ₹{Math.round(1000 * (Number(econCommValue || 0) / 100))}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-line/60">
+                  <div className="text-emerald-900">
+                    👨‍🌾 <strong>Gaushala Manager:</strong> ₹
+                    {Math.round(
+                      (1000 * (Math.max(0, 100 - Number(econCommValue || 0)) / 100)) *
+                        (econManagerSharePct / 100),
+                    )}{" "}
+                    <span className="text-[10px] text-ink-faint font-mono">
+                      ({econManagerSharePct}% of sanctuary payout)
                     </span>
                   </div>
-                )}
+                  <div className="text-emerald-900">
+                    🏛️ <strong>District Ops Admin:</strong> ₹
+                    {Math.round(
+                      (1000 * (Math.max(0, 100 - Number(econCommValue || 0)) / 100)) *
+                        ((100 - econManagerSharePct) / 100),
+                    )}{" "}
+                    <span className="text-[10px] text-ink-faint font-mono">
+                      ({100 - econManagerSharePct}% of sanctuary payout)
+                    </span>
+                  </div>
+                </div>
               </div>
+            </div>
 
-              <Field
-                label="Partnership Notes &amp; Rationale"
-                hint="Visible in Super Admin ledger &amp; audit"
-              >
-                <textarea
-                  rows={2}
-                  value={econNotes}
-                  onChange={(e) => setEconNotes(e.target.value)}
-                  placeholder="e.g. Partner sanctuary trust; 8% preferential commission agreed for high cattle standards"
-                  className={`${inputCls} font-sans`}
-                />
-              </Field>
+            {/* Optional Memo Notes */}
+            <div>
+              <label className="block text-[11.5px] font-medium text-ink-soft mb-1">
+                Agreement Note / Rationale (Optional):
+              </label>
+              <input
+                type="text"
+                value={econNotes}
+                onChange={(e) => setEconNotes(e.target.value)}
+                placeholder="e.g. 80/20 standard split approved for this sanctuary"
+                className="w-full bg-card border border-line rounded-sm px-2.5 py-1.5 text-[12px] text-ink outline-none"
+              />
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-line">
               <button
                 type="button"
                 onClick={() => setEconModalOpen(false)}
-                className="px-3 py-1.5 text-[12.5px] text-ink-soft hover:text-ink transition cursor-pointer"
+                className="px-3.5 py-1.5 text-[12.5px] font-medium text-ink-soft hover:text-ink transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleSaveEconomics}
-                className="px-4 py-1.5 bg-gradient-to-r from-amber-600 to-amber-700 text-white rounded text-[12.5px] font-medium hover:opacity-90 transition cursor-pointer shadow-2xs"
+                className="px-5 py-2 bg-gradient-to-r from-amber-600 to-amber-700 text-white rounded text-[12.5px] font-medium hover:opacity-90 transition cursor-pointer shadow-xs flex items-center gap-1.5"
               >
-                Save Economics Configuration
+                <CheckCircle2 size={14} />
+                <span>Save Commission Split</span>
               </button>
             </div>
           </div>

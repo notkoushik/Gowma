@@ -39,6 +39,35 @@ export interface UserRichMeta {
     authorityLevel?: string
     treasuryClearanceLevel?: string
   }
+  bankDetails?: {
+    accountHolder?: string
+    bankName?: string
+    accountNumber?: string
+    ifscCode?: string
+    upiId?: string
+    branchName?: string
+    isVerified?: boolean
+  }
+  assignedRegion?: {
+    id?: string
+    state?: string
+    district?: string
+    name?: string
+    zone?: string
+  }
+  migrationHistory?: Array<{
+    id: string
+    timestamp: string
+    type: "SOURCE" | "TARGET"
+    otherAdminId: string
+    otherAdminName: string
+    regionName: string
+    transferredGaushalasCount: number
+    transferredManagersCount: number
+    transferredBookingsCount: number
+    operator: string
+    notes?: string
+  }>
 }
 
 // In-memory cache backed by PostgreSQL `users.metadata`
@@ -91,6 +120,15 @@ export function saveUserMeta(identifier: string, patch: Partial<UserRichMeta>) {
     adminData: patch.adminData
       ? { ...(existing.adminData || {}), ...patch.adminData }
       : existing.adminData,
+    bankDetails: patch.bankDetails
+      ? { ...(existing.bankDetails || {}), ...patch.bankDetails }
+      : existing.bankDetails,
+    assignedRegion: patch.assignedRegion !== undefined
+      ? patch.assignedRegion
+      : existing.assignedRegion,
+    migrationHistory: patch.migrationHistory !== undefined
+      ? patch.migrationHistory
+      : existing.migrationHistory,
   }
 
   metaStore[key] = updated

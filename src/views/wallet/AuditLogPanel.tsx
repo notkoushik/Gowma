@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { RefreshCw, ScrollText } from "lucide-react"
 import { Panel, PanelHead } from "../../lib/ui"
-import { dateTime, walletApi, type AuditEntry } from "../../services/commissionWalletApi"
+import {
+  dateTime,
+  walletApi,
+  type AuditEntry,
+} from "../../services/commissionWalletApi"
 
 const label: Record<string, string> = {
   SETTLEMENT_APPROVED: "Settlement approved",
@@ -37,13 +41,16 @@ const roleName: Record<string, string> = {
 }
 
 function Details({ d }: { d: Record<string, unknown> | null }) {
-  const pairs = Object.entries(d || {}).filter(([, v]) => v !== null && v !== undefined && v !== "")
+  const pairs = Object.entries(d || {}).filter(
+    ([, v]) => v !== null && v !== undefined && v !== "",
+  )
   if (!pairs.length) return <span className="text-ink-faint">–</span>
   return (
     <div className="flex flex-wrap gap-x-3 gap-y-0.5">
       {pairs.map(([k, v]) => (
         <span key={k} className="text-[12px] text-ink-soft">
-          <span className="text-ink-faint">{k}:</span> {typeof v === "object" ? JSON.stringify(v) : String(v)}
+          <span className="text-ink-faint">{k}:</span>{" "}
+          {typeof v === "object" ? JSON.stringify(v) : String(v)}
         </span>
       ))}
     </div>
@@ -74,13 +81,19 @@ export default function AuditLogPanel() {
     void load()
   }, [load])
 
-  const actions = useMemo(() => [...new Set((entries || []).map((e) => e.action))].sort(), [entries])
+  const actions = useMemo(
+    () => [...new Set((entries || []).map((e) => e.action))].sort(),
+    [entries],
+  )
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
     return (entries || []).filter(
       (e) =>
         (!action || e.action === action) &&
-        (!needle || `${e.actor} ${e.role} ${label[e.action] || e.action} ${e.targetId || ""} ${JSON.stringify(e.details || {})}`.toLowerCase().includes(needle)),
+        (!needle ||
+          `${e.actor} ${e.role} ${label[e.action] || e.action} ${e.targetId || ""} ${JSON.stringify(e.details || {})}`
+            .toLowerCase()
+            .includes(needle)),
     )
   }, [entries, q, action])
 
@@ -90,8 +103,13 @@ export default function AuditLogPanel() {
         title="Audit log"
         desc="Every approval, refund, percentage change, payout account and withdrawal, with who did it. Only you can see this."
         right={
-          <button onClick={load} className="inline-flex items-center gap-1.5 border border-line rounded-sm px-3 py-1.5 text-[12.5px] text-ink-soft hover:bg-paper-deep" aria-label="Refresh audit log">
-            <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Refresh
+          <button
+            onClick={load}
+            className="inline-flex items-center gap-1.5 border border-line rounded-sm px-3 py-1.5 text-[12.5px] text-ink-soft hover:bg-paper-deep"
+            aria-label="Refresh audit log"
+          >
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />{" "}
+            Refresh
           </button>
         }
       />
@@ -141,29 +159,46 @@ export default function AuditLogPanel() {
               <tbody>
                 {entries === null && (
                   <tr>
-                    <td colSpan={5} className="px-5 py-5 text-ink-faint">Loading…</td>
+                    <td colSpan={5} className="px-5 py-5 text-ink-faint">
+                      Loading…
+                    </td>
                   </tr>
                 )}
                 {entries !== null && filtered.length === 0 && (
                   <tr>
                     <td colSpan={5} className="px-5 py-5 text-ink-faint">
                       <span className="inline-flex items-center gap-2">
-                        <ScrollText size={14} /> {entries.length ? "Nothing matches that search." : "No activity recorded yet."}
+                        <ScrollText size={14} />{" "}
+                        {entries.length
+                          ? "Nothing matches that search."
+                          : "No activity recorded yet."}
                       </span>
                     </td>
                   </tr>
                 )}
                 {filtered.slice(0, shown).map((e) => (
                   <tr key={e.id} className="border-t border-line align-top">
-                    <td className="px-5 py-2 whitespace-nowrap">{dateTime(e.at)}</td>
+                    <td className="px-5 py-2 whitespace-nowrap">
+                      {dateTime(e.at)}
+                    </td>
                     <td className="px-2 py-2">
                       <div>{e.actor}</div>
-                      <div className="text-[11.5px] text-ink-faint">{roleName[e.role] || e.role}</div>
+                      <div className="text-[11.5px] text-ink-faint">
+                        {roleName[e.role] || e.role}
+                      </div>
                     </td>
                     <td className="px-2 py-2">
-                      <span className={`inline-block rounded-sm px-2 py-0.5 text-[11.5px] font-medium ${tone(e.action)}`}>{label[e.action] || e.action}</span>
+                      <span
+                        className={`inline-block rounded-sm px-2 py-0.5 text-[11.5px] font-medium ${tone(e.action)}`}
+                      >
+                        {label[e.action] || e.action}
+                      </span>
                     </td>
-                    <td className="px-2 py-2 font-mono text-[11.5px] break-all max-w-[200px]">{e.targetId ? `${e.targetType} ${e.targetId.slice(0, 18)}` : e.targetType}</td>
+                    <td className="px-2 py-2 font-mono text-[11.5px] break-all max-w-[200px]">
+                      {e.targetId
+                        ? `${e.targetType} ${e.targetId.slice(0, 18)}`
+                        : e.targetType}
+                    </td>
                     <td className="px-5 py-2">
                       <Details d={e.details} />
                     </td>
@@ -174,7 +209,10 @@ export default function AuditLogPanel() {
           </div>
           {filtered.length > shown && (
             <div className="px-5 py-3 border-t border-line">
-              <button onClick={() => setShown(shown + 50)} className="text-[13px] text-saffron-deep">
+              <button
+                onClick={() => setShown(shown + 50)}
+                className="text-[13px] text-saffron-deep"
+              >
                 Show more ({filtered.length - shown} left)
               </button>
             </div>

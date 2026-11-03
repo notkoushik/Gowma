@@ -34,6 +34,10 @@ import {
   Image as ImageIcon,
   Link2,
   RefreshCw,
+  ShieldAlert,
+  Lock,
+  Unlock,
+  CalendarRange,
 } from "lucide-react"
 import {
   type Animal,
@@ -51,10 +55,11 @@ import {
   LACTATION_STATUSES,
   TEMPERAMENT_PRESETS,
 } from "../../data/animals"
-import { inr, type Booking } from "../../data/mock"
+import { inr, slots, type Booking } from "../../data/mock"
 import { type Gosala } from "../../data/gosalas"
 import { useStore, useToast } from "../../store/store"
 import { Panel, Tag, Eyebrow, StatusPill } from "../../lib/ui"
+import { getTodayReference, getDateChipLabel, normalizeDateStr } from "../../lib/dateUtils"
 
 export const SACRED_MARKS_PRESETS = [
   "Shrivatsa curl on forehead (Auspicious Mahalakshmi mark)",
@@ -731,12 +736,18 @@ function AnimalCard({
   a,
   onOpenDossier,
   onEditCow,
+  onOpenSlots,
+  onReviewPhotos,
+  isSuperAdmin,
   recentTripsCount,
   shelter,
 }: {
   a: Animal
   onOpenDossier: (animal: Animal) => void
   onEditCow?: (animal: Animal) => void
+  onOpenSlots?: (animal: Animal) => void
+  onReviewPhotos?: (animal: Animal) => void
+  isSuperAdmin?: boolean
   recentTripsCount: number
   shelter?: Gosala
 }) {
@@ -756,6 +767,21 @@ function AnimalCard({
           {/* Status Badge */}
           <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 flex-wrap">
             <Tag tone={statusToneMap[a.status] || "ok"}>{a.status}</Tag>
+            {(a.approvalStatus === "PENDING_SUPER_ADMIN" || a.status === "Under Audit") && (
+              <span className="bg-amber-500/95 text-white font-medium text-[10px] font-mono px-2 py-0.5 rounded-full flex items-center gap-1 backdrop-blur-sm shadow-xs animate-pulse">
+                <ShieldAlert size={11} /> Photo Audit Pending
+              </span>
+            )}
+            {a.approvalStatus === "REJECTED" && (
+              <span className="bg-red-600/95 text-white font-medium text-[10px] font-mono px-2 py-0.5 rounded-full flex items-center gap-1 backdrop-blur-sm shadow-xs">
+                <X size={11} /> Photos Rejected
+              </span>
+            )}
+            {a.approvalStatus === "APPROVED" && (
+              <span className="bg-emerald-600/95 text-white font-medium text-[10px] font-mono px-2 py-0.5 rounded-full flex items-center gap-1 backdrop-blur-sm shadow-xs">
+                <BadgeCheck size={11} /> Super Admin Certified
+              </span>
+            )}
             {isCooldown && (
               <span className="bg-amber-100/90 text-amber-900 border border-amber-300 text-[10px] font-mono px-2 py-0.5 rounded-full flex items-center gap-1 backdrop-blur-sm animate-pulse">
                 <Clock size={11} /> 90m Rest Active
@@ -952,24 +978,45 @@ function AnimalCard({
       </div>
 
       {/* Card Footer / Action */}
-      <div className="p-4 pt-0 flex items-center gap-2">
-        <button
-          onClick={() => onOpenDossier(a)}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-[12.5px] font-medium rounded-sm border border-line bg-card hover:bg-paper-deep text-ink transition-colors group-hover:border-saffron/40 cursor-pointer"
-        >
-          <span>View Profile & Welfare Dossier</span>
-          <ChevronRight size={14} className="text-ink-faint" />
-        </button>
-        {onEditCow && (
+      <div className="p-4 pt-0 space-y-2">
+        {isSuperAdmin && (a.approvalStatus === "PENDING_SUPER_ADMIN" || a.status === "Under Audit") && onReviewPhotos && (
           <button
-            onClick={() => onEditCow(a)}
-            className="p-2 text-[12.5px] font-medium rounded-sm border border-line bg-card hover:bg-paper-deep text-ink-soft hover:text-saffron-deep transition-colors cursor-pointer"
-            title={`Edit details for ${a.name}`}
-            aria-label={`Edit details for ${a.name}`}
+            onClick={() => onReviewPhotos(a)}
+            className="w-full flex items-center justify-center gap-1.5 py-2 px-3 text-[12px] font-semibold rounded-sm bg-saffron text-white hover:bg-saffron-deep transition-colors shadow-xs cursor-pointer"
           >
-            <Edit2 size={14} />
+            <ShieldCheck size={14} />
+            <span>Review Photos &amp; Authorize Herd</span>
           </button>
         )}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onOpenDossier(a)}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-[12px] font-medium rounded-sm border border-line bg-card hover:bg-paper-deep text-ink transition-colors group-hover:border-saffron/40 cursor-pointer"
+          >
+            <span>View Dossier</span>
+            <ChevronRight size={14} className="text-ink-faint" />
+          </button>
+          {onOpenSlots && (
+            <button
+              onClick={() => onOpenSlots(a)}
+              className="py-2 px-2.5 text-[12px] font-medium rounded-sm border border-line bg-card hover:bg-forest-soft hover:text-forest text-ink-soft transition-colors flex items-center gap-1 cursor-pointer"
+              title="Lock / Block Booking Slots for this cow"
+            >
+              <Clock size={13} className="text-forest" />
+              <span className="hidden sm:inline">Slots</span>
+            </button>
+          )}
+          {onEditCow && (
+            <button
+              onClick={() => onEditCow(a)}
+              className="p-2 text-[12.5px] font-medium rounded-sm border border-line bg-card hover:bg-paper-deep text-ink-soft hover:text-saffron-deep transition-colors cursor-pointer"
+              title={`Edit details for ${a.name}`}
+              aria-label={`Edit details for ${a.name}`}
+            >
+              <Edit2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
     </Panel>
   )
@@ -980,6 +1027,9 @@ export default function Animals() {
   const {
     animals,
     addAnimal,
+    verifyAnimal,
+    toggleSlotBlock,
+    checkAnimalAvailability,
     updateAnimal,
     updateAnimalStatus,
     updateAnimalWelfareConfig,
@@ -994,10 +1044,33 @@ export default function Animals() {
     setActiveGosalaFilter,
     currentRole,
     profiles,
+    authUser,
+    managers = [],
   } = useStore()
+
+  const myManagerRecord = managers.find(
+    (m) =>
+      m.id === authUser?.userId ||
+      m.email === authUser?.email ||
+      m.name.toLowerCase() === (authUser?.name || "").toLowerCase(),
+  )
+  const myAssignedGosalaNames = useMemo(() => {
+    if (currentRole !== "manager") return []
+    const set = new Set<string>()
+    if (activeManagerGosala) set.add(activeManagerGosala.toLowerCase())
+    if (myManagerRecord?.gosala) set.add(myManagerRecord.gosala.toLowerCase())
+    if (myManagerRecord?.gosalas) {
+      myManagerRecord.gosalas.forEach((g) => set.add(g.toLowerCase()))
+    }
+    if (profiles?.manager?.managerData?.gosala) {
+      set.add(profiles.manager.managerData.gosala.toLowerCase())
+    }
+    return Array.from(set)
+  }, [currentRole, activeManagerGosala, myManagerRecord, profiles?.manager])
 
   const assignedGosala =
     activeManagerGosala ||
+    myAssignedGosalaNames[0] ||
     (activeGosalaFilter && activeGosalaFilter !== "ALL"
       ? activeGosalaFilter
       : "") ||
@@ -1021,6 +1094,17 @@ export default function Animals() {
   const [activeTab, setActiveTab] =
     useState<"history" | "vet" | "diet" | "rules">("history")
   const [searchQuery, setSearchQuery] = useState("")
+
+  // Super Admin Photo Verification & Admission Desk States
+  const [reviewingAnimal, setReviewingAnimal] = useState<Animal | null>(null)
+  const [reviewActivePhotoIdx, setReviewActivePhotoIdx] = useState(0)
+  const [showRejectPrompt, setShowRejectPrompt] = useState(false)
+  const [rejectionReasonInput, setRejectionReasonInput] = useState("")
+  const [bovineAuditFilter, setBovineAuditFilter] = useState<"all" | "pending" | "verified">("all")
+
+  // Manager Booking Slots & Timing Lock States
+  const [slotLockAnimal, setSlotLockAnimal] = useState<Animal | null>(null)
+  const [slotLockDate, setSlotLockDate] = useState<string>(getTodayReference())
 
   // Empanelled Vet Form State & Modal
   const [showAddVetModal, setShowAddVetModal] = useState(false)
@@ -1661,11 +1745,14 @@ export default function Animals() {
   const filteredAnimals = useMemo(() => {
     let list = animals
     if (currentRole === "manager") {
-      list = list.filter(
-        (a) =>
-          String(a.gosala || "").toLowerCase() ===
-          String(assignedGosala || "").toLowerCase(),
-      )
+      list = list.filter((a) => {
+        const gName = String(a.gosala || "").toLowerCase()
+        return (
+          myAssignedGosalaNames.length === 0 ||
+          myAssignedGosalaNames.includes(gName) ||
+          gName === String(assignedGosala || "").toLowerCase()
+        )
+      })
     } else if (activeGosalaFilter && activeGosalaFilter !== "ALL") {
       list = list.filter(
         (a) =>
@@ -1673,17 +1760,76 @@ export default function Animals() {
           String(activeGosalaFilter || "").toLowerCase(),
       )
     }
-    const q = String(searchQuery || "").toLowerCase().trim()
+
+    if (currentRole === "super_admin") {
+      if (bovineAuditFilter === "pending") {
+        list = list.filter(
+          (a) =>
+            a.approvalStatus === "PENDING_SUPER_ADMIN" ||
+            a.status === "Under Audit",
+        )
+      } else if (bovineAuditFilter === "verified") {
+        list = list.filter(
+          (a) =>
+            a.approvalStatus === "APPROVED" ||
+            (!a.approvalStatus && a.status !== "Under Audit"),
+        )
+      }
+    }
+
+    const q = String(searchQuery || "")
+      .toLowerCase()
+      .trim()
     if (!q) return list
     return list.filter(
       (a) =>
-        String(a.name || "").toLowerCase().includes(q) ||
-        String(a.gosala || "").toLowerCase().includes(q) ||
-        String(a.type || "").toLowerCase().includes(q) ||
+        String(a.name || "")
+          .toLowerCase()
+          .includes(q) ||
+        String(a.gosala || "")
+          .toLowerCase()
+          .includes(q) ||
+        String(a.type || "")
+          .toLowerCase()
+          .includes(q) ||
         (a.breed && String(a.breed).toLowerCase().includes(q)) ||
-        (a.assignedHandler && String(a.assignedHandler).toLowerCase().includes(q)),
+        (a.assignedHandler &&
+          String(a.assignedHandler).toLowerCase().includes(q)),
     )
-  }, [animals, searchQuery, activeGosalaFilter, currentRole, assignedGosala])
+  }, [
+    animals,
+    searchQuery,
+    activeGosalaFilter,
+    currentRole,
+    assignedGosala,
+    myAssignedGosalaNames,
+    bovineAuditFilter,
+  ])
+
+  const pendingPhotoAuditCount = useMemo(() => {
+    return animals.filter(
+      (a) =>
+        a.approvalStatus === "PENDING_SUPER_ADMIN" || a.status === "Under Audit",
+    ).length
+  }, [animals])
+
+  const slotDateOptions = useMemo(() => {
+    const dates: { label: string; value: string }[] = []
+    const today = new Date()
+    for (let i = 0; i < 7; i++) {
+      const d = new Date()
+      d.setDate(today.getDate() + i)
+      const val = normalizeDateStr(d)
+      const label =
+        i === 0
+          ? `Today (${getDateChipLabel(val)})`
+          : i === 1
+            ? `Tomorrow (${getDateChipLabel(val)})`
+            : getDateChipLabel(val)
+      dates.push({ label, value: val })
+    }
+    return dates
+  }, [])
 
   // Filtered Empanelled Doctors (Strict Multi-tenant Isolation)
   const filteredVets = useMemo(() => {
@@ -1692,26 +1838,42 @@ export default function Animals() {
       if (currentRole === "manager") {
         const isAssigned = assigned.some(
           (g) =>
-            String(g || "").toLowerCase() === String(assignedGosala || "").toLowerCase() ||
+            String(g || "").toLowerCase() ===
+              String(assignedGosala || "").toLowerCase() ||
             String(g || "").toLowerCase() === "all gaushalas",
         )
         if (!isAssigned) return false
       } else if (activeGosalaFilter && activeGosalaFilter !== "ALL") {
         const isAssigned = assigned.some(
           (g) =>
-            String(g || "").toLowerCase() === String(activeGosalaFilter || "").toLowerCase() ||
+            String(g || "").toLowerCase() ===
+              String(activeGosalaFilter || "").toLowerCase() ||
             String(g || "").toLowerCase() === "all gaushalas",
         )
         if (!isAssigned) return false
       }
-      const q = String(searchQuery || "").trim().toLowerCase()
+      const q = String(searchQuery || "")
+        .trim()
+        .toLowerCase()
       if (!q) return true
       return (
-        String(v.name || "").toLowerCase().includes(q) ||
-        String(v.regNo || "").toLowerCase().includes(q) ||
-        String(v.clinic || "").toLowerCase().includes(q) ||
-        String(v.specialization || "").toLowerCase().includes(q) ||
-        assigned.some((g) => String(g || "").toLowerCase().includes(q))
+        String(v.name || "")
+          .toLowerCase()
+          .includes(q) ||
+        String(v.regNo || "")
+          .toLowerCase()
+          .includes(q) ||
+        String(v.clinic || "")
+          .toLowerCase()
+          .includes(q) ||
+        String(v.specialization || "")
+          .toLowerCase()
+          .includes(q) ||
+        assigned.some((g) =>
+          String(g || "")
+            .toLowerCase()
+            .includes(q),
+        )
       )
     })
   }, [vets, currentRole, assignedGosala, activeGosalaFilter, searchQuery])
@@ -1979,22 +2141,115 @@ export default function Animals() {
       {/* 3A. Sacred Herd Grid View */}
       {mainTab === "herd" && (
         <div className="space-y-4">
+          {/* Super Admin Bovine Photo Audit & Certification Desk Header */}
+          {currentRole === "super_admin" && (
+            <div className="bg-card border border-amber-400/40 rounded-lg p-4 space-y-3 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-amber-500/15 text-amber-600 flex items-center justify-center shrink-0 border border-amber-500/30">
+                    <ShieldAlert
+                      size={20}
+                      className={pendingPhotoAuditCount > 0 ? "animate-pulse" : ""}
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-serif text-[15px] font-bold text-ink">
+                        Super Admin Bovine Photo Audit &amp; Admission Desk
+                      </h3>
+                      {pendingPhotoAuditCount > 0 ? (
+                        <span className="font-mono text-[10px] bg-amber-500 text-white font-bold px-2 py-0.5 rounded-full animate-pulse flex items-center gap-1">
+                          <ShieldAlert size={10} />
+                          {pendingPhotoAuditCount} Awaiting Verification
+                        </span>
+                      ) : (
+                        <span className="font-mono text-[10px] bg-emerald-600 text-white font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <BadgeCheck size={10} />
+                          All Cattle Certified
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[12px] text-ink-soft mt-0.5">
+                      Strict Multi-Tier Verification: New cattle registered by managers or regional ops admins require Super Admin photographic inspection and sign-off before becoming visible or bookable by devotees.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Filter Chips */}
+                <div className="flex items-center gap-1.5 shrink-0 bg-paper-deep p-1 rounded-md border border-line">
+                  <button
+                    type="button"
+                    onClick={() => setBovineAuditFilter("all")}
+                    className={`px-3 py-1 rounded text-[11px] font-medium transition cursor-pointer ${
+                      bovineAuditFilter === "all"
+                        ? "bg-forest text-white font-semibold shadow-xs"
+                        : "text-ink-soft hover:text-ink hover:bg-card"
+                    }`}
+                  >
+                    All Herd ({animals.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBovineAuditFilter("pending")}
+                    className={`px-3 py-1 rounded text-[11px] font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                      bovineAuditFilter === "pending"
+                        ? "bg-amber-500 text-white font-bold shadow-xs"
+                        : "text-amber-700 hover:text-amber-900 hover:bg-amber-100/50"
+                    }`}
+                  >
+                    <ShieldAlert size={12} />
+                    <span>Pending Photo Audit ({pendingPhotoAuditCount})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBovineAuditFilter("verified")}
+                    className={`px-3 py-1 rounded text-[11px] font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                      bovineAuditFilter === "verified"
+                        ? "bg-emerald-600 text-white font-bold shadow-xs"
+                        : "text-emerald-700 hover:text-emerald-900 hover:bg-emerald-100/50"
+                    }`}
+                  >
+                    <BadgeCheck size={12} />
+                    <span>
+                      Certified (
+                      {animals.filter((a) => a.approvalStatus === "APPROVED").length}
+                      )
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {filteredAnimals.length === 0 ? (
             <Panel className="p-8 text-center bg-card">
               <div className="w-12 h-12 rounded-full bg-forest-soft/30 text-forest mx-auto flex items-center justify-center mb-3">
                 <Building2 size={24} />
               </div>
               <h3 className="font-serif text-[16px] text-ink font-semibold">
-                No Resident Cattle Found
+                {bovineAuditFilter === "pending"
+                  ? "No Cattle Awaiting Photo Audit"
+                  : "No Resident Cattle Found"}
               </h3>
               <p className="text-[12.5px] text-ink-faint mt-1 max-w-sm mx-auto">
-                {currentRole === "manager"
-                  ? `No cattle currently found under "${assignedGosala}". You can register new cattle directly to this shelter.`
-                  : activeGosalaFilter !== "ALL"
-                    ? `No cattle currently housed under "${activeGosalaFilter}". You can register new cattle directly to this shelter.`
-                    : "No animals matched your search criteria."}
+                {bovineAuditFilter === "pending"
+                  ? "All cattle registered across gaushalas have been photo-inspected and certified by Super Admin."
+                  : currentRole === "manager"
+                    ? `No cattle currently found under "${assignedGosala}". You can register new cattle directly to this shelter.`
+                    : activeGosalaFilter !== "ALL"
+                      ? `No cattle currently housed under "${activeGosalaFilter}". You can register new cattle directly to this shelter.`
+                      : "No animals matched your search criteria."}
               </p>
               <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
+                {bovineAuditFilter !== "all" && (
+                  <button
+                    type="button"
+                    onClick={() => setBovineAuditFilter("all")}
+                    className="px-3 py-1.5 rounded border border-line bg-card text-ink text-[12px] hover:bg-paper-deep transition-colors cursor-pointer"
+                  >
+                    View All Cattle
+                  </button>
+                )}
                 {(currentRole === "manager" ||
                   activeGosalaFilter !== "ALL") && (
                   <button
@@ -2052,6 +2307,17 @@ export default function Animals() {
                     a={a}
                     onOpenDossier={openDossier}
                     onEditCow={handleOpenEditCow}
+                    onOpenSlots={(cow) => {
+                      setSlotLockAnimal(cow)
+                      setSlotLockDate(getTodayReference())
+                    }}
+                    onReviewPhotos={(cow) => {
+                      setReviewingAnimal(cow)
+                      setReviewActivePhotoIdx(0)
+                      setShowRejectPrompt(false)
+                      setRejectionReasonInput("")
+                    }}
+                    isSuperAdmin={currentRole === "super_admin"}
                     recentTripsCount={tripCount}
                     shelter={shelter}
                   />
@@ -4865,6 +5131,552 @@ export default function Animals() {
                 </>
               )}
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Super Admin Bovine Photo Audit & Admission Modal */}
+      {reviewingAnimal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-ink/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="bg-paper border border-line rounded-lg shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto my-auto">
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-line flex items-start justify-between gap-3 bg-card sticky top-0 z-10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-full bg-amber-500/15 text-amber-600 flex items-center justify-center shrink-0 border border-amber-500/30">
+                  <ShieldAlert size={18} />
+                </div>
+                <div>
+                  <h3 className="font-serif text-[17px] font-bold text-ink leading-tight">
+                    Super Admin Photo Verification &amp; Admission Desk
+                  </h3>
+                  <p className="text-[12px] text-ink-faint">
+                    Candidate:{" "}
+                    <span className="font-semibold text-ink">
+                      {reviewingAnimal.name}
+                    </span>{" "}
+                    ({reviewingAnimal.breed || reviewingAnimal.type}) ·{" "}
+                    {reviewingAnimal.gosala}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setReviewingAnimal(null)
+                  setShowRejectPrompt(false)
+                  setRejectionReasonInput("")
+                }}
+                className="p-1.5 text-ink-faint hover:text-ink rounded hover:bg-paper transition-colors cursor-pointer"
+                aria-label="Close photo audit modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-5 space-y-4">
+              {/* Photo Viewer & Carousel */}
+              {(() => {
+                const photos =
+                  reviewingAnimal.photos && reviewingAnimal.photos.length > 0
+                    ? reviewingAnimal.photos
+                    : [reviewingAnimal.photo]
+                const currentPhoto =
+                  photos[reviewActivePhotoIdx] || reviewingAnimal.photo
+
+                return (
+                  <div className="space-y-2.5">
+                    <div className="relative h-64 sm:h-80 bg-paper-deep rounded-lg overflow-hidden border border-line flex items-center justify-center group">
+                      <img
+                        src={currentPhoto}
+                        alt={`${reviewingAnimal.name} photo ${reviewActivePhotoIdx + 1}`}
+                        className="w-full h-full object-contain bg-black/5"
+                      />
+                      <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+                        <span className="bg-black/70 backdrop-blur-md text-white text-[11px] font-mono px-2.5 py-0.5 rounded-full shadow-xs flex items-center gap-1">
+                          <Camera size={12} />
+                          Photo {reviewActivePhotoIdx + 1} of {photos.length}
+                        </span>
+                        {reviewingAnimal.tagId && (
+                          <span className="bg-forest/90 backdrop-blur-md text-white text-[11px] font-mono px-2 py-0.5 rounded-full shadow-xs">
+                            Tag: {reviewingAnimal.tagId}
+                          </span>
+                        )}
+                      </div>
+                      <a
+                        href={currentPhoto}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="absolute bottom-2.5 right-2.5 bg-black/70 hover:bg-black/90 backdrop-blur-md text-white text-[11px] px-2 py-1 rounded flex items-center gap-1 transition-colors"
+                      >
+                        <ExternalLink size={12} />
+                        <span>Inspect Full Resolution</span>
+                      </a>
+                    </div>
+
+                    {/* Thumbnail Selector */}
+                    {photos.length > 1 && (
+                      <div className="flex items-center gap-2 overflow-x-auto py-1">
+                        {photos.map((p, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setReviewActivePhotoIdx(idx)}
+                            className={`w-14 h-14 rounded-md overflow-hidden border-2 shrink-0 transition cursor-pointer ${
+                              reviewActivePhotoIdx === idx
+                                ? "border-saffron ring-2 ring-saffron/20 scale-105"
+                                : "border-line opacity-70 hover:opacity-100"
+                            }`}
+                          >
+                            <img
+                              src={p}
+                              alt={`Thumbnail ${idx + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* Candidate Bovine Profile & Custodian Submission Details */}
+              <div className="bg-card border border-line rounded-lg p-3.5 space-y-2.5 text-[12px]">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                  <div className="bg-paper-deep/70 p-2 rounded border border-line/60">
+                    <div className="text-[10px] uppercase font-mono text-ink-faint">
+                      Breed
+                    </div>
+                    <div className="font-semibold text-ink mt-0.5">
+                      {reviewingAnimal.breed || reviewingAnimal.type}
+                    </div>
+                  </div>
+                  <div className="bg-paper-deep/70 p-2 rounded border border-line/60">
+                    <div className="text-[10px] uppercase font-mono text-ink-faint">
+                      Age &amp; Weight
+                    </div>
+                    <div className="font-semibold text-ink mt-0.5">
+                      {reviewingAnimal.age} · {reviewingAnimal.weight}
+                    </div>
+                  </div>
+                  <div className="bg-paper-deep/70 p-2 rounded border border-line/60">
+                    <div className="text-[10px] uppercase font-mono text-ink-faint">
+                      Submitting Officer
+                    </div>
+                    <div className="font-semibold text-ink mt-0.5 truncate">
+                      {reviewingAnimal.submittedByName || "Gaushala Custodian"}
+                    </div>
+                  </div>
+                  <div className="bg-paper-deep/70 p-2 rounded border border-line/60">
+                    <div className="text-[10px] uppercase font-mono text-ink-faint">
+                      Authority Role
+                    </div>
+                    <div className="font-semibold text-forest mt-0.5 uppercase text-[11px] font-mono">
+                      {reviewingAnimal.submittedByRole || "manager"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-line/60 space-y-1.5 text-ink-soft">
+                  <div className="flex items-start gap-2">
+                    <span className="font-semibold text-ink shrink-0">
+                      Gaushala Shelter:
+                    </span>
+                    <span>{reviewingAnimal.gosala}</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="font-semibold text-ink shrink-0">
+                      Gosevak Caretaker:
+                    </span>
+                    <span>
+                      {reviewingAnimal.assignedHandler || "Gaushala Sevak"}
+                    </span>
+                  </div>
+                  {reviewingAnimal.healthNotes && (
+                    <div className="flex items-start gap-2">
+                      <span className="font-semibold text-ink shrink-0">
+                        Health &amp; Demeanor:
+                      </span>
+                      <span>{reviewingAnimal.healthNotes}</span>
+                    </div>
+                  )}
+                  {reviewingAnimal.ceremonialPurposes && (
+                    <div className="flex items-start gap-2">
+                      <span className="font-semibold text-ink shrink-0">
+                        Ceremonial Suitability:
+                      </span>
+                      <span>
+                        {reviewingAnimal.ceremonialPurposes.join(", ")}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Rejection Input Drawer if triggered */}
+              {showRejectPrompt ? (
+                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg space-y-3 animate-fade-in">
+                  <div className="flex items-center gap-2 text-red-700 font-semibold text-[13px]">
+                    <AlertTriangle size={16} />
+                    <span>Provide Reason for Photo Evidence Rejection</span>
+                  </div>
+                  <p className="text-[11.5px] text-ink-soft">
+                    Select a reason or write feedback for the manager. The cow will remain locked until compliant photos are provided.
+                  </p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[
+                      "Blurry / low-resolution photo evidence",
+                      "Incorrect breed physical markings",
+                      "Exhaustion / not fit for sacred puja",
+                      "Missing RFID tag / identity proof",
+                    ].map((reason) => (
+                      <button
+                        key={reason}
+                        type="button"
+                        onClick={() => setRejectionReasonInput(reason)}
+                        className="text-[11px] px-2.5 py-1 rounded bg-card border border-red-200 text-ink-soft hover:bg-red-50 transition cursor-pointer"
+                      >
+                        {reason}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={rejectionReasonInput}
+                    onChange={(e) => setRejectionReasonInput(e.target.value)}
+                    placeholder="Enter explicit feedback for the gaushala manager..."
+                    className="w-full bg-card border border-red-300 rounded p-2 text-[12px] text-ink focus:outline-none focus:border-red-500"
+                  />
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowRejectPrompt(false)}
+                      className="px-3 py-1.5 rounded border border-line bg-card text-ink text-[12px] hover:bg-paper-deep cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const reason =
+                          rejectionReasonInput.trim() ||
+                          "Photo evidence does not meet Super Admin standards"
+                        await verifyAnimal(reviewingAnimal.name, false, reason)
+                        notify({
+                          title: "Bovine Photo Audit Rejected",
+                          description: `${reviewingAnimal.name} marked as rejected (${reason}). Manager notified.`,
+                          tone: "alert",
+                        })
+                        setReviewingAnimal(null)
+                        setShowRejectPrompt(false)
+                        setRejectionReasonInput("")
+                      }}
+                      className="px-4 py-1.5 rounded bg-red-600 hover:bg-red-700 text-white font-medium text-[12px] shadow-xs cursor-pointer flex items-center gap-1"
+                    >
+                      <X size={14} />
+                      <span>Confirm Rejection</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-forest-soft/60 border border-forest/20 rounded-lg flex items-center gap-2.5 text-[12px] text-forest">
+                  <ShieldCheck size={18} className="shrink-0" />
+                  <span>
+                    Super Admin Sign-off: Approving will immediately admit {reviewingAnimal.name} into the active Gaushala herd, making her visible and bookable for devotees across the platform.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Footer Actions */}
+            {!showRejectPrompt && (
+              <div className="p-4 sm:p-5 border-t border-line bg-card flex flex-col sm:flex-row items-center justify-between gap-2.5 sticky bottom-0">
+                <button
+                  type="button"
+                  onClick={() => setShowRejectPrompt(true)}
+                  className="w-full sm:w-auto px-4 py-2 text-[12px] font-medium border border-red-300 text-red-600 hover:bg-red-50 rounded transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <X size={14} />
+                  <span>Reject Photo Evidence</span>
+                </button>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReviewingAnimal(null)
+                      setShowRejectPrompt(false)
+                      setRejectionReasonInput("")
+                    }}
+                    className="flex-1 sm:flex-none px-4 py-2 text-[12px] border border-line rounded text-ink-soft hover:bg-paper-deep cursor-pointer"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await verifyAnimal(reviewingAnimal.name, true)
+                      notify({
+                        title: "Bovine Certified & Admitted",
+                        description: `${reviewingAnimal.name} certified by Super Admin! Cattle is now active for devotee bookings.`,
+                        tone: "ok",
+                      })
+                      setReviewingAnimal(null)
+                    }}
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-5 py-2 text-[12.5px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors shadow-xs cursor-pointer"
+                  >
+                    <BadgeCheck size={16} />
+                    <span>Approve &amp; Authorize Herd</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 5. Manager Booking Timing & Slot Lockdown Modal */}
+      {slotLockAnimal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-ink/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="bg-paper border border-line rounded-lg shadow-2xl w-full max-w-xl max-h-[92vh] overflow-y-auto my-auto">
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-line flex items-start justify-between gap-3 bg-card sticky top-0 z-10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-full bg-forest-soft text-forest flex items-center justify-center shrink-0 border border-forest/20">
+                  <CalendarRange size={18} />
+                </div>
+                <div>
+                  <h3 className="font-serif text-[17px] font-bold text-ink leading-tight">
+                    Manage Booking Timing &amp; Slots: {slotLockAnimal.name}
+                  </h3>
+                  <p className="text-[12px] text-ink-faint">
+                    {slotLockAnimal.gosala} · Max {slotLockAnimal.maxDailyTrips || 2} sevas/day
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSlotLockAnimal(null)}
+                className="p-1.5 text-ink-faint hover:text-ink rounded hover:bg-paper transition-colors cursor-pointer"
+                aria-label="Close timing lockdown modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-5 space-y-4">
+              {/* Date Selection Strip */}
+              <div>
+                <label className="block text-[11px] font-mono uppercase tracking-wider text-ink-faint mb-1.5">
+                  Select Date for Timing Control
+                </label>
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                  {slotDateOptions.map((opt) => {
+                    const isSelected = slotLockDate === opt.value
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setSlotLockDate(opt.value)}
+                        className={`px-3 py-1.5 rounded-full text-[11.5px] font-medium whitespace-nowrap transition cursor-pointer ${
+                          isSelected
+                            ? "bg-forest text-white font-semibold shadow-xs"
+                            : "bg-card border border-line text-ink-soft hover:text-ink hover:bg-paper"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Bulk Quick Actions */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 p-3 bg-paper-deep/70 rounded-md border border-line">
+                <div className="text-[11.5px] text-ink-soft">
+                  <span className="font-semibold text-ink">Date Active:</span>{" "}
+                  {slotLockDate}
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      slots.forEach((s) => {
+                        const check = checkAnimalAvailability(
+                          slotLockAnimal.name,
+                          slotLockDate,
+                          s,
+                          60,
+                        )
+                        if (check.status === "Available") {
+                          toggleSlotBlock(slotLockAnimal.name, slotLockDate, s)
+                        }
+                      })
+                      notify({
+                        title: "Slots Blocked",
+                        description: `All open slots for ${slotLockAnimal.name} on ${slotLockDate} locked for rest / custody.`,
+                        tone: "info",
+                      })
+                    }}
+                    className="flex-1 sm:flex-none text-[11px] px-2.5 py-1.5 rounded bg-amber-500/10 border border-amber-400 text-amber-800 font-medium hover:bg-amber-500/20 transition cursor-pointer flex items-center justify-center gap-1"
+                  >
+                    <Lock size={12} />
+                    <span>Lock All Slots</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      slots.forEach((s) => {
+                        const check = checkAnimalAvailability(
+                          slotLockAnimal.name,
+                          slotLockDate,
+                          s,
+                          60,
+                        )
+                        if (check.status === "Blocked") {
+                          toggleSlotBlock(slotLockAnimal.name, slotLockDate, s)
+                        }
+                      })
+                      notify({
+                        title: "Slots Reopened",
+                        description: `All blocked slots for ${slotLockAnimal.name} on ${slotLockDate} reopened for devotees.`,
+                        tone: "ok",
+                      })
+                    }}
+                    className="flex-1 sm:flex-none text-[11px] px-2.5 py-1.5 rounded bg-emerald-500/10 border border-emerald-400 text-emerald-800 font-medium hover:bg-emerald-500/20 transition cursor-pointer flex items-center justify-center gap-1"
+                  >
+                    <Unlock size={12} />
+                    <span>Unlock All</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Slots Grid */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] text-ink-faint">
+                  <span>Daily Puja Muhurat Slots:</span>
+                  <span>Tap slot to toggle block / unblock</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {slots.map((s) => {
+                    const check = checkAnimalAvailability(
+                      slotLockAnimal.name,
+                      slotLockDate,
+                      s,
+                      60,
+                    )
+                    const isAvailable = check.status === "Available"
+                    const isBlocked = check.status === "Blocked"
+                    const isBooked = check.status === "Booked"
+                    const isBuffer = check.status === "Buffer"
+
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        disabled={isBooked || isBuffer}
+                        onClick={() => {
+                          if (isAvailable || isBlocked) {
+                            toggleSlotBlock(
+                              slotLockAnimal.name,
+                              slotLockDate,
+                              s,
+                            )
+                            notify({
+                              title: isAvailable
+                                ? "Slot Blocked"
+                                : "Slot Reopened",
+                              description: isAvailable
+                                ? `Muhurat ${s} on ${slotLockDate} blocked for ${slotLockAnimal.name}.`
+                                : `Muhurat ${s} on ${slotLockDate} reopened for devotee booking.`,
+                              tone: isAvailable ? "info" : "ok",
+                            })
+                          }
+                        }}
+                        className={`p-2.5 rounded-md border text-left flex items-center justify-between gap-2 transition cursor-pointer ${
+                          isAvailable
+                            ? "bg-emerald-50/60 border-emerald-300 hover:bg-emerald-100/60 text-emerald-950"
+                            : isBlocked
+                              ? "bg-amber-50/70 border-amber-400 hover:bg-amber-100/70 text-amber-950"
+                              : isBooked
+                                ? "bg-blue-50/60 border-blue-300 text-blue-950 opacity-90 cursor-not-allowed"
+                                : "bg-orange-50/60 border-orange-300 text-orange-950 opacity-90 cursor-not-allowed"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[13px] font-bold">
+                            {s}
+                          </span>
+                          <span className="text-[11px] font-medium">
+                            {isAvailable && "Available"}
+                            {isBlocked && "Blocked by Custodian"}
+                            {isBooked && "Booked (Devotee Seva)"}
+                            {isBuffer && "Rest Buffer (90m)"}
+                          </span>
+                        </div>
+                        <div className="shrink-0">
+                          {isAvailable && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-200/70 text-emerald-800 flex items-center gap-1">
+                              <Unlock size={10} /> Block
+                            </span>
+                          )}
+                          {isBlocked && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-200/80 text-amber-900 font-semibold flex items-center gap-1">
+                              <Lock size={10} /> Unblock
+                            </span>
+                          )}
+                          {isBooked && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-200/70 text-blue-800 flex items-center gap-1">
+                              <CheckCircle2 size={10} /> Locked
+                            </span>
+                          )}
+                          {isBuffer && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-orange-200/70 text-orange-800 flex items-center gap-1">
+                              <Clock size={10} /> Buffer
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Status Legend */}
+              <div className="p-3 bg-paper-deep/60 rounded-md border border-line text-[11px] text-ink-soft space-y-1">
+                <div className="font-semibold text-ink">Availability Key:</div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    <span>Available</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                    <span>Blocked (Locked)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                    <span>Confirmed Seva</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-orange-500" />
+                    <span>90m Rest Buffer</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 sm:p-5 border-t border-line bg-card flex items-center justify-end sticky bottom-0">
+              <button
+                type="button"
+                onClick={() => setSlotLockAnimal(null)}
+                className="px-5 py-2 text-[12.5px] font-medium bg-forest hover:bg-forest/90 text-white rounded transition shadow-xs cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}

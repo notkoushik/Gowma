@@ -22,6 +22,10 @@ import {
   Minimize2,
   Store,
   Percent,
+  Globe,
+  MapPin,
+  UserCheck,
+  ArrowRightLeft,
 } from "lucide-react"
 import Overview from "./views/Overview"
 import Bookings from "./views/Bookings"
@@ -29,6 +33,7 @@ import Availability from "./views/Availability"
 import Pricing from "./views/Pricing"
 import Settlements from "./views/Settlements"
 import GosalaManagers from "./views/GosalaManagers"
+import RegionalGovernance from "./views/admin/RegionalGovernance"
 import LiveTracking from "./views/manager/LiveTracking"
 import Gaushalas from "./views/manager/Gaushalas"
 import Animals from "./views/manager/Animals"
@@ -46,7 +51,7 @@ import { useRealtime } from "./hooks/useRealtime"
 import type { RoleId } from "./data/roles"
 import { api } from "./services/api"
 
-type View = "overview" | "gosalas" | "managers" | "bookings" | "tracking" | "animals" | "ledger" | "availability" | "pricing" | "settlements" | "wallet"
+type View = "overview" | "gosalas" | "managers" | "bookings" | "tracking" | "animals" | "ledger" | "availability" | "pricing" | "settlements" | "wallet" | "regions"
 
 const titles: Record<View, { title: string desc: string }> = {
   overview: {
@@ -93,6 +98,10 @@ const titles: Record<View, { title: string desc: string }> = {
     title: "Gosala Settlements & Disbursements",
     desc: "Super Admin treasury: payout batches, platform commission & Gosala disbursements",
   },
+  regions: {
+    title: "Regional Operations & Admin Governance",
+    desc: "Manage Indian regions, appoint regional admins, active/deactivate custodians, and execute audited data migration",
+  },
 }
 
 const VALID_ROLES: RoleId[] = [
@@ -114,6 +123,7 @@ const VALID_ADMIN_VIEWS: View[] = [
   "availability",
   "pricing",
   "settlements",
+  "regions",
 ]
 
 function parseHash(): {
@@ -128,7 +138,8 @@ function parseHash(): {
   const r = parts[0]
   // A bare "#admin" is the admin login. "#admin/<view>" belongs to the Operations Admin
   // workspace, so it must not be treated as a logout.
-  if (r === "login" || r === "admin-login" || (r === "admin" && !parts[1])) return { role: null }
+  if (r === "login" || r === "admin-login" || (r === "admin" && !parts[1]))
+    return { role: null }
   if (VALID_ROLES.includes(r as RoleId)) {
     return { role: r as RoleId, subview: parts[1], sector: parts[2] }
   }
@@ -262,12 +273,17 @@ export default function App() {
     markNotificationRead,
     markAllNotificationsRead,
     clearNotifications,
+    regions,
+    operationalAdmins,
   } = useStore()
   const [auth, setAuth] = useState<RoleId | null>(getInitialAuth)
   const [view, setView] = useState<View>(getInitialAdminView)
   const [pricingSector, setPricingSector] =
     useState<"global" | "gosalas" | "commissions">(getInitialPricingSector)
   const [isPricingMenuOpen, setIsPricingMenuOpen] = useState(true)
+  const [isRegionsMenuOpen, setIsRegionsMenuOpen] = useState(true)
+  const [regionalSector, setRegionalSector] =
+    useState<"all" | "free" | "regions" | "migrations">("all")
   const [isMaximized, setIsMaximized] = useState(false)
   const [editAdminProfileOpen, setEditAdminProfileOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
@@ -416,7 +432,10 @@ export default function App() {
     try {
       localStorage.setItem("gomaa_auth_role", "login")
       if (wasAdmin) {
-        if (typeof window !== "undefined" && window.location.pathname.startsWith("/admin")) {
+        if (
+          typeof window !== "undefined" &&
+          window.location.pathname.startsWith("/admin")
+        ) {
           window.location.reload()
         } else {
           window.location.href = "/admin"
@@ -667,6 +686,12 @@ export default function App() {
       icon: Users,
       badge: `${managers.length}`,
     },
+    {
+      id: "regions",
+      label: "Regional Governance",
+      icon: Globe,
+      badge: `${regions.length}`,
+    },
     // Live tracking is intentionally excluded from the Super Admin shell.
   ]
 
@@ -902,6 +927,146 @@ export default function App() {
                           />
                           <span className="truncate">
                             Commission &amp; Economics
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+
+              if (n.id === "regions") {
+                const isOpen = isRegionsMenuOpen
+                return (
+                  <div key={n.id} className="space-y-1">
+                    <div
+                      className={`w-full flex items-center justify-between rounded-sm text-[13.5px] transition-colors ${
+                        active
+                          ? "bg-saffron-soft text-saffron-deep font-medium"
+                          : "text-ink-soft hover:bg-paper-deep hover:text-ink"
+                      }`}
+                    >
+                      <button
+                        onClick={() => {
+                          if (view !== "regions") {
+                            handleSetAdminView("regions")
+                            setIsRegionsMenuOpen(true)
+                          } else {
+                            setIsRegionsMenuOpen((prev) => !prev)
+                          }
+                        }}
+                        className="flex-1 flex items-center gap-3 px-3 py-2.5 text-left cursor-pointer min-w-0"
+                      >
+                        <n.icon
+                          size={17}
+                          className={active ? "text-saffron" : "text-ink-faint"}
+                        />
+                        <span className="truncate">{n.label}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setIsRegionsMenuOpen((prev) => !prev)
+                        }}
+                        className="p-2 mr-1 text-ink-faint hover:text-amber-700 hover:bg-amber-100/50 rounded-xs transition cursor-pointer"
+                        title={
+                          isOpen
+                            ? "Collapse regional sub-sectors"
+                            : "Expand regional sub-sectors"
+                        }
+                        aria-label={
+                          isOpen
+                            ? "Collapse regional sub-sectors"
+                            : "Expand regional sub-sectors"
+                        }
+                      >
+                        <ChevronRight
+                          size={13}
+                          className={`transition-transform duration-200 ${
+                            isOpen ? "rotate-90 text-amber-600" : ""
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {/* Integrated Sub-Menu for Regional Governance */}
+                    {isOpen && (
+                      <div className="pl-3 pr-1 py-1 space-y-1 border-l-2 border-amber-400/80 ml-4 animate-in fade-in duration-150">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setRegionalSector("all")
+                            handleSetAdminView("regions")
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-sm text-[12px] transition flex items-center gap-2 cursor-pointer ${
+                            active && regionalSector === "all"
+                              ? "bg-amber-100 text-amber-950 font-semibold border border-amber-300 shadow-2xs"
+                              : "text-ink-soft hover:bg-paper-deep hover:text-ink"
+                          }`}
+                        >
+                          <Users size={13} className="text-forest shrink-0" />
+                          <span className="truncate">All Regional Admins</span>
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setRegionalSector("free")
+                            handleSetAdminView("regions")
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-sm text-[12px] transition flex items-center gap-2 cursor-pointer ${
+                            active && regionalSector === "free"
+                              ? "bg-amber-100 text-amber-950 font-semibold border border-amber-300 shadow-2xs"
+                              : "text-ink-soft hover:bg-paper-deep hover:text-ink"
+                          }`}
+                        >
+                          <UserCheck
+                            size={13}
+                            className="text-amber-600 shrink-0"
+                          />
+                          <span className="truncate">Free Admins Pool</span>
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setRegionalSector("regions")
+                            handleSetAdminView("regions")
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-sm text-[12px] transition flex items-center gap-2 cursor-pointer ${
+                            active && regionalSector === "regions"
+                              ? "bg-amber-100 text-amber-950 font-semibold border border-amber-300 shadow-2xs"
+                              : "text-ink-soft hover:bg-paper-deep hover:text-ink"
+                          }`}
+                        >
+                          <MapPin
+                            size={13}
+                            className="text-saffron-deep shrink-0"
+                          />
+                          <span className="truncate">
+                            Operational Regions &amp; Hubs
+                          </span>
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setRegionalSector("migrations")
+                            handleSetAdminView("regions")
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-sm text-[12px] transition flex items-center gap-2 cursor-pointer ${
+                            active && regionalSector === "migrations"
+                              ? "bg-amber-100 text-amber-950 font-semibold border border-amber-300 shadow-2xs"
+                              : "text-ink-soft hover:bg-paper-deep hover:text-ink"
+                          }`}
+                        >
+                          <ArrowRightLeft
+                            size={13}
+                            className="text-indigo-600 shrink-0"
+                          />
+                          <span className="truncate">
+                            Data Migration &amp; Audit
                           </span>
                         </button>
                       </div>
@@ -1320,6 +1485,9 @@ export default function App() {
                 onSwitchToCaptain={() => handleSetAuth("super_admin")}
               />
             ))}
+          {view === "regions" && (
+            <RegionalGovernance initialSector={regionalSector} />
+          )}
         </main>
       </div>
 

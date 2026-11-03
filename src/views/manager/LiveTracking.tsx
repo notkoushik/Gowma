@@ -335,10 +335,11 @@ export default function LiveTracking() {
     }
     setIsAdvancing(true)
     try {
+      await api.handoverBovine(matchedBooking.id).catch(() => {})
       await api.setTripStage(matchedBooking.id, 4) // Step 4: Travelling to Devotee
       updateAnimalStatus(selectedAnimal.name, "In Transit")
       notify(
-        `Trip Started: ${selectedAnimal.name} is now travelling on vehicle with padded ramp. Live GPS map active!`,
+        `Trip Started: ${selectedAnimal.name} is safely boarded and now travelling on vehicle with padded ramp. Live GPS map active!`,
         "ok",
       )
     } catch (e: any) {

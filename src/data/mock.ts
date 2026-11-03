@@ -70,6 +70,17 @@ export type Booking = {
   handoverOtpVerified?: boolean
   handoverOtpVerifiedAt?: string | null
 
+  // Geolocation & Map Precision
+  customerLat?: number | null
+  customerLng?: number | null
+
+  // Sacred Offerings & Add-ons Itemized Breakdown
+  selectedAddons?: Array<{ id: string; name: string; qty: number; price: number; total: number }>
+
+  // Gaushala Manager Bovine Dispatch & Driver Handover Check
+  bovineHandedOver?: boolean
+  bovineHandedOverAt?: string | null
+
   // Rich Swiggy/Uber Driver Profile & Cattle Ambulance Specs
   driverPhone?: string | null
   driverVehiclePlate?: string | null

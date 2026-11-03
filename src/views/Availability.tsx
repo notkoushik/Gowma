@@ -75,10 +75,33 @@ export default function Availability() {
     currentRole,
     activeGosalaFilter,
     activeManagerGosala,
+    authUser,
+    managers = [],
   } = useStore()
+
+  const myManagerRecord = managers.find(
+    (m) =>
+      m.id === authUser?.userId ||
+      m.email === authUser?.email ||
+      m.name.toLowerCase() === (authUser?.name || "").toLowerCase(),
+  )
+  const myAssignedGosalas = useMemo(() => {
+    if (currentRole !== "manager") return []
+    const set = new Set<string>()
+    if (activeManagerGosala) set.add(activeManagerGosala.toLowerCase())
+    if (myManagerRecord?.gosala) set.add(myManagerRecord.gosala.toLowerCase())
+    if (myManagerRecord?.gosalas) {
+      myManagerRecord.gosalas.forEach((g) => set.add(g.toLowerCase()))
+    }
+    if (profiles?.manager?.managerData?.gosala) {
+      set.add(profiles.manager.managerData.gosala.toLowerCase())
+    }
+    return Array.from(set)
+  }, [currentRole, activeManagerGosala, myManagerRecord, profiles?.manager])
 
   const assignedGosala =
     activeManagerGosala ||
+    myAssignedGosalas[0] ||
     (activeGosalaFilter && activeGosalaFilter !== "ALL"
       ? activeGosalaFilter
       : "") ||
@@ -162,7 +185,9 @@ export default function Availability() {
 
       const matchesGosala =
         currentRole === "manager"
-          ? a.gosala.toLowerCase() === assignedGosala.toLowerCase()
+          ? myAssignedGosalas.length === 0 ||
+            myAssignedGosalas.includes(a.gosala.toLowerCase()) ||
+            a.gosala.toLowerCase() === assignedGosala.toLowerCase()
           : selectedGosala === "ALL" ||
             a.gosala.toLowerCase() === selectedGosala.toLowerCase()
 
@@ -182,6 +207,7 @@ export default function Availability() {
     searchQuery,
     currentRole,
     assignedGosala,
+    myAssignedGosalas,
   ])
 
   // 3. Grid Metrics for Selected Date

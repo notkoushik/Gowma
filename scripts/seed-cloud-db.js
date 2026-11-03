@@ -11,23 +11,79 @@ function hashPassword(password) {
 
 async function seed() {
   try {
+    // 0. Safely neutralize conflicting uniqueId assignments on cloud DB
+    try {
+      const staleEmails = [
+        "alt.yq-fs88dj2@yopmail.com",
+        "raju@gmail.com",
+        "operations@gomaa.in",
+      ]
+      await prisma.user.updateMany({
+        where: { email: { in: staleEmails, mode: "insensitive" } },
+        data: { uniqueId: null, isActive: false },
+      })
+    } catch (e) {
+      console.warn("[Seed] Neutralize stale notice:", e.message)
+    }
+
+    try {
+      const targetUniqueIds = [
+        "GMA-SA-0001",
+        "GMA-OPS-0101",
+        "GMA-OPS-0102",
+        "GMA-MGR-0101",
+        "GMA-MGR-0201",
+        "GMA-MGR-0301",
+        "GMA-DEV-0223",
+        "GMA-DRV-3001",
+      ]
+      await prisma.user.updateMany({
+        where: {
+          uniqueId: { in: targetUniqueIds },
+          email: {
+            notIn: [
+              "superadmin@gomaa.in",
+              "admin@gomaa.in",
+              "ops.secunderabad@gomaa.in",
+              "manager1@gomaa.in",
+              "manager2@gomaa.in",
+              "manager3@gomaa.in",
+              "devpulseorg@gmail.com",
+              "driver@gomaa.in",
+            ],
+          },
+        },
+        data: { uniqueId: null },
+      })
+    } catch (e) {
+      console.warn("[Seed] Target uniqueId unbinding notice:", e.message)
+    }
+
     const superAdmins = [
       {
         id: "USER-SA-SUPERADMIN",
         uniqueId: "GMA-SA-0001",
-        name: "Super Admin",
+        name: "Acharya Vishwanath Sharma",
         email: "superadmin@gomaa.in",
-        phone: "+91 98000 00000",
+        phone: "+91 98000 00001",
         role: "SUPER_ADMIN",
         password: hashPassword("SuperAdmin@2026!"),
         isActive: true,
+        metadata: {
+          password: "SuperAdmin@2026!",
+          adminData: {
+            adminId: "GMA-SA-0001",
+            department: "Apex Executive Council",
+            designation: "Platform Captain & Supreme Authority",
+            jurisdiction: "All-India Sanctuary Network",
+            authorityLevel: "Tier-0 Root Platform",
+            treasuryClearanceLevel: "Unrestricted Treasury Control",
+          },
+        },
       },
     ]
 
-    // Note: Non-destructive build step. Only ensures Super Admins exist.
-    // NEVER delete users, animals, gaushalas, or bookings during deployment builds.
-
-    // 2. Ensure both Super Admins exist with scrypt hash
+    // Note: Non-destructive build step. Ensures Super Admin exists.
     for (const sa of superAdmins) {
       const existing = await prisma.user.findFirst({
         where: {
@@ -46,22 +102,50 @@ async function seed() {
           where: { id: existing.id },
           data: {
             uniqueId: sa.uniqueId,
+            name: sa.name,
+            phone: sa.phone,
             role: "SUPER_ADMIN",
             isActive: true,
-            ...(!existing.password ? { password: sa.password } : {}),
+            password: sa.password,
+            metadata: sa.metadata,
           },
         })
         console.log(`[Seed] Super Admin re-verified: ${sa.email}`)
       }
     }
 
-    // 3. Ensure test devotee accounts devpulseorg@gmail.com and devpusleorg@gmail.com exist
+    // 3. Ensure test devotee and driver accounts exist
     try {
-      const devoteesToSeed = [
-        { email: "devpulseorg@gmail.com", phone: "+91 7780740223", name: "Devotee (devpulseorg)", uniqueId: "GMA-DEV-0223" },
-        { email: "devpusleorg@gmail.com", phone: "+91 7780740224", name: "Devotee (devpusleorg)", uniqueId: "GMA-DEV-0224" },
+      const standardUsers = [
+        {
+          email: "devpulseorg@gmail.com",
+          phone: "+91 77807 40223",
+          name: "Srinivas Ramanujan (Devotee)",
+          uniqueId: "GMA-DEV-0223",
+          role: "CUSTOMER",
+          password: hashPassword("Devotee@2026!"),
+          metadata: { password: "Devotee@2026!" },
+        },
+        {
+          email: "driver@gomaa.in",
+          phone: "+91 98203 33001",
+          name: "Sunil Pawar (Transit Pilot)",
+          uniqueId: "GMA-DRV-3001",
+          role: "DRIVER",
+          password: hashPassword("Driver@2026!"),
+          metadata: {
+            password: "Driver@2026!",
+            driverData: {
+              driverId: "GMA-DRV-3001",
+              vehicleNumber: "TS-09-UB-4491",
+              vehicleType: "Tata 407 (8ft Sacred Transit Bed)",
+              licenseNumber: "DL-TS092021004491",
+              status: "Active",
+            },
+          },
+        },
       ]
-      for (const d of devoteesToSeed) {
+      for (const d of standardUsers) {
         const existing = await prisma.user.findFirst({
           where: { email: { equals: d.email, mode: "insensitive" } },
         })
@@ -72,12 +156,13 @@ async function seed() {
               uniqueId: d.uniqueId,
               name: d.name,
               phone: d.phone,
-              role: "CUSTOMER",
+              role: d.role,
               isActive: true,
-              password: hashPassword("GomaaAdmin@2026!"),
+              password: d.password,
+              metadata: d.metadata,
             },
           })
-          console.log(`[Seed] Devotee ${d.email} re-verified with unique ID ${d.uniqueId}`)
+          console.log(`[Seed] User ${d.email} re-verified with unique ID ${d.uniqueId}`)
         } else {
           await prisma.user.create({
             data: {
@@ -85,90 +170,103 @@ async function seed() {
               name: d.name,
               email: d.email,
               phone: d.phone,
-              role: "CUSTOMER",
+              role: d.role,
               isActive: true,
-              password: hashPassword("GomaaAdmin@2026!"),
+              password: d.password,
+              metadata: d.metadata,
             },
           })
-          console.log(`[Seed] Devotee ${d.email} created with unique ID ${d.uniqueId}`)
+          console.log(`[Seed] User ${d.email} created with unique ID ${d.uniqueId}`)
         }
       }
     } catch (e) {
-      console.warn("[Seed] Devotee error:", e.message)
+      console.warn("[Seed] Standard users error:", e.message)
     }
 
-    // 4. Ensure Operations Admins exist with verified passwords
+    // 4. Ensure Operations Admins exist with verified credentials
     const operationsAdmins = [
       {
-        email: "alt.yq-fs88dj2@yopmail.com",
-        uniqueId: "GMA-OPS-0101",
-        name: "Admin_1",
-        phone: "+91 98222 33344",
-        password: hashPassword("GomaaAdmin@2026!"),
-      },
-      {
+        id: "USER-OPS-HYD-01",
         email: "admin@gomaa.in",
+        uniqueId: "GMA-OPS-0101",
+        name: "Rajeshwar Rao",
+        phone: "+91 98222 00101",
+        password: hashPassword("OpsAdmin@2026!"),
+        metadata: {
+          password: "OpsAdmin@2026!",
+          adminData: {
+            adminId: "GMA-OPS-0101",
+            department: "Sanctuary Operations",
+            designation: "Senior Operations Director",
+            jurisdiction: "Telangana & Andhra Pradesh",
+            authorityLevel: "Tier-1 Regional Hub",
+          },
+        },
+      },
+      {
+        id: "USER-OPS-SEC-02",
+        email: "ops.secunderabad@gomaa.in",
         uniqueId: "GMA-OPS-0102",
-        name: "Operations Admin",
-        phone: "+91 98222 33345",
-        password: hashPassword("GomaaAdmin@2026!"),
-      },
-      {
-        email: "operations@gomaa.in",
-        uniqueId: "GMA-OPS-0103",
-        name: "Operations Admin",
-        phone: "+91 98222 33346",
-        password: hashPassword("GomaaAdmin@2026!"),
-      },
-      {
-        email: "gomaa052026@gmail.com",
-        uniqueId: "GMA-OPS-0104",
-        name: "GOMAA Operations",
-        phone: "+91 98222 33347",
-        password: hashPassword("GomaaAdmin@2026!"),
+        name: "Vikramaditya Reddy",
+        phone: "+91 98222 00102",
+        password: hashPassword("OpsAdmin@2026!"),
+        metadata: {
+          password: "OpsAdmin@2026!",
+          adminData: {
+            adminId: "GMA-OPS-0102",
+            department: "Sanctuary Operations",
+            designation: "Secunderabad Regional Controller",
+            jurisdiction: "Secunderabad Cantonment Division",
+            authorityLevel: "Tier-1 Regional Hub",
+          },
+        },
       },
     ]
 
-    let admin1User = null
-    let gomaaUser = null
-
+    const opsAdminMap = {}
     for (const adm of operationsAdmins) {
-      let existingAdm = await prisma.user.findFirst({
-        where: { email: { equals: adm.email, mode: "insensitive" } },
-      })
-
-      if (!existingAdm) {
-        existingAdm = await prisma.user.create({
-          data: {
-            uniqueId: adm.uniqueId,
-            name: adm.name,
-            email: adm.email,
-            phone: adm.phone,
-            role: "OPERATIONS_ADMIN",
-            password: adm.password,
-            isActive: true,
-          },
+      try {
+        await prisma.user.updateMany({
+          where: { uniqueId: adm.uniqueId, NOT: { email: adm.email } },
+          data: { uniqueId: null },
         })
-        console.log(`[Seed] Created Operations Admin: ${adm.email}`)
-      } else {
-        existingAdm = await prisma.user.update({
-          where: { id: existingAdm.id },
-          data: {
-            uniqueId: adm.uniqueId,
-            name: adm.name,
-            role: "OPERATIONS_ADMIN",
-            isActive: true,
-            password: adm.password,
-          },
+        let existingAdm = await prisma.user.findFirst({
+          where: { email: { equals: adm.email, mode: "insensitive" } },
         })
-        console.log(`[Seed] Synchronized Operations Admin: ${adm.email}`)
-      }
 
-      if (adm.email === "alt.yq-fs88dj2@yopmail.com") {
-        admin1User = existingAdm
-      }
-      if (adm.email === "gomaa052026@gmail.com") {
-        gomaaUser = existingAdm
+        if (!existingAdm) {
+          existingAdm = await prisma.user.create({
+            data: {
+              id: adm.id,
+              uniqueId: adm.uniqueId,
+              name: adm.name,
+              email: adm.email,
+              phone: adm.phone,
+              role: "OPERATIONS_ADMIN",
+              password: adm.password,
+              isActive: true,
+              metadata: adm.metadata,
+            },
+          })
+          console.log(`[Seed] Created Operations Admin: ${adm.email}`)
+        } else {
+          existingAdm = await prisma.user.update({
+            where: { id: existingAdm.id },
+            data: {
+              uniqueId: adm.uniqueId,
+              name: adm.name,
+              phone: adm.phone,
+              role: "OPERATIONS_ADMIN",
+              isActive: true,
+              password: adm.password,
+              metadata: adm.metadata,
+            },
+          })
+          console.log(`[Seed] Synchronized Operations Admin: ${adm.email}`)
+        }
+        opsAdminMap[adm.email] = existingAdm
+      } catch (err) {
+        console.warn(`[Seed] Notice on Operations Admin ${adm.email}:`, err.message)
       }
     }
 
@@ -182,7 +280,7 @@ async function seed() {
         contactEmail: "gaushala1@gomaa.in",
         latitude: 17.4156,
         longitude: 78.4357,
-        governingAdmin: gomaaUser || admin1User,
+        governingAdmin: opsAdminMap["admin@gomaa.in"],
       },
       {
         name: "Gaushala_02",
@@ -192,7 +290,7 @@ async function seed() {
         contactEmail: "gaushala2@gomaa.in",
         latitude: 17.4401,
         longitude: 78.3489,
-        governingAdmin: gomaaUser || admin1User,
+        governingAdmin: opsAdminMap["admin@gomaa.in"],
       },
       {
         name: "Gaushala_03",
@@ -202,12 +300,12 @@ async function seed() {
         contactEmail: "gaushala3@gomaa.in",
         latitude: 17.4721,
         longitude: 78.5028,
-        governingAdmin: admin1User,
+        governingAdmin: opsAdminMap["ops.secunderabad@gomaa.in"],
       },
     ]
 
     for (const gDef of defaultGosalas) {
-      const govAdmin = gDef.governingAdmin || admin1User
+      const govAdmin = gDef.governingAdmin || opsAdminMap["admin@gomaa.in"]
       const existingG = await prisma.gosala.findFirst({
         where: { name: { equals: gDef.name, mode: "insensitive" } },
       })
@@ -222,117 +320,182 @@ async function seed() {
             latitude: gDef.latitude,
             longitude: gDef.longitude,
             isActive: true,
-            adminId: govAdmin.id,
-            adminEmail: govAdmin.email,
-            adminName: govAdmin.name,
+            adminId: govAdmin?.id,
+            adminEmail: govAdmin?.email,
+            adminName: govAdmin?.name,
           },
         })
-        console.log(`[Seed] Created sanctuary ${gDef.name} governed by ${govAdmin.name}`)
+        console.log(`[Seed] Created sanctuary ${gDef.name} governed by ${govAdmin?.name}`)
       } else {
         await prisma.gosala.update({
           where: { id: existingG.id },
           data: {
-            adminId: govAdmin.id,
-            adminEmail: govAdmin.email,
-            adminName: govAdmin.name,
+            adminId: govAdmin?.id,
+            adminEmail: govAdmin?.email,
+            adminName: govAdmin?.name,
           },
         })
-        console.log(`[Seed] Sanctuary ${existingG.name} synchronized with governance (${govAdmin.name} - ${govAdmin.email})`)
+        console.log(`[Seed] Sanctuary ${existingG.name} synchronized with governance (${govAdmin?.name} - ${govAdmin?.email})`)
       }
     }
 
-    // 6. Ensure standard Managers exist for Gaushala_01 and Gaushala_03
+    // 6. Ensure standard Managers exist for Gaushala_01, Gaushala_02, and Gaushala_03
     const defaultManagers = [
       {
-        id: "USER-MGR-01",
+        id: "USER-MGR-HYD-01",
         uniqueId: "GMA-MGR-0101",
-        name: "Manager 1",
+        name: "Shyam Sundar Shastri",
         email: "manager1@gomaa.in",
-        phone: "+91 98111 22233",
+        phone: "+91 98111 00101",
         role: "GOSALA_MANAGER",
-        password: hashPassword("GomaaAdmin@2026!"),
+        password: hashPassword("Manager@2026!"),
         isActive: true,
         targetGosalaName: "Gaushala_01",
+        metadata: {
+          password: "Manager@2026!",
+          managerData: {
+            managerId: "GMA-MGR-0101",
+            qualification: "Senior Vedic Agronomist & Gosala Overseer",
+            experienceYears: 12,
+            assignedSanctuary: "Gaushala_01",
+          },
+        },
       },
       {
-        id: "USER-MGR-02",
+        id: "USER-MGR-CYB-02",
         uniqueId: "GMA-MGR-0201",
-        name: "Manager 2",
+        name: "Gopal Krishna Murthy",
         email: "manager2@gomaa.in",
-        phone: "+91 98444 55566",
+        phone: "+91 98111 00201",
         role: "GOSALA_MANAGER",
-        password: hashPassword("GomaaAdmin@2026!"),
+        password: hashPassword("Manager@2026!"),
+        isActive: true,
+        targetGosalaName: "Gaushala_02",
+        metadata: {
+          password: "Manager@2026!",
+          managerData: {
+            managerId: "GMA-MGR-0201",
+            qualification: "Bovine Health & Sanctuary Care Lead",
+            experienceYears: 9,
+            assignedSanctuary: "Gaushala_02",
+          },
+        },
+      },
+      {
+        id: "USER-MGR-SEC-03",
+        uniqueId: "GMA-MGR-0301",
+        name: "Raghavendra Swamy",
+        email: "manager3@gomaa.in",
+        phone: "+91 98111 00301",
+        role: "GOSALA_MANAGER",
+        password: hashPassword("Manager@2026!"),
         isActive: true,
         targetGosalaName: "Gaushala_03",
+        metadata: {
+          password: "Manager@2026!",
+          managerData: {
+            managerId: "GMA-MGR-0301",
+            qualification: "Indigenous Breed Preservation Specialist",
+            experienceYears: 15,
+            assignedSanctuary: "Gaushala_03",
+          },
+        },
       },
     ]
 
     for (const mDef of defaultManagers) {
-      let mgr = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { email: { equals: mDef.email, mode: "insensitive" } },
-            { id: mDef.id },
-          ],
-        },
-      })
-      if (!mgr) {
-        mgr = await prisma.user.create({
-          data: {
-            id: mDef.id,
-            uniqueId: mDef.uniqueId,
-            name: mDef.name,
-            email: mDef.email,
-            phone: mDef.phone,
-            role: "GOSALA_MANAGER",
-            password: mDef.password,
-            isActive: true,
+      try {
+        await prisma.user.updateMany({
+          where: { uniqueId: mDef.uniqueId, NOT: { email: mDef.email } },
+          data: { uniqueId: null },
+        })
+        let mgr = await prisma.user.findFirst({
+          where: {
+            OR: [
+              { email: { equals: mDef.email, mode: "insensitive" } },
+              { id: mDef.id },
+            ],
           },
         })
-        console.log(`[Seed] Created Manager: ${mDef.name} (${mDef.email}) with ${mDef.uniqueId}`)
-      } else {
-        await prisma.user.update({
-          where: { id: mgr.id },
-          data: {
-            uniqueId: mDef.uniqueId,
-            name: mDef.name,
-            role: "GOSALA_MANAGER",
-            isActive: true,
-            ...(!mgr.password ? { password: mDef.password } : {}),
-          },
-        })
-        console.log(`[Seed] Synchronized Manager: ${mDef.name} (${mDef.email}) with ${mDef.uniqueId}`)
-      }
+        if (!mgr) {
+          mgr = await prisma.user.create({
+            data: {
+              id: mDef.id,
+              uniqueId: mDef.uniqueId,
+              name: mDef.name,
+              email: mDef.email,
+              phone: mDef.phone,
+              role: "GOSALA_MANAGER",
+              password: mDef.password,
+              isActive: true,
+              metadata: mDef.metadata,
+            },
+          })
+          console.log(`[Seed] Created Manager: ${mDef.name} (${mDef.email}) with ${mDef.uniqueId}`)
+        } else {
+          mgr = await prisma.user.update({
+            where: { id: mgr.id },
+            data: {
+              uniqueId: mDef.uniqueId,
+              name: mDef.name,
+              phone: mDef.phone,
+              role: "GOSALA_MANAGER",
+              isActive: true,
+              password: mDef.password,
+              metadata: mDef.metadata,
+            },
+          })
+          console.log(`[Seed] Synchronized Manager: ${mDef.name} (${mDef.email}) with ${mDef.uniqueId}`)
+        }
 
-      // Link to target Gaushala
-      const targetG = await prisma.gosala.findFirst({
-        where: { name: { equals: mDef.targetGosalaName, mode: "insensitive" } },
-      })
-      if (targetG) {
-        // Enforce 1:1 single-custodian invariant
-        await prisma.gosalaManagerAssignment.deleteMany({
-          where: {
-            gosalaId: targetG.id,
-            NOT: { userId: mgr.id },
-          },
+        // Link to target Gaushala
+        const targetG = await prisma.gosala.findFirst({
+          where: { name: { equals: mDef.targetGosalaName, mode: "insensitive" } },
         })
-        await prisma.gosalaManagerAssignment.upsert({
-          where: {
-            userId_gosalaId: {
+        if (targetG) {
+          // Enforce 1:1 single-custodian invariant
+          await prisma.gosalaManagerAssignment.deleteMany({
+            where: {
+              gosalaId: targetG.id,
+              NOT: { userId: mgr.id },
+            },
+          })
+          await prisma.gosalaManagerAssignment.upsert({
+            where: {
+              userId_gosalaId: {
+                userId: mgr.id,
+                gosalaId: targetG.id,
+              },
+            },
+            create: {
               userId: mgr.id,
               gosalaId: targetG.id,
+              region: targetG.region,
+              status: "Active",
             },
-          },
-          create: {
-            userId: mgr.id,
-            gosalaId: targetG.id,
-            region: targetG.region,
-            status: "Active",
-          },
-          update: {
-            status: "Active",
-          },
-        })
+            update: {
+              status: "Active",
+            },
+          })
+
+          // Update sanctuary metadata with active custodian details
+          await prisma.gosala.update({
+            where: { id: targetG.id },
+            data: {
+              metadata: {
+                ...(typeof targetG.metadata === "object" ? targetG.metadata : {}),
+                managerId: mDef.uniqueId,
+                managerName: mDef.name,
+                caretaker: mDef.name,
+                caretakerPhone: mDef.phone,
+                isActingManager: false,
+                actAsManagerMyself: false,
+              },
+            },
+          })
+        }
+      } catch (err) {
+        console.warn(`[Seed] Notice on Manager ${mDef.email}:`, err.message)
       }
     }
 

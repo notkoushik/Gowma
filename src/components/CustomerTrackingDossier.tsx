@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Sparkles,
+  XCircle,
 } from "lucide-react"
 import { tripStages } from "../data/driver"
 import type { MyBooking } from "../views/CustomerApp"
@@ -39,10 +40,23 @@ export default function CustomerTrackingDossier({
   const [copiedOtp, setCopiedOtp] = useState(false)
   const [revealedOtp, setRevealedOtp] = useState(false)
 
+  const isRejected =
+    booking.status === "Rejected" ||
+    booking.status === "REJECTED" ||
+    booking.status === "DECLINED"
+
   const stage = booking.driverStage ?? 0
   const isDriverAssigned = Boolean(
     booking.driver && booking.driver.trim().length > 0,
   )
+  const isBovineBoarded = Boolean(
+    booking.bovineHandedOver ||
+      stage >= 2 ||
+      booking.status === "En Route" ||
+      booking.status === "At Altar" ||
+      booking.status === "In Service",
+  )
+
   const isArrived = stage === 5
   const isHandoverVerified = Boolean(booking.handoverOtpVerified || stage >= 6)
 
@@ -67,20 +81,113 @@ export default function CustomerTrackingDossier({
     `Hare Krishna ${driverName}! Regarding GOMAA Booking ${booking.id} (${booking.animal}) for ${booking.gosala}. Our altar is ready.`,
   )}`
 
+  // REJECTED STATE: When manager declines request, DO NOT show active radar or transit map
+  if (isRejected) {
+    return (
+      <div className="rounded-xl border border-red-200 bg-card p-6 shadow-sm space-y-4">
+        <div className="flex items-start gap-3.5">
+          <div className="h-11 w-11 rounded-full bg-red-100 text-danger flex items-center justify-center shrink-0">
+            <XCircle size={24} />
+          </div>
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-red-100 text-red-900 border border-red-200">
+              Seva Request Declined by Gaushala Sanctuary
+            </div>
+            <h3 className="font-serif text-[18px] text-ink font-semibold">
+              Booking {booking.id} Not Approved
+            </h3>
+            <p className="text-[13px] text-ink-soft leading-relaxed">
+              {booking.managerRemark
+                ? `Gaushala Custodian Remark: "${booking.managerRemark}"`
+                : "The Gaushala Sanctuary Custodian declined this booking due to animal welfare, required rest intervals, or road transit safety. Manager decisions are final."}
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-lg bg-paper border border-line p-4 space-y-2 text-[12px]">
+          <div className="font-mono text-[11px] uppercase tracking-wider text-forest font-semibold flex items-center gap-1.5">
+            <CheckCircle2 size={14} /> 100% Escrow Refund Guaranteed
+          </div>
+          <p className="text-ink-soft">
+            The dakshina amount has been released from platform escrow back to your original payment method. The refund reference is{" "}
+            <code className="font-mono text-ink font-medium">REF-{booking.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8)}</code>.
+          </p>
+        </div>
+
+        <div className="pt-2 flex flex-col sm:flex-row gap-3">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="px-5 py-2.5 rounded-lg bg-saffron text-white text-[13px] font-medium hover:bg-saffron-deep transition-colors shadow-xs cursor-pointer"
+          >
+            Explore Alternate Auspicious Slots
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
-      {/* Live Map Component */}
-      <LiveTripMap
-        bookingId={booking.id}
-        pickupLocation={booking.gosala}
-        dropLocation={booking.address || "Kondapur, Hyderabad"}
-        driverName={driverName}
-        stageIndex={stage}
-        distanceKm={booking.distanceKm || 8}
-        customerCoords={customerCoords}
-        viewerRole="CUSTOMER"
-        heightClass={layoutMode === "wide" ? "h-[400px]" : heightClass}
-      />
+      {/* Live Map or Sanctuary Boarding Stage */}
+      {!isBovineBoarded ? (
+        <div className="rounded-xl border border-saffron/40 bg-card p-5 shadow-xs space-y-3.5">
+          <div className="flex items-start gap-3.5">
+            <div className="relative shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-saffron-soft text-saffron-deep">
+              <Clock size={22} className="animate-pulse" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10.5px] font-mono uppercase font-semibold text-saffron-deep bg-saffron-soft px-2 py-0.5 rounded border border-saffron/30">
+                  Sanctuary Preparation Stage
+                </span>
+                <span className="text-[11px] font-mono text-ink-faint">
+                  Awaiting Handover to Pilot
+                </span>
+              </div>
+              <h3 className="text-[16px] font-serif font-semibold text-ink mt-1">
+                Grooming & Hydration at {booking.gosala}
+              </h3>
+              <p className="text-[12.5px] text-ink-soft mt-1 leading-relaxed">
+                The sanctuary attendants are currently hydrating, feeding, and checking the physiological comfort of{" "}
+                <strong className="text-ink">{booking.animal}</strong> before departure.
+              </p>
+              <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-paper text-[12px] text-ink font-medium border border-line">
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
+                <span>Live GPS Driver Tracking will activate once Gaushala Manager confirms cattle handover to the transit pilot.</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Standby Driver preview if driver assigned */}
+          {isDriverAssigned && (
+            <div className="pt-3 border-t border-line flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[12px]">
+              <div className="flex items-center gap-2">
+                <Truck size={14} className="text-forest" />
+                <span className="text-ink-soft">
+                  Transit Pilot <strong className="text-ink">{driverName}</strong> on standby at Gaushala gate
+                </span>
+              </div>
+              <span className="font-mono text-[11px] text-forest font-medium">
+                Vehicle: {vehiclePlate}
+              </span>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Live Map Component when bovine is boarded and on the move */
+        <LiveTripMap
+          bookingId={booking.id}
+          pickupLocation={booking.gosala}
+          dropLocation={booking.address || "Kondapur, Hyderabad"}
+          driverName={driverName}
+          stageIndex={stage}
+          distanceKm={booking.distanceKm || 8}
+          customerCoords={customerCoords}
+          viewerRole="CUSTOMER"
+          heightClass={layoutMode === "wide" ? "h-[400px]" : heightClass}
+        />
+      )}
 
       {/* DRIVER ALLOCATION SECTION (Swiggy / Uber Style) */}
       {!isDriverAssigned ? (

@@ -99,7 +99,11 @@ export default function DesktopCustomer({
   const [locationPickerOpen, setLocationPickerOpen] = useState(false)
   const deviceLocation = useDeviceLocation()
 
-  const liveAnimals = storeAnimals || []
+  const liveAnimals = (storeAnimals || []).filter(
+    (a) =>
+      a.approvalStatus === "APPROVED" ||
+      (!a.approvalStatus && a.status !== "Under Audit"),
+  )
 
   const customerGosalas: Gosala[] = useMemo(() => {
     return storeGosalas.map((g, idx) => {
@@ -202,6 +206,13 @@ export default function DesktopCustomer({
       ? myBookings.find((b) => b.id === selectedTrackBookingId)
       : null) ||
     myBookings.find((b) => b.status === "In Service") ||
+    myBookings.find(
+      (b) =>
+        typeof b.driverStage === "number" &&
+        b.driverStage > 0 &&
+        b.status !== "Completed" &&
+        b.status !== "Rejected",
+    ) ||
     myBookings.find((b) => b.status === "Confirmed" && b.driver) ||
     myBookings.find((b) => b.status === "Confirmed") ||
     myBookings.find((b) => b.status === "Under Review") ||
@@ -214,13 +225,19 @@ export default function DesktopCustomer({
         a.type.toLowerCase().includes(q.toLowerCase()) ||
         a.gosala.toLowerCase().includes(q.toLowerCase())),
   )
-  const animalTypes = ["All", ...Array.from(new Set(liveAnimals.map((a) => a.type)))]
+  const animalTypes = [
+    "All",
+    ...Array.from(new Set(liveAnimals.map((a) => a.type))),
+  ]
   const animalPages = Math.max(1, Math.ceil(list.length / ANIMALS_PER_PAGE))
   const pagedAnimals = list.slice(
     (Math.min(animalPage, animalPages) - 1) * ANIMALS_PER_PAGE,
     Math.min(animalPage, animalPages) * ANIMALS_PER_PAGE,
   )
-  const gosalaPages = Math.max(1, Math.ceil(sortedGaushalas.length / GOSALAS_PER_PAGE))
+  const gosalaPages = Math.max(
+    1,
+    Math.ceil(sortedGaushalas.length / GOSALAS_PER_PAGE),
+  )
   const pagedGaushalas = sortedGaushalas.slice(
     (Math.min(gosalaPage, gosalaPages) - 1) * GOSALAS_PER_PAGE,
     Math.min(gosalaPage, gosalaPages) * GOSALAS_PER_PAGE,
@@ -352,7 +369,9 @@ export default function DesktopCustomer({
                 value={deliveryAddress}
                 onChange={(e) => setDeliveryAddress(e.target.value)}
                 onBlur={() => setIsEditingAddress(false)}
-                onKeyDown={(e) => e.key === "Enter" && setIsEditingAddress(false)}
+                onKeyDown={(e) =>
+                  e.key === "Enter" && setIsEditingAddress(false)
+                }
                 autoFocus
                 className="flex-1 min-w-0 text-ink bg-paper px-2 py-0.5 rounded outline-none border border-saffron"
               />
@@ -1169,9 +1188,11 @@ function TrackView({
       <CustomerTrackingDossier
         booking={booking}
         customerCoords={
-          deviceLocation.lat && deviceLocation.lng
-            ? [deviceLocation.lat, deviceLocation.lng]
-            : null
+          booking.customerLat && booking.customerLng
+            ? [booking.customerLat, booking.customerLng]
+            : deviceLocation.lat && deviceLocation.lng
+              ? [deviceLocation.lat, deviceLocation.lng]
+              : null
         }
         layoutMode="wide"
         heightClass="h-[380px]"

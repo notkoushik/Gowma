@@ -80,6 +80,7 @@ export type Gosala = {
   adminName?: string
   isActingManager?: boolean
   actAsManagerMyself?: boolean
+  newManager?: { name: string; phone?: string; email?: string; password?: string }
 }
 
 export type PartnershipTier = "PREFERRED" | "STANDARD" | "CHARITABLE" | "COMMERCIAL" | "CUSTOM"

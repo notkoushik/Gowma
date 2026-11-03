@@ -83,6 +83,10 @@ export type BookingSummary = {
   extraUnitRateSnapshot?: number
   commissionSnapshot?: number
   commissionPct?: number
+  customerLat?: number | null
+  customerLng?: number | null
+  selectedAddons?: Array<{ id: string; name: string; qty: number; price: number; total: number }>
+  pairSurcharge?: number
 }
 
 export type MyBooking = {
@@ -106,6 +110,12 @@ export type MyBooking = {
   driverRating?: number | null
   driverTotalTrips?: number | null
   driverAvatar?: string | null
+  managerRemark?: string
+  bovineHandedOver?: boolean
+  bovineHandedOverAt?: string | null
+  customerLat?: number | null
+  customerLng?: number | null
+  selectedAddons?: Array<any>
 }
 
 export function makeBooking(
@@ -177,6 +187,9 @@ export function makeBooking(
     extraUnitRateSnapshot: s.extraUnitRateSnapshot ?? 500,
     commissionSnapshot: commAmount,
     quoteToken: s.quoteToken,
+    customerLat: s.customerLat ?? null,
+    customerLng: s.customerLng ?? null,
+    selectedAddons: s.selectedAddons ?? [],
     createdAt: new Date().toLocaleString("en-IN", {
       day: "numeric",
       month: "short",
@@ -222,6 +235,12 @@ export function toMyBooking(b: Booking): MyBooking {
     driverRating: b.driverRating,
     driverTotalTrips: b.driverTotalTrips,
     driverAvatar: b.driverAvatar,
+    managerRemark: b.managerRemark,
+    bovineHandedOver: b.bovineHandedOver,
+    bovineHandedOverAt: b.bovineHandedOverAt,
+    customerLat: b.customerLat,
+    customerLng: b.customerLng,
+    selectedAddons: b.selectedAddons,
   }
 }
 
@@ -255,7 +274,11 @@ function Discover({
   )
   const deviceLocation = useDeviceLocation()
 
-  const liveAnimals = storeAnimals || []
+  const liveAnimals = (storeAnimals || []).filter(
+    (a) =>
+      a.approvalStatus === "APPROVED" ||
+      (!a.approvalStatus && a.status !== "Under Audit"),
+  )
 
   const customerGosalas: Gosala[] = useMemo(() => {
     return storeGosalas.map((g, idx) => {
@@ -1127,9 +1150,11 @@ function Track({
       <CustomerTrackingDossier
         booking={booking}
         customerCoords={
-          deviceLocation.lat && deviceLocation.lng
-            ? [deviceLocation.lat, deviceLocation.lng]
-            : null
+          booking.customerLat && booking.customerLng
+            ? [booking.customerLat, booking.customerLng]
+            : deviceLocation.lat && deviceLocation.lng
+              ? [deviceLocation.lat, deviceLocation.lng]
+              : null
         }
         layoutMode="compact"
         heightClass="h-56"
@@ -1168,7 +1193,7 @@ function MobileCustomer({
   const [gosalaProfileId, setGosalaProfileId] = useState<string | null>(null)
   const [gosalaProfileDist, setGosalaProfileDist] =
     useState<number | undefined>(undefined)
-  const [flow, setFlow] = useState<{ animal: Animal; gosala: Gosala } | null>(
+  const [flow, setFlow] = useState<{ animal: Animal gosala: Gosala } | null>(
     null,
   )
   const [editProfileOpen, setEditProfileOpen] = useState(false)
@@ -1187,12 +1212,19 @@ function MobileCustomer({
       ? myBookings.find((b) => b.id === selectedTrackBookingId)
       : null) ||
     myBookings.find((b) => b.status === "In Service") ||
+    myBookings.find(
+      (b) =>
+        typeof b.driverStage === "number" &&
+        b.driverStage > 0 &&
+        b.status !== "Completed" &&
+        b.status !== "Rejected",
+    ) ||
     myBookings.find((b) => b.status === "Confirmed" && b.driver) ||
     myBookings.find((b) => b.status === "Confirmed") ||
     myBookings.find((b) => b.status === "Under Review") ||
     myBookings[0]
 
-  const tabs: { id: Tab; label: string; icon: typeof Home }[] = [
+  const tabs: { id: Tab label: string icon: typeof Home }[] = [
     { id: "discover", label: "Discover", icon: Compass },
     { id: "bookings", label: "Bookings", icon: Ticket },
     { id: "track", label: "Track", icon: Truck },
@@ -1270,10 +1302,14 @@ function MobileCustomer({
                   <div className="overflow-y-auto divide-y divide-line/60 p-1 flex-1">
                     {notifications.length === 0 ? (
                       <div className="p-8 text-center text-ink-faint text-[12.5px]">
-                        <Bell size={24} className="mx-auto text-ink-faint/40 mb-2" />
+                        <Bell
+                          size={24}
+                          className="mx-auto text-ink-faint/40 mb-2"
+                        />
                         No notifications yet.
                         <div className="text-[11px] text-ink-faint/70 mt-1">
-                          Booking approvals, driver assignments, and transit updates appear here.
+                          Booking approvals, driver assignments, and transit
+                          updates appear here.
                         </div>
                       </div>
                     ) : (

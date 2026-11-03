@@ -118,10 +118,27 @@ export type PaidBooking = {
 export async function recordBookingPayment(booking: PaidBooking) {
   await ensureSystemWallets()
   const cfg = await getWalletConfig()
+  let platformBp = cfg.platformBp
+  try {
+    const g = await prisma.gosala.findFirst({
+      where: {
+        OR: [
+          ...(booking.gosalaId ? [{ id: booking.gosalaId }] : []),
+          ...(booking.gosalaName ? [{ name: booking.gosalaName }] : []),
+        ],
+      },
+      select: { commissionValue: true },
+    })
+    if (g && g.commissionValue !== null && g.commissionValue !== undefined) {
+      platformBp = Math.round(Number(g.commissionValue) * 100)
+    }
+  } catch {}
+
   const policy = await getManagerBpFor(booking.gosalaId)
   const grossPaise = BigInt(Math.round(booking.totalAmount * 100))
   const taxPaise = BigInt(Math.round(booking.taxFee * 100))
-  const shares = computeShares(grossPaise, taxPaise, cfg.platformBp, policy.managerBp)
+  const effectiveManagerBp = Math.min(policy.managerBp, Math.max(0, BP_TOTAL - platformBp))
+  const shares = computeShares(grossPaise, taxPaise, platformBp, effectiveManagerBp)
   const paidAt = booking.paymentCapturedAt ?? booking.createdAt ?? new Date()
   const source = booking.paymentProvider === "WALLET" ? "WALLET" : "RAZORPAY"
 

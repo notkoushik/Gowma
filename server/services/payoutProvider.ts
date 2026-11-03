@@ -50,12 +50,22 @@ const API = "https://api.razorpay.com/v1"
 
 export class RazorpayXProvider implements PayoutProvider {
   mode = "RAZORPAYX" as const
+  private keyId: string
+  private keySecret: string
+  private accountNumber: string
+  private fetchImpl: typeof fetch
+
   constructor(
-    private keyId: string,
-    private keySecret: string,
-    private accountNumber: string,
-    private fetchImpl: typeof fetch = fetch,
-  ) {}
+    keyId: string,
+    keySecret: string,
+    accountNumber: string,
+    fetchImpl: typeof fetch = fetch,
+  ) {
+    this.keyId = keyId
+    this.keySecret = keySecret
+    this.accountNumber = accountNumber
+    this.fetchImpl = fetchImpl
+  }
 
   private async call(path: string, method: "GET" | "POST", body?: unknown, extraHeaders: Record<string, string> = {}) {
     const controller = new AbortController()

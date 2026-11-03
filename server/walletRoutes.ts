@@ -98,62 +98,110 @@ function mapLedgerError(err: any): HandlerResponse {
   return fail(500, "Something went wrong while handling the wallet request")
 }
 
-/** Gaushalas this user may act for. Super Admin: all. Admin: those they govern or are scoped to. */
+/** Gaushalas this user may act for. Super Admin: all. Admin: those they govern. Manager: those they manage. */
 async function gosalasFor(user: JwtPayload) {
   if (user.role === "super_admin") return prisma.gosala.findMany({ where: { isActive: true }, orderBy: { name: "asc" } })
-  const scoped = [...(user.gosalaIds || []), ...(user.gosalaNames || [])]
-  return prisma.gosala.findMany({
-    where: {
-      isActive: true,
-      OR: [{ adminId: user.userId }, ...(scoped.length ? [{ id: { in: scoped } }, { name: { in: scoped } }] : [])],
-    },
-    orderBy: { name: "asc" },
-  })
+  if (user.role === "admin") {
+    const adminEmail = (user.email || "").toLowerCase().trim()
+    const allGosalas = await prisma.gosala.findMany({ where: { isActive: true }, orderBy: { name: "asc" } })
+    return allGosalas.filter((g: any) => {
+      const gEmail = (g.adminEmail || "").toLowerCase().trim()
+      const gAdminId = g.adminId
+      if (gAdminId && user.userId && gAdminId !== user.userId) return false
+      if (gEmail && adminEmail && gEmail !== adminEmail) return false
+      return Boolean((user.userId && gAdminId === user.userId) || (adminEmail && gEmail === adminEmail))
+    })
+  }
+  if (user.role === "manager") {
+    const assignments = await prisma.gosalaManagerAssignment.findMany({
+      where: { userId: user.userId, status: "Active" },
+      include: { gosala: true },
+    })
+    const matched = assignments.map((a: any) => a.gosala).filter(Boolean)
+    if (matched.length > 0) return matched
+
+    // Fallback: match by gosala metadata or adminId
+    const allGosalas = await prisma.gosala.findMany({ where: { isActive: true }, orderBy: { name: "asc" } })
+    return allGosalas.filter((g: any) => {
+      const meta = (g.metadata && typeof g.metadata === "object") ? (g.metadata as any) : {}
+      return meta.managerId === user.userId ||
+        (user.name && meta.managerName && meta.managerName.toLowerCase() === user.name.toLowerCase()) ||
+        g.adminId === user.userId
+    })
+  }
+  return []
 }
 
 async function walletSummary(userId: string, role: JwtPayload["role"]) {
-  // Everything below is independent, so it runs at the same time. The database is remote and
-  // each query costs a round trip, so running them one by one made this screen take seconds.
   const earnsFrom = async (): Promise<string[]> => {
     if (role === "admin") return (await prisma.gosala.findMany({ where: { adminId: userId }, select: { id: true } })).map((g) => g.id)
-    if (role === "manager") return (await prisma.gosalaManagerAssignment.findMany({ where: { userId, status: "Active" }, select: { gosalaId: true } })).map((a) => a.gosalaId)
+    if (role === "manager") {
+      const direct = (await prisma.gosalaManagerAssignment.findMany({ where: { userId, status: "Active" }, select: { gosalaId: true } })).map((a) => a.gosalaId)
+      if (direct.length > 0) return direct
+      const allG = await prisma.gosala.findMany({ where: { isActive: true }, select: { id: true, adminId: true, metadata: true } })
+      return allG.filter((g: any) => {
+        const meta = (g.metadata && typeof g.metadata === "object") ? (g.metadata as any) : {}
+        return meta.managerId === userId || g.adminId === userId
+      }).map((g) => g.id)
+    }
     return []
   }
-  const [wallet, gosalaIds, processing] = await Promise.all([
-    prisma.wallet.findUnique({ where: { userId } }),
+
+  let wallet = await prisma.wallet.findUnique({ where: { userId } })
+  if (!wallet && userId) {
+    try {
+      wallet = await prisma.wallet.create({
+        data: {
+          userId,
+          balancePaise: 0n,
+          heldPaise: 0n,
+        },
+      })
+    } catch {}
+  }
+
+  const [gosalaIds, processing] = await Promise.all([
     earnsFrom(),
-    prisma.withdrawalRequest.aggregate({ where: { userId, status: "PROCESSING" }, _sum: { amountPaise: true } }),
+    prisma.withdrawalRequest.aggregate({ where: { userId, status: "PROCESSING" }, _sum: { amountPaise: true } }).catch(() => ({ _sum: { amountPaise: null } })),
   ])
-  const available = wallet ? BigInt(wallet.balancePaise) : 0n
+  const available = wallet?.balancePaise !== null && wallet?.balancePaise !== undefined ? BigInt(wallet.balancePaise) : 0n
 
-  const [rows, txs, adminGosalas, managerCounts] = await Promise.all([
+  const [rows, txs, adminGosalas, activeAssignments] = await Promise.all([
     gosalaIds.length
-      ? prisma.bookingSettlement.findMany({ where: { gosalaId: { in: gosalaIds }, status: { in: ["HELD", "READY_FOR_APPROVAL"] } }, orderBy: { eligibleAt: "asc" }, take: 200 })
+      ? prisma.bookingSettlement.findMany({ where: { gosalaId: { in: gosalaIds }, status: { in: ["HELD", "READY_FOR_APPROVAL"] } }, orderBy: { eligibleAt: "asc" }, take: 200 }).catch(() => [])
       : Promise.resolve([]),
-    wallet ? prisma.walletTransaction.findMany({ where: { walletId: wallet.id }, orderBy: { createdAt: "desc" }, take: 40 }) : Promise.resolve([]),
-    role === "admin" && gosalaIds.length ? prisma.gosala.findMany({ where: { id: { in: gosalaIds } }, select: { id: true, adminId: true } }) : Promise.resolve([]),
+    wallet ? prisma.walletTransaction.findMany({ where: { walletId: wallet.id }, orderBy: { createdAt: "desc" }, take: 40 }).catch(() => []) : Promise.resolve([]),
+    role === "admin" && gosalaIds.length ? prisma.gosala.findMany({ where: { id: { in: gosalaIds } }, select: { id: true, adminId: true } }).catch(() => []) : Promise.resolve([]),
     role === "manager" && gosalaIds.length
-      ? prisma.gosalaManagerAssignment.groupBy({ by: ["gosalaId"], where: { gosalaId: { in: gosalaIds }, status: "Active" }, _count: { _all: true } })
+      ? prisma.gosalaManagerAssignment.findMany({ where: { gosalaId: { in: gosalaIds }, status: "Active" }, select: { gosalaId: true } }).catch(() => [])
       : Promise.resolve([]),
   ])
 
-  // How many people share each gaushala's admin or manager portion. An admin share goes to one admin.
+  // Count active managers per gaushala safely without groupBy
   const people = new Map<string, number>()
-  if (role === "admin") for (const g of adminGosalas) people.set(g.id, 1)
-  else for (const c of managerCounts) people.set(c.gosalaId, Math.max(1, c._count._all))
+  if (role === "admin") {
+    for (const g of adminGosalas) people.set(g.id, 1)
+  } else {
+    for (const a of activeAssignments) {
+      people.set(a.gosalaId, (people.get(a.gosalaId) || 0) + 1)
+    }
+  }
 
   const earnsFromNames = gosalaIds.length
-    ? (await prisma.gosala.findMany({ where: { id: { in: gosalaIds } }, select: { name: true }, orderBy: { name: "asc" } })).map((g) => g.name)
+    ? (await prisma.gosala.findMany({ where: { id: { in: gosalaIds } }, select: { name: true }, orderBy: { name: "asc" } }).catch(() => [])).map((g) => g.name)
     : []
 
   const upcoming = rows.map((s) => {
-    const total = role === "admin" ? s.adminPaise : s.managerPaise
+    const rawTotal = role === "admin" ? s.adminPaise : s.managerPaise
+    const totalPaise = rawTotal !== null && rawTotal !== undefined ? BigInt(rawTotal) : 0n
+    const divisor = BigInt(Math.max(1, people.get(s.gosalaId) ?? 1))
+    const myPaise = divisor > 0n ? totalPaise / divisor : totalPaise
     return {
       settlementId: s.id,
       bookingId: s.bookingId,
       gosalaName: s.gosalaName,
       status: s.status,
-      myRupees: rupees(total / BigInt(people.get(s.gosalaId) ?? 1)),
+      myRupees: rupees(myPaise),
       eligibleAt: iso(s.eligibleAt),
     }
   })
@@ -170,11 +218,11 @@ async function walletSummary(userId: string, role: JwtPayload["role"]) {
       id: t.id,
       type: t.type,
       purpose: t.purpose,
-      amountRupees: rupees(t.amountPaise),
-      balanceAfterRupees: rupees(t.balanceAfter),
+      amountRupees: t.amountPaise !== null && t.amountPaise !== undefined ? rupees(t.amountPaise) : 0,
+      balanceAfterRupees: t.balanceAfter !== null && t.balanceAfter !== undefined ? rupees(t.balanceAfter) : 0,
       bookingId: t.bookingId,
       description: t.description,
-      createdAt: t.createdAt.toISOString(),
+      createdAt: t.createdAt ? t.createdAt.toISOString() : new Date().toISOString(),
     })),
   }
 }
@@ -239,15 +287,32 @@ export async function handleWalletRoutes(args: {
   if (method === "GET" && pathname === "/api/wallet/me") {
     if (!isAdmin && !isManager) return fail(403, "Only Operations Admins and Managers have an earnings wallet")
     try {
+      const summaryPromise = walletSummary(authUser.userId, authUser.role).catch((wErr) => {
+        console.error("[walletSummary] Error:", wErr?.stack || wErr)
+        return {
+          earnsFrom: authUser.gosalaNames || [],
+          availableRupees: 0,
+          comingRupees: 0,
+          inTransitRupees: 0,
+          upcoming: [],
+          transactions: [],
+        }
+      })
+      const accountsPromise = listPayoutAccounts(authUser.userId).catch(() => [])
+      const withdrawalsPromise = listWithdrawals(authUser.userId).catch(() => [])
+      const cfgPromise = getWalletConfig().catch(() => ({ settlementDelayDays: 2, platformBp: 2000 }))
+      const refreshPromise = refreshProcessing(authUser.userId).catch(() => {})
+
       const [summary, accounts, withdrawals, cfg] = await Promise.all([
-        walletSummary(authUser.userId, authUser.role),
-        listPayoutAccounts(authUser.userId),
-        listWithdrawals(authUser.userId),
-        getWalletConfig(),
-        refreshProcessing(authUser.userId),
+        summaryPromise,
+        accountsPromise,
+        withdrawalsPromise,
+        cfgPromise,
+        refreshPromise,
       ])
-      return ok({ ...summary, accounts, withdrawals, payoutMode: getPayoutProvider().mode, payoutModeNote: payoutModeReason(), delayDays: cfg.settlementDelayDays })
-    } catch (err) {
+      return ok({ ...summary, accounts, withdrawals, payoutMode: getPayoutProvider().mode, payoutModeNote: payoutModeReason(), delayDays: (cfg as any)?.settlementDelayDays || 2 })
+    } catch (err: any) {
+      console.error("[wallet] unexpected error in GET /api/wallet/me:", err?.stack || err)
       return mapLedgerError(err)
     }
   }

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "reg-te-warangal-50lj",
+    "state": "Telangana",
+    "district": "Warangal",
+    "name": "Warangal Heritage Gaushala Belt d090ae51",
+    "zone": "South",
+    "defaultMaxRadiusKm": 45,
+    "pincodePrefixes": [
+      "506001",
+      "506002"
+    ],
+    "assignedAdminId": "5771dd5a-8fe9-4792-a59d-0cd6a726daf5",
+    "assignedAdminName": "New Regional Officer d090ae51",
+    "assignedAdminEmail": "ops.new.d090ae51@gomaa.test",
+    "assignedAdminPhone": "+91 9724927537",
+    "assignedAt": "2026-11-02T16:21:27.479Z",
+    "status": "Active",
+    "createdAt": "2026-11-01T18:05:44.647Z",
+    "isCustom": true
+  }
+]

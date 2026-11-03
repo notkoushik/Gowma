@@ -183,16 +183,16 @@ export default function BookingFlow({
   onClose,
   onPlace,
   onComplete,
+  /** Saves the booking on the server once Razorpay has captured the payment */
+  /** Called when the customer leaves the success screen */
 }: {
   animal: Animal
   gosala: Gosala
   onClose: () => void
-  /** Saves the booking on the server once Razorpay has captured the payment */
   onPlace: (
     summary: import("../CustomerApp").BookingSummary,
     payment: RazorpayProof,
   ) => Promise<void>
-  /** Called when the customer leaves the success screen */
   onComplete: () => void
 }) {
   const { pricingConfig, checkAnimalAvailability, profiles, authUser } =
@@ -213,7 +213,7 @@ export default function BookingFlow({
         h.state.toLowerCase() === nearestHub.state.toLowerCase(),
     ).slice(0, 4)
 
-    const list: { name: string distanceKm: number }[] = []
+    const list: { name: string; distanceKm: number; lat: number; lng: number }[] = []
 
     // 1. If devotee has a detected or active device location, calculate real road distance to this Gaushala
     if (deviceLocation.lat && deviceLocation.lng) {
@@ -232,6 +232,8 @@ export default function BookingFlow({
       list.push({
         name: `Current Location: ${userLabel}`,
         distanceKm: roadDist,
+        lat: deviceLocation.lat,
+        lng: deviceLocation.lng,
       })
     }
 
@@ -244,6 +246,8 @@ export default function BookingFlow({
       list.push({
         name: `${hub.name}, ${hub.city}`,
         distanceKm: roadDist,
+        lat: hub.lat,
+        lng: hub.lng,
       })
     })
 
@@ -252,10 +256,14 @@ export default function BookingFlow({
         {
           name: `${gosala.name} Environs (${gosala.area || nearestHub.city})`,
           distanceKm: 4.2,
+          lat: originLat + 0.015,
+          lng: originLng + 0.015,
         },
         {
           name: `Central Temple Courtyard, ${nearestHub.city}`,
           distanceKm: 8.5,
+          lat: originLat + 0.025,
+          lng: originLng + 0.025,
         },
       )
     }
@@ -307,6 +315,12 @@ export default function BookingFlow({
   )
   const [distanceKm, setDistanceKm] = useState(
     () => venueOptions[0]?.distanceKm || 6.5,
+  )
+  const [venueLat, setVenueLat] = useState<number>(
+    () => venueOptions[0]?.lat || deviceLocation.lat || 17.4582,
+  )
+  const [venueLng, setVenueLng] = useState<number>(
+    () => venueOptions[0]?.lng || deviceLocation.lng || 78.3491,
   )
   const [hasUserEditedAddress, setHasUserEditedAddress] = useState(false)
   // Where the user dropped the pin; added to the address so the team can open it in a map app
@@ -446,6 +460,18 @@ export default function BookingFlow({
   const addonTotal =
     dynamicAddons.reduce((a, x) => a + (qty[x.id] || 0) * x.price, 0) +
     pairSurcharge
+
+  const selectedAddonItems = useMemo(() => {
+    return dynamicAddons
+      .filter((x) => (qty[x.id] || 0) > 0)
+      .map((x) => ({
+        id: x.id,
+        name: x.name,
+        qty: qty[x.id] || 1,
+        price: x.price,
+        total: (qty[x.id] || 1) * x.price,
+      }))
+  }, [dynamicAddons, qty])
 
   const effectiveTaxPct =
     gosala.taxTreatment === "section_80g_exempt"
@@ -602,8 +628,9 @@ export default function BookingFlow({
     attempt()
       .catch((err) => {
         if (/\b409\b/.test(String(err?.message))) throw err
-        return new Promise<Awaited<ReturnType<typeof attempt>>>((resolve, reject) =>
-          setTimeout(() => attempt().then(resolve, reject), 800),
+        return new Promise<Awaited<ReturnType<typeof attempt>>>(
+          (resolve, reject) =>
+            setTimeout(() => attempt().then(resolve, reject), 800),
         )
       })
       .then((res) => {
@@ -636,7 +663,15 @@ export default function BookingFlow({
     return () => {
       active = false
     }
-  }, [step, slot, animal.name, selectedDateStr, duration, devoteeName, holdRetry])
+  }, [
+    step,
+    slot,
+    animal.name,
+    selectedDateStr,
+    duration,
+    devoteeName,
+    holdRetry,
+  ])
 
   // Hold timer countdown in step 5
   useEffect(() => {
@@ -719,6 +754,8 @@ export default function BookingFlow({
 
   const handleUseGps = () => {
     setHasUserEditedAddress(true)
+    if (deviceLocation.lat) setVenueLat(deviceLocation.lat)
+    if (deviceLocation.lng) setVenueLng(deviceLocation.lng)
     const detectedCity = deviceLocation.city || gosala.region || "Local Area"
     const detectedStreet = deviceLocation.address || "Devotee Live Location"
     updateAddressFields(
@@ -745,6 +782,8 @@ export default function BookingFlow({
     setHasUserEditedAddress(true)
     const venue = venueOptions[idx]
     if (venue) {
+      if ((venue as any).lat) setVenueLat((venue as any).lat)
+      if ((venue as any).lng) setVenueLng((venue as any).lng)
       updateAddressFields(
         houseFlatNo,
         buildingName,
@@ -768,6 +807,10 @@ export default function BookingFlow({
     durationMin: duration,
     address,
     distanceKm,
+    customerLat: venueLat,
+    customerLng: venueLng,
+    selectedAddons: selectedAddonItems,
+    pairSurcharge,
     base: backendPricing?.base ?? animal.price,
     extraTime: backendPricing?.extraTime ?? extraTime,
     transport: backendPricing?.transport ?? transport,
@@ -877,48 +920,134 @@ export default function BookingFlow({
 
   if (done) {
     return (
-      <div className="fixed inset-0 z-50 bg-paper flex items-center justify-center p-6">
-        <div className="w-full max-w-[390px] text-center">
-          <div className="h-16 w-16 rounded-full bg-ok-soft grid place-items-center mx-auto">
-            <Check size={30} className="text-ok" />
+      <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+        <div className="w-full max-w-[460px] bg-paper rounded-xl border border-line shadow-2xl p-5 sm:p-6 text-center my-auto">
+          <div className="h-14 w-14 rounded-full bg-emerald-100 text-emerald-800 grid place-items-center mx-auto shadow-2xs">
+            <Check size={28} className="text-emerald-700" />
           </div>
-          <h2 className="font-serif text-[24px] text-ink mt-5">
-            Payment verified
+          <h2 className="font-serif text-[22px] font-semibold text-ink mt-3.5">
+            Payment Verified &amp; Confirmed
           </h2>
-          <p className="text-[13px] text-ink-soft mt-2 leading-relaxed">
-            Your payment is confirmed and your booking is now with the
-            gaushala manager for review. We'll email you (and show it under
-            Track) as soon as it is confirmed.
+          <p className="text-[12.5px] text-ink-soft mt-1 leading-relaxed">
+            Your seva contribution has been safely secured in escrow. Your booking dossier is now with the Gaushala Manager for pre-dispatch review.
           </p>
-          <div className="mt-6 rounded-sm border border-line bg-card p-4 text-left space-y-2 text-[13px]">
-            {[
-              [
-                "Service Category",
-                effectiveAnimalType === "Cow & Calf"
-                  ? "Gau-Vatsa Jodi Seva (Mother & Calf Pair)"
-                  : effectiveAnimalType,
-              ],
-              ["Bovine", effectiveAnimalName],
-              ["Gosala", gosala.name],
-              ["Date", selectedDateStr],
-              ["Time", `${slot} – ${endTime} (${duration} min)`],
-              [
-                "Distance",
-                `${distanceKm} km (${chargeableKm.toFixed(1)} km chargeable)`,
-              ],
-              ["Amount paid", inr(total)],
-            ].map(([l, v]) => (
-              <div key={l} className="flex justify-between">
-                <span className="text-ink-faint">{l}</span>
-                <span className="text-ink font-medium text-right">{v}</span>
+
+          <div className="mt-4 rounded-lg border border-line bg-card p-4 text-left space-y-2.5 text-[12.5px]">
+            {/* Core Booking Parameters */}
+            <div className="space-y-1.5 pb-2.5 border-b border-line">
+              <div className="flex justify-between">
+                <span className="text-ink-faint">Service Category</span>
+                <span className="text-ink font-semibold text-right">
+                  {effectiveAnimalType === "Cow & Calf"
+                    ? "Gau-Vatsa Jodi Seva (Mother & Calf Pair)"
+                    : `${effectiveAnimalType} Seva`}
+                </span>
               </div>
-            ))}
+              <div className="flex justify-between">
+                <span className="text-ink-faint">Sacred Bovine</span>
+                <span className="text-ink font-semibold text-right">{effectiveAnimalName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ink-faint">Home Sanctuary Base</span>
+                <span className="text-ink font-semibold text-right">{gosala.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ink-faint">Auspicious Date &amp; Muhurat</span>
+                <span className="text-ink font-semibold text-right font-mono">
+                  {selectedDateStr} · {slot} – {endTime}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ink-faint">Altar Venue Address</span>
+                <span className="text-ink font-medium text-right max-w-[240px] truncate" title={address}>
+                  {address}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-[11px] pt-0.5">
+                <span className="text-ink-faint">GPS Pinpoint Coordinates</span>
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${venueLat},${venueLng}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-forest hover:underline font-mono font-semibold inline-flex items-center gap-1"
+                >
+                  📍 {venueLat.toFixed(4)}° N, {venueLng.toFixed(4)}° E ↗
+                </a>
+              </div>
+            </div>
+
+            {/* Itemized Financial & Add-ons Breakdown */}
+            <div className="space-y-1.5 pt-1">
+              <div className="font-mono text-[10px] uppercase tracking-wider text-ink-faint font-bold">
+                Itemized Seva &amp; Add-ons Breakdown
+              </div>
+              <div className="flex justify-between text-ink-soft">
+                <span>Base Booking Fare (60 min)</span>
+                <span className="font-mono tabular">{inr(backendPricing?.base ?? animal.price)}</span>
+              </div>
+              {pairSurcharge > 0 && (
+                <div className="flex justify-between text-amber-900 font-medium text-[12px]">
+                  <span>Accompanying Baby Calf Seva (Gau-Vatsa Jodi)</span>
+                  <span className="font-mono tabular">+{inr(pairSurcharge)}</span>
+                </div>
+              )}
+              {extraTime > 0 && (
+                <div className="flex justify-between text-ink-soft">
+                  <span>Extra Puja Time ({duration - 60} min)</span>
+                  <span className="font-mono tabular">+{inr(extraTime)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-ink-soft">
+                <span>Transport ({chargeableKm.toFixed(1)} km chargeable)</span>
+                <span className="font-mono tabular">+{inr(transport)}</span>
+              </div>
+
+              {/* Selected Add-ons Itemization */}
+              {selectedAddonItems.length > 0 && (
+                <div className="bg-paper/70 rounded p-2 border border-line/60 space-y-1 my-1">
+                  <div className="text-[11px] font-semibold text-ink mb-1">
+                    Selected Sacred Offerings ({selectedAddonItems.length}):
+                  </div>
+                  {selectedAddonItems.map((item) => (
+                    <div key={item.id} className="flex justify-between items-center text-[11.5px] text-ink-soft">
+                      <span>• {item.name} <span className="font-mono text-ink-faint">× {item.qty}</span></span>
+                      <span className="font-mono font-medium text-ink tabular">+{inr(item.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex justify-between text-ink-soft">
+                <span>
+                  {effectiveTaxPct === 0
+                    ? "GST / Tax (Section 80G Exempt: 0%)"
+                    : `GST / Tax (${effectiveTaxPct}%)`}
+                </span>
+                <span className="font-mono tabular">+{inr(tax)}</span>
+              </div>
+            </div>
+
+            {/* Total Paid Row */}
+            <div className="pt-2 border-t border-line flex justify-between items-center">
+              <div>
+                <span className="font-serif text-[15px] font-semibold text-ink block">
+                  Total Amount Paid
+                </span>
+                <span className="text-[10px] text-emerald-800 font-mono flex items-center gap-1 font-semibold">
+                  <Check size={11} /> Escrow Verified via Gateway
+                </span>
+              </div>
+              <span className="font-mono text-[18px] font-bold text-ink tabular">
+                {inr(total)}
+              </span>
+            </div>
           </div>
+
           <button
             onClick={onComplete}
-            className="w-full mt-6 bg-saffron text-white rounded-sm py-3 text-[14px] font-medium hover:bg-saffron-deep transition-colors shadow-sm"
+            className="w-full mt-4 bg-saffron text-white rounded-md py-2.5 text-[13.5px] font-semibold hover:bg-saffron-deep transition-colors shadow-xs cursor-pointer"
           >
-            View my booking & tracking
+            View My Booking &amp; Live Tracking
           </button>
         </div>
       </div>
@@ -1738,10 +1867,31 @@ export default function BookingFlow({
                     v={transport}
                   />
                   {addonTotal - pairSurcharge > 0 && (
-                    <Line
-                      l="Sacred Offerings & Add-ons"
-                      v={addonTotal - pairSurcharge}
-                    />
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex justify-between text-ink-soft text-[12.5px] font-medium">
+                        <span>Sacred Offerings & Add-ons</span>
+                        <span className="font-mono tabular text-ink font-semibold">
+                          +{inr(addonTotal - pairSurcharge)}
+                        </span>
+                      </div>
+                      {selectedAddonItems.length > 0 && (
+                        <div className="rounded-xs bg-paper-deep/60 px-2.5 py-2 space-y-1 border border-line text-[11.5px]">
+                          {selectedAddonItems.map((item) => (
+                            <div key={item.id} className="flex justify-between text-ink-soft">
+                              <span>
+                                • {item.name}{" "}
+                                <span className="font-mono text-ink-faint">
+                                  ({inr(item.price)} × {item.qty})
+                                </span>
+                              </span>
+                              <span className="font-mono tabular text-ink font-medium">
+                                +{inr(item.total)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
                   <Line
                     l={
