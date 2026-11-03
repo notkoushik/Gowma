@@ -1,4 +1,5 @@
 import { handleApiRequest } from "./router.ts"
+import { flushNotifications } from "./services/notifyService.ts"
 
 function resolveRequestUrl(req: any): string {
   const rawUrl = req.url || ""
@@ -94,6 +95,9 @@ export default async function handler(req: any, res: any) {
       res.end(JSON.stringify({ error: `Endpoint not found: ${req.method} ${requestUrl}` }))
       return
     }
+
+    // Let any WhatsApp/email started by this request finish before the function is frozen
+    await flushNotifications()
 
     res.statusCode = result.status
     res.setHeader("Content-Type", "application/json")

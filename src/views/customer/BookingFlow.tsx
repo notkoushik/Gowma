@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
+import AddressMapPicker, { type PickedPlace } from "./AddressMapPicker"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   AlertCircle,
   ArrowRight,
@@ -322,6 +323,8 @@ export default function BookingFlow({
     () => venueOptions[0]?.lng || deviceLocation.lng || 78.3491,
   )
   const [hasUserEditedAddress, setHasUserEditedAddress] = useState(false)
+  // Where the user dropped the pin; added to the address so the team can open it in a map app
+  const pinRef = useRef<{ lat: number; lng: number } | null>(null)
 
   // Initialize only once on mount if not yet edited by user
   useEffect(() => {
@@ -718,6 +721,9 @@ export default function BookingFlow({
       street,
       mark ? `Landmark: ${mark}` : "",
       city,
+      pinRef.current
+        ? `Map: https://www.google.com/maps?q=${pinRef.current.lat.toFixed(6)},${pinRef.current.lng.toFixed(6)}`
+        : "",
     ].filter(Boolean)
     setAddress(parts.join(", "))
   }
@@ -729,8 +735,21 @@ export default function BookingFlow({
     setLandmark("")
     setCityPincode("")
     setAddress("")
+    pinRef.current = null
     setSelectedLocIndex(null)
     setHasUserEditedAddress(true)
+  }
+
+  const handleMapPick = (place: PickedPlace) => {
+    pinRef.current = { lat: place.lat, lng: place.lng }
+    setSelectedLocIndex(null)
+    updateAddressFields(
+      houseFlatNo,
+      place.building || buildingName,
+      place.street || streetArea,
+      landmark,
+      place.cityPincode || cityPincode,
+    )
   }
 
   const handleUseGps = () => {
@@ -1434,10 +1453,13 @@ export default function BookingFlow({
                 </div>
               </div>
 
+              {/* Search any place in India, or drop a pin on the map */}
+              <AddressMapPicker onPick={handleMapPick} />
+
               {/* Landmark / Area Presets */}
               <div>
                 <span className="text-[11px] font-medium text-ink-faint block mb-1.5">
-                  Suggested Hub Areas & Landmarks:
+                  Or choose a nearby hub area:
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                   {venueOptions.map((loc, idx) => (

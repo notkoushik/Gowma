@@ -2748,15 +2748,20 @@ async function requestPasswordResetOtp(emailOrPhone, channel = "EMAIL", ipAddres
       );
     }
   } else {
-    const smsResult = await sendOtpSms({
-      toPhone: user.phone || emailOrPhone,
-      otp: rawOtp,
-      expiryMinutes: 10
-    });
-    if (!smsResult.success) {
-      throw new Error(
-        smsResult.error || "Carrier SMS dispatch is currently unavailable. Please use 'Email Address' verification to receive your 6-digit code."
-      );
+    const template = (process.env.MSG91_WHATSAPP_LOGIN_OTP_TEMPLATE || process.env.MSG91_WHATSAPP_OTP_TEMPLATE || "").trim();
+    if (process.env.NODE_ENV === "test") {
+    } else if (!template || !whatsappConfigured()) {
+      throw new Error("WhatsApp verification is not available right now. Please use 'Email Verification' to receive your code.");
+    } else {
+      const waResult = await sendWhatsAppTemplate({
+        toPhone: user.phone || emailOrPhone,
+        template,
+        vars: [rawOtp],
+        urlButtonValue: rawOtp
+      });
+      if (!waResult.success) {
+        throw new Error("We could not send the WhatsApp message. Please check that your registered number has WhatsApp, or use 'Email Verification'.");
+      }
     }
   }
   const targetIdentifier = channel === "PHONE" ? user.phone || emailOrPhone : user.email;
@@ -2944,7 +2949,7 @@ ${msg.text}`;
     }
   }
 }
-async function notifyUsers(userIds, msg) {
+async function notifyUsersNow(userIds, msg) {
   if (!enabled() || !userIds.length) return;
   try {
     const users = await prisma.user.findMany({
@@ -2956,16 +2961,16 @@ async function notifyUsers(userIds, msg) {
     console.warn("[notify] could not look up recipients:", err?.message);
   }
 }
-async function notifySuperAdmins(msg) {
+async function notifySuperAdminsNow(msg) {
   if (!enabled()) return;
   try {
     const admins = await prisma.user.findMany({ where: { role: "SUPER_ADMIN", isActive: true }, select: { id: true } });
-    await notifyUsers(admins.map((a) => a.id), msg);
+    await notifyUsersNow(admins.map((a) => a.id), msg);
   } catch (err) {
     console.warn("[notify] could not look up super admins:", err?.message);
   }
 }
-async function notifyGosalaTeam(gosalaId, msg) {
+async function notifyGosalaTeamNow(gosalaId, msg) {
   if (!enabled()) return;
   try {
     const gosala = await prisma.gosala.findUnique({
@@ -2974,11 +2979,25 @@ async function notifyGosalaTeam(gosalaId, msg) {
     });
     if (!gosala) return;
     const ids = [gosala.adminId, ...gosala.managers.map((m) => m.userId)].filter(Boolean);
-    await notifyUsers(ids, msg);
+    await notifyUsersNow(ids, msg);
   } catch (err) {
     console.warn("[notify] could not look up gaushala team:", err?.message);
   }
 }
+var pending = /* @__PURE__ */ new Set();
+function track(p) {
+  pending.add(p);
+  const done = () => pending.delete(p);
+  p.then(done, done);
+  return p;
+}
+async function flushNotifications(timeoutMs = 8e3) {
+  if (!pending.size) return;
+  await Promise.race([Promise.allSettled([...pending]), new Promise((r) => setTimeout(r, timeoutMs))]);
+}
+var notifyUsers = (userIds, msg) => track(notifyUsersNow(userIds, msg));
+var notifySuperAdmins = (msg) => track(notifySuperAdminsNow(msg));
+var notifyGosalaTeam = (gosalaId, msg) => track(notifyGosalaTeamNow(gosalaId, msg));
 function bookingInfo(b) {
   return {
     id: b.id,
@@ -2995,7 +3014,7 @@ var messages = {
     subject: `Booking ${b.id} received`,
     text: `Your payment${b.total ? ` of \u20B9${b.total.toLocaleString("en-IN")}` : ""} was received and booking ${b.id} for ${b.animal} at ${b.gosala} on ${b.date}, ${b.time} is now with the gaushala manager for confirmation. We will tell you as soon as it is confirmed.`,
     sms: { template: "MSG91_TEMPLATE_BOOKING_PLACED", vars: [b.id, b.animal, b.date] },
-    whatsapp: { template: "gomaa_booking_placed", vars: [b.id, b.date] }
+    whatsapp: { template: "gomaa_booking_placed", vars: [b.id, b.animal, b.date] }
   }),
   bookingNeedsReview: (b) => ({
     subject: `New booking to review: ${b.animal} on ${b.date}`,
@@ -5256,11 +5275,19 @@ function splitEqually(totalPaise, recipients) {
   }
   return out;
 }
+function envDelayDays() {
+  const raw = (process.env.GOMAA_SETTLEMENT_DELAY_DAYS || "").trim();
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n <= 30 ? n : null;
+}
 async function getWalletConfig() {
   const row = await prisma.walletConfig.findUnique({ where: { id: 1 } });
   return {
     platformBp: row?.platformBp ?? DEFAULT_PLATFORM_BP,
-    settlementDelayDays: row?.settlementDelayDays ?? DEFAULT_DELAY_DAYS
+    // GOMAA_SETTLEMENT_DELAY_DAYS lets a test environment release earnings straight away (0).
+    // Leave it unset in production: the wallet setting (2 days by default) is used.
+    settlementDelayDays: envDelayDays() ?? row?.settlementDelayDays ?? DEFAULT_DELAY_DAYS
   };
 }
 async function getManagerBpFor(gosalaId) {
@@ -5525,8 +5552,8 @@ async function requestSplitChange(args) {
   await validateManagerBp(args.managerBp);
   const gosala = await prisma.gosala.findUnique({ where: { id: args.gosalaId } });
   if (!gosala) throw new LedgerError("Gaushala not found", "INVALID");
-  const pending = await prisma.splitPolicyRequest.findFirst({ where: { policyKey: gosala.id, status: "PENDING" } });
-  if (pending) throw new LedgerError("A change for this gaushala is already waiting for Super Admin approval", "CONFLICT");
+  const pending2 = await prisma.splitPolicyRequest.findFirst({ where: { policyKey: gosala.id, status: "PENDING" } });
+  if (pending2) throw new LedgerError("A change for this gaushala is already waiting for Super Admin approval", "CONFLICT");
   const current = await getManagerBpFor(gosala.id);
   if (current.managerBp === args.managerBp) throw new LedgerError("That is already the current manager percentage", "CONFLICT");
   return prisma.splitPolicyRequest.create({
@@ -11291,6 +11318,7 @@ async function handler(req, res) {
       res.end(JSON.stringify({ error: `Endpoint not found: ${req.method} ${requestUrl}` }));
       return;
     }
+    await flushNotifications();
     res.statusCode = result.status;
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify(result.body));

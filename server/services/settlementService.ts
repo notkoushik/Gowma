@@ -70,11 +70,20 @@ export function splitEqually(totalPaise: bigint, recipients: string[]): Map<stri
 // Settings and policy
 // ---------------------------------------------------------------------------
 
+function envDelayDays(): number | null {
+  const raw = (process.env.GOMAA_SETTLEMENT_DELAY_DAYS || "").trim()
+  if (!raw) return null
+  const n = Number(raw)
+  return Number.isInteger(n) && n >= 0 && n <= 30 ? n : null
+}
+
 export async function getWalletConfig() {
   const row = await prisma.walletConfig.findUnique({ where: { id: 1 } })
   return {
     platformBp: row?.platformBp ?? DEFAULT_PLATFORM_BP,
-    settlementDelayDays: row?.settlementDelayDays ?? DEFAULT_DELAY_DAYS,
+    // GOMAA_SETTLEMENT_DELAY_DAYS lets a test environment release earnings straight away (0).
+    // Leave it unset in production: the wallet setting (2 days by default) is used.
+    settlementDelayDays: envDelayDays() ?? row?.settlementDelayDays ?? DEFAULT_DELAY_DAYS,
   }
 }
 

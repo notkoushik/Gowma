@@ -2,7 +2,7 @@ import { prisma } from "../prisma.ts"
 import { hashPassword, verifyPassword } from "../auth/password.ts"
 import { signResetToken, verifyResetToken } from "../auth/jwt.ts"
 import { sendOtpEmail } from "./resendService.ts"
-import { sendOtpSms } from "./smsService.ts"
+import { sendWhatsAppTemplate, whatsappConfigured } from "./smsService.ts"
 import crypto from "node:crypto"
 
 export interface OtpRequestResult {
@@ -201,17 +201,22 @@ export async function requestPasswordResetOtp(
       )
     }
   } else {
-    // Phone channel (for SMS delivery via Fast2SMS / Twilio / MSG91)
-    const smsResult = await sendOtpSms({
-      toPhone: user.phone || emailOrPhone,
-      otp: rawOtp,
-      expiryMinutes: 10,
-    })
-    if (!smsResult.success) {
-      throw new Error(
-        smsResult.error ||
-        "Carrier SMS dispatch is currently unavailable. Please use 'Email Address' verification to receive your 6-digit code."
-      )
+    // Phone channel: the code goes to the user's WhatsApp (approved authentication template with a copy-code button)
+    const template = (process.env.MSG91_WHATSAPP_LOGIN_OTP_TEMPLATE || process.env.MSG91_WHATSAPP_OTP_TEMPLATE || "").trim()
+    if (process.env.NODE_ENV === "test") {
+      // tests never message a real number
+    } else if (!template || !whatsappConfigured()) {
+      throw new Error("WhatsApp verification is not available right now. Please use 'Email Verification' to receive your code.")
+    } else {
+      const waResult = await sendWhatsAppTemplate({
+        toPhone: user.phone || emailOrPhone,
+        template,
+        vars: [rawOtp],
+        urlButtonValue: rawOtp,
+      })
+      if (!waResult.success) {
+        throw new Error("We could not send the WhatsApp message. Please check that your registered number has WhatsApp, or use 'Email Verification'.")
+      }
     }
   }
 
