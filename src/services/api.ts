@@ -359,7 +359,15 @@ export const api = {
       amountPaise: number
       currency: string
       keyId: string
+      isSynthetic?: boolean
     }>("/api/payments/razorpay/order", {
+      method: "POST",
+      body: JSON.stringify(params),
+    })
+  },
+
+  async createSyntheticPaymentProof(params: { orderId: string; amountPaise: number }) {
+    return request<RazorpayProof>("/api/payments/razorpay/synthetic-proof", {
       method: "POST",
       body: JSON.stringify(params),
     })

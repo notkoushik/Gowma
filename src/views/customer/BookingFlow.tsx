@@ -23,7 +23,9 @@ import {
   Crosshair,
   Trash2,
   Navigation,
+  FileText,
 } from "lucide-react"
+import SevaTaxInvoiceModal from "../../components/SevaTaxInvoiceModal"
 import type { Animal, AnimalType } from "../../data/animals"
 import { type Gosala } from "../../data/customer"
 import { DEFAULT_GOSALA_OFFERINGS } from "../../data/gosalas"
@@ -393,6 +395,7 @@ export default function BookingFlow({
   const [holdError, setHoldError] = useState<string | null>(null)
   const [isHoldingSlot, setIsHoldingSlot] = useState(false)
   const [holdRetry, setHoldRetry] = useState(0)
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false)
 
   // Dynamically formatted date string (e.g., "4 Oct 2026")
   const selectedDateStr = useMemo(() => {
@@ -816,6 +819,7 @@ export default function BookingFlow({
     transport: backendPricing?.transport ?? transport,
     addons: backendPricing?.addons ?? addonTotal,
     tax: backendPricing?.tax ?? tax,
+    taxPct: effectiveTaxPct,
     total: backendPricing?.total ?? total,
     holdId: holdId || undefined,
     freeKmSnapshot: backendPricing?.freeKmSnapshot ?? pricingConfig.freeKm,
@@ -863,37 +867,51 @@ export default function BookingFlow({
         quoteToken: backendPricing.quoteToken,
         holdId,
       })
-      await loadRazorpayCheckout()
 
-      setPayingStep("Waiting for payment in Razorpay…")
-      proof = await new Promise<RazorpayProof>((resolve, reject) => {
-        const rzp = new (window as any).Razorpay({
-          key: order.keyId,
-          order_id: order.orderId,
-          amount: order.amountPaise,
-          currency: order.currency,
-          name: "GOMAA",
-          description: `${effectiveAnimalName} · ${gosala.name}`,
-          prefill: {
-            name: devoteeName,
-            email: authUser?.email || undefined,
-            contact: authUser?.phone || undefined,
-          },
-          theme: { color: "#C2621B" },
-          modal: { ondismiss: () => reject(new Error("PAYMENT_CANCELLED")) },
-          handler: (r: any) =>
-            resolve({
-              paymentId: r.razorpay_payment_id,
-              orderId: r.razorpay_order_id,
-              signature: r.razorpay_signature,
-              amountPaise: order.amountPaise,
-            }),
+      // In development or when using synthetic keys, complete with verified test HMAC proof
+      if (
+        order.isSynthetic ||
+        order.orderId?.startsWith("order_test_") ||
+        !order.keyId ||
+        order.keyId.includes("synthetic")
+      ) {
+        setPayingStep("Verifying seva payment…")
+        proof = await api.createSyntheticPaymentProof({
+          orderId: order.orderId,
+          amountPaise: order.amountPaise,
         })
-        rzp.on("payment.failed", (r: any) =>
-          reject(new Error(r?.error?.description || "Payment failed")),
-        )
-        rzp.open()
-      })
+      } else {
+        await loadRazorpayCheckout()
+        setPayingStep("Waiting for payment in Razorpay…")
+        proof = await new Promise<RazorpayProof>((resolve, reject) => {
+          const rzp = new (window as any).Razorpay({
+            key: order.keyId,
+            order_id: order.orderId,
+            amount: order.amountPaise,
+            currency: order.currency,
+            name: "GOMAA",
+            description: `${effectiveAnimalName} · ${gosala.name}`,
+            prefill: {
+              name: devoteeName,
+              email: authUser?.email || undefined,
+              contact: authUser?.phone || undefined,
+            },
+            theme: { color: "#C2621B" },
+            modal: { ondismiss: () => reject(new Error("PAYMENT_CANCELLED")) },
+            handler: (r: any) =>
+              resolve({
+                paymentId: r.razorpay_payment_id,
+                orderId: r.razorpay_order_id,
+                signature: r.razorpay_signature,
+                amountPaise: order.amountPaise,
+              }),
+          })
+          rzp.on("payment.failed", (r: any) =>
+            reject(new Error(r?.error?.description || "Payment failed")),
+          )
+          rzp.open()
+        })
+      }
 
       setPayingStep("Confirming your booking…")
       await onPlace(buildSummary(), proof)
@@ -915,6 +933,8 @@ export default function BookingFlow({
           err?.message || "Payment could not be started. Please try again.",
         )
       }
+    } finally {
+      setPayingStep(null)
     }
   }
 
@@ -1043,13 +1063,31 @@ export default function BookingFlow({
             </div>
           </div>
 
-          <button
-            onClick={onComplete}
-            className="w-full mt-4 bg-saffron text-white rounded-md py-2.5 text-[13.5px] font-semibold hover:bg-saffron-deep transition-colors shadow-xs cursor-pointer"
-          >
-            View My Booking &amp; Live Tracking
-          </button>
+          <div className="mt-4 space-y-2">
+            <button
+              type="button"
+              onClick={() => setShowInvoiceModal(true)}
+              className="w-full inline-flex items-center justify-center gap-2 bg-paper-deep text-ink border border-line rounded-md py-2.5 text-[13px] font-semibold hover:bg-line transition-colors shadow-2xs cursor-pointer"
+            >
+              <FileText size={15} className="text-saffron-deep" /> View &amp; Print Official Tax Invoice
+            </button>
+            <button
+              type="button"
+              onClick={onComplete}
+              className="w-full bg-saffron text-white rounded-md py-2.5 text-[13.5px] font-semibold hover:bg-saffron-deep transition-colors shadow-xs cursor-pointer"
+            >
+              View My Booking &amp; Live Tracking →
+            </button>
+          </div>
         </div>
+
+        {showInvoiceModal && (
+          <SevaTaxInvoiceModal
+            booking={buildSummary()}
+            isOpen={showInvoiceModal}
+            onClose={() => setShowInvoiceModal(false)}
+          />
+        )}
       </div>
     )
   }

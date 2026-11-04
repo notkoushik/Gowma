@@ -483,6 +483,27 @@ function ReviewCard({
                     </strong>
                   </span>
                 </div>
+
+                {/* Selected Add-ons / Offerings on Review Desk */}
+                {b.selectedAddons && b.selectedAddons.length > 0 && (
+                  <div className="w-full mt-2.5 pt-2 border-t border-line/60 flex flex-wrap items-center gap-2 text-[12px]">
+                    <span className="font-mono text-[10.5px] uppercase font-bold text-saffron-deep tracking-wider flex items-center gap-1">
+                      <Sparkles size={12} /> Sacred Add-ons ({b.selectedAddons.length}):
+                    </span>
+                    {b.selectedAddons.map((item: any, idx: number) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 bg-paper px-2 py-0.5 rounded border border-line text-[11.5px] text-ink font-medium shadow-2xs"
+                      >
+                        <span>• {item.name}</span>
+                        <span className="text-ink-faint font-mono text-[10.5px]">×{item.qty}</span>
+                        {item.total ? (
+                          <span className="font-mono text-saffron-deep text-[10.5px] font-semibold">(+{inr(item.total)})</span>
+                        ) : null}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2 self-start md:self-auto">

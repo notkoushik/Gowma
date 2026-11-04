@@ -154,10 +154,13 @@ async function walletSummary(userId: string, role: JwtPayload["role"]) {
         data: {
           userId,
           balancePaise: 0n,
-          heldPaise: 0n,
+          currency: "INR",
+          isActive: true,
         },
       })
-    } catch {}
+    } catch {
+      wallet = await prisma.wallet.findUnique({ where: { userId } })
+    }
   }
 
   const [gosalaIds, processing] = await Promise.all([

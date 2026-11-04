@@ -24,7 +24,9 @@ import {
   Building2,
   PawPrint,
   X,
+  FileText,
 } from "lucide-react"
+import SevaTaxInvoiceModal from "../components/SevaTaxInvoiceModal"
 import { type Animal, type AnimalType } from "../data/animals"
 import { pricing, type Gosala } from "../data/customer"
 import { CURRENT_CUSTOMER, inr, type Booking } from "../data/mock"
@@ -87,6 +89,8 @@ export type BookingSummary = {
   customerLng?: number | null
   selectedAddons?: Array<{ id: string; name: string; qty: number; price: number; total: number }>
   pairSurcharge?: number
+  taxPct?: number
+  paymentProvider?: "RAZORPAY" | "WALLET"
 }
 
 export type MyBooking = {
@@ -116,6 +120,7 @@ export type MyBooking = {
   customerLat?: number | null
   customerLng?: number | null
   selectedAddons?: Array<any>
+  [key: string]: any
 }
 
 export function makeBooking(
@@ -172,9 +177,11 @@ export function makeBooking(
     transport: s.transport,
     addons: s.addons,
     tax: s.tax,
+    taxPct: s.taxPct,
     discount: 0,
     total: s.total,
     commissionPct: commPct,
+    paymentProvider: s.paymentProvider || "RAZORPAY",
     status: "Payment Verified",
     driver: null,
     driverStage: 0,
@@ -241,6 +248,20 @@ export function toMyBooking(b: Booking): MyBooking {
     customerLat: b.customerLat,
     customerLng: b.customerLng,
     selectedAddons: b.selectedAddons,
+    base: b.base,
+    extraTime: b.extraTime,
+    transport: b.transport,
+    addons: b.addons,
+    tax: b.tax,
+    taxPct: (b as any).taxPct,
+    customer: b.customer,
+    phone: b.phone,
+    customerEmail: (b as any).customerEmail,
+    paymentId: (b as any).paymentId,
+    paymentOrderId: (b as any).paymentOrderId,
+    paymentProvider: (b as any).paymentProvider,
+    createdAt: (b as any).createdAt,
+    rawBooking: b,
   }
 }
 
@@ -956,6 +977,7 @@ function Bookings({
   onTrack: (bookingId?: string) => void
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [selectedInvoiceBooking, setSelectedInvoiceBooking] = useState<any>(null)
 
   return (
     <div className="p-4 space-y-3">
@@ -1071,10 +1093,22 @@ function Bookings({
                   green grass feeding protocol.
                 </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-line/60">
-                  <span className="text-[11.5px] text-forest font-medium inline-flex items-center gap-1">
-                    <ShieldCheck size={13} /> Verified Devotee Booking
-                  </span>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-line/60">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11.5px] text-forest font-medium inline-flex items-center gap-1">
+                      <ShieldCheck size={13} /> Verified
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSelectedInvoiceBooking((b as any).rawBooking || b)
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-line bg-card hover:bg-paper text-ink text-[11px] font-medium transition cursor-pointer shadow-2xs"
+                    >
+                      <FileText size={12} className="text-saffron-deep" /> Official Invoice
+                    </button>
+                  </div>
                   {b.status !== "Rejected" && (
                     <button
                       onClick={(e) => {
@@ -1092,6 +1126,14 @@ function Bookings({
           </div>
         )
       })}
+
+      {selectedInvoiceBooking && (
+        <SevaTaxInvoiceModal
+          booking={selectedInvoiceBooking}
+          isOpen={Boolean(selectedInvoiceBooking)}
+          onClose={() => setSelectedInvoiceBooking(null)}
+        />
+      )}
     </div>
   )
 }
@@ -1217,12 +1259,46 @@ function MobileCustomer({
         typeof b.driverStage === "number" &&
         b.driverStage > 0 &&
         b.status !== "Completed" &&
-        b.status !== "Rejected",
+        b.status !== "Rejected" &&
+        b.status !== "Cancelled" &&
+        b.status !== "Refunded",
     ) ||
-    myBookings.find((b) => b.status === "Confirmed" && b.driver) ||
-    myBookings.find((b) => b.status === "Confirmed") ||
-    myBookings.find((b) => b.status === "Under Review") ||
+    myBookings.find(
+      (b) =>
+        b.status === "Confirmed" &&
+        b.driver &&
+        b.status !== "Rejected" &&
+        b.status !== "Cancelled",
+    ) ||
+    myBookings.find(
+      (b) =>
+        b.status === "Confirmed" &&
+        b.status !== "Rejected" &&
+        b.status !== "Cancelled",
+    ) ||
+    myBookings.find(
+      (b) =>
+        b.status === "Under Review" &&
+        b.status !== "Rejected" &&
+        b.status !== "Cancelled",
+    ) ||
+    myBookings.find(
+      (b) =>
+        b.status !== "Rejected" &&
+        b.status !== "Cancelled" &&
+        b.status !== "Completed" &&
+        b.status !== "Refunded",
+    ) ||
     myBookings[0]
+
+  const isLiveActiveTrip = Boolean(
+    activeTrip &&
+      activeTrip.status !== "Rejected" &&
+      activeTrip.status !== "Cancelled" &&
+      activeTrip.status !== "Completed" &&
+      activeTrip.status !== "Refunded" &&
+      !(activeTrip.managerApproval && activeTrip.managerApproval.confirmed === false),
+  )
 
   const tabs: { id: Tab label: string icon: typeof Home }[] = [
     { id: "discover", label: "Discover", icon: Compass },
@@ -1686,7 +1762,7 @@ function MobileCustomer({
               >
                 <Icon size={19} className={active ? "text-saffron" : ""} />
                 <span>{t.label}</span>
-                {t.id === "track" && activeTrip && (
+                {t.id === "track" && isLiveActiveTrip && (
                   <span className="absolute top-2 right-1/2 translate-x-3 h-1.5 w-1.5 rounded-full bg-saffron" />
                 )}
               </button>

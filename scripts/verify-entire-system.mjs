@@ -143,14 +143,27 @@ async function run() {
     harness.assert(holdRes1?.status === 200 && holdRes1?.body?.success === true, "Customer successfully acquires slot hold")
     const holdId = holdRes1?.body?.hold?.id
 
-    // Attempt overlapping hold on same slot
+    // Attempt overlapping hold on same slot by another devotee
+    const cust2Token = (await import("../server/auth/jwt.ts")).signJwt({
+      userId: `cust-other-${harness.testRunId}`,
+      email: `devotee2.${harness.testRunId}@gomaa.test`,
+      name: "Second Devotee",
+      role: "customer",
+      dbRole: "CUSTOMER",
+      gosalaIds: [],
+      gosalaNames: [],
+    })
+    const cust2Headers = {
+      Authorization: `Bearer ${cust2Token}`,
+      "Content-Type": "application/json",
+    }
     const holdRes2 = await handleApiRequest("POST", "/api/hold", JSON.stringify({
       animal: testAnimal.name,
       date: holdDate,
       start: holdStart,
       durationMin: 60,
-      customerName: custUser.name,
-    }), customerHeaders)
+      customerName: "Second Devotee",
+    }), cust2Headers)
     harness.assert(holdRes2?.status === 409, "Overlapping slot hold is rejected with 409 Conflict")
 
     // 7. Atomic Booking Transaction & Payment Requirement

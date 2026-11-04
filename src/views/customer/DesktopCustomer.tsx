@@ -22,7 +22,9 @@ import {
   Fingerprint,
   Building2,
   PawPrint,
+  FileText,
 } from "lucide-react"
+import SevaTaxInvoiceModal from "../../components/SevaTaxInvoiceModal"
 import { type Animal } from "../../data/animals"
 import { pricing, type Gosala } from "../../data/customer"
 import { inr } from "../../data/mock"
@@ -211,12 +213,46 @@ export default function DesktopCustomer({
         typeof b.driverStage === "number" &&
         b.driverStage > 0 &&
         b.status !== "Completed" &&
-        b.status !== "Rejected",
+        b.status !== "Rejected" &&
+        b.status !== "Cancelled" &&
+        b.status !== "Refunded",
     ) ||
-    myBookings.find((b) => b.status === "Confirmed" && b.driver) ||
-    myBookings.find((b) => b.status === "Confirmed") ||
-    myBookings.find((b) => b.status === "Under Review") ||
+    myBookings.find(
+      (b) =>
+        b.status === "Confirmed" &&
+        b.driver &&
+        b.status !== "Rejected" &&
+        b.status !== "Cancelled",
+    ) ||
+    myBookings.find(
+      (b) =>
+        b.status === "Confirmed" &&
+        b.status !== "Rejected" &&
+        b.status !== "Cancelled",
+    ) ||
+    myBookings.find(
+      (b) =>
+        b.status === "Under Review" &&
+        b.status !== "Rejected" &&
+        b.status !== "Cancelled",
+    ) ||
+    myBookings.find(
+      (b) =>
+        b.status !== "Rejected" &&
+        b.status !== "Cancelled" &&
+        b.status !== "Completed" &&
+        b.status !== "Refunded",
+    ) ||
     myBookings[0]
+
+  const isLiveActiveTrip = Boolean(
+    activeTrip &&
+      activeTrip.status !== "Rejected" &&
+      activeTrip.status !== "Cancelled" &&
+      activeTrip.status !== "Completed" &&
+      activeTrip.status !== "Refunded" &&
+      !(activeTrip.managerApproval && activeTrip.managerApproval.confirmed === false),
+  )
   const list = liveAnimals.filter(
     (a) =>
       (typeFilter === "All" || a.type === typeFilter) &&
@@ -293,7 +329,7 @@ export default function DesktopCustomer({
                   }`}
                 >
                   {n.label}
-                  {n.id === "track" && activeTrip && (
+                  {n.id === "track" && isLiveActiveTrip && (
                     <span className="absolute top-5 right-1 h-1.5 w-1.5 rounded-full bg-saffron" />
                   )}
                   <span
@@ -985,6 +1021,7 @@ function BookingsView({
   onTrack: (bookingId?: string) => void
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [selectedInvoiceBooking, setSelectedInvoiceBooking] = useState<any>(null)
 
   return (
     <div>
@@ -1106,10 +1143,22 @@ function BookingsView({
                       green grass feeding protocol.
                     </div>
 
-                    <div className="flex items-center justify-between pt-2 border-t border-line/60">
-                      <span className="text-[12px] text-forest font-medium inline-flex items-center gap-1.5">
-                        <ShieldCheck size={14} /> Verified Devotee Booking
-                      </span>
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-line/60">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[12px] text-forest font-medium inline-flex items-center gap-1.5">
+                          <ShieldCheck size={14} /> Verified Devotee Booking
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedInvoiceBooking((b as any).rawBooking || b)
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-line bg-card hover:bg-paper text-ink text-[11.5px] font-medium transition cursor-pointer shadow-2xs"
+                        >
+                          <FileText size={13} className="text-saffron-deep" /> Official Invoice
+                        </button>
+                      </div>
                       {b.status !== "Rejected" && (
                         <button
                           onClick={(e) => {
@@ -1128,6 +1177,14 @@ function BookingsView({
             )
           })}
         </div>
+      )}
+
+      {selectedInvoiceBooking && (
+        <SevaTaxInvoiceModal
+          booking={selectedInvoiceBooking}
+          isOpen={Boolean(selectedInvoiceBooking)}
+          onClose={() => setSelectedInvoiceBooking(null)}
+        />
       )}
     </div>
   )

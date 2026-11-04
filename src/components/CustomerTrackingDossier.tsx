@@ -43,7 +43,10 @@ export default function CustomerTrackingDossier({
   const isRejected =
     booking.status === "Rejected" ||
     booking.status === "REJECTED" ||
-    booking.status === "DECLINED"
+    booking.status === "DECLINED" ||
+    booking.status === "Cancelled" ||
+    booking.status === "Refunded" ||
+    (booking.managerApproval && booking.managerApproval.confirmed === false)
 
   const stage = booking.driverStage ?? 0
   const isDriverAssigned = Boolean(

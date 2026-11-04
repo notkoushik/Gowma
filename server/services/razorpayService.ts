@@ -76,9 +76,14 @@ export async function createPaymentOrder(input: Omit<PaymentInput, "paymentId" |
       return { orderId: order.id, amountPaise, currency: "INR" }
     }
   } catch (err: any) {
-    // Offline fake orders are for tests only. With real keys configured, surface the failure
+    // Offline fake orders are for tests and dev/synthetic environments. With real keys configured, surface the failure
     // instead of handing the browser an order id that Razorpay Checkout will reject.
-    if (process.env.NODE_ENV !== "production" && (!process.env.RAZORPAY_KEY_ID || process.env.NODE_ENV === "test")) {
+    const isSyntheticOrDev =
+      process.env.NODE_ENV !== "production" &&
+      (!process.env.RAZORPAY_KEY_ID ||
+        !/^rzp_(test|live)_(?!gomaa_synthetic)/.test(process.env.RAZORPAY_KEY_ID) ||
+        process.env.NODE_ENV === "test")
+    if (isSyntheticOrDev) {
       return { orderId: `order_test_${crypto.randomBytes(8).toString("hex")}`, amountPaise, currency: "INR" }
     }
     throw err
