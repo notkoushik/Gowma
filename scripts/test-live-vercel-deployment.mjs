@@ -91,7 +91,7 @@ async function runTests() {
     const res = await fetch(`${PROD_BASE}/api/auth/admin-login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "operations@gomaa.in", password: "GomaaAdmin@2026!" }),
+      body: JSON.stringify({ email: "ops.secunderabad@gomaa.in", password: "OpsAdmin@2026!" }),
     })
     const data = await res.json()
     assert(res.status === 200 && data.ok === true && data.user.role === "admin", "Operations Admin signs in via /api/auth/admin-login")
@@ -107,7 +107,7 @@ async function runTests() {
     const res = await fetch(`${PROD_BASE}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "devpulseorg@gmail.com", password: "GomaaAdmin@2026!" }),
+      body: JSON.stringify({ email: "devpulseorg@gmail.com", password: "Devotee@2026!" }),
     })
     const data = await res.json()
     assert(res.status === 200 && data.ok === true && data.user.role === "customer", "Devotee Customer signs in via /api/auth/login")
