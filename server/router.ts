@@ -591,6 +591,20 @@ export async function handleApiRequest(
   if (!pathname.startsWith("/api/")) return null
 
   const authUser = getAuthUserFromHeader(headers?.authorization || headers?.Authorization)
+  if (authUser) {
+    const rawR = (authUser.role || "").toLowerCase().trim()
+    const rawDbR = (authUser.dbRole || "").toLowerCase().trim()
+    if (rawR === "gosala_manager" || rawDbR === "gosala_manager") {
+      authUser.role = "manager"
+      if (!authUser.dbRole) (authUser as any).dbRole = "GOSALA_MANAGER"
+    } else if (rawR === "operations_admin" || rawDbR === "operations_admin") {
+      authUser.role = "admin"
+      if (!authUser.dbRole) (authUser as any).dbRole = "OPERATIONS_ADMIN"
+    } else if (rawR === "super_admin" || rawDbR === "super_admin") {
+      authUser.role = "super_admin"
+      if (!authUser.dbRole) (authUser as any).dbRole = "SUPER_ADMIN"
+    }
+  }
 
   // Every API route is private by default. Keep only the minimum bootstrap
   // endpoints public; individual mutation groups add stricter role checks below.
@@ -636,8 +650,8 @@ export async function handleApiRequest(
       return (
         userRole === t ||
         userDbRole === t ||
-        (t === "manager" && (userDbRole === "gosala_manager" || userRole === "manager")) ||
-        (t === "admin" && (userDbRole === "operations_admin" || userRole === "admin")) ||
+        (t === "manager" && (userDbRole === "gosala_manager" || userRole === "manager" || userRole === "gosala_manager")) ||
+        (t === "admin" && (userDbRole === "operations_admin" || userRole === "admin" || userRole === "operations_admin")) ||
         (t === "super_admin" && (userDbRole === "super_admin" || userRole === "super_admin")) ||
         (t === "customer" && (userDbRole === "customer" || userRole === "customer")) ||
         (t === "driver" && (userDbRole === "driver" || userRole === "driver"))

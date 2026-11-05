@@ -5830,14 +5830,16 @@ var coolOffHours = () => {
   return getPayoutProvider().mode === "SANDBOX" ? 0 : 24;
 };
 function publicAccount(a) {
+  const usableDate = a.usableFrom instanceof Date ? a.usableFrom : new Date(a.usableFrom || Date.now());
+  const createdDate = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt || Date.now());
   return {
     id: a.id,
     type: a.type,
     holderName: a.holderName,
     label: a.type === "BANK" ? `Bank \u2022\u2022\u2022\u2022${a.accountLast4} (${a.ifsc})` : a.vpa,
-    usableFrom: a.usableFrom.toISOString(),
-    usableNow: a.usableFrom.getTime() <= Date.now(),
-    createdAt: a.createdAt.toISOString()
+    usableFrom: usableDate.toISOString(),
+    usableNow: usableDate.getTime() <= Date.now(),
+    createdAt: createdDate.toISOString()
   };
 }
 async function listPayoutAccounts(userId) {
@@ -5939,17 +5941,19 @@ async function consumeOtp(userId, otp, amountPaise, payoutAccountId) {
   if (claimed.count !== 1) throw new LedgerError("That code was already used", "CONFLICT");
 }
 function serializeWithdrawal(w, accountLabel) {
+  const reqDate = w.requestedAt instanceof Date ? w.requestedAt : new Date(w.requestedAt || Date.now());
+  const compDate = w.completedAt ? w.completedAt instanceof Date ? w.completedAt : new Date(w.completedAt) : null;
   return {
     id: w.id,
-    amountPaise: w.amountPaise.toString(),
-    amountRupees: Number(w.amountPaise) / 100,
+    amountPaise: (w.amountPaise ?? 0).toString(),
+    amountRupees: Number(w.amountPaise ?? 0) / 100,
     status: w.status,
     mode: w.mode,
     utr: w.utr,
     failureReason: w.failureReason,
     account: accountLabel,
-    requestedAt: w.requestedAt.toISOString(),
-    completedAt: w.completedAt ? w.completedAt.toISOString() : null
+    requestedAt: reqDate.toISOString(),
+    completedAt: compDate ? compDate.toISOString() : null
   };
 }
 async function createWithdrawal(args) {
@@ -6167,8 +6171,9 @@ function mapLedgerError(err) {
   return fail(500, "Something went wrong while handling the wallet request");
 }
 async function gosalasFor(user) {
-  if (user.role === "super_admin") return prisma.gosala.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });
-  if (user.role === "admin") {
+  const r = (user.role || "").toLowerCase() === "gosala_manager" ? "manager" : (user.role || "").toLowerCase() === "operations_admin" ? "admin" : (user.role || "").toLowerCase();
+  if (r === "super_admin") return prisma.gosala.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });
+  if (r === "admin") {
     const adminEmail = (user.email || "").toLowerCase().trim();
     const allGosalas = await prisma.gosala.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });
     return allGosalas.filter((g) => {
@@ -6179,7 +6184,7 @@ async function gosalasFor(user) {
       return Boolean(user.userId && gAdminId === user.userId || adminEmail && gEmail === adminEmail);
     });
   }
-  if (user.role === "manager") {
+  if (r === "manager") {
     const assignments = await prisma.gosalaManagerAssignment.findMany({
       where: { userId: user.userId, status: "Active" },
       include: { gosala: true }
@@ -6195,9 +6200,10 @@ async function gosalasFor(user) {
   return [];
 }
 async function walletSummary(userId, role) {
+  const r = (role || "").toLowerCase() === "gosala_manager" ? "manager" : (role || "").toLowerCase() === "operations_admin" ? "admin" : (role || "").toLowerCase();
   const earnsFrom = async () => {
-    if (role === "admin") return (await prisma.gosala.findMany({ where: { adminId: userId }, select: { id: true } })).map((g) => g.id);
-    if (role === "manager") {
+    if (r === "admin") return (await prisma.gosala.findMany({ where: { adminId: userId }, select: { id: true } })).map((g) => g.id);
+    if (r === "manager") {
       const direct = (await prisma.gosalaManagerAssignment.findMany({ where: { userId, status: "Active" }, select: { gosalaId: true } })).map((a) => a.gosalaId);
       if (direct.length > 0) return direct;
       const allG = await prisma.gosala.findMany({ where: { isActive: true }, select: { id: true, adminId: true, metadata: true } });
@@ -6231,11 +6237,11 @@ async function walletSummary(userId, role) {
   const [rows, txs, adminGosalas, activeAssignments] = await Promise.all([
     gosalaIds.length ? prisma.bookingSettlement.findMany({ where: { gosalaId: { in: gosalaIds }, status: { in: ["HELD", "READY_FOR_APPROVAL"] } }, orderBy: { eligibleAt: "asc" }, take: 200 }).catch(() => []) : Promise.resolve([]),
     wallet ? prisma.walletTransaction.findMany({ where: { walletId: wallet.id }, orderBy: { createdAt: "desc" }, take: 40 }).catch(() => []) : Promise.resolve([]),
-    role === "admin" && gosalaIds.length ? prisma.gosala.findMany({ where: { id: { in: gosalaIds } }, select: { id: true, adminId: true } }).catch(() => []) : Promise.resolve([]),
-    role === "manager" && gosalaIds.length ? prisma.gosalaManagerAssignment.findMany({ where: { gosalaId: { in: gosalaIds }, status: "Active" }, select: { gosalaId: true } }).catch(() => []) : Promise.resolve([])
+    r === "admin" && gosalaIds.length ? prisma.gosala.findMany({ where: { id: { in: gosalaIds } }, select: { id: true, adminId: true } }).catch(() => []) : Promise.resolve([]),
+    r === "manager" && gosalaIds.length ? prisma.gosalaManagerAssignment.findMany({ where: { gosalaId: { in: gosalaIds }, status: "Active" }, select: { gosalaId: true } }).catch(() => []) : Promise.resolve([])
   ]);
   const people = /* @__PURE__ */ new Map();
-  if (role === "admin") {
+  if (r === "admin") {
     for (const g of adminGosalas) people.set(g.id, 1);
   } else {
     for (const a of activeAssignments) {
@@ -6244,7 +6250,7 @@ async function walletSummary(userId, role) {
   }
   const earnsFromNames = gosalaIds.length ? (await prisma.gosala.findMany({ where: { id: { in: gosalaIds } }, select: { name: true }, orderBy: { name: "asc" } }).catch(() => [])).map((g) => g.name) : [];
   const upcoming = rows.map((s) => {
-    const rawTotal = role === "admin" ? s.adminPaise : s.managerPaise;
+    const rawTotal = r === "admin" ? s.adminPaise : s.managerPaise;
     const totalPaise = rawTotal !== null && rawTotal !== void 0 ? BigInt(rawTotal) : 0n;
     const divisor = BigInt(Math.max(1, people.get(s.gosalaId) ?? 1));
     const myPaise = divisor > 0n ? totalPaise / divisor : totalPaise;
@@ -6316,13 +6322,14 @@ async function handleWalletRoutes(args) {
     return ok(moved);
   }
   if (!authUser) return null;
-  const isSA = authUser.role === "super_admin";
-  const isAdmin = authUser.role === "admin";
-  const isManager = authUser.role === "manager";
+  const roleNorm = (authUser.role || "").toLowerCase() === "gosala_manager" || (authUser.dbRole || "").toLowerCase() === "gosala_manager" ? "manager" : (authUser.role || "").toLowerCase() === "operations_admin" || (authUser.dbRole || "").toLowerCase() === "operations_admin" ? "admin" : (authUser.role || "").toLowerCase();
+  const isSA = roleNorm === "super_admin" || (authUser.dbRole || "").toLowerCase() === "super_admin";
+  const isAdmin = roleNorm === "admin";
+  const isManager = roleNorm === "manager";
   if (method === "GET" && pathname === "/api/wallet/me") {
     if (!isAdmin && !isManager) return fail(403, "Only Operations Admins and Managers have an earnings wallet");
     try {
-      const summaryPromise = walletSummary(authUser.userId, authUser.role).catch((wErr) => {
+      const summaryPromise = walletSummary(authUser.userId, roleNorm).catch((wErr) => {
         console.error("[walletSummary] Error:", wErr?.stack || wErr);
         return {
           earnsFrom: authUser.gosalaNames || [],
@@ -7057,6 +7064,20 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   const { pathname, query } = parseUrl(rawUrl);
   if (!pathname.startsWith("/api/")) return null;
   const authUser = getAuthUserFromHeader(headers?.authorization || headers?.Authorization);
+  if (authUser) {
+    const rawR = (authUser.role || "").toLowerCase().trim();
+    const rawDbR = (authUser.dbRole || "").toLowerCase().trim();
+    if (rawR === "gosala_manager" || rawDbR === "gosala_manager") {
+      authUser.role = "manager";
+      if (!authUser.dbRole) authUser.dbRole = "GOSALA_MANAGER";
+    } else if (rawR === "operations_admin" || rawDbR === "operations_admin") {
+      authUser.role = "admin";
+      if (!authUser.dbRole) authUser.dbRole = "OPERATIONS_ADMIN";
+    } else if (rawR === "super_admin" || rawDbR === "super_admin") {
+      authUser.role = "super_admin";
+      if (!authUser.dbRole) authUser.dbRole = "SUPER_ADMIN";
+    }
+  }
   const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/admin-login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/webhooks/razorpayx" || pathname === "/api/jobs/settlement-maturity" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/jobs/settlement-maturity" || pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/regions" || pathname === "/api/places/search" || pathname === "/api/animals" || pathname === "/api/gosalas" || pathname === "/api/vets" || pathname === "/api/pricing-config" || pathname === "/api/pricing/config" || pathname === "/api/availability" || pathname === "/api/settlements/schedule");
   if (!isPublicRoute && !authUser) {
     return { status: 401, body: { ok: false, error: "Authentication required" } };
@@ -7069,7 +7090,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     const userDbRole = (authUser.dbRole || "").toLowerCase();
     const isAllowed = roles.some((target) => {
       const t = target.toLowerCase();
-      return userRole === t || userDbRole === t || t === "manager" && (userDbRole === "gosala_manager" || userRole === "manager") || t === "admin" && (userDbRole === "operations_admin" || userRole === "admin") || t === "super_admin" && (userDbRole === "super_admin" || userRole === "super_admin") || t === "customer" && (userDbRole === "customer" || userRole === "customer") || t === "driver" && (userDbRole === "driver" || userRole === "driver");
+      return userRole === t || userDbRole === t || t === "manager" && (userDbRole === "gosala_manager" || userRole === "manager" || userRole === "gosala_manager") || t === "admin" && (userDbRole === "operations_admin" || userRole === "admin" || userRole === "operations_admin") || t === "super_admin" && (userDbRole === "super_admin" || userRole === "super_admin") || t === "customer" && (userDbRole === "customer" || userRole === "customer") || t === "driver" && (userDbRole === "driver" || userRole === "driver");
     });
     return isAllowed ? null : { status: 403, body: { ok: false, error: "Insufficient privileges" } };
   };

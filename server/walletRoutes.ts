@@ -100,8 +100,9 @@ function mapLedgerError(err: any): HandlerResponse {
 
 /** Gaushalas this user may act for. Super Admin: all. Admin: those they govern. Manager: those they manage. */
 async function gosalasFor(user: JwtPayload) {
-  if (user.role === "super_admin") return prisma.gosala.findMany({ where: { isActive: true }, orderBy: { name: "asc" } })
-  if (user.role === "admin") {
+  const r = (user.role || "").toLowerCase() === "gosala_manager" ? "manager" : (user.role || "").toLowerCase() === "operations_admin" ? "admin" : (user.role || "").toLowerCase()
+  if (r === "super_admin") return prisma.gosala.findMany({ where: { isActive: true }, orderBy: { name: "asc" } })
+  if (r === "admin") {
     const adminEmail = (user.email || "").toLowerCase().trim()
     const allGosalas = await prisma.gosala.findMany({ where: { isActive: true }, orderBy: { name: "asc" } })
     return allGosalas.filter((g: any) => {
@@ -112,7 +113,7 @@ async function gosalasFor(user: JwtPayload) {
       return Boolean((user.userId && gAdminId === user.userId) || (adminEmail && gEmail === adminEmail))
     })
   }
-  if (user.role === "manager") {
+  if (r === "manager") {
     const assignments = await prisma.gosalaManagerAssignment.findMany({
       where: { userId: user.userId, status: "Active" },
       include: { gosala: true },
@@ -133,9 +134,10 @@ async function gosalasFor(user: JwtPayload) {
 }
 
 async function walletSummary(userId: string, role: JwtPayload["role"]) {
+  const r = (role || "").toLowerCase() === "gosala_manager" ? "manager" : (role || "").toLowerCase() === "operations_admin" ? "admin" : (role || "").toLowerCase()
   const earnsFrom = async (): Promise<string[]> => {
-    if (role === "admin") return (await prisma.gosala.findMany({ where: { adminId: userId }, select: { id: true } })).map((g) => g.id)
-    if (role === "manager") {
+    if (r === "admin") return (await prisma.gosala.findMany({ where: { adminId: userId }, select: { id: true } })).map((g) => g.id)
+    if (r === "manager") {
       const direct = (await prisma.gosalaManagerAssignment.findMany({ where: { userId, status: "Active" }, select: { gosalaId: true } })).map((a) => a.gosalaId)
       if (direct.length > 0) return direct
       const allG = await prisma.gosala.findMany({ where: { isActive: true }, select: { id: true, adminId: true, metadata: true } })
@@ -174,15 +176,15 @@ async function walletSummary(userId: string, role: JwtPayload["role"]) {
       ? prisma.bookingSettlement.findMany({ where: { gosalaId: { in: gosalaIds }, status: { in: ["HELD", "READY_FOR_APPROVAL"] } }, orderBy: { eligibleAt: "asc" }, take: 200 }).catch(() => [])
       : Promise.resolve([]),
     wallet ? prisma.walletTransaction.findMany({ where: { walletId: wallet.id }, orderBy: { createdAt: "desc" }, take: 40 }).catch(() => []) : Promise.resolve([]),
-    role === "admin" && gosalaIds.length ? prisma.gosala.findMany({ where: { id: { in: gosalaIds } }, select: { id: true, adminId: true } }).catch(() => []) : Promise.resolve([]),
-    role === "manager" && gosalaIds.length
+    r === "admin" && gosalaIds.length ? prisma.gosala.findMany({ where: { id: { in: gosalaIds } }, select: { id: true, adminId: true } }).catch(() => []) : Promise.resolve([]),
+    r === "manager" && gosalaIds.length
       ? prisma.gosalaManagerAssignment.findMany({ where: { gosalaId: { in: gosalaIds }, status: "Active" }, select: { gosalaId: true } }).catch(() => [])
       : Promise.resolve([]),
   ])
 
   // Count active managers per gaushala safely without groupBy
   const people = new Map<string, number>()
-  if (role === "admin") {
+  if (r === "admin") {
     for (const g of adminGosalas) people.set(g.id, 1)
   } else {
     for (const a of activeAssignments) {
@@ -195,7 +197,7 @@ async function walletSummary(userId: string, role: JwtPayload["role"]) {
     : []
 
   const upcoming = rows.map((s) => {
-    const rawTotal = role === "admin" ? s.adminPaise : s.managerPaise
+    const rawTotal = r === "admin" ? s.adminPaise : s.managerPaise
     const totalPaise = rawTotal !== null && rawTotal !== undefined ? BigInt(rawTotal) : 0n
     const divisor = BigInt(Math.max(1, people.get(s.gosalaId) ?? 1))
     const myPaise = divisor > 0n ? totalPaise / divisor : totalPaise
@@ -282,15 +284,22 @@ export async function handleWalletRoutes(args: {
   }
 
   if (!authUser) return null
-  const isSA = authUser.role === "super_admin"
-  const isAdmin = authUser.role === "admin"
-  const isManager = authUser.role === "manager"
+  const roleNorm =
+    (authUser.role || "").toLowerCase() === "gosala_manager" || (authUser.dbRole || "").toLowerCase() === "gosala_manager"
+      ? "manager"
+      : (authUser.role || "").toLowerCase() === "operations_admin" || (authUser.dbRole || "").toLowerCase() === "operations_admin"
+      ? "admin"
+      : (authUser.role || "").toLowerCase()
+
+  const isSA = roleNorm === "super_admin" || (authUser.dbRole || "").toLowerCase() === "super_admin"
+  const isAdmin = roleNorm === "admin"
+  const isManager = roleNorm === "manager"
 
   // ---- Admin / Manager wallet ----------------------------------------------------------------
   if (method === "GET" && pathname === "/api/wallet/me") {
     if (!isAdmin && !isManager) return fail(403, "Only Operations Admins and Managers have an earnings wallet")
     try {
-      const summaryPromise = walletSummary(authUser.userId, authUser.role).catch((wErr) => {
+      const summaryPromise = walletSummary(authUser.userId, roleNorm as any).catch((wErr) => {
         console.error("[walletSummary] Error:", wErr?.stack || wErr)
         return {
           earnsFrom: authUser.gosalaNames || [],

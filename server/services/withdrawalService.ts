@@ -65,14 +65,16 @@ const coolOffHours = () => {
 // ---------------------------------------------------------------------------
 
 export function publicAccount(a: any) {
+  const usableDate = a.usableFrom instanceof Date ? a.usableFrom : new Date(a.usableFrom || Date.now())
+  const createdDate = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt || Date.now())
   return {
     id: a.id,
     type: a.type,
     holderName: a.holderName,
     label: a.type === "BANK" ? `Bank ••••${a.accountLast4} (${a.ifsc})` : a.vpa,
-    usableFrom: a.usableFrom.toISOString(),
-    usableNow: a.usableFrom.getTime() <= Date.now(),
-    createdAt: a.createdAt.toISOString(),
+    usableFrom: usableDate.toISOString(),
+    usableNow: usableDate.getTime() <= Date.now(),
+    createdAt: createdDate.toISOString(),
   }
 }
 
@@ -197,17 +199,19 @@ async function consumeOtp(userId: string, otp: string, amountPaise: bigint, payo
 }
 
 export function serializeWithdrawal(w: any, accountLabel?: string) {
+  const reqDate = w.requestedAt instanceof Date ? w.requestedAt : new Date(w.requestedAt || Date.now())
+  const compDate = w.completedAt ? (w.completedAt instanceof Date ? w.completedAt : new Date(w.completedAt)) : null
   return {
     id: w.id,
-    amountPaise: w.amountPaise.toString(),
-    amountRupees: Number(w.amountPaise) / 100,
+    amountPaise: (w.amountPaise ?? 0).toString(),
+    amountRupees: Number(w.amountPaise ?? 0) / 100,
     status: w.status,
     mode: w.mode,
     utr: w.utr,
     failureReason: w.failureReason,
     account: accountLabel,
-    requestedAt: w.requestedAt.toISOString(),
-    completedAt: w.completedAt ? w.completedAt.toISOString() : null,
+    requestedAt: reqDate.toISOString(),
+    completedAt: compDate ? compDate.toISOString() : null,
   }
 }
 
