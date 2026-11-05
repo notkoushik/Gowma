@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import {
   ArrowRight,
+  ArrowLeft,
   Eye,
   EyeOff,
   Lock,
@@ -42,8 +43,10 @@ const POPULAR_REGIONS = [
 
 export default function Login({
   onSignIn,
+  onBackToLanding,
 }: {
   onSignIn: (role: RoleId) => void
+  onBackToLanding?: () => void
 }) {
   const {
     profiles,
@@ -643,6 +646,18 @@ export default function Login({
               GOMAA
             </span>
           </div>
+
+          {/* Back to Landing Page */}
+          {onBackToLanding && (
+            <button
+              type="button"
+              onClick={onBackToLanding}
+              className="mb-5 inline-flex items-center gap-1.5 text-xs font-medium text-ink-faint hover:text-ink transition-colors cursor-pointer"
+            >
+              <ArrowLeft size={14} />
+              <span>&larr; Back to Home &amp; Cattle Catalog</span>
+            </button>
+          )}
 
           {/* Form Header */}
           <div>

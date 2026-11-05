@@ -44,6 +44,7 @@ import AdminLogin from "./views/AdminLogin"
 import ManagerApp from "./views/ManagerApp"
 import DriverApp from "./views/DriverApp"
 import CustomerApp from "./views/CustomerApp"
+import GomaaLandingPage from "./views/landing/GomaaLandingPage"
 import EditProfileModal from "./components/EditProfileModal"
 import { Skeleton } from "./components/common/Skeleton"
 import { useStore, useToast } from "./store/store"
@@ -53,7 +54,7 @@ import { api } from "./services/api"
 
 type View = "overview" | "gosalas" | "managers" | "bookings" | "tracking" | "animals" | "ledger" | "availability" | "pricing" | "settlements" | "wallet" | "regions"
 
-const titles: Record<View, { title: string desc: string }> = {
+const titles: Record<View, { title: string; desc: string }> = {
   overview: {
     title: "Regional Operations & Treasury",
     desc: "Real-time booking pipeline, revenue metrics and network health across regional sanctuaries",
@@ -285,6 +286,13 @@ export default function App() {
   const [regionalSector, setRegionalSector] =
     useState<"all" | "free" | "regions" | "migrations">("all")
   const [isMaximized, setIsMaximized] = useState(false)
+  const [showLoginView, setShowLoginView] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const h = window.location.hash.toLowerCase()
+      return h === "#login" || h.startsWith("#login/")
+    }
+    return false
+  })
   const [editAdminProfileOpen, setEditAdminProfileOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notifFilter, setNotifFilter] =
@@ -570,10 +578,12 @@ export default function App() {
         }
       } else {
         localStorage.setItem("gomaa_auth_role", "login")
-        window.location.hash = "#login"
+        if (showLoginView && window.location.hash !== "#login") {
+          window.location.hash = "#login"
+        }
       }
     } catch (e) {}
-  }, [auth, setCurrentRole, view, pricingSector])
+  }, [auth, setCurrentRole, view, pricingSector, showLoginView])
 
   // Listen to hash changes (back/forward or direct navigation)
   useEffect(() => {
@@ -586,8 +596,21 @@ export default function App() {
 
       if (!token) {
         setAuth(null)
-        if (window.location.hash && window.location.hash !== "#login") {
-          window.location.hash = "#login"
+        const currentHash = window.location.hash.toLowerCase()
+        if (currentHash === "#login" || currentHash.startsWith("#login/")) {
+          setShowLoginView(true)
+        } else if (
+          currentHash === "" ||
+          currentHash === "#" ||
+          currentHash === "#home" ||
+          currentHash === "#landing" ||
+          currentHash === "#cattle" ||
+          currentHash === "#gaushalas" ||
+          currentHash === "#how-it-works" ||
+          currentHash === "#impact" ||
+          currentHash === "#blogs"
+        ) {
+          setShowLoginView(false)
         }
         return
       }
@@ -634,7 +657,37 @@ export default function App() {
     return <AdminLogin onSignIn={(role) => handleLoginSuccess(role)} />
   }
 
-  if (!auth) return <Login onSignIn={(role) => handleLoginSuccess(role)} />
+  if (!auth) {
+    if (showLoginView) {
+      return (
+        <Login
+          onSignIn={(role) => {
+            setShowLoginView(false)
+            handleLoginSuccess(role)
+          }}
+          onBackToLanding={() => {
+            setShowLoginView(false)
+            if (window.location.hash === "#login") {
+              window.location.hash = ""
+            }
+          }}
+        />
+      )
+    }
+    return (
+      <GomaaLandingPage
+        onSignIn={() => {
+          setShowLoginView(true)
+          window.location.hash = "#login"
+        }}
+        onStartBooking={(_animalName) => {
+          setShowLoginView(true)
+          window.location.hash = "#login"
+        }}
+        selectedRegion={dynamicRegion !== "Regional" ? dynamicRegion : "Visakhapatnam"}
+      />
+    )
+  }
   if (auth === "customer") return <CustomerApp onSignOut={handleSignOut} />
   if (auth === "manager") return <ManagerApp onSignOut={handleSignOut} />
   if (auth === "driver") return <DriverApp onSignOut={handleSignOut} />

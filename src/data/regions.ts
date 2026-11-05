@@ -409,6 +409,18 @@ export const INDIAN_REGIONAL_HUBS: OperationalRegionHub[] = [
 
   // --- ANDHRA PRADESH ---
   {
+    id: "hub-visakhapatnam",
+    state: "Andhra Pradesh",
+    city: "Visakhapatnam",
+    name: "Visakhapatnam (Sri Venkateswara Coastal Sanctuary)",
+    zone: "East",
+    lat: 17.6868,
+    lng: 83.2185,
+    defaultMaxRadiusKm: 45,
+    pincodePrefixes: ["530001", "530002", "530003", "530017", "530045"],
+    isFeatured: true,
+  },
+  {
     id: "hub-tirupati",
     state: "Andhra Pradesh",
     city: "Tirupati",
