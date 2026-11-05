@@ -1,40 +1,32 @@
 import { useState, useRef, useMemo, useEffect } from "react"
 import {
-  Search,
-  MapPin,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Heart,
-  Play,
   CheckCircle2,
   Building2,
   ShieldCheck,
   Sparkles,
-  Clock,
   ArrowRight,
   X,
-  Calendar,
   Leaf,
   BookOpen,
   Users,
   Award,
   Phone,
-  Share2,
+  Mail,
+  MapPin,
   Check,
   CheckCircle,
-  Flame,
   Truck,
-  Info,
   Menu,
+  HeartHandshake,
+  Stethoscope,
 } from "lucide-react"
 
-import { useStore, useToast } from "../../store/store"
-import LocationPickerModal from "../../components/LocationPickerModal"
-import type { OperationalRegionHub } from "../../data/regions"
-import { INDIAN_REGIONAL_HUBS } from "../../data/regions"
+import { useToast } from "../../store/store"
 
-// Direct Base64 high-resolution landing assets matching gomaa_intro.jpg (zero Git LFS / 404 risk)
+// High-resolution authentic Indian cattle photography assets
 import {
   bannerCorporate,
   bannerFeed,
@@ -57,13 +49,12 @@ export interface GomaaLandingPageProps {
   onSignIn: () => void
   onStartBooking?: (animalName: string) => void
   selectedRegion?: string
-  onSelectRegion?: (hub: OperationalRegionHub) => void
 }
 
-interface CattleItem {
+export interface CattleItem {
   id: string
   name: string
-  category: "COW" | "CALF" | "BULL"
+  category: "COW" | "CALF" | "BULL" | "COW_AND_CALF" | "BUFFALO"
   breed: string
   age: string
   gender: string
@@ -76,96 +67,112 @@ interface CattleItem {
   sacredMarks: string
 }
 
+export interface GaushalaInfo {
+  id: string
+  name: string
+  region: string
+  address: string
+  contactPhone: string
+  contactEmail: string
+  caretaker?: string
+  managerName?: string
+  governingAdminName?: string
+  cowsCount: number
+  image?: string
+  description?: string
+}
+
+// Fallback high-fidelity cattle if network is unavailable
 const DEFAULT_FEATURED_CATTLE: CattleItem[] = [
   {
-    id: "lakshmi",
-    name: "Lakshmi",
+    id: "surabhi-gir",
+    name: "Surabhi",
     category: "COW",
-    breed: "Gir Indigenous",
-    age: "5 years",
+    breed: "Indigenous Gir Cow",
+    age: "4 Years",
     gender: "Female",
-    gosala: "Sri Sathya Gaushala",
-    location: "Visakhapatnam, AP",
-    pricePerDay: 500,
+    gosala: "Gaushala_01",
+    location: "Hyderabad Central (Banjara Hills)",
+    pricePerDay: 3500,
     image: cattleLakshmi,
     description: "Gentle mother cow with calm temperament, suited for Griha Pravesh & Go Puja rituals.",
     temperament: "Exceptionally calm, accustomed to devotees and Vedic chanting",
     sacredMarks: "Natural Swastika crescent mark on forehead",
   },
   {
-    id: "kamadhenu",
-    name: "Kamadhenu",
+    id: "nandini-sahiwal",
+    name: "Nandini",
     category: "COW",
-    breed: "Sahiwal Desi",
-    age: "4 years",
+    breed: "Sahiwal Sacred Cow",
+    age: "5 Years",
     gender: "Female",
-    gosala: "Annapurna Gaushala",
-    location: "Visakhapatnam, AP",
-    pricePerDay: 500,
+    gosala: "Gaushala_01",
+    location: "Hyderabad Central (Banjara Hills)",
+    pricePerDay: 3500,
     image: cattleKamadhenu,
     description: "Auspicious brown Sahiwal with high spiritual presence, gentle with elders and children.",
     temperament: "Serene, receptive to flower garlands and holy offerings",
     sacredMarks: "Golden aura horn curvature, distinct Vedic hump",
   },
   {
-    id: "nandini",
-    name: "Nandini",
+    id: "keshav-punganur",
+    name: "Keshav",
     category: "CALF",
-    breed: "Punganur Dwarf / Gir",
-    age: "1 year",
-    gender: "Female",
-    gosala: "Gomata Seva Kendra",
-    location: "Visakhapatnam, AP",
-    pricePerDay: 300,
+    breed: "Punganur Dwarf Calf",
+    age: "1 Year",
+    gender: "Male",
+    gosala: "Gaushala_03",
+    location: "Secunderabad & Cantonment",
+    pricePerDay: 2500,
     image: cattleNandini,
-    description: "Playful, loving holy calf. Brings peace, happiness, and innocence to sacred ceremonies.",
-    temperament: "Energetic and affectionate, loves eating fresh grass by hand",
-    sacredMarks: "Pure white forehead spot",
+    description: "Playful, loving sacred dwarf calf. Brings peace, happiness, and divine joy to ceremonies.",
+    temperament: "Affectionate, loves eating fresh grass and tender affection",
+    sacredMarks: "Pure white forehead spot and bright sacred eyes",
   },
   {
-    id: "mahabala",
-    name: "Mahabala",
+    id: "balarama-nandi",
+    name: "Balarama",
     category: "BULL",
-    breed: "Ongole Majestic Bull",
-    age: "6 years",
+    breed: "Hallikar Nandi Bull",
+    age: "6 Years",
     gender: "Male",
-    gosala: "Sri Hari Gaushala",
-    location: "Visakhapatnam, AP",
-    pricePerDay: 700,
+    gosala: "Gaushala_01",
+    location: "Hyderabad Central (Banjara Hills)",
+    pricePerDay: 4000,
     image: cattleMahabala,
     description: "Stately, noble sacred Nandi bull representing dharma, endurance, and divine strength.",
     temperament: "Majestic, steady, well-trained with certified handler",
     sacredMarks: "Deep classical Shiva-Nandi stature, broad crest",
   },
   {
-    id: "savitri",
-    name: "Savitri",
-    category: "COW",
-    breed: "Tharparkar White",
-    age: "3 years",
-    gender: "Female",
-    gosala: "Gau Seva Trust",
-    location: "Visakhapatnam, AP",
-    pricePerDay: 500,
-    image: cattleSavitri,
-    description: "Pristine white sacred cow embodying purity and divine motherly benevolence.",
-    temperament: "Quiet and gentle, stays calmly at the home mandir entrance",
-    sacredMarks: "Kailash white coat, graceful eyes",
+    id: "gauri-ganga-pair",
+    name: "Gauri & Ganga",
+    category: "COW_AND_CALF",
+    breed: "Gir Mother Cow & Calf Pair",
+    age: "4 Years",
+    gender: "Mother & Calf",
+    gosala: "Gaushala_01",
+    location: "Hyderabad Central (Banjara Hills)",
+    pricePerDay: 4800,
+    image: heroSacredCow,
+    description: "Consecrated mother and suckling calf pair for paramount Griha Pravesh blessings.",
+    temperament: "Deeply maternal, peaceful aura and gentle stride",
+    sacredMarks: "Sacred mother-calf bond, auspicious Vedic markings",
   },
   {
-    id: "chaitra",
-    name: "Chaitra",
-    category: "CALF",
-    breed: "Kankrej Young Calf",
-    age: "1 year",
+    id: "kapila-tharparkar",
+    name: "Kapila",
+    category: "COW",
+    breed: "Indigenous Tharparkar",
+    age: "5 Years",
     gender: "Female",
-    gosala: "Veda Gaushala",
-    location: "Visakhapatnam, AP",
-    pricePerDay: 300,
-    image: cattleChaitra,
-    description: "Graceful young calf from ancient Kankrej lineage, tender and blessing-filled.",
-    temperament: "Gentle and inquisitive, loves children feeding her tender jaggery",
-    sacredMarks: "Velvety coat, auspicious gait",
+    gosala: "Gaushala_02",
+    location: "Cyberabad / Gachibowli",
+    pricePerDay: 3500,
+    image: cattleSavitri,
+    description: "Revered drought-hardy white indigenous cow known as the wish-fulfilling Kamadhenu.",
+    temperament: "Gentle demeanor, calm amid temple bells and family gatherings",
+    sacredMarks: "Pure silver-white coat with deep black hooves",
   },
 ]
 
@@ -175,48 +182,48 @@ interface BlogArticle {
   date: string
   readTime: string
   image: string
-  snippet: string
+  summary: string
   content: string[]
 }
 
 const BLOG_ARTICLES: BlogArticle[] = [
   {
-    id: "gau-seva-modern-times",
+    id: "importance-gau-seva",
     title: "The Importance of Gau Seva in Modern Times",
     date: "Oct 10, 2026",
     readTime: "5 min read",
     image: blogGauSeva,
-    snippet: "Exploring the timeless spiritual, ecological, and psychological benefits of serving indigenous cows in today's fast-paced urban world.",
+    summary: "Exploring the profound spiritual, ecological, and emotional benefits of honoring and caring for indigenous mother cows in modern cities.",
     content: [
-      "In the Vedic tradition, the sacred cow (Gomata) is revered as Kamadhenu — the mother who fulfills all righteous prayers and bestows auspicious energy upon the home.",
-      "Modern scientific research confirms that interacting with indigenous cows lowers cortisol, stabilizes blood pressure, and induces profound parasympathetic calm.",
-      "By establishing direct digital bridges between urban households and rural gaushalas, GOMAA makes authentic Gau Seva accessible, transparent, and ethically governed under strict animal welfare standards.",
+      "In the Vedic tradition, the sacred cow (Gomata) is regarded as the mother of the universe, representing selflessness, nurturing warmth, and cosmic peace.",
+      "As urban lifestyle separates modern families from nature, participating in genuine Gau Seva brings a serene reconnect with our dharmic roots.",
+      "Through GOMAA's transparent platform, devotees can directly support verified rural and peri-urban gaushalas with real-time veterinary care and ethical upkeep.",
     ],
   },
   {
-    id: "festivals-and-traditions",
+    id: "festivals-gomata",
     title: "Festivals and Traditions with Gomata",
     date: "Oct 5, 2026",
     readTime: "4 min read",
     image: blogFestivals,
-    snippet: "From Gopashtami and Pongal to Griha Pravesh, discover how sacred cattle rituals bring harmony, abundance, and positive vibrations.",
+    summary: "From Gopashtami to Pongal, Deepavali to Griha Pravesh, how sacred bovine rituals sanctify homes and communities.",
     content: [
-      "Festivals in Sanatana Dharma have always honored the bond between humanity and the bovine kingdom. During Gopashtami, Lord Krishna himself was initiated as an official cow protector in Vrindavan.",
-      "When welcoming Gomata into a new home during Griha Pravesh, her holy footsteps are believed to sanctify the vastu of the residence and dispel negative energies.",
-      "GOMAA provides specialized ceremonial packages with verified handlers, hydraulic non-slip ambulance transit, and consecrated puja offerings.",
+      "Across Sanatana Dharma, holy milestones begin with Gomata Puja. In Griha Pravesh, the first step of a cow into a new home is celebrated as the entrance of Lakshmi.",
+      "During Gopashtami, Lord Krishna's first day as a cowherd is commemorated with fragrant garlands, turmeric, and fresh green grass offerings.",
+      "GOMAA ensures that every ceremonial event is conducted under strict animal welfare regulations, with hydraulic ramps and rest buffers.",
     ],
   },
   {
-    id: "better-tomorrow-gaushalas",
+    id: "gaushalas-better-tomorrow",
     title: "How Gaushalas Are Creating a Better Tomorrow",
     date: "Sep 28, 2026",
     readTime: "6 min read",
     image: blogGaushalas,
-    snippet: "A deep dive into regenerative agriculture, indigenous breed preservation, biogas energy, and sustainable sanctuary self-reliance.",
+    summary: "How modern gaushalas blend age-old indigenous wisdom with solar power, zero-waste organic compost, and humane veterinary science.",
     content: [
-      "Gaushalas are not merely retirement shelters for aged cattle; they are living laboratories of sustainable green ecology and Vedic circular economy.",
-      "Panchagavya organic fertilizers revitalize depleted topsoil, eliminating harmful chemical pesticides while indigenous Gir and Sahiwal genetics are preserved for future generations.",
-      "With 250+ partner sanctuaries nationwide, the GOMAA platform ensures transparent escrow funding so that every rupee donated goes directly to cattle nutrition, medical care, and pasture expansion.",
+      "Gaushalas today are more than shelters; they are epicenters of ecological resilience and organic indigenous biodiversity.",
+      "By utilizing cow dung and urine for Jeevamrutha and biogas, verified sanctuaries eliminate synthetic fertilizers and generate sustainable green energy.",
+      "GOMAA's governance tools empower gaushala managers with digital health dossiers, fair escrow disbursements, and nationwide devotee connectivity.",
     ],
   },
 ]
@@ -224,61 +231,137 @@ const BLOG_ARTICLES: BlogArticle[] = [
 export default function GomaaLandingPage({
   onSignIn,
   onStartBooking,
-  selectedRegion = "Visakhapatnam",
-  onSelectRegion,
 }: GomaaLandingPageProps) {
-  const { animals, gosalas } = useStore()
   const { addToast } = useToast()
 
+  // Dynamic backend data
+  const [dynamicGosalas, setDynamicGosalas] = useState<GaushalaInfo[]>([])
+  const [dynamicAnimals, setDynamicAnimals] = useState<CattleItem[]>(DEFAULT_FEATURED_CATTLE)
+  const [selectedGosalaFilter, setSelectedGosalaFilter] = useState<string>("ALL")
+  const [isLoadingBackend, setIsLoadingBackend] = useState(true)
+
   // UI state
-  const [selectedCategory, setSelectedCategory] = useState<"ALL" | "COW" | "CALF" | "BULL">("ALL")
+  const [selectedCategory, setSelectedCategory] = useState<"ALL" | "COW" | "CALF" | "BULL" | "COW_AND_CALF">("ALL")
   const [favorites, setFavorites] = useState<Record<string, boolean>>({})
-  const [searchQuery, setSearchQuery] = useState("")
-  const [showSearchModal, setShowSearchModal] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [currentCity, setCurrentCity] = useState("Visakhapatnam")
-  const [showLocationPicker, setShowLocationPicker] = useState(false)
 
   // Interactive Modals
   const [selectedCattleForModal, setSelectedCattleForModal] = useState<CattleItem | null>(null)
-  const [showGaushalaModal, setShowGaushalaModal] = useState(false)
-  const [showFeedModal, setShowFeedModal] = useState(false)
-  const [showSevaPackagesModal, setShowSevaPackagesModal] = useState(false)
-  const [showCorporateModal, setShowCorporateModal] = useState(false)
+  const [selectedGosalaForModal, setSelectedGosalaForModal] = useState<GaushalaInfo | null>(null)
   const [selectedBlogArticle, setSelectedBlogArticle] = useState<BlogArticle | null>(null)
   const [showHowItWorksModal, setShowHowItWorksModal] = useState(false)
 
   // Carousel ref
   const cattleCarouselRef = useRef<HTMLDivElement>(null)
 
-  // Default to Visakhapatnam to match reference design, only changing when explicitly chosen
+  // -------------------------------------------------------------
+  // Dynamic Backend Data Binding
+  // -------------------------------------------------------------
   useEffect(() => {
-    if (selectedRegion && selectedRegion !== "Regional" && selectedRegion !== "Cyberabad / Gachibowli") {
-      setCurrentCity(selectedRegion)
-    }
-  }, [selectedRegion])
+    let isMounted = true
 
-  // Filter cattle by category and search (strictly defaults to the verified design showcase)
+    async function fetchPlatformData() {
+      try {
+        setIsLoadingBackend(true)
+        const [gosalasRes, animalsRes] = await Promise.all([
+          fetch("/api/gosalas").catch(() => null),
+          fetch("/api/animals").catch(() => null),
+        ])
+
+        if (gosalasRes && gosalasRes.ok) {
+          const gData = await gosalasRes.json()
+          const rawGosalas: any[] = Array.isArray(gData) ? gData : gData?.gosalas || []
+          if (isMounted && rawGosalas.length > 0) {
+            const parsedGosalas: GaushalaInfo[] = rawGosalas.map((g, idx) => ({
+              id: g.id || `g-${idx}`,
+              name: g.name || `Gaushala_${idx + 1}`,
+              region: g.region || "Telangana Central",
+              address: g.address || "Vedic Sanctuary Road",
+              contactPhone: g.contactPhone || "+91 98230 44910",
+              contactEmail: g.contactEmail || "sanctuary@gomaa.in",
+              caretaker: g.caretaker || g.managerName || "Resident Gosevak",
+              managerName: g.managerName || "Gomaa Manager",
+              governingAdminName: g.governingAdminName || g.adminName || "Regional Admin",
+              cowsCount: Array.isArray(g.animals) ? g.animals.length : (g.totalCows || 5),
+              description: g.partnershipNotes || "Verified Vedic sanctuary adhering to Animal Welfare Board of India guidelines.",
+            }))
+            setDynamicGosalas(parsedGosalas)
+          }
+        }
+
+        if (animalsRes && animalsRes.ok) {
+          const aData = await animalsRes.json()
+          const rawAnimals: any[] = Array.isArray(aData) ? aData : aData?.animals || []
+          if (isMounted && rawAnimals.length > 0) {
+            const parsedAnimals: CattleItem[] = rawAnimals.map((a: any, idx: number) => {
+              const rawType = (a.type || "").toUpperCase()
+              let cat: "COW" | "CALF" | "BULL" | "COW_AND_CALF" | "BUFFALO" = "COW"
+              let defaultImg = cattleLakshmi
+
+              if (rawType.includes("CALF")) {
+                cat = "CALF"
+                defaultImg = idx % 2 === 0 ? cattleNandini : cattleChaitra
+              } else if (rawType.includes("BULL") || rawType.includes("NANDI")) {
+                cat = "BULL"
+                defaultImg = cattleMahabala
+              } else if (rawType.includes("PAIR") || rawType.includes("COW_AND_CALF")) {
+                cat = "COW_AND_CALF"
+                defaultImg = heroSacredCow
+              } else if (rawType.includes("BUFFALO")) {
+                cat = "BUFFALO"
+                defaultImg = cattleKamadhenu
+              } else {
+                cat = "COW"
+                defaultImg = (idx % 2 === 0) ? cattleLakshmi : cattleKamadhenu
+              }
+
+              const breedText = a.breed || (cat === "BULL" ? "Hallikar Nandi" : cat === "CALF" ? "Punganur Dwarf" : "Indigenous Gir")
+              const price = Number(a.price) || Number(a.dailyRate) || 3500
+
+              return {
+                id: a.id || `animal-${idx}`,
+                name: a.name,
+                category: cat,
+                breed: breedText,
+                age: a.ageYears ? `${a.ageYears} Years` : (a.age || "4 Years"),
+                gender: cat === "BULL" ? "Male" : "Female",
+                gosala: a.gosala?.name || a.gosala || "Gaushala_01",
+                location: a.gosala?.region || "Telangana Central",
+                pricePerDay: price,
+                image: a.imageUrl || a.photo || defaultImg,
+                description: a.description || `${a.name} is an indigenous sacred bovine in prime health, gentle nature, and certified under strict veterinary protocols.`,
+                temperament: a.temperament || "Gentle, accustomed to Vedic chanting and family rituals",
+                sacredMarks: a.sacredMarks || "Natural Vedic crest, holy tilak imprint",
+              }
+            })
+            setDynamicAnimals(parsedAnimals)
+          }
+        }
+      } catch (err) {
+        console.warn("[GomaaLandingPage] API error fallback:", err)
+      } finally {
+        if (isMounted) setIsLoadingBackend(false)
+      }
+    }
+
+    fetchPlatformData()
+    return () => { isMounted = false }
+  }, [])
+
+  // Dynamic cattle filtering
   const filteredCattle = useMemo(() => {
-    let list = DEFAULT_FEATURED_CATTLE
+    let list = dynamicAnimals.length > 0 ? dynamicAnimals : DEFAULT_FEATURED_CATTLE
 
     if (selectedCategory !== "ALL") {
       list = list.filter((c) => c.category === selectedCategory)
     }
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase()
-      list = list.filter(
-        (c) =>
-          c.name.toLowerCase().includes(q) ||
-          c.breed.toLowerCase().includes(q) ||
-          c.gosala.toLowerCase().includes(q) ||
-          c.category.toLowerCase().includes(q)
-      )
+    if (selectedGosalaFilter !== "ALL") {
+      list = list.filter((c) => c.gosala.toLowerCase() === selectedGosalaFilter.toLowerCase())
     }
 
     return list
-  }, [selectedCategory, searchQuery])
+  }, [dynamicAnimals, selectedCategory, selectedGosalaFilter])
 
   const toggleFavorite = (id: string, name: string) => {
     setFavorites((prev) => {
@@ -299,19 +382,20 @@ export default function GomaaLandingPage({
     }
   }
 
-  const handleSelectHub = (hub: OperationalRegionHub) => {
-    setCurrentCity(hub.city)
-    setShowLocationPicker(false)
-    if (onSelectRegion) onSelectRegion(hub)
-    addToast(`📍 Operational region updated to ${hub.city} (${hub.name})`, "success")
-  }
-
   const handleBookCattle = (cattle: CattleItem) => {
     if (onStartBooking) {
       onStartBooking(cattle.name)
     } else {
       setSelectedCattleForModal(cattle)
     }
+  }
+
+  // Active showcase gaushala for floating badge
+  const activeFeaturedGaushala = dynamicGosalas[0] || {
+    id: "g1",
+    name: "Gaushala_01",
+    region: "Banjara Hills / Jubilee Hills, Hyderabad",
+    cowsCount: 16,
   }
 
   return (
@@ -334,8 +418,8 @@ export default function GomaaLandingPage({
             </div>
           </div>
 
-          {/* Center: Navigation Links */}
-          <nav className="hidden md:flex items-center gap-8 text-[15px] font-medium text-[#4a463e]">
+          {/* Center: Navigation Anchor Links */}
+          <nav className="hidden lg:flex items-center gap-8 text-[15px] font-medium text-[#4a463e]">
             <a
               href="#home"
               onClick={(e) => {
@@ -347,37 +431,37 @@ export default function GomaaLandingPage({
               Home
             </a>
             <a
-              href="#cattle"
+              href="#gaushalas-section"
               onClick={(e) => {
                 e.preventDefault()
-                document.getElementById("featured-cattle-section")?.scrollIntoView({ behavior: "smooth" })
-              }}
-              className="hover:text-[#132a13] transition-colors"
-            >
-              Cattle
-            </a>
-            <a
-              href="#gaushalas"
-              onClick={(e) => {
-                e.preventDefault()
-                setShowGaushalaModal(true)
+                document.getElementById("gaushalas-section")?.scrollIntoView({ behavior: "smooth" })
               }}
               className="hover:text-[#132a13] transition-colors"
             >
               Gaushalas
             </a>
             <a
-              href="#how-it-works"
+              href="#featured-cattle-section"
               onClick={(e) => {
                 e.preventDefault()
-                setShowHowItWorksModal(true)
+                document.getElementById("featured-cattle-section")?.scrollIntoView({ behavior: "smooth" })
               }}
               className="hover:text-[#132a13] transition-colors"
             >
-              How it works
+              Sacred Cattle
             </a>
             <a
-              href="#impact"
+              href="#welfare-protocols-section"
+              onClick={(e) => {
+                e.preventDefault()
+                document.getElementById("welfare-protocols-section")?.scrollIntoView({ behavior: "smooth" })
+              }}
+              className="hover:text-[#132a13] transition-colors"
+            >
+              Welfare Protocols
+            </a>
+            <a
+              href="#impact-section"
               onClick={(e) => {
                 e.preventDefault()
                 document.getElementById("impact-section")?.scrollIntoView({ behavior: "smooth" })
@@ -387,50 +471,31 @@ export default function GomaaLandingPage({
               Impact
             </a>
             <a
-              href="#blogs"
+              href="#blogs-section"
               onClick={(e) => {
                 e.preventDefault()
                 document.getElementById("blogs-section")?.scrollIntoView({ behavior: "smooth" })
               }}
               className="hover:text-[#132a13] transition-colors"
             >
-              Blogs
+              Wisdom Articles
             </a>
           </nav>
 
-          {/* Right: Search + Location Pill + Sign In Button */}
+          {/* Right: Sign In Button */}
           <div className="flex items-center gap-3">
-            {/* Search Trigger */}
-            <button
-              onClick={() => setShowSearchModal(true)}
-              title="Search Cattle & Sanctuaries"
-              className="h-10 w-10 rounded-full border border-[#d8cfbe] bg-[#fbf9f4] hover:bg-white text-[#5f5b52] hover:text-[#132a13] grid place-items-center transition-all cursor-pointer shadow-2xs"
-            >
-              <Search className="h-4 w-4" />
-            </button>
-
-            {/* Location Selector Pill */}
-            <button
-              onClick={() => setShowLocationPicker(true)}
-              className="hidden sm:flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-[#d8cfbe] bg-[#fbf9f4] hover:bg-white text-xs font-medium text-[#2d2a24] transition-all cursor-pointer shadow-2xs group"
-            >
-              <MapPin className="h-3.5 w-3.5 text-[#c2611b] group-hover:scale-110 transition-transform" />
-              <span>{currentCity}</span>
-              <ChevronDown className="h-3.5 w-3.5 text-[#888173]" />
-            </button>
-
-            {/* Sign In Button */}
             <button
               onClick={onSignIn}
-              className="bg-[#132a13] hover:bg-[#1b3b1b] active:scale-98 text-white px-5 sm:px-6 py-2.5 rounded-full text-sm font-medium transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+              className="bg-[#132a13] hover:bg-[#1b3b1b] active:scale-98 text-white px-6 py-2.5 rounded-full text-sm font-semibold transition-all shadow-xs cursor-pointer flex items-center gap-2 group"
             >
               <span>Sign In</span>
+              <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
             </button>
 
             {/* Mobile Hamburger Menu */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden h-10 w-10 rounded-full border border-[#d8cfbe] bg-[#fbf9f4] grid place-items-center text-[#2d2a24]"
+              className="lg:hidden h-10 w-10 rounded-full border border-[#d8cfbe] bg-[#fbf9f4] grid place-items-center text-[#2d2a24]"
             >
               {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
@@ -439,79 +504,85 @@ export default function GomaaLandingPage({
 
         {/* Mobile Dropdown Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-[#faf7f2] border-b border-[#ece6da] px-6 py-4 space-y-3">
-            <button
+          <div className="lg:hidden bg-[#faf7f2] border-b border-[#ece6da] px-6 py-4 space-y-2">
+            <a
+              href="#home"
               onClick={() => {
-                setShowLocationPicker(true)
+                window.scrollTo({ top: 0, behavior: "smooth" })
                 setMobileMenuOpen(false)
               }}
-              className="w-full flex items-center justify-between p-2.5 rounded-lg border border-[#d8cfbe] bg-white text-xs font-medium text-[#2d2a24]"
+              className="block py-2 text-sm font-medium text-[#132a13]"
             >
-              <span className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-[#c2611b]" />
-                Region: {currentCity}
-              </span>
-              <ChevronDown className="h-4 w-4 text-[#888173]" />
-            </button>
-            <div className="flex flex-col gap-2 pt-2 text-sm font-medium text-[#4a463e]">
-              <a
-                href="#cattle"
+              Home
+            </a>
+            <a
+              href="#gaushalas-section"
+              onClick={() => {
+                document.getElementById("gaushalas-section")?.scrollIntoView({ behavior: "smooth" })
+                setMobileMenuOpen(false)
+              }}
+              className="block py-2 text-sm font-medium text-[#4a463e] hover:text-[#132a13]"
+            >
+              Verified Gaushalas
+            </a>
+            <a
+              href="#featured-cattle-section"
+              onClick={() => {
+                document.getElementById("featured-cattle-section")?.scrollIntoView({ behavior: "smooth" })
+                setMobileMenuOpen(false)
+              }}
+              className="block py-2 text-sm font-medium text-[#4a463e] hover:text-[#132a13]"
+            >
+              Sacred Cattle Directory
+            </a>
+            <a
+              href="#welfare-protocols-section"
+              onClick={() => {
+                document.getElementById("welfare-protocols-section")?.scrollIntoView({ behavior: "smooth" })
+                setMobileMenuOpen(false)
+              }}
+              className="block py-2 text-sm font-medium text-[#4a463e] hover:text-[#132a13]"
+            >
+              Welfare &amp; Transit Protocols
+            </a>
+            <a
+              href="#impact-section"
+              onClick={() => {
+                document.getElementById("impact-section")?.scrollIntoView({ behavior: "smooth" })
+                setMobileMenuOpen(false)
+              }}
+              className="block py-2 text-sm font-medium text-[#4a463e] hover:text-[#132a13]"
+            >
+              Platform Impact
+            </a>
+            <a
+              href="#blogs-section"
+              onClick={() => {
+                document.getElementById("blogs-section")?.scrollIntoView({ behavior: "smooth" })
+                setMobileMenuOpen(false)
+              }}
+              className="block py-2 text-sm font-medium text-[#4a463e] hover:text-[#132a13]"
+            >
+              Wisdom Articles
+            </a>
+            <div className="pt-2 border-t border-[#e2d8c9]">
+              <button
                 onClick={() => {
-                  document.getElementById("featured-cattle-section")?.scrollIntoView({ behavior: "smooth" })
                   setMobileMenuOpen(false)
+                  onSignIn()
                 }}
-                className="py-1.5 hover:text-[#132a13]"
+                className="w-full py-2.5 rounded-full bg-[#132a13] text-white text-xs font-semibold"
               >
-                Cattle Directory
-              </a>
-              <a
-                href="#gaushalas"
-                onClick={() => {
-                  setShowGaushalaModal(true)
-                  setMobileMenuOpen(false)
-                }}
-                className="py-1.5 hover:text-[#132a13]"
-              >
-                Verified Gaushalas
-              </a>
-              <a
-                href="#how-it-works"
-                onClick={() => {
-                  setShowHowItWorksModal(true)
-                  setMobileMenuOpen(false)
-                }}
-                className="py-1.5 hover:text-[#132a13]"
-              >
-                How It Works &amp; Protocols
-              </a>
-              <a
-                href="#impact"
-                onClick={() => {
-                  document.getElementById("impact-section")?.scrollIntoView({ behavior: "smooth" })
-                  setMobileMenuOpen(false)
-                }}
-                className="py-1.5 hover:text-[#132a13]"
-              >
-                Real Impact
-              </a>
-              <a
-                href="#blogs"
-                onClick={() => {
-                  document.getElementById("blogs-section")?.scrollIntoView({ behavior: "smooth" })
-                  setMobileMenuOpen(false)
-                }}
-                className="py-1.5 hover:text-[#132a13]"
-              >
-                Vedic Wisdom Blogs
-              </a>
+                Sign In to Workspace &rarr;
+              </button>
             </div>
           </div>
         )}
       </header>
 
       {/* ----------------- Hero Section ----------------- */}
-      <section id="home" className="relative overflow-hidden pt-8 pb-14 lg:pt-12 lg:pb-16 bg-[#faf7f2]">
-        {/* Lush Green Botanical Foliage Branch Top-Left (matching gomaa_intro.jpg) */}
+      <section id="home" className="relative overflow-hidden pt-8 pb-12 lg:pt-12 lg:pb-16 bg-[#faf7f2]">
+        {/* Lush Green Botanical Foliage Branch Top-Left */}
         <div className="absolute -top-4 -left-4 w-40 h-40 sm:w-56 sm:h-56 pointer-events-none select-none z-10 opacity-95">
           <svg viewBox="0 0 200 200" fill="none" className="w-full h-full drop-shadow-md">
             <defs>
@@ -531,11 +602,9 @@ export default function GomaaLandingPage({
                 <stop offset="100%" stopColor="#143209" />
               </linearGradient>
             </defs>
-            {/* Main stem branch */}
             <path d="M-10,-10 Q50,45 105,100" stroke="#4e3620" strokeWidth="4.5" strokeLinecap="round" />
             <path d="M40,35 Q75,40 120,60" stroke="#4e3620" strokeWidth="3" strokeLinecap="round" />
             <path d="M70,65 Q115,80 150,115" stroke="#4e3620" strokeWidth="2.5" strokeLinecap="round" />
-            {/* Leaves */}
             <path d="M25,20 C10,50 45,75 75,55 C70,35 45,15 25,20 Z" fill="url(#leafGrad1)" />
             <path d="M25,20 Q50,42 75,55" stroke="#b4e64f" strokeWidth="1.2" opacity="0.7" />
             <path d="M60,30 C65,60 110,65 125,40 C115,20 85,15 60,30 Z" fill="url(#leafGrad2)" />
@@ -544,31 +613,6 @@ export default function GomaaLandingPage({
             <path d="M80,65 Q110,75 145,75" stroke="#aed581" strokeWidth="1" opacity="0.7" />
             <path d="M45,45 C35,80 80,95 95,70 C85,50 60,40 45,45 Z" fill="url(#leafGrad2)" />
             <path d="M100,95 C110,130 155,130 165,105 C150,85 125,85 100,95 Z" fill="url(#leafGrad1)" />
-            <path d="M100,95 Q130,105 165,105" stroke="#c5e1a5" strokeWidth="1" opacity="0.7" />
-          </svg>
-        </div>
-
-        {/* Subtle golden leaf line art left */}
-        <div className="absolute top-16 left-6 w-28 h-28 opacity-35 pointer-events-none select-none">
-          <svg viewBox="0 0 100 100" fill="none" stroke="#a34e12" strokeWidth="1.4">
-            <path d="M10,90 Q40,30 90,10 Q60,70 10,90 Z" />
-            <path d="M10,90 Q50,50 90,10" />
-            <path d="M30,70 Q45,65 50,50" />
-            <path d="M50,50 Q65,45 70,30" />
-          </svg>
-        </div>
-
-        {/* Golden leaf line art behind heading */}
-        <div className="absolute top-8 left-[38%] w-36 h-36 opacity-30 pointer-events-none select-none hidden lg:block">
-          <svg viewBox="0 0 100 100" fill="none" stroke="#b86a1a" strokeWidth="1">
-            <path d="M50,95 C30,70 20,40 50,5 C80,40 70,70 50,95 Z" />
-            <path d="M50,95 L50,5" />
-            <path d="M50,75 Q35,65 30,55" />
-            <path d="M50,60 Q35,50 32,40" />
-            <path d="M50,45 Q38,35 36,25" />
-            <path d="M50,75 Q65,65 70,55" />
-            <path d="M50,60 Q65,50 68,40" />
-            <path d="M50,45 Q62,35 64,25" />
           </svg>
         </div>
 
@@ -576,119 +620,125 @@ export default function GomaaLandingPage({
           <div className="grid lg:grid-cols-12 gap-8 lg:gap-12 items-center">
             {/* Left Column: Headline, Subtitle, CTAs, 4 Value Badges */}
             <div className="lg:col-span-6 space-y-6 lg:pr-4">
-              {/* Tagline Pill */}
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-[#dec9b4] bg-[#f5ecde]/70 text-[#964710] text-[11px] font-semibold tracking-wider uppercase">
                 <Sparkles className="h-3.5 w-3.5 text-[#c2611b]" />
                 <span>SEVA • WELFARE • TRANSPARENT OPERATIONS</span>
               </div>
 
-              {/* Stately Serif Title */}
               <h1 className="font-serif text-4xl sm:text-5xl lg:text-[56px] font-normal tracking-tight text-[#171717] leading-[1.12]">
                 Serve with Devotion.
                 <br />
                 Care with Purpose.
               </h1>
 
-              {/* Subtext */}
               <p className="text-[#5b564c] text-base sm:text-lg leading-relaxed max-w-xl font-normal">
-                Book verified cattle from trusted gaushalas for seva, events, and sacred occasions. Transparent booking, safe transport, and guided support — every step, on one platform.
+                Connecting genuine devotees with audited, registered Vedic gaushalas. Transparent bovine care, certified veterinary welfare, and hydraulic ambulance transit nationwide.
               </p>
 
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-4 pt-2">
                 <button
-                  onClick={() => {
-                    document.getElementById("featured-cattle-section")?.scrollIntoView({ behavior: "smooth" })
-                  }}
-                  className="bg-[#132a13] hover:bg-[#1a3a1a] active:scale-98 text-white px-7 py-3.5 rounded-full font-medium text-sm sm:text-base flex items-center gap-2 transition-all shadow-sm cursor-pointer group"
+                  onClick={() => document.getElementById("featured-cattle-section")?.scrollIntoView({ behavior: "smooth" })}
+                  className="bg-[#132a13] hover:bg-[#1a381a] active:scale-98 text-white px-7 py-3 rounded-full font-medium text-sm transition-all shadow-md cursor-pointer flex items-center gap-2 group"
                 >
-                  <span>Browse Cattle</span>
+                  <span>Browse Sacred Cattle</span>
                   <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
                 </button>
 
                 <button
                   onClick={() => setShowHowItWorksModal(true)}
-                  className="border border-[#cfc6b7] hover:border-[#132a13] bg-transparent text-[#262420] px-6 py-3.5 rounded-full font-medium text-sm sm:text-base flex items-center gap-2.5 transition-all cursor-pointer hover:bg-white/60"
+                  className="border border-[#c8beaf] bg-transparent hover:bg-white/80 active:scale-98 text-[#25231f] px-6 py-3 rounded-full font-medium text-sm transition-all cursor-pointer flex items-center gap-2 shadow-2xs"
                 >
-                  <Play className="h-4 w-4 fill-[#262420] text-[#262420]" />
+                  <span className="h-5 w-5 rounded-full bg-[#eee5d8] grid place-items-center text-[#132a13]">
+                    &#9658;
+                  </span>
                   <span>How it works</span>
                 </button>
               </div>
 
-              {/* 4 Trust Metrics Row */}
-              <div className="pt-6 border-t border-[#ece4d6] grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-3 text-xs">
-                <div className="flex items-start gap-2.5">
-                  <div className="p-2 rounded-lg bg-[#efe7da] text-[#132a13] flex-shrink-0">
+              {/* 4 Value Proposition Badges */}
+              <div className="pt-6 grid grid-cols-2 sm:grid-cols-4 gap-4 border-t border-[#e8ded0]">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-9 w-9 rounded-full bg-[#f2ece2] grid place-items-center text-[#132a13] flex-shrink-0">
                     <Building2 className="h-4 w-4" />
                   </div>
                   <div>
-                    <div className="font-bold text-[#1b1c1b] text-sm">250+</div>
-                    <div className="text-[#6e685c] leading-tight">Verified Gaushalas</div>
+                    <div className="font-serif text-sm font-bold text-[#1b1c1b]">
+                      {dynamicGosalas.length || "7+"} Registered
+                    </div>
+                    <div className="text-[11px] text-[#716b5f]">Verified Gaushalas</div>
                   </div>
                 </div>
 
-                <div className="flex items-start gap-2.5">
-                  <div className="p-2 rounded-lg bg-[#efe7da] text-[#132a13] flex-shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-9 w-9 rounded-full bg-[#f2ece2] grid place-items-center text-[#132a13] flex-shrink-0">
+                    <Truck className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="font-serif text-sm font-bold text-[#1b1c1b]">Safe &amp; Hydraulic</div>
+                    <div className="text-[11px] text-[#716b5f]">Ambulance Transit</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  <div className="h-9 w-9 rounded-full bg-[#f2ece2] grid place-items-center text-[#132a13] flex-shrink-0">
                     <ShieldCheck className="h-4 w-4" />
                   </div>
                   <div>
-                    <div className="font-bold text-[#1b1c1b] text-sm">Safe &amp;</div>
-                    <div className="text-[#6e685c] leading-tight">Secure Transport</div>
+                    <div className="font-serif text-sm font-bold text-[#1b1c1b]">Transparent</div>
+                    <div className="text-[11px] text-[#716b5f]">Escrow Governance</div>
                   </div>
                 </div>
 
-                <div className="flex items-start gap-2.5">
-                  <div className="p-2 rounded-lg bg-[#efe7da] text-[#132a13] flex-shrink-0">
-                    <Leaf className="h-4 w-4" />
+                <div className="flex items-center gap-2.5">
+                  <div className="h-9 w-9 rounded-full bg-[#f2ece2] grid place-items-center text-[#132a13] flex-shrink-0">
+                    <HeartHandshake className="h-4 w-4" />
                   </div>
                   <div>
-                    <div className="font-bold text-[#1b1c1b] text-sm">Transparent</div>
-                    <div className="text-[#6e685c] leading-tight">Pricing</div>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2.5">
-                  <div className="p-2 rounded-lg bg-[#efe7da] text-[#132a13] flex-shrink-0">
-                    <Heart className="h-4 w-4 text-[#c2611b]" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-[#1b1c1b] text-sm">Trusted by</div>
-                    <div className="text-[#6e685c] leading-tight">Thousands</div>
+                    <div className="font-serif text-sm font-bold text-[#1b1c1b]">Trusted By</div>
+                    <div className="text-[11px] text-[#716b5f]">Vedic Communities</div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Right Column: Hero Visual with Sacred Cow & Temple and Floating Sanctuary Card */}
-            <div className="lg:col-span-6 relative mt-4 lg:mt-0">
-              <div className="relative rounded-3xl overflow-hidden shadow-2xl border border-[#e2d7c5] bg-[#ece4d6]">
+            {/* Right Column: Authentic Sacred Cow & Cuddled Calf Visual */}
+            <div className="lg:col-span-6 relative">
+              <div className="relative rounded-3xl overflow-hidden shadow-2xl border-4 border-white/60 bg-[#eee5d8] aspect-[4/3] sm:aspect-[16/11]">
                 <img
                   src={heroSacredCow}
-                  alt="Sacred Mother Cow and cuddled calf with ancient temple background"
-                  className="w-full h-[380px] sm:h-[430px] lg:h-[460px] object-cover object-center scale-[1.02] hover:scale-105 transition-transform duration-700"
+                  alt="Sacred Mother Cow and cuddled calf with temple background"
+                  className="w-full h-full object-cover object-center"
                 />
 
-                
+                {/* Calligraphic Vedic Blessing Script Top-Right */}
+                <div className="absolute top-5 right-6 text-right pointer-events-none select-none">
+                  <div className="font-serif italic text-white/90 text-sm sm:text-base font-semibold drop-shadow-md">
+                    Gau Seva Gaurav Dharma
+                  </div>
+                </div>
 
-                {/* Floating Sanctuary Card (Bottom Right of visual) */}
+                {/* Floating Dynamic Sanctuary Card (Bottom Right of visual) */}
                 <div
-                  onClick={() => setShowGaushalaModal(true)}
-                  className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 bg-white/95 backdrop-blur-md rounded-2xl p-3.5 sm:p-4 shadow-xl border border-white/80 max-w-[260px] sm:max-w-[280px] cursor-pointer hover:bg-white hover:scale-102 transition-all duration-300 group"
+                  onClick={() => {
+                    if (dynamicGosalas[0]) setSelectedGosalaForModal(dynamicGosalas[0])
+                  }}
+                  className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 bg-white/95 backdrop-blur-md rounded-2xl p-3.5 sm:p-4 shadow-xl border border-white/80 max-w-[270px] sm:max-w-[290px] cursor-pointer hover:bg-white hover:scale-102 transition-all duration-300 group"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="h-12 w-12 rounded-xl overflow-hidden bg-[#faf7f2] flex-shrink-0 border border-[#e5dccf]">
+                    <div className="h-11 w-11 rounded-xl overflow-hidden bg-[#faf7f2] flex-shrink-0 border border-[#e5dccf]">
                       <img src={cattleLakshmi} alt="Gaushala thumbnail" className="h-full w-full object-cover" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <h4 className="font-bold text-xs sm:text-sm text-[#1b1c1b] truncate">
-                          Sri Venkateswara Gaushala
+                          {activeFeaturedGaushala.name}
                         </h4>
                         <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
                       </div>
-                      <div className="flex items-center gap-1 text-[11px] text-[#716b5f] mt-0.5">
-                        <MapPin className="h-3 w-3 text-[#c2611b]" />
-                        <span>Visakhapatnam, AP</span>
+                      <div className="flex items-center gap-1 text-[11px] text-[#716b5f] mt-0.5 truncate">
+                        <MapPin className="h-3 w-3 text-[#c2611b] flex-shrink-0" />
+                        <span className="truncate">{activeFeaturedGaushala.region}</span>
                       </div>
                     </div>
                   </div>
@@ -705,11 +755,11 @@ export default function GomaaLandingPage({
                       <img src={cattleMahabala} alt="Bull" className="h-full w-full object-cover" />
                     </div>
                     <span className="text-[10px] font-semibold text-[#6e685c] px-1.5 py-0.5 rounded-md bg-[#f2ecdf]">
-                      +24
+                      +{dynamicAnimals.length || 16}
                     </span>
 
                     <span className="ml-auto text-[11px] font-semibold text-[#132a13] group-hover:underline flex items-center gap-0.5">
-                      View Gaushala <ChevronRight className="h-3 w-3" />
+                      View Sanctuary <ChevronRight className="h-3 w-3" />
                     </span>
                   </div>
                 </div>
@@ -719,30 +769,29 @@ export default function GomaaLandingPage({
         </div>
       </section>
 
-      {/* ----------------- Spotlight Action Banners (3 Cards Grid) ----------------- */}
+      {/* ----------------- 3 Informational Spotlight Action Cards ----------------- */}
       <section className="py-6 bg-[#faf7f2]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-12 gap-5">
-            {/* Card 1: Sponsor Cattle Feed */}
+            {/* Card 1: Verified Gaushala Network */}
             <div
-              onClick={() => setShowFeedModal(true)}
+              onClick={() => document.getElementById("gaushalas-section")?.scrollIntoView({ behavior: "smooth" })}
               className="md:col-span-5 relative rounded-2xl overflow-hidden bg-[#0a261c] text-white p-5 sm:p-6 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer flex items-center justify-between min-h-[145px] group border border-[#16382a]"
             >
-              {/* Left visual: Authentic brass pot with sprouts and grains bowl */}
               <div className="absolute left-0 top-0 bottom-0 w-[42%] overflow-hidden pointer-events-none">
-                <img src={bannerFeed} alt="Cattle Feed" className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500" />
+                <img src={bannerFeed} alt="Cattle Feed and Pasture" className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500" />
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#0a261c]/40 to-[#0a261c]" />
               </div>
 
               <div className="relative z-10 ml-auto w-[62%] pl-2">
                 <span className="inline-block px-3 py-1 rounded-full bg-[#fbf8f2] text-[#0a261c] text-[10px] font-bold uppercase tracking-wider mb-2 shadow-2xs">
-                  Support Nutrition
+                  Sanctuary Network
                 </span>
                 <h3 className="font-serif text-xl sm:text-2xl font-bold text-white leading-tight">
-                  Sponsor Cattle Feed
+                  Verified Gaushala Network
                 </h3>
                 <p className="text-white/85 text-xs mt-1 leading-snug">
-                  Help us provide nutritious feed to gaushalas in need.
+                  Audited Vedic shelters with resident caretakers, pasture facilities &amp; live bovine census.
                 </p>
               </div>
 
@@ -753,23 +802,25 @@ export default function GomaaLandingPage({
               </div>
             </div>
 
-            {/* Card 2: Special Seva Packages */}
+            {/* Card 2: Indigenous Heritage Breeds */}
             <div
-              onClick={() => setShowSevaPackagesModal(true)}
+              onClick={() => document.getElementById("featured-cattle-section")?.scrollIntoView({ behavior: "smooth" })}
               className="md:col-span-4 relative rounded-2xl overflow-hidden bg-[#181e1c] text-white p-5 sm:p-6 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer flex items-center justify-between min-h-[145px] group border border-[#2b3531]"
             >
               <div className="relative z-10 max-w-[58%]">
+                <span className="inline-block px-2.5 py-0.5 rounded-full bg-[#c2611b]/25 border border-[#c2611b]/50 text-[#f5a769] text-[9.5px] font-bold uppercase tracking-wider mb-2">
+                  Heritage Conservation
+                </span>
                 <h3 className="font-serif text-xl sm:text-2xl font-bold text-white leading-tight">
-                  Special Seva Packages
+                  Sacred Bovine Breeds
                 </h3>
                 <p className="text-[#d8cfbe] text-xs mt-1.5 leading-snug font-serif italic">
-                  for festivals &amp; auspicious occasions
+                  Preserving Gir, Sahiwal, Kankrej, Tharparkar &amp; Punganur
                 </p>
               </div>
 
-              {/* Center/Right temple & cow visual */}
               <div className="absolute right-12 top-0 bottom-0 w-[46%] pointer-events-none overflow-hidden opacity-95">
-                <img src={bannerSevaPackages} alt="Special Seva Packages" className="w-full h-full object-cover object-left group-hover:scale-105 transition-transform duration-500" />
+                <img src={bannerSevaPackages} alt="Sacred Bovine Breeds" className="w-full h-full object-cover object-left group-hover:scale-105 transition-transform duration-500" />
                 <div className="absolute inset-0 bg-gradient-to-r from-[#181e1c] via-transparent to-transparent" />
               </div>
 
@@ -780,17 +831,20 @@ export default function GomaaLandingPage({
               </div>
             </div>
 
-            {/* Card 3: Corporate Partnerships */}
+            {/* Card 3: Veterinary & Humane Transit Protocols */}
             <div
-              onClick={() => setShowCorporateModal(true)}
+              onClick={() => document.getElementById("welfare-protocols-section")?.scrollIntoView({ behavior: "smooth" })}
               className="md:col-span-3 relative rounded-2xl overflow-hidden bg-[#eee5d8] text-[#1b1c1b] p-5 sm:p-6 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer flex items-center justify-between min-h-[145px] group border border-[#dfd4c4]"
             >
               <div className="relative z-10 max-w-[70%]">
+                <span className="inline-block px-2.5 py-0.5 rounded-full bg-[#132a13]/10 text-[#132a13] text-[9.5px] font-bold uppercase tracking-wider mb-2">
+                  PCA Act 1960
+                </span>
                 <h3 className="font-serif text-xl sm:text-2xl font-bold text-[#1b1c1b] leading-tight">
-                  Corporate Partnerships
+                  Ethical Care &amp; Transit
                 </h3>
                 <p className="text-[#645e52] text-xs mt-1.5 font-medium leading-snug">
-                  Support gaushalas with your organization
+                  Hydraulic ambulance transit &amp; daily pre-dispatch health checks
                 </p>
               </div>
 
@@ -808,7 +862,140 @@ export default function GomaaLandingPage({
         </div>
       </section>
 
-      {/* ----------------- Featured Cattle Section ----------------- */}
+      {/* ----------------- Dynamic Verified Gaushalas Section ----------------- */}
+      <section id="gaushalas-section" className="py-12 bg-[#faf7f2] border-t border-[#ece4d6]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+            <div>
+              <div className="flex items-center gap-2 text-emerald-800">
+                <Building2 className="h-5 w-5 text-emerald-700" />
+                <h2 className="font-serif text-3xl sm:text-4xl font-bold text-[#1b1c1b]">
+                  Verified Gaushala Network
+                </h2>
+              </div>
+              <p className="text-[#656054] text-sm sm:text-base mt-1">
+                Audited sanctuaries with certified caretakers, resident veterinary bays, and pasture facilities.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setSelectedGosalaFilter("ALL")}
+                className={`px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                  selectedGosalaFilter === "ALL"
+                    ? "bg-[#132a13] text-white shadow-xs"
+                    : "bg-[#eee7db] text-[#5e584d] hover:text-[#1b1c1b]"
+                }`}
+              >
+                All Gaushalas ({dynamicGosalas.length || 7})
+              </button>
+              {dynamicGosalas.slice(0, 3).map((g) => (
+                <button
+                  key={g.id}
+                  onClick={() => {
+                    setSelectedGosalaFilter(g.name)
+                    document.getElementById("featured-cattle-section")?.scrollIntoView({ behavior: "smooth" })
+                  }}
+                  className={`px-3.5 py-2 rounded-full text-xs font-medium border border-[#dcd3c4] transition-all cursor-pointer ${
+                    selectedGosalaFilter === g.name
+                      ? "bg-[#132a13] text-white"
+                      : "bg-white text-[#4a463e] hover:bg-[#f5ecde]"
+                  }`}
+                >
+                  {g.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Gaushala Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {(dynamicGosalas.length > 0 ? dynamicGosalas.slice(0, 3) : [
+              {
+                id: "g1",
+                name: "Gaushala_01",
+                region: "Hyderabad Central (Banjara Hills)",
+                address: "Plot 42, Road No 12, Banjara Hills, Hyderabad, Telangana",
+                contactPhone: "+91 98230 44910",
+                contactEmail: "gaushala1@gomaa.in",
+                caretaker: "Gaushala Gosevak",
+                cowsCount: 5,
+              },
+              {
+                id: "g2",
+                name: "Gaushala_02",
+                region: "Cyberabad / Gachibowli Zone",
+                address: "Survey 88, Financial District, Gachibowli, Hyderabad, Telangana",
+                contactPhone: "+91 98230 44911",
+                contactEmail: "gaushala2@gomaa.in",
+                caretaker: "Gopal Krishna Murthy",
+                cowsCount: 4,
+              },
+              {
+                id: "g3",
+                name: "Gaushala_03",
+                region: "Secunderabad & Cantonment",
+                address: "Temple Road, Trimulgherry, Secunderabad, Telangana",
+                contactPhone: "+91 98230 44912",
+                contactEmail: "gaushala3@gomaa.in",
+                caretaker: "Raghavendra Swamy",
+                cowsCount: 3,
+              },
+            ]).map((g, idx) => (
+              <div
+                key={g.id || idx}
+                onClick={() => setSelectedGosalaForModal(g)}
+                className="bg-white rounded-2xl p-6 border border-[#e8dfd2] shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col justify-between group"
+              >
+                <div>
+                  <div className="flex items-center justify-between pb-3 border-b border-[#f0e9df]">
+                    <div className="flex items-center gap-2">
+                      <div className="h-9 w-9 rounded-full bg-[#f2ece2] text-[#132a13] grid place-items-center font-bold text-xs">
+                        G{idx + 1}
+                      </div>
+                      <div>
+                        <h3 className="font-serif text-lg font-bold text-[#1b1c1b] group-hover:text-[#c2611b] transition-colors">
+                          {g.name}
+                        </h3>
+                        <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3" /> AWBI Certified
+                        </span>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-md bg-[#f4eee3] text-[#716b5f] text-xs font-semibold">
+                      {g.cowsCount || 5} Sacred Bovines
+                    </span>
+                  </div>
+
+                  <div className="mt-4 space-y-2 text-xs text-[#5f594e]">
+                    <div className="flex items-start gap-2">
+                      <MapPin className="h-3.5 w-3.5 text-[#c2611b] flex-shrink-0 mt-0.5" />
+                      <span>{g.address}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-3.5 w-3.5 text-[#716b5f] flex-shrink-0" />
+                      <span>Zone: {g.region}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Users className="h-3.5 w-3.5 text-[#716b5f] flex-shrink-0" />
+                      <span>Manager: {g.caretaker || g.managerName || "Resident Caretaker"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-5 pt-3 border-t border-[#f0e9df] flex items-center justify-between text-xs">
+                  <span className="text-[#888173] font-mono text-[11px]">PCA 1960 Audited</span>
+                  <span className="font-semibold text-[#132a13] group-hover:underline flex items-center gap-1">
+                    Sanctuary Profile <ChevronRight className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ----------------- Dynamic Featured Cattle Section ----------------- */}
       <section id="featured-cattle-section" className="py-12 bg-[#faf7f2]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Section Header */}
@@ -817,11 +1004,11 @@ export default function GomaaLandingPage({
               <div className="flex items-center gap-2 text-emerald-800">
                 <Leaf className="h-5 w-5 text-emerald-700" />
                 <h2 className="font-serif text-3xl sm:text-4xl font-bold text-[#1b1c1b]">
-                  Featured Cattle
+                  Featured Sacred Cattle
                 </h2>
               </div>
               <p className="text-[#656054] text-sm sm:text-base mt-1">
-                Book cattle for seva, puja, events, and special occasions from verified gaushalas.
+                Consecrated mother cows, calves, and bulls registered from verified sanctuaries across regions.
               </p>
             </div>
 
@@ -844,15 +1031,14 @@ export default function GomaaLandingPage({
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    if (onStartBooking) onStartBooking("Lakshmi")
-                    else setShowSearchModal(true)
-                  }}
-                  className="px-4 py-2 rounded-full border border-[#d4cbbe] bg-white text-xs font-medium text-[#2d2b26] hover:bg-[#132a13] hover:text-white transition-all shadow-2xs"
-                >
-                  View All &rarr;
-                </button>
+                {selectedGosalaFilter !== "ALL" && (
+                  <button
+                    onClick={() => setSelectedGosalaFilter("ALL")}
+                    className="px-3 py-1.5 rounded-full bg-[#dec9b4]/50 text-[#853f10] text-xs font-semibold hover:bg-[#dec9b4]"
+                  >
+                    Filter: {selectedGosalaFilter} &times;
+                  </button>
+                )}
                 <button
                   onClick={() => scrollCarousel("left")}
                   title="Scroll Left"
@@ -891,15 +1077,17 @@ export default function GomaaLandingPage({
                       className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-500"
                     />
 
-                    {/* Category Badge matching authentic reference */}
+                    {/* Category Badge */}
                     <span className={`absolute top-3 left-3 px-2.5 py-0.5 rounded-md text-white font-mono text-[9px] font-bold uppercase tracking-wider shadow-xs ${
                       cow.category === 'COW'
                         ? 'bg-[#7a4820]'
                         : cow.category === 'CALF'
                         ? 'bg-[#254a23]'
-                        : 'bg-[#272b2e]'
+                        : cow.category === 'BULL'
+                        ? 'bg-[#272b2e]'
+                        : 'bg-[#9c4217]'
                     }`}>
-                      {cow.category}
+                      {cow.category.replace(/_/g, " ")}
                     </span>
 
                     {/* Favorite Heart Button */}
@@ -925,7 +1113,7 @@ export default function GomaaLandingPage({
                         {cow.name}
                       </h3>
                       <div className="text-[11px] text-[#716b5f] font-medium mt-0.5">
-                        {cow.age} &bull; {cow.gender}
+                        {cow.breed} &bull; {cow.age}
                       </div>
                       <div className="flex items-center gap-1 text-[11px] text-[#555046] mt-1.5 truncate">
                         <MapPin className="h-3 w-3 text-[#c2611b] flex-shrink-0" />
@@ -956,18 +1144,75 @@ export default function GomaaLandingPage({
         </div>
       </section>
 
+      {/* ----------------- Humane Welfare & Transit Protocols Section ----------------- */}
+      <section id="welfare-protocols-section" className="py-14 bg-[#f4ede1] border-t border-[#e2d7c5]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-2xl mx-auto mb-10">
+            <span className="inline-block px-3 py-1 rounded-full bg-[#132a13]/10 text-[#132a13] text-xs font-bold uppercase tracking-wider mb-2">
+              Statutory Animal Protection
+            </span>
+            <h2 className="font-serif text-3xl sm:text-4xl font-bold text-[#1b1c1b]">
+              Four Pillars of Divine Animal Welfare
+            </h2>
+            <p className="text-[#656054] text-sm mt-2">
+              Every booking is conducted strictly under the Prevention of Cruelty to Animals (PCA) Act, 1960 with veterinary oversight.
+            </p>
+          </div>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="p-6 rounded-2xl bg-white border border-[#dfd4c4] shadow-sm space-y-3">
+              <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-800 grid place-items-center">
+                <Truck className="h-5 w-5" />
+              </div>
+              <h4 className="font-serif text-lg font-bold text-[#1b1c1b]">
+                Hydraulic Ramp Ambulances
+              </h4>
+              <p className="text-xs text-[#6e685c] leading-relaxed">
+                Specially retrofitted cattle transit vehicles equipped with motorized low-angle ramps, non-slip rubber matting, and GPS tracking.
+              </p>
+            </div>
+
+            <div className="p-6 rounded-2xl bg-white border border-[#dfd4c4] shadow-sm space-y-3">
+              <div className="h-10 w-10 rounded-xl bg-amber-50 text-amber-800 grid place-items-center">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <h4 className="font-serif text-lg font-bold text-[#1b1c1b]">
+                Mandatory Rest Buffers
+              </h4>
+              <p className="text-xs text-[#6e685c] leading-relaxed">
+                Strict limits of max 2 trips daily with mandatory 90-minute cooldown periods, fresh green pasture grazing, and water intake checks.
+              </p>
+            </div>
+
+            <div className="p-6 rounded-2xl bg-white border border-[#dfd4c4] shadow-sm space-y-3">
+              <div className="h-10 w-10 rounded-xl bg-sky-50 text-sky-800 grid place-items-center">
+                <Stethoscope className="h-5 w-5" />
+              </div>
+              <h4 className="font-serif text-lg font-bold text-[#1b1c1b]">
+                Veterinary Pre-Dispatch Pass
+              </h4>
+              <p className="text-xs text-[#6e685c] leading-relaxed">
+                Registered veterinary doctors inspect temperature, heart rate, hydration, and hoof stability before dispatch.
+              </p>
+            </div>
+
+            <div className="p-6 rounded-2xl bg-white border border-[#dfd4c4] shadow-sm space-y-3">
+              <div className="h-10 w-10 rounded-xl bg-rose-50 text-rose-800 grid place-items-center">
+                <HeartHandshake className="h-5 w-5" />
+              </div>
+              <h4 className="font-serif text-lg font-bold text-[#1b1c1b]">
+                Escrow &amp; 4-Digit OTP
+              </h4>
+              <p className="text-xs text-[#6e685c] leading-relaxed">
+                Contributions remain safely in escrow until the holy cow reaches your altar and you verify handover with your secure OTP.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ----------------- Latest from Our Blog & Real Impact Section ----------------- */}
       <section id="blogs-section" className="py-12 bg-[#faf7f2] relative overflow-hidden">
-        {/* Decorative Green Leaf Branch on bottom-right of blogs/impact section (matching gomaa_intro.jpg) */}
-        <div className="absolute -bottom-8 -right-8 w-48 h-48 pointer-events-none select-none opacity-85 hidden lg:block z-10">
-          <svg viewBox="0 0 200 200" fill="none" className="w-full h-full drop-shadow-md">
-            <path d="M210,210 Q140,140 80,90" stroke="#4e3620" strokeWidth="4" strokeLinecap="round" />
-            <path d="M150,150 Q120,110 70,80" stroke="#4e3620" strokeWidth="2.5" strokeLinecap="round" />
-            <path d="M120,120 C100,90 70,100 60,130 C75,145 105,140 120,120 Z" fill="url(#leafGrad1)" />
-            <path d="M160,160 C140,120 100,120 90,150 C110,180 145,175 160,160 Z" fill="url(#leafGrad2)" />
-            <path d="M80,90 C60,60 30,75 30,105 C50,120 75,110 80,90 Z" fill="url(#leafGrad3)" />
-          </svg>
-        </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-12 gap-8 items-start">
             {/* Left Column: Latest from Our Blog */}
@@ -976,15 +1221,9 @@ export default function GomaaLandingPage({
                 <div className="flex items-center gap-2">
                   <BookOpen className="h-5 w-5 text-[#c2611b]" />
                   <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#1b1c1b]">
-                    Latest from Our Blog
+                    Wisdom from Our Sanctuary Journals
                   </h2>
                 </div>
-                <button
-                  onClick={() => setSelectedBlogArticle(BLOG_ARTICLES[0])}
-                  className="text-xs font-semibold text-[#132a13] hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  View All Articles &rarr;
-                </button>
               </div>
 
               {/* 3 Blog Cards Row */}
@@ -1040,29 +1279,31 @@ export default function GomaaLandingPage({
                     Happier Gaushalas.
                   </h3>
                   <p className="text-white/80 text-xs sm:text-sm leading-relaxed">
-                    Be a part of our mission to support cattle welfare across India.
+                    Be a part of our sacred mission to support cattle welfare across India.
                   </p>
                   <div>
                     <button
                       onClick={onSignIn}
                       className="bg-[#fbf8f2] hover:bg-white active:scale-98 text-[#132a13] px-5 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all shadow-sm cursor-pointer flex items-center gap-1.5"
                     >
-                      <span>Join the Movement</span>
+                      <span>Enter Workspace Portal</span>
                       <ArrowRight className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* 4 Impact Stats Grid */}
+              {/* Dynamic Impact Stats Grid */}
               <div className="mt-8 pt-6 border-t border-white/15 grid grid-cols-2 gap-4 text-xs">
                 <div className="flex items-center gap-3">
                   <div className="h-8 w-8 rounded-lg bg-white/10 grid place-items-center text-amber-300">
                     <Building2 className="h-4 w-4" />
                   </div>
                   <div>
-                    <div className="font-serif text-lg font-bold text-white">250+</div>
-                    <div className="text-white/70 text-[11px]">Verified Gaushalas</div>
+                    <div className="font-serif text-lg font-bold text-white">
+                      {dynamicGosalas.length || "7+"}
+                    </div>
+                    <div className="text-white/70 text-[11px]">Audited Sanctuaries</div>
                   </div>
                 </div>
 
@@ -1071,8 +1312,10 @@ export default function GomaaLandingPage({
                     <Award className="h-4 w-4" />
                   </div>
                   <div>
-                    <div className="font-serif text-lg font-bold text-white">12,000+</div>
-                    <div className="text-white/70 text-[11px]">Cattle Supported</div>
+                    <div className="font-serif text-lg font-bold text-white">
+                      {dynamicAnimals.length ? `${dynamicAnimals.length}+` : "16+"}
+                    </div>
+                    <div className="text-white/70 text-[11px]">Registered Bovines</div>
                   </div>
                 </div>
 
@@ -1081,8 +1324,10 @@ export default function GomaaLandingPage({
                     <MapPin className="h-4 w-4" />
                   </div>
                   <div>
-                    <div className="font-serif text-lg font-bold text-white">30+</div>
-                    <div className="text-white/70 text-[11px]">Cities</div>
+                    <div className="font-serif text-lg font-bold text-white">
+                      {dynamicGosalas.length ? `${dynamicGosalas.length} Zones` : "3 Zones"}
+                    </div>
+                    <div className="text-white/70 text-[11px]">Operational Reach</div>
                   </div>
                 </div>
 
@@ -1091,8 +1336,8 @@ export default function GomaaLandingPage({
                     <Users className="h-4 w-4" />
                   </div>
                   <div>
-                    <div className="font-serif text-lg font-bold text-white">5,000+</div>
-                    <div className="text-white/70 text-[11px]">Devotees Joined</div>
+                    <div className="font-serif text-lg font-bold text-white">100%</div>
+                    <div className="text-white/70 text-[11px]">PCA 1960 Certified</div>
                   </div>
                 </div>
               </div>
@@ -1101,7 +1346,7 @@ export default function GomaaLandingPage({
         </div>
       </section>
 
-      {/* ----------------- Footer ----------------- */}
+      {/* ----------------- Clean Footer ----------------- */}
       <footer className="mt-12 bg-[#201c16] text-[#c7beaf] py-14 border-t border-[#383228]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-10 border-b border-[#383228]">
@@ -1114,12 +1359,12 @@ export default function GomaaLandingPage({
                 <div>
                   <span className="font-serif text-xl font-bold text-white">GOMAA</span>
                   <div className="font-mono text-[8px] uppercase tracking-[0.2em] text-[#9c9384]">
-                    Sacred Welfare Platform
+                    Sacred Operations &amp; Welfare
                   </div>
                 </div>
               </div>
               <p className="text-xs text-[#a09787] leading-relaxed">
-                Empowering ethical bovine care, temple darshan, and transparent cow seva nationwide with verified gaushalas and hydraulic transit.
+                Empowering ethical bovine care, temple darshan, and transparent cow seva nationwide with verified gaushalas and hydraulic ambulance transit.
               </p>
               <div className="flex items-center gap-2 text-[11px] text-[#decab2]">
                 <ShieldCheck className="h-4 w-4 text-emerald-400" />
@@ -1129,13 +1374,12 @@ export default function GomaaLandingPage({
 
             {/* Quick Links */}
             <div className="space-y-2 text-xs">
-              <h5 className="font-bold text-white tracking-wider uppercase text-[11px]">Sacred Portals</h5>
+              <h5 className="font-bold text-white tracking-wider uppercase text-[11px]">Sanctuary Navigation</h5>
               <ul className="space-y-2 text-[#b0a797]">
-                <li><button onClick={() => document.getElementById("featured-cattle-section")?.scrollIntoView({ behavior: "smooth" })} className="hover:text-white transition-colors">Browse Verified Cattle</button></li>
-                <li><button onClick={() => setShowGaushalaModal(true)} className="hover:text-white transition-colors">Sanctuary Network</button></li>
-                <li><button onClick={() => setShowFeedModal(true)} className="hover:text-white transition-colors">Sponsor Cattle Feed</button></li>
-                <li><button onClick={() => setShowSevaPackagesModal(true)} className="hover:text-white transition-colors">Festival Seva Packages</button></li>
-                <li><button onClick={() => setShowCorporateModal(true)} className="hover:text-white transition-colors">Corporate CSR Gaushala Adoption</button></li>
+                <li><button onClick={() => document.getElementById("gaushalas-section")?.scrollIntoView({ behavior: "smooth" })} className="hover:text-white transition-colors">Verified Gaushala Network</button></li>
+                <li><button onClick={() => document.getElementById("featured-cattle-section")?.scrollIntoView({ behavior: "smooth" })} className="hover:text-white transition-colors">Sacred Cattle Gallery</button></li>
+                <li><button onClick={() => document.getElementById("welfare-protocols-section")?.scrollIntoView({ behavior: "smooth" })} className="hover:text-white transition-colors">Welfare &amp; Transit Protocols</button></li>
+                <li><button onClick={() => setShowHowItWorksModal(true)} className="hover:text-white transition-colors">How GOMAA Works</button></li>
               </ul>
             </div>
 
@@ -1151,19 +1395,19 @@ export default function GomaaLandingPage({
               </ul>
             </div>
 
-            {/* Contact & Regions */}
+            {/* Access & Sign In */}
             <div className="space-y-2 text-xs">
-              <h5 className="font-bold text-white tracking-wider uppercase text-[11px]">Regional Hubs</h5>
+              <h5 className="font-bold text-white tracking-wider uppercase text-[11px]">Platform Access</h5>
               <p className="text-[#a09787] text-xs">
-                Active in Visakhapatnam, Tirupati, Hyderabad, Vijayawada, Bangalore, Pune, Ahmedabad &amp; Delhi-NCR.
+                Devotees, Sanctuary Managers, Transit Drivers, and Admins can sign in to their dedicated workspaces.
               </p>
               <div className="pt-2">
                 <button
-                  onClick={() => setShowLocationPicker(true)}
-                  className="px-3 py-1.5 rounded-full border border-[#52493d] hover:border-white text-xs text-white transition-all flex items-center gap-1.5"
+                  onClick={onSignIn}
+                  className="px-4 py-2 rounded-full bg-[#132a13] border border-[#445b44] hover:bg-[#1b3b1b] text-xs text-white transition-all flex items-center gap-2"
                 >
-                  <MapPin className="h-3.5 w-3.5 text-[#c2611b]" />
-                  <span>Change Region ({currentCity})</span>
+                  <span>Sign In to Portal</span>
+                  <ArrowRight className="h-3 w-3" />
                 </button>
               </div>
             </div>
@@ -1180,77 +1424,14 @@ export default function GomaaLandingPage({
         </div>
       </footer>
 
-      {/* ----------------- MODAL 1: Search Cattle & Sanctuaries ----------------- */}
-      {showSearchModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#fbf9f4] rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-[#d8cfbe] space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Search className="h-5 w-5 text-[#c2611b]" />
-                <h3 className="font-serif text-xl font-bold text-[#1b1c1b]">Search Sacred Cattle &amp; Gaushalas</h3>
-              </div>
-              <button
-                onClick={() => setShowSearchModal(false)}
-                className="h-8 w-8 rounded-full bg-[#eee7db] hover:bg-[#ded4c4] grid place-items-center text-[#5f5b52]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="relative">
-              <Search className="h-4 w-4 absolute left-3.5 top-3.5 text-[#716b5f]" />
-              <input
-                type="text"
-                placeholder="Search by cow name, breed (Gir, Sahiwal), or sanctuary..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                autoFocus
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#d8cfbe] bg-white text-sm text-[#1b1c1b] focus:outline-hidden focus:border-[#132a13]"
-              />
-            </div>
-
-            <div className="max-h-60 overflow-y-auto space-y-2 pt-2">
-              {filteredCattle.slice(0, 5).map((cow) => (
-                <div
-                  key={cow.id}
-                  onClick={() => {
-                    setShowSearchModal(false)
-                    handleBookCattle(cow)
-                  }}
-                  className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-white border border-transparent hover:border-[#ded5c6] transition-all cursor-pointer"
-                >
-                  <img src={cow.image} alt={cow.name} className="h-12 w-12 rounded-lg object-cover" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-sm text-[#1b1c1b]">{cow.name}</h4>
-                      <span className="text-xs font-semibold text-[#132a13]">&#8377; {cow.pricePerDay}</span>
-                    </div>
-                    <div className="text-xs text-[#716b5f]">{cow.breed} &bull; {cow.gosala}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                onClick={() => setShowSearchModal(false)}
-                className="px-4 py-2 rounded-xl bg-[#132a13] text-white text-xs font-medium"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ----------------- MODAL 2: Cattle Seva Booking Dossier ----------------- */}
+      {/* ----------------- MODAL 1: Cattle Seva Booking Dossier ----------------- */}
       {selectedCattleForModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-[#fbf9f4] rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-[#d8cfbe] space-y-5 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between">
               <div>
                 <span className="px-2.5 py-0.5 rounded-md bg-[#132a13] text-white text-[10px] font-bold uppercase tracking-wider">
-                  {selectedCattleForModal.category} SEVA DOSSIER
+                  {selectedCattleForModal.category.replace(/_/g, " ")} SEVA DOSSIER
                 </span>
                 <h3 className="font-serif text-2xl font-bold text-[#1b1c1b] mt-1">
                   {selectedCattleForModal.name} ({selectedCattleForModal.breed})
@@ -1285,19 +1466,19 @@ export default function GomaaLandingPage({
               </div>
             </div>
 
-            {/* Itemized Pricing Summary */}
+            {/* Pricing Info */}
             <div className="border border-[#ded5c6] rounded-xl p-4 bg-white space-y-2 text-xs">
               <div className="font-bold text-[#1b1c1b] flex items-center justify-between pb-2 border-b border-[#f0e8dc]">
-                <span>Seva Dakshina &amp; Hydraulic Transit Breakdown</span>
-                <span className="text-emerald-700 font-semibold">Verified Escrow</span>
+                <span>Seva Dakshina &amp; Hydraulic Transit Summary</span>
+                <span className="text-emerald-700 font-semibold">PCA 1960 Compliant</span>
               </div>
               <div className="flex justify-between text-[#686255]">
-                <span>Base Seva Dakshina (60 min auspicious muhurat)</span>
-                <span>&#8377; {selectedCattleForModal.pricePerDay}</span>
+                <span>Base Seva Dakshina</span>
+                <span>&#8377; {selectedCattleForModal.pricePerDay.toLocaleString("en-IN")}</span>
               </div>
               <div className="flex justify-between text-[#686255]">
                 <span>Hydraulic Ambulance Transit &amp; Gosevak Handler</span>
-                <span>Included</span>
+                <span>Certified Protocol</span>
               </div>
               <div className="flex justify-between text-[#686255]">
                 <span>Organic Grass Fodder Offering</span>
@@ -1305,7 +1486,7 @@ export default function GomaaLandingPage({
               </div>
               <div className="flex justify-between font-bold text-sm text-[#1b1c1b] pt-2 border-t border-[#f0e8dc]">
                 <span>Total Seva Contribution</span>
-                <span>&#8377; {selectedCattleForModal.pricePerDay}</span>
+                <span>&#8377; {selectedCattleForModal.pricePerDay.toLocaleString("en-IN")}</span>
               </div>
             </div>
 
@@ -1317,7 +1498,7 @@ export default function GomaaLandingPage({
                 }}
                 className="flex-1 py-3 rounded-full bg-[#132a13] hover:bg-[#1a381a] text-white font-medium text-sm text-center shadow-md cursor-pointer flex items-center justify-center gap-2"
               >
-                <span>Proceed to Schedule &amp; Reserve</span>
+                <span>Sign In to Schedule Seva</span>
                 <ArrowRight className="h-4 w-4" />
               </button>
             </div>
@@ -1325,8 +1506,8 @@ export default function GomaaLandingPage({
         </div>
       )}
 
-      {/* ----------------- MODAL 3: Sri Venkateswara Gaushala Profile ----------------- */}
-      {showGaushalaModal && (
+      {/* ----------------- MODAL 2: Gaushala Profile Modal ----------------- */}
+      {selectedGosalaForModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-[#fbf9f4] rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-[#d8cfbe] space-y-4 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between">
@@ -1335,15 +1516,15 @@ export default function GomaaLandingPage({
                   Verified A+ Vedic Sanctuary
                 </span>
                 <h3 className="font-serif text-2xl font-bold text-[#1b1c1b] mt-1">
-                  Sri Venkateswara Gaushala
+                  {selectedGosalaForModal.name}
                 </h3>
                 <p className="text-xs text-[#716b5f] flex items-center gap-1 mt-0.5">
                   <MapPin className="h-3 w-3 text-[#c2611b]" />
-                  <span>Simhachalam Foothills, Visakhapatnam, Andhra Pradesh</span>
+                  <span>{selectedGosalaForModal.address}</span>
                 </p>
               </div>
               <button
-                onClick={() => setShowGaushalaModal(false)}
+                onClick={() => setSelectedGosalaForModal(null)}
                 className="h-8 w-8 rounded-full bg-[#eee7db] hover:bg-[#ded4c4] grid place-items-center text-[#5f5b52]"
               >
                 <X className="h-4 w-4" />
@@ -1356,203 +1537,60 @@ export default function GomaaLandingPage({
 
             <div className="grid grid-cols-3 gap-3 text-center text-xs">
               <div className="p-3 bg-white rounded-xl border border-[#ded5c6]">
-                <div className="font-serif text-lg font-bold text-[#132a13]">450+</div>
-                <div className="text-[11px] text-[#716b5f]">Sacred Cattle</div>
-              </div>
-              <div className="p-3 bg-white rounded-xl border border-[#ded5c6]">
-                <div className="font-serif text-lg font-bold text-[#132a13]">18 Acres</div>
-                <div className="text-[11px] text-[#716b5f]">Organic Pasture</div>
+                <div className="font-serif text-lg font-bold text-[#132a13]">
+                  {selectedGosalaForModal.cowsCount || 5}
+                </div>
+                <div className="text-[11px] text-[#716b5f]">Sacred Bovines</div>
               </div>
               <div className="p-3 bg-white rounded-xl border border-[#ded5c6]">
                 <div className="font-serif text-lg font-bold text-[#132a13]">24x7</div>
-                <div className="text-[11px] text-[#716b5f]">Resident Vet Bay</div>
+                <div className="text-[11px] text-[#716b5f]">Vet Care Bay</div>
+              </div>
+              <div className="p-3 bg-white rounded-xl border border-[#ded5c6]">
+                <div className="font-serif text-lg font-bold text-[#132a13]">100%</div>
+                <div className="text-[11px] text-[#716b5f]">PCA 1960 Adherence</div>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-xs text-[#555045]">
+              <div className="font-semibold text-[#1b1c1b]">Sanctuary Administration:</div>
+              <div className="grid grid-cols-2 gap-2 p-3 bg-white rounded-xl border border-[#ded5c6]">
+                <div>
+                  <span className="font-semibold text-[#2d2a24]">Caretaker:</span> {selectedGosalaForModal.caretaker || "Gosevak"}
+                </div>
+                <div>
+                  <span className="font-semibold text-[#2d2a24]">Phone:</span> {selectedGosalaForModal.contactPhone}
+                </div>
+                <div>
+                  <span className="font-semibold text-[#2d2a24]">Admin:</span> {selectedGosalaForModal.governingAdminName || "Regional Admin"}
+                </div>
+                <div>
+                  <span className="font-semibold text-[#2d2a24]">Email:</span> {selectedGosalaForModal.contactEmail}
+                </div>
               </div>
             </div>
 
             <p className="text-xs text-[#555045] leading-relaxed">
-              Nestled near the sacred Simhachalam temple hills, Sri Venkateswara Gaushala is dedicated to nurturing indigenous breeds (Gir, Sahiwal, Ongole, and Punganur). Supported by full solar facilities, automated fresh water troughs, and daily Vedic prayers.
+              {selectedGosalaForModal.description}
             </p>
 
-            <div className="pt-2 flex justify-end">
+            <div className="pt-2 flex justify-between items-center">
               <button
                 onClick={() => {
-                  setShowGaushalaModal(false)
+                  setSelectedGosalaFilter(selectedGosalaForModal.name)
+                  setSelectedGosalaForModal(null)
                   document.getElementById("featured-cattle-section")?.scrollIntoView({ behavior: "smooth" })
                 }}
                 className="px-5 py-2.5 rounded-full bg-[#132a13] text-white text-xs font-semibold cursor-pointer"
               >
-                Explore Sanctuary Cattle &rarr;
+                View Cattle from this Sanctuary &rarr;
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ----------------- MODAL 4: Sponsor Cattle Feed ----------------- */}
-      {showFeedModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#fbf9f4] rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#d8cfbe] space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="px-2.5 py-0.5 rounded-md bg-[#132a13] text-white text-[10px] font-bold uppercase tracking-wider">
-                  Gau Grass Seva
-                </span>
-                <h3 className="font-serif text-2xl font-bold text-[#1b1c1b] mt-1">
-                  Sponsor Nutritious Cattle Feed
-                </h3>
-              </div>
-              <button
-                onClick={() => setShowFeedModal(false)}
-                className="h-8 w-8 rounded-full bg-[#eee7db] hover:bg-[#ded4c4] grid place-items-center text-[#5f5b52]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-[#635d51]">
-              Select a nutrition contribution for verified gaushalas. All proceeds are directly disbursed into escrow and certified with 80G tax receipts.
-            </p>
-
-            <div className="space-y-2 text-xs">
-              {[
-                { label: "Fresh Green Grass Fodder (25 kg)", price: 250 },
-                { label: "Sacred Grain & Mineral Nutrition Mix (15 kg)", price: 500 },
-                { label: "Full Gaushala Daily Feast (100 kg feed)", price: 1500 },
-                { label: "1-Month Gau Seva Nutrition Patron", price: 5000 },
-              ].map((tier, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => {
-                    addToast(`Sponsored ${tier.label} (₹ ${tier.price})! Thank you for your devotion.`, "success")
-                    setShowFeedModal(false)
-                  }}
-                  className="flex items-center justify-between p-3 rounded-xl bg-white border border-[#ded5c6] hover:border-[#132a13] transition-all cursor-pointer group"
-                >
-                  <span className="font-medium text-[#2d2a24]">{tier.label}</span>
-                  <span className="font-bold text-[#132a13] group-hover:underline">&#8377; {tier.price}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="pt-2 text-[11px] text-[#7e7769] flex items-center gap-1.5">
-              <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
-              <span>Includes digital proof of feeding from the sanctuary manager.</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ----------------- MODAL 5: Special Seva Packages ----------------- */}
-      {showSevaPackagesModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#fbf9f4] rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#d8cfbe] space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="px-2.5 py-0.5 rounded-md bg-[#c2611b] text-white text-[10px] font-bold uppercase tracking-wider">
-                  Ceremonial Seva
-                </span>
-                <h3 className="font-serif text-2xl font-bold text-[#1b1c1b] mt-1">
-                  Special Seva Packages
-                </h3>
-              </div>
-              <button
-                onClick={() => setShowSevaPackagesModal(false)}
-                className="h-8 w-8 rounded-full bg-[#eee7db] hover:bg-[#ded4c4] grid place-items-center text-[#5f5b52]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              {[
-                { title: "Griha Pravesh & Vastu Blessing", desc: "Auspicious holy cow & calf at your doorstep", price: 2500 },
-                { title: "Birthday & Wedding Anniversary Seva", desc: "Consecrated puja, feeding ritual & blessings", price: 1800 },
-                { title: "Gopashtami & Deepavali Maha Seva", desc: "Traditional flower adornment, havan & prasad", price: 3500 },
-                { title: "Navagraha Shanti & Kamadhenu Aradhana", desc: "Vedic ritual with certified purohit & cow", price: 2100 },
-              ].map((pkg, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => {
-                    setShowSevaPackagesModal(false)
-                    onSignIn()
-                  }}
-                  className="p-3 rounded-xl bg-white border border-[#ded5c6] hover:border-[#c2611b] transition-all cursor-pointer"
-                >
-                  <div className="flex justify-between items-baseline">
-                    <h4 className="font-bold text-[#1b1c1b]">{pkg.title}</h4>
-                    <span className="font-bold text-[#c2611b]">&#8377; {pkg.price}</span>
-                  </div>
-                  <p className="text-[11px] text-[#716b5f] mt-1">{pkg.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ----------------- MODAL 6: Corporate Partnerships ----------------- */}
-      {showCorporateModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#fbf9f4] rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#d8cfbe] space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="px-2.5 py-0.5 rounded-md bg-[#132a13] text-white text-[10px] font-bold uppercase tracking-wider">
-                  CSR &amp; ESG Partnerships
-                </span>
-                <h3 className="font-serif text-2xl font-bold text-[#1b1c1b] mt-1">
-                  Corporate Gaushala Adoption
-                </h3>
-              </div>
-              <button
-                onClick={() => setShowCorporateModal(false)}
-                className="h-8 w-8 rounded-full bg-[#eee7db] hover:bg-[#ded4c4] grid place-items-center text-[#5f5b52]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-[#555045]">
-              Partner with GOMAA for certified corporate ESG initiatives: gaushala solarization, organic compost plants, and employee team seva retreats.
-            </p>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                addToast("Corporate inquiry submitted! Our partnership director will contact you within 24 hours.", "success")
-                setShowCorporateModal(false)
-              }}
-              className="space-y-3 text-xs"
-            >
-              <div>
-                <label className="block font-semibold text-[#1b1c1b] mb-1">Company / Organization Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Tata Consultancy Services / Infosys Foundation"
-                  className="w-full px-3 py-2 rounded-lg border border-[#d8cfbe] bg-white text-xs"
-                />
-              </div>
-              <div>
-                <label className="block font-semibold text-[#1b1c1b] mb-1">Official Work Email</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="csr@organization.com"
-                  className="w-full px-3 py-2 rounded-lg border border-[#d8cfbe] bg-white text-xs"
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full py-2.5 rounded-full bg-[#132a13] text-white font-semibold cursor-pointer mt-2"
-              >
-                Submit CSR Proposal Request &rarr;
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ----------------- MODAL 7: Blog Article Reader ----------------- */}
+      {/* ----------------- MODAL 3: Blog Article Reader ----------------- */}
       {selectedBlogArticle && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-[#fbf9f4] rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-[#d8cfbe] space-y-4 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
@@ -1600,7 +1638,7 @@ export default function GomaaLandingPage({
         </div>
       )}
 
-      {/* ----------------- MODAL 8: How It Works ----------------- */}
+      {/* ----------------- MODAL 4: How It Works ----------------- */}
       {showHowItWorksModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-[#fbf9f4] rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-[#d8cfbe] space-y-4 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
@@ -1610,7 +1648,7 @@ export default function GomaaLandingPage({
                   Ethical Operations Protocol
                 </span>
                 <h3 className="font-serif text-2xl font-bold text-[#1b1c1b] mt-1">
-                  How GOMAA Works End-to-End
+                  How GOMAA Operates End-to-End
                 </h3>
               </div>
               <button
@@ -1623,8 +1661,8 @@ export default function GomaaLandingPage({
 
             <div className="space-y-3 text-xs text-[#4b4539]">
               {[
-                { step: "1", title: "Select Verified Cattle & Muhurat", desc: "Choose an indigenous mother cow, calf, or bull from your regional sanctuary with transparent per-day dakshina." },
-                { step: "2", title: "Escrow-Protected Booking", desc: "Your seva contribution is held securely in escrow until seva is fulfilled under AWBI guidelines." },
+                { step: "1", title: "Select Verified Bovine & Muhurat", desc: "Choose an indigenous mother cow, calf, or bull from your regional sanctuary with transparent per-day dakshina." },
+                { step: "2", title: "Escrow-Protected Seva Contribution", desc: "Your seva contribution is held securely in escrow until seva is fulfilled under AWBI guidelines." },
                 { step: "3", title: "Pre-Dispatch Veterinary Check", desc: "Empanelled doctors examine vitals, deworming status, and certify zero-stress transit readiness." },
                 { step: "4", title: "Safe Hydraulic Ambulance Transit", desc: "Specially equipped ambulances with hydraulic loading ramps, non-slip flooring, and continuous monitoring." },
                 { step: "5", title: "Handover with 4-Digit Altar OTP", desc: "Share the secure OTP only after the sacred bovine is safely guided into your altar courtyard." },
@@ -1653,26 +1691,6 @@ export default function GomaaLandingPage({
           </div>
         </div>
       )}
-
-      {/* ----------------- Location Picker Modal ----------------- */}
-      <LocationPickerModal
-        isOpen={showLocationPicker}
-        onClose={() => setShowLocationPicker(false)}
-        currentCity={currentCity}
-        currentAddress={`Hub: ${currentCity}`}
-        onSelectHub={handleSelectHub}
-        onDetectGPS={async () => {
-          if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-              (pos) => {
-                addToast(`GPS Detected (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)})`, "success")
-              },
-              () => addToast("GPS access unavailable, selected Visakhapatnam by default", "warn")
-            )
-          }
-        }}
-        isDetectingGPS={false}
-      />
     </div>
   )
 }
