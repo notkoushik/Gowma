@@ -34,22 +34,24 @@ import LocationPickerModal from "../../components/LocationPickerModal"
 import type { OperationalRegionHub } from "../../data/regions"
 import { INDIAN_REGIONAL_HUBS } from "../../data/regions"
 
-// Cropped high-resolution landing assets matching gomaa_intro.jpg
-import heroSacredCow from "../../assets/landing/hero_sacred_cow.jpg"
-import bannerFeed from "../../assets/landing/banner_feed.jpg"
-import bannerSevaPackages from "../../assets/landing/banner_seva_packages.jpg"
-import bannerCorporate from "../../assets/landing/banner_corporate.jpg"
-import cattleLakshmi from "../../assets/landing/cattle_lakshmi.jpg"
-import cattleKamadhenu from "../../assets/landing/cattle_kamadhenu.jpg"
-import cattleNandini from "../../assets/landing/cattle_nandini.jpg"
-import cattleMahabala from "../../assets/landing/cattle_mahabala.jpg"
-import cattleSavitri from "../../assets/landing/cattle_savitri.jpg"
-import cattleChaitra from "../../assets/landing/cattle_chaitra.jpg"
-import blogGauSeva from "../../assets/landing/blog_gau_seva.jpg"
-import blogFestivals from "../../assets/landing/blog_festivals.jpg"
-import blogGaushalas from "../../assets/landing/blog_gaushalas.jpg"
-import impactCowPortrait from "../../assets/landing/impact_cow_portrait.jpg"
-import logoEmblem from "../../assets/landing/gomaa_logo_emblem.jpg"
+// Direct Base64 high-resolution landing assets matching gomaa_intro.jpg (zero Git LFS / 404 risk)
+import {
+  bannerCorporate,
+  bannerFeed,
+  bannerSevaPackages,
+  blogFestivals,
+  blogGauSeva,
+  blogGaushalas,
+  cattleChaitra,
+  cattleKamadhenu,
+  cattleLakshmi,
+  cattleMahabala,
+  cattleNandini,
+  cattleSavitri,
+  gomaaLogoEmblem,
+  heroSacredCow,
+  impactCowPortrait,
+} from "../../assets/landing/imagesData"
 
 export interface GomaaLandingPageProps {
   onSignIn: () => void
@@ -234,7 +236,7 @@ export default function GomaaLandingPage({
   const [searchQuery, setSearchQuery] = useState("")
   const [showSearchModal, setShowSearchModal] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [currentCity, setCurrentCity] = useState(selectedRegion)
+  const [currentCity, setCurrentCity] = useState("Visakhapatnam")
   const [showLocationPicker, setShowLocationPicker] = useState(false)
 
   // Interactive Modals
@@ -249,36 +251,16 @@ export default function GomaaLandingPage({
   // Carousel ref
   const cattleCarouselRef = useRef<HTMLDivElement>(null)
 
-  // Sync selectedRegion prop
+  // Default to Visakhapatnam to match reference design, only changing when explicitly chosen
   useEffect(() => {
-    if (selectedRegion) setCurrentCity(selectedRegion)
+    if (selectedRegion && selectedRegion !== "Regional" && selectedRegion !== "Cyberabad / Gachibowli") {
+      setCurrentCity(selectedRegion)
+    }
   }, [selectedRegion])
 
-  // Filter cattle by category and search
+  // Filter cattle by category and search (strictly defaults to the verified design showcase)
   const filteredCattle = useMemo(() => {
     let list = DEFAULT_FEATURED_CATTLE
-
-    // If store has real live animals, we can merge or enhance them
-    if (animals && animals.length > 0) {
-      const storeItems: CattleItem[] = animals.slice(0, 6).map((a, idx) => ({
-        id: a.name.toLowerCase().replace(/\s+/g, "-") + "-" + idx,
-        name: a.name,
-        category: (a.type?.toUpperCase() === "CALF" ? "CALF" : a.type?.toUpperCase() === "BULL" ? "BULL" : "COW") as "COW" | "CALF" | "BULL",
-        breed: a.breed || "Indigenous Desi",
-        age: a.age || "4 years",
-        gender: a.type === "Bull" ? "Male" : "Female",
-        gosala: a.gosala || "Sri Venkateswara Gaushala",
-        location: currentCity + ", AP",
-        pricePerDay: a.price || 500,
-        image: a.photo || DEFAULT_FEATURED_CATTLE[idx % DEFAULT_FEATURED_CATTLE.length].image,
-        description: a.healthNotes || "Sacred bovine nurtured with love, natural organic fodder, and daily Vedic prayers.",
-        temperament: a.temperament || "Gentle, calm and peaceful",
-        sacredMarks: a.sacredMarks || "Natural sacred marks, auspicious posture",
-      }))
-      if (storeItems.length >= 4) {
-        list = storeItems
-      }
-    }
 
     if (selectedCategory !== "ALL") {
       list = list.filter((c) => c.category === selectedCategory)
@@ -296,7 +278,7 @@ export default function GomaaLandingPage({
     }
 
     return list
-  }, [animals, selectedCategory, searchQuery, currentCity])
+  }, [selectedCategory, searchQuery])
 
   const toggleFavorite = (id: string, name: string) => {
     setFavorites((prev) => {
@@ -340,7 +322,7 @@ export default function GomaaLandingPage({
           {/* Left: GOMAA Logo & Subtitle */}
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
             <div className="h-11 w-11 rounded-full overflow-hidden shadow-xs border border-[#d8cfbe] bg-[#f2ecdf] flex-shrink-0 grid place-items-center">
-              <img src={logoEmblem} alt="GOMAA Seal" className="h-full w-full object-cover scale-105" />
+              <img src={gomaaLogoEmblem} alt="GOMAA Seal" className="h-full w-full object-cover scale-105" />
             </div>
             <div>
               <div className="font-serif text-2xl font-bold tracking-tight text-[#1b1c1b] leading-none flex items-center gap-1.5">
@@ -529,13 +511,64 @@ export default function GomaaLandingPage({
 
       {/* ----------------- Hero Section ----------------- */}
       <section id="home" className="relative overflow-hidden pt-8 pb-14 lg:pt-12 lg:pb-16 bg-[#faf7f2]">
-        {/* Subtle decorative golden leaf ornament left */}
-        <div className="absolute top-12 left-4 w-28 h-28 opacity-25 pointer-events-none select-none">
-          <svg viewBox="0 0 100 100" fill="none" stroke="#a34e12" strokeWidth="1.2">
+        {/* Lush Green Botanical Foliage Branch Top-Left (matching gomaa_intro.jpg) */}
+        <div className="absolute -top-4 -left-4 w-40 h-40 sm:w-56 sm:h-56 pointer-events-none select-none z-10 opacity-95">
+          <svg viewBox="0 0 200 200" fill="none" className="w-full h-full drop-shadow-md">
+            <defs>
+              <linearGradient id="leafGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#99c93c" />
+                <stop offset="50%" stopColor="#558b2f" />
+                <stop offset="100%" stopColor="#2e5418" />
+              </linearGradient>
+              <linearGradient id="leafGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#b4e64f" />
+                <stop offset="60%" stopColor="#689f38" />
+                <stop offset="100%" stopColor="#1b3c0e" />
+              </linearGradient>
+              <linearGradient id="leafGrad3" x1="0%" y1="50%" x2="100%" y2="50%">
+                <stop offset="0%" stopColor="#8bc34a" />
+                <stop offset="70%" stopColor="#33691e" />
+                <stop offset="100%" stopColor="#143209" />
+              </linearGradient>
+            </defs>
+            {/* Main stem branch */}
+            <path d="M-10,-10 Q50,45 105,100" stroke="#4e3620" strokeWidth="4.5" strokeLinecap="round" />
+            <path d="M40,35 Q75,40 120,60" stroke="#4e3620" strokeWidth="3" strokeLinecap="round" />
+            <path d="M70,65 Q115,80 150,115" stroke="#4e3620" strokeWidth="2.5" strokeLinecap="round" />
+            {/* Leaves */}
+            <path d="M25,20 C10,50 45,75 75,55 C70,35 45,15 25,20 Z" fill="url(#leafGrad1)" />
+            <path d="M25,20 Q50,42 75,55" stroke="#b4e64f" strokeWidth="1.2" opacity="0.7" />
+            <path d="M60,30 C65,60 110,65 125,40 C115,20 85,15 60,30 Z" fill="url(#leafGrad2)" />
+            <path d="M60,30 Q90,38 125,40" stroke="#d4ff78" strokeWidth="1.2" opacity="0.7" />
+            <path d="M80,65 C85,95 130,100 145,75 C135,55 105,50 80,65 Z" fill="url(#leafGrad3)" />
+            <path d="M80,65 Q110,75 145,75" stroke="#aed581" strokeWidth="1" opacity="0.7" />
+            <path d="M45,45 C35,80 80,95 95,70 C85,50 60,40 45,45 Z" fill="url(#leafGrad2)" />
+            <path d="M100,95 C110,130 155,130 165,105 C150,85 125,85 100,95 Z" fill="url(#leafGrad1)" />
+            <path d="M100,95 Q130,105 165,105" stroke="#c5e1a5" strokeWidth="1" opacity="0.7" />
+          </svg>
+        </div>
+
+        {/* Subtle golden leaf line art left */}
+        <div className="absolute top-16 left-6 w-28 h-28 opacity-35 pointer-events-none select-none">
+          <svg viewBox="0 0 100 100" fill="none" stroke="#a34e12" strokeWidth="1.4">
             <path d="M10,90 Q40,30 90,10 Q60,70 10,90 Z" />
             <path d="M10,90 Q50,50 90,10" />
             <path d="M30,70 Q45,65 50,50" />
             <path d="M50,50 Q65,45 70,30" />
+          </svg>
+        </div>
+
+        {/* Golden leaf line art behind heading */}
+        <div className="absolute top-8 left-[38%] w-36 h-36 opacity-30 pointer-events-none select-none hidden lg:block">
+          <svg viewBox="0 0 100 100" fill="none" stroke="#b86a1a" strokeWidth="1">
+            <path d="M50,95 C30,70 20,40 50,5 C80,40 70,70 50,95 Z" />
+            <path d="M50,95 L50,5" />
+            <path d="M50,75 Q35,65 30,55" />
+            <path d="M50,60 Q35,50 32,40" />
+            <path d="M50,45 Q38,35 36,25" />
+            <path d="M50,75 Q65,65 70,55" />
+            <path d="M50,60 Q65,50 68,40" />
+            <path d="M50,45 Q62,35 64,25" />
           </svg>
         </div>
 
@@ -696,24 +729,24 @@ export default function GomaaLandingPage({
             {/* Card 1: Sponsor Cattle Feed */}
             <div
               onClick={() => setShowFeedModal(true)}
-              className="md:col-span-5 relative rounded-2xl overflow-hidden bg-[#132a13] text-white p-6 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col justify-between min-h-[140px] group border border-[#234223]"
+              className="md:col-span-5 relative rounded-2xl overflow-hidden bg-[#132a13] text-white p-6 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col justify-between min-h-[145px] group border border-[#234223]"
             >
-              <div className="absolute inset-0 opacity-40 mix-blend-luminosity pointer-events-none">
-                <img src={bannerFeed} alt="Cattle Feed" className="w-full h-full object-cover object-left" />
+              <div className="absolute inset-0 pointer-events-none">
+                <img src={bannerFeed} alt="Cattle Feed" className="w-full h-full object-cover object-center" />
               </div>
               <div className="relative z-10">
-                <span className="inline-block px-3 py-1 rounded-full bg-[#fbf8f2] text-[#132a13] text-[10.5px] font-bold uppercase tracking-wider mb-2.5">
+                <span className="inline-block px-3 py-1 rounded-full bg-[#fbf8f2] text-[#132a13] text-[10.5px] font-bold uppercase tracking-wider mb-2.5 shadow-2xs">
                   Support Nutrition
                 </span>
-                <h3 className="font-serif text-2xl font-bold text-white leading-tight">
+                <h3 className="font-serif text-2xl font-bold text-white leading-tight drop-shadow-xs">
                   Sponsor Cattle Feed
                 </h3>
-                <p className="text-white/80 text-xs mt-1 max-w-xs">
+                <p className="text-white/90 text-xs mt-1 max-w-xs drop-shadow-xs">
                   Help us provide nutritious feed to gaushalas in need.
                 </p>
               </div>
               <div className="relative z-10 self-end mt-4">
-                <div className="h-9 w-9 rounded-full bg-white text-[#132a13] grid place-items-center group-hover:scale-110 transition-transform shadow-sm">
+                <div className="h-9 w-9 rounded-full bg-white text-[#132a13] grid place-items-center group-hover:scale-110 transition-transform shadow-md">
                   <ArrowRight className="h-4 w-4" />
                 </div>
               </div>
@@ -722,21 +755,21 @@ export default function GomaaLandingPage({
             {/* Card 2: Special Seva Packages */}
             <div
               onClick={() => setShowSevaPackagesModal(true)}
-              className="md:col-span-4 relative rounded-2xl overflow-hidden bg-[#241f19] text-white p-6 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col justify-between min-h-[140px] group border border-[#443a2f]"
+              className="md:col-span-4 relative rounded-2xl overflow-hidden bg-[#241f19] text-white p-6 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col justify-between min-h-[145px] group border border-[#443a2f]"
             >
-              <div className="absolute inset-0 opacity-45 mix-blend-overlay pointer-events-none">
-                <img src={bannerSevaPackages} alt="Special Seva Packages" className="w-full h-full object-cover" />
+              <div className="absolute inset-0 pointer-events-none">
+                <img src={bannerSevaPackages} alt="Special Seva Packages" className="w-full h-full object-cover object-center" />
               </div>
               <div className="relative z-10">
-                <h3 className="font-serif text-2xl font-bold text-white leading-tight">
+                <h3 className="font-serif text-2xl font-bold text-white leading-tight drop-shadow-xs">
                   Special Seva Packages
                 </h3>
-                <p className="text-white/80 text-xs mt-1.5">
+                <p className="text-white/90 text-xs mt-1.5 drop-shadow-xs">
                   for festivals &amp; auspicious occasions
                 </p>
               </div>
               <div className="relative z-10 self-end mt-4">
-                <div className="h-9 w-9 rounded-full bg-white text-[#1b1c1b] grid place-items-center group-hover:scale-110 transition-transform shadow-sm">
+                <div className="h-9 w-9 rounded-full bg-white text-[#1b1c1b] grid place-items-center group-hover:scale-110 transition-transform shadow-md">
                   <ArrowRight className="h-4 w-4" />
                 </div>
               </div>
@@ -745,21 +778,21 @@ export default function GomaaLandingPage({
             {/* Card 3: Corporate Partnerships */}
             <div
               onClick={() => setShowCorporateModal(true)}
-              className="md:col-span-3 relative rounded-2xl overflow-hidden bg-[#f1ebe0] text-[#1b1c1b] p-6 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col justify-between min-h-[140px] group border border-[#ded5c6]"
+              className="md:col-span-3 relative rounded-2xl overflow-hidden bg-[#f1ebe0] text-[#1b1c1b] p-6 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col justify-between min-h-[145px] group border border-[#ded5c6]"
             >
-              <div className="absolute inset-0 opacity-30 mix-blend-multiply pointer-events-none">
-                <img src={bannerCorporate} alt="Corporate Partnerships" className="w-full h-full object-cover" />
+              <div className="absolute inset-0 pointer-events-none">
+                <img src={bannerCorporate} alt="Corporate Partnerships" className="w-full h-full object-cover object-center" />
               </div>
               <div className="relative z-10">
                 <h3 className="font-serif text-2xl font-bold text-[#1b1c1b] leading-tight">
                   Corporate Partnerships
                 </h3>
-                <p className="text-[#645e52] text-xs mt-1.5">
+                <p className="text-[#524b3f] text-xs mt-1.5 font-medium">
                   Support gaushalas with your organization
                 </p>
               </div>
               <div className="relative z-10 self-end mt-4">
-                <div className="h-9 w-9 rounded-full bg-[#1b1c1b] text-white grid place-items-center group-hover:scale-110 transition-transform shadow-sm">
+                <div className="h-9 w-9 rounded-full bg-[#1b1c1b] text-white grid place-items-center group-hover:scale-110 transition-transform shadow-md">
                   <ArrowRight className="h-4 w-4" />
                 </div>
               </div>
@@ -911,7 +944,17 @@ export default function GomaaLandingPage({
       </section>
 
       {/* ----------------- Latest from Our Blog & Real Impact Section ----------------- */}
-      <section id="blogs-section" className="py-12 bg-[#faf7f2]">
+      <section id="blogs-section" className="py-12 bg-[#faf7f2] relative overflow-hidden">
+        {/* Decorative Green Leaf Branch on bottom-right of blogs/impact section (matching gomaa_intro.jpg) */}
+        <div className="absolute -bottom-8 -right-8 w-48 h-48 pointer-events-none select-none opacity-85 hidden lg:block z-10">
+          <svg viewBox="0 0 200 200" fill="none" className="w-full h-full drop-shadow-md">
+            <path d="M210,210 Q140,140 80,90" stroke="#4e3620" strokeWidth="4" strokeLinecap="round" />
+            <path d="M150,150 Q120,110 70,80" stroke="#4e3620" strokeWidth="2.5" strokeLinecap="round" />
+            <path d="M120,120 C100,90 70,100 60,130 C75,145 105,140 120,120 Z" fill="url(#leafGrad1)" />
+            <path d="M160,160 C140,120 100,120 90,150 C110,180 145,175 160,160 Z" fill="url(#leafGrad2)" />
+            <path d="M80,90 C60,60 30,75 30,105 C50,120 75,110 80,90 Z" fill="url(#leafGrad3)" />
+          </svg>
+        </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-12 gap-8 items-start">
             {/* Left Column: Latest from Our Blog */}
@@ -1053,7 +1096,7 @@ export default function GomaaLandingPage({
             <div className="space-y-3">
               <div className="flex items-center gap-2.5">
                 <div className="h-9 w-9 rounded-full overflow-hidden border border-[#d8cfbe] bg-[#f2ecdf]">
-                  <img src={logoEmblem} alt="GOMAA" className="h-full w-full object-cover" />
+                  <img src={gomaaLogoEmblem} alt="GOMAA" className="h-full w-full object-cover" />
                 </div>
                 <div>
                   <span className="font-serif text-xl font-bold text-white">GOMAA</span>

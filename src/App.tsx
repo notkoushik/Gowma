@@ -684,7 +684,7 @@ export default function App() {
           setShowLoginView(true)
           window.location.hash = "#login"
         }}
-        selectedRegion={dynamicRegion !== "Regional" ? dynamicRegion : "Visakhapatnam"}
+        selectedRegion="Visakhapatnam"
       />
     )
   }
