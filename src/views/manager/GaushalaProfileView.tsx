@@ -38,6 +38,7 @@ import {
   PackageCheck,
   Store,
   Lock,
+  Upload,
 } from "lucide-react"
 import { inr } from "../../data/mock"
 import {
@@ -51,6 +52,11 @@ import {
   GOSALA_CUSTOM_DETAIL_SUGGESTIONS,
   GOSALA_PHOTO_PRESETS,
 } from "../../data/gosalas"
+import {
+  getOfferingImage,
+  OFFERING_PHOTO_PRESETS,
+  DEFAULT_OFFERING_FALLBACK_IMAGE,
+} from "../../utils/offeringImages"
 import { type Animal, type EmpanelledVet } from "../../data/animals"
 import { useStore, useToast } from "../../store/store"
 
@@ -208,6 +214,26 @@ export default function GaushalaProfileView({
   const [offeringDesc, setOfferingDesc] = useState("")
   const [offeringMaxQty, setOfferingMaxQty] = useState<number>(5)
   const [offeringInStock, setOfferingInStock] = useState<boolean>(true)
+  const [offeringImage, setOfferingImage] = useState<string>("")
+  const [showPresetPicker, setShowPresetPicker] = useState<boolean>(false)
+
+  const handleOfferingPhotoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      notify("Image file size must be less than 5MB", "warn")
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      const result = evt.target?.result as string
+      if (result) {
+        setOfferingImage(result)
+        notify("Photo uploaded successfully", "ok")
+      }
+    }
+    reader.readAsDataURL(file)
+  }
 
   const [showDeleteOfferingModal, setShowDeleteOfferingModal] = useState(false)
   const [offeringToDelete, setOfferingToDelete] =
@@ -228,6 +254,8 @@ export default function GaushalaProfileView({
     setOfferingDesc("")
     setOfferingMaxQty(5)
     setOfferingInStock(true)
+    setOfferingImage("")
+    setShowPresetPicker(false)
     setShowOfferingModal(true)
   }
 
@@ -246,6 +274,8 @@ export default function GaushalaProfileView({
     setOfferingDesc(it.desc)
     setOfferingMaxQty(it.maxQty || 5)
     setOfferingInStock(it.inStock)
+    setOfferingImage(it.image || "")
+    setShowPresetPicker(false)
     setShowOfferingModal(true)
   }
 
@@ -274,6 +304,7 @@ export default function GaushalaProfileView({
               desc: offeringDesc.trim() || "Devotional offering item",
               maxQty: Number(offeringMaxQty) || 5,
               inStock: offeringInStock,
+              image: offeringImage.trim() || undefined,
             }
           : it,
       )
@@ -290,6 +321,7 @@ export default function GaushalaProfileView({
         desc: offeringDesc.trim() || "Devotional offering item",
         maxQty: Number(offeringMaxQty) || 5,
         inStock: offeringInStock,
+        image: offeringImage.trim() || undefined,
       }
       updatedList = [newItem, ...currentList]
       notify(`Added offering "${offeringName.trim()}" to ${gosala.name}`, "ok")
@@ -1663,74 +1695,95 @@ export default function GaushalaProfileView({
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {gosalaOfferings.map((it) => {
                   const theme =
                     OFFERING_CATEGORY_THEMES[it.category] ||
                     OFFERING_CATEGORY_THEMES.puja
+                  const photoSrc = getOfferingImage(it)
                   return (
                     <div
                       key={it.id}
-                      className={`border rounded-xl p-4 transition flex flex-col justify-between ${
+                      className={`border rounded-xl overflow-hidden transition flex flex-col justify-between ${
                         it.inStock
                           ? "bg-card border-line hover:border-forest/40 shadow-xs"
                           : "bg-paper/40 border-dashed border-line opacity-80"
                       }`}
                     >
-                      <div>
-                        {/* Badges Row */}
-                        <div className="flex items-center justify-between gap-2 mb-2.5">
+                      {/* Photo Thumbnail Banner */}
+                      <div className="relative h-40 w-full bg-paper-deep/50 overflow-hidden border-b border-line group">
+                        <img
+                          src={photoSrc}
+                          alt={it.name}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src =
+                              DEFAULT_OFFERING_FALLBACK_IMAGE
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30 pointer-events-none" />
+
+                        {/* Badges Floating on Image */}
+                        <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2 pointer-events-none">
                           <span
-                            className={`text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full font-semibold border ${theme.bg} ${theme.border} ${theme.text}`}
+                            className={`text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full font-semibold border backdrop-blur-md shadow-xs ${theme.bg} ${theme.border} ${theme.text}`}
                           >
                             {theme.label}
                           </span>
                           <span
-                            className={`text-[10.5px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                            className={`text-[10.5px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1 backdrop-blur-md shadow-xs ${
                               it.inStock
-                                ? "bg-ok/10 text-ok border border-ok/20"
-                                : "bg-danger/10 text-danger border border-danger/20"
+                                ? "bg-emerald-950/85 text-emerald-300 border border-emerald-500/40"
+                                : "bg-rose-950/85 text-rose-300 border border-rose-500/40"
                             }`}
                           >
                             <span
                               className={`w-1.5 h-1.5 rounded-full ${
-                                it.inStock ? "bg-ok" : "bg-danger"
+                                it.inStock ? "bg-emerald-400" : "bg-rose-400"
                               }`}
                             />
                             {it.inStock ? "In Stock" : "Out of Stock"}
                           </span>
                         </div>
 
-                        {/* Title & Desc */}
-                        <h4 className="font-serif text-[15px] font-bold text-ink leading-tight">
-                          {it.name}
-                        </h4>
-                        <p className="text-[12px] text-ink-soft mt-1 leading-snug line-clamp-2">
-                          {it.desc ||
-                            "Devotional offering item for cattle seva"}
-                        </p>
+                        {/* Price Tag Floating on Image Bottom Right */}
+                        <div className="absolute bottom-2.5 right-2.5 px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md border border-white/20 text-white font-mono text-[13px] font-bold shadow-sm">
+                          {inr(it.price)}
+                        </div>
                       </div>
 
-                      {/* Pricing & Controls */}
-                      <div className="mt-4 pt-3 border-t border-line/60">
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <span className="text-[10.5px] text-ink-faint block uppercase font-mono">
-                              Devotee Price
-                            </span>
-                            <span className="font-serif text-[17px] font-bold text-ink font-mono">
-                              {inr(it.price)}
-                            </span>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-[10.5px] text-ink-faint block font-mono">
-                              Order Limit
-                            </span>
-                            <span className="text-[11.5px] font-medium text-ink font-mono">
-                              Max {it.maxQty || 5} per booking
-                            </span>
-                          </div>
+                      {/* Title & Desc */}
+                      <div className="p-4 flex-1 flex flex-col justify-between">
+                        <div>
+                          <h4 className="font-serif text-[15px] font-bold text-ink leading-tight">
+                            {it.name}
+                          </h4>
+                          <p className="text-[12px] text-ink-soft mt-1 leading-snug line-clamp-2">
+                            {it.desc ||
+                              "Devotional offering item for cattle seva"}
+                          </p>
                         </div>
+
+                        {/* Pricing & Controls */}
+                        <div className="mt-4 pt-3 border-t border-line/60">
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <span className="text-[10.5px] text-ink-faint block uppercase font-mono">
+                                Devotee Price
+                              </span>
+                              <span className="font-serif text-[17px] font-bold text-ink font-mono">
+                                {inr(it.price)}
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-[10.5px] text-ink-faint block font-mono">
+                                Order Limit
+                              </span>
+                              <span className="text-[11.5px] font-medium text-ink font-mono">
+                                Max {it.maxQty || 5} per booking
+                              </span>
+                            </div>
+                          </div>
 
                         {canManageOfferings ? (
                           <div className="flex items-center justify-between gap-1.5 pt-1">
@@ -1776,7 +1829,8 @@ export default function GaushalaProfileView({
                         )}
                       </div>
                     </div>
-                  )
+                  </div>
+                )
                 })}
               </div>
             )}
@@ -3131,6 +3185,114 @@ export default function GaushalaProfileView({
                   onChange={(e) => setOfferingDesc(e.target.value)}
                   className="w-full bg-paper border border-line focus:border-forest rounded px-3 py-2 text-[12px] text-ink outline-none resize-none"
                 />
+              </div>
+
+              {/* Photo Attachment & Selection */}
+              <div className="space-y-2 pt-2 border-t border-line/60">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11.5px] font-medium text-ink">
+                    Offering Photo (Upload or Preset)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowPresetPicker(!showPresetPicker)}
+                    className="text-[11px] text-forest hover:underline inline-flex items-center gap-1 cursor-pointer font-medium"
+                  >
+                    <Sparkles size={12} />
+                    <span>
+                      {showPresetPicker ? "Hide Presets" : "Choose from Presets"}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Photo Preview & Upload Controls */}
+                <div className="flex items-center gap-3">
+                  <div className="w-16 h-16 rounded-lg overflow-hidden bg-paper-deep border border-line flex-shrink-0 relative group shadow-2xs">
+                    <img
+                      src={offeringImage || DEFAULT_OFFERING_FALLBACK_IMAGE}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src =
+                          DEFAULT_OFFERING_FALLBACK_IMAGE
+                      }}
+                    />
+                    {offeringImage && (
+                      <button
+                        type="button"
+                        onClick={() => setOfferingImage("")}
+                        className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-[10px] cursor-pointer"
+                        title="Remove custom photo"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <label className="px-3 py-1.5 rounded bg-card border border-line hover:border-forest text-[11.5px] text-ink font-medium cursor-pointer transition inline-flex items-center gap-1.5 shadow-2xs">
+                        <Upload size={13} className="text-forest" />
+                        <span>Upload Photo</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleOfferingPhotoFile}
+                          className="hidden"
+                        />
+                      </label>
+                      <span className="text-[11px] text-ink-faint">or image URL</span>
+                    </div>
+                    <input
+                      type="url"
+                      placeholder="https://images.unsplash.com/..."
+                      value={
+                        offeringImage.startsWith("data:")
+                          ? "(Uploaded local image file)"
+                          : offeringImage
+                      }
+                      onChange={(e) => setOfferingImage(e.target.value)}
+                      disabled={offeringImage.startsWith("data:")}
+                      className="w-full bg-paper border border-line focus:border-forest rounded px-2.5 py-1 text-[11.5px] text-ink outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Preset Picker Dropdown / Grid */}
+                {showPresetPicker && (
+                  <div className="p-2.5 rounded-lg border border-line bg-card/60 mt-2 space-y-2 animate-fade-in">
+                    <span className="text-[10.5px] font-mono text-ink-faint uppercase block">
+                      Select Devotional Preset:
+                    </span>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {OFFERING_PHOTO_PRESETS.map((preset) => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => {
+                            setOfferingImage(preset.url)
+                            setShowPresetPicker(false)
+                          }}
+                          className={`group relative rounded-md overflow-hidden border aspect-video transition cursor-pointer text-left ${
+                            offeringImage === preset.url
+                              ? "border-forest ring-2 ring-forest/30"
+                              : "border-line hover:border-forest/60"
+                          }`}
+                        >
+                          <img
+                            src={preset.url}
+                            alt={preset.label}
+                            className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-black/40 flex items-end p-1">
+                            <span className="text-[9px] font-semibold text-white leading-tight line-clamp-1">
+                              {preset.label}
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-line">

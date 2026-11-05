@@ -24,6 +24,7 @@ export type GosalaOfferingItem = {
   category: GosalaOfferingCategory
   inStock: boolean
   maxQty?: number
+  image?: string
 }
 
 export type Gosala = {
@@ -36,7 +37,7 @@ export type Gosala = {
   email: string
   managerId: string
   managerName: string
-  assignedManagers?: { id: string name: string phone?: string email?: string }[]
+  assignedManagers?: { id: string; name: string; phone?: string; email?: string }[]
   caretaker: string
   caretakerPhone?: string
   caretakerShift?: string
@@ -104,6 +105,7 @@ export const DEFAULT_GOSALA_OFFERINGS: GosalaOfferingItem[] = [
     category: "puja",
     inStock: true,
     maxQty: 5,
+    image: "https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?auto=format&fit=crop&w=600&q=80",
   },
   {
     id: "item-fodder",
@@ -113,6 +115,7 @@ export const DEFAULT_GOSALA_OFFERINGS: GosalaOfferingItem[] = [
     category: "feed",
     inStock: true,
     maxQty: 10,
+    image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=600&q=80",
   },
   {
     id: "item-chunni",
@@ -122,6 +125,7 @@ export const DEFAULT_GOSALA_OFFERINGS: GosalaOfferingItem[] = [
     category: "decoration",
     inStock: true,
     maxQty: 3,
+    image: "https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=600&q=80",
   },
   {
     id: "item-jaggery",
@@ -131,6 +135,7 @@ export const DEFAULT_GOSALA_OFFERINGS: GosalaOfferingItem[] = [
     category: "feed",
     inStock: true,
     maxQty: 5,
+    image: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=600&q=80",
   },
   {
     id: "item-ghee",
@@ -140,6 +145,7 @@ export const DEFAULT_GOSALA_OFFERINGS: GosalaOfferingItem[] = [
     category: "prasadam",
     inStock: true,
     maxQty: 4,
+    image: "https://images.unsplash.com/photo-1589927986089-35812388d1f4?auto=format&fit=crop&w=600&q=80",
   },
   {
     id: "item-dhoop",
@@ -149,6 +155,7 @@ export const DEFAULT_GOSALA_OFFERINGS: GosalaOfferingItem[] = [
     category: "puja",
     inStock: true,
     maxQty: 6,
+    image: "https://images.unsplash.com/photo-1606293926075-69a00dbfde81?auto=format&fit=crop&w=600&q=80",
   },
   {
     id: "item-puja-kit",
@@ -158,6 +165,7 @@ export const DEFAULT_GOSALA_OFFERINGS: GosalaOfferingItem[] = [
     category: "puja",
     inStock: true,
     maxQty: 2,
+    image: "https://images.unsplash.com/photo-1609710228159-0fa9bd7c0827?auto=format&fit=crop&w=600&q=80",
   },
 ]
 

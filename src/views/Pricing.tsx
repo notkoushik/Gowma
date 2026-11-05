@@ -45,6 +45,7 @@ import {
   Maximize2,
   Minimize2,
   ChevronDown,
+  Upload,
 } from "lucide-react"
 import {
   DEFAULT_GOSALA_OFFERINGS,
@@ -56,6 +57,11 @@ import {
   type CommissionType,
   type TaxTreatment,
 } from "../data/gosalas"
+import {
+  getOfferingImage,
+  OFFERING_PHOTO_PRESETS,
+  DEFAULT_OFFERING_FALLBACK_IMAGE,
+} from "../utils/offeringImages"
 
 function Field({
   label,
@@ -691,6 +697,26 @@ export default function Pricing({
   const [itemDesc, setItemDesc] = useState("")
   const [itemMaxQty, setItemMaxQty] = useState(5)
   const [itemInStock, setItemInStock] = useState(true)
+  const [itemImage, setItemImage] = useState<string>("")
+  const [showItemPresets, setShowItemPresets] = useState<boolean>(false)
+
+  const handleItemPhotoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      notify("Image file size must be less than 5MB", "warn")
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      const result = evt.target?.result as string
+      if (result) {
+        setItemImage(result)
+        notify("Photo uploaded successfully", "ok")
+      }
+    }
+    reader.readAsDataURL(file)
+  }
 
   const handleOpenAddItem = () => {
     if (!isSuperAdmin) return
@@ -701,6 +727,8 @@ export default function Pricing({
     setItemDesc("")
     setItemMaxQty(5)
     setItemInStock(true)
+    setItemImage("")
+    setShowItemPresets(false)
     setItemModalOpen(true)
   }
 
@@ -713,6 +741,8 @@ export default function Pricing({
     setItemDesc(it.desc)
     setItemMaxQty(it.maxQty || 5)
     setItemInStock(it.inStock)
+    setItemImage(it.image || "")
+    setShowItemPresets(false)
     setItemModalOpen(true)
   }
 
@@ -748,6 +778,7 @@ export default function Pricing({
               desc: itemDesc.trim(),
               maxQty: Number(itemMaxQty) || 5,
               inStock: itemInStock,
+              image: itemImage.trim() || undefined,
             }
           : it,
       )
@@ -761,6 +792,7 @@ export default function Pricing({
         desc: itemDesc.trim(),
         maxQty: Number(itemMaxQty) || 5,
         inStock: itemInStock,
+        image: itemImage.trim() || undefined,
       }
       updatedList = [newItem, ...currentList]
       notify(
@@ -2649,50 +2681,68 @@ export default function Pricing({
                     {gosalaItems.map((item) => {
                       const catBadge =
                         CATEGORY_COLORS[item.category] || CATEGORY_COLORS.puja
+                      const photoSrc = getOfferingImage(item)
                       return (
                         <div
                           key={item.id}
-                          className={`rounded-sm border p-4 transition-all relative flex flex-col justify-between ${
+                          className={`rounded-xl border overflow-hidden transition-all relative flex flex-col justify-between ${
                             item.inStock
                               ? "bg-card border-line hover:border-amber-300 hover:shadow-xs"
                               : "bg-paper-deep/40 border-line/60 opacity-70"
                           }`}
                         >
-                          <div>
-                            <div className="flex items-start justify-between gap-2">
+                          {/* Photo Banner */}
+                          <div className="relative h-36 w-full bg-paper-deep/50 overflow-hidden border-b border-line group">
+                            <img
+                              src={photoSrc}
+                              alt={item.name}
+                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src =
+                                  DEFAULT_OFFERING_FALLBACK_IMAGE
+                              }}
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30 pointer-events-none" />
+                            <div className="absolute top-2 left-2 right-2 flex items-center justify-between gap-2 pointer-events-none">
                               <span
-                                className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${catBadge.bg}`}
+                                className={`text-[10px] font-mono px-2 py-0.5 rounded-full border backdrop-blur-md ${catBadge.bg}`}
                               >
                                 {catBadge.label}
                               </span>
                               <span
-                                className={`font-mono text-[10px] px-1.5 py-0.2 rounded font-medium ${
+                                className={`font-mono text-[10px] px-1.5 py-0.2 rounded font-medium backdrop-blur-md ${
                                   item.inStock
-                                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                                    : "bg-rose-50 text-rose-800 border border-rose-200"
+                                    ? "bg-emerald-950/80 text-emerald-300 border border-emerald-500/30"
+                                    : "bg-rose-950/80 text-rose-300 border border-rose-500/30"
                                 }`}
                               >
                                 {item.inStock ? "In Stock" : "Out of Stock"}
                               </span>
                             </div>
-
-                            <div className="font-serif text-[15px] font-semibold text-ink mt-2.5">
-                              {item.name}
+                            <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/80 backdrop-blur-md border border-white/20 text-white font-mono text-[12px] font-bold">
+                              {inr(item.price)}
                             </div>
-                            <p className="text-[12px] text-ink-faint mt-1 leading-relaxed line-clamp-2">
-                              {item.desc}
-                            </p>
                           </div>
 
-                          <div className="mt-4 pt-3 border-t border-line flex items-center justify-between">
+                          <div className="p-3.5 flex-1 flex flex-col justify-between">
                             <div>
-                              <span className="text-[10px] text-ink-faint uppercase font-mono block">
-                                Seva Price
-                              </span>
-                              <span className="font-mono text-[16px] text-ink font-semibold tabular">
-                                {inr(item.price)}
-                              </span>
+                              <div className="font-serif text-[15px] font-semibold text-ink">
+                                {item.name}
+                              </div>
+                              <p className="text-[12px] text-ink-faint mt-1 leading-relaxed line-clamp-2">
+                                {item.desc}
+                              </p>
                             </div>
+
+                            <div className="mt-4 pt-3 border-t border-line flex items-center justify-between">
+                              <div>
+                                <span className="text-[10px] text-ink-faint uppercase font-mono block">
+                                  Seva Price
+                                </span>
+                                <span className="font-mono text-[16px] text-ink font-semibold tabular">
+                                  {inr(item.price)}
+                                </span>
+                              </div>
 
                             {canManageOfferings ? (
                               <div className="flex items-center gap-1.5">
@@ -2733,7 +2783,8 @@ export default function Pricing({
                             )}
                           </div>
                         </div>
-                      )
+                      </div>
+                    )
                     })}
                   </div>
                 </div>
@@ -3688,6 +3739,112 @@ export default function Pricing({
                     </span>
                   </label>
                 </div>
+              </div>
+
+              {/* Photo Attachment & Presets */}
+              <div className="space-y-2 pt-2 border-t border-line/60">
+                <div className="flex items-center justify-between">
+                  <span className="text-[12.5px] font-medium text-ink">
+                    Offering Photo (Upload or Preset)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowItemPresets(!showItemPresets)}
+                    className="text-[11px] text-amber-700 hover:underline inline-flex items-center gap-1 cursor-pointer font-medium"
+                  >
+                    <Sparkles size={12} />
+                    <span>
+                      {showItemPresets ? "Hide Presets" : "Choose Preset"}
+                    </span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="w-16 h-16 rounded-lg overflow-hidden bg-paper-deep border border-line flex-shrink-0 relative group shadow-2xs">
+                    <img
+                      src={itemImage || DEFAULT_OFFERING_FALLBACK_IMAGE}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src =
+                          DEFAULT_OFFERING_FALLBACK_IMAGE
+                      }}
+                    />
+                    {itemImage && (
+                      <button
+                        type="button"
+                        onClick={() => setItemImage("")}
+                        className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-[10px] cursor-pointer"
+                        title="Remove custom photo"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <label className="px-3 py-1 rounded bg-card border border-line hover:border-amber-400 text-[11.5px] text-ink font-medium cursor-pointer transition inline-flex items-center gap-1.5 shadow-2xs">
+                        <Upload size={13} className="text-amber-700" />
+                        <span>Upload Photo</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleItemPhotoFile}
+                          className="hidden"
+                        />
+                      </label>
+                      <span className="text-[11px] text-ink-faint">or image URL</span>
+                    </div>
+                    <input
+                      type="url"
+                      placeholder="https://images.unsplash.com/..."
+                      value={
+                        itemImage.startsWith("data:")
+                          ? "(Uploaded local image file)"
+                          : itemImage
+                      }
+                      onChange={(e) => setItemImage(e.target.value)}
+                      disabled={itemImage.startsWith("data:")}
+                      className={inputCls}
+                    />
+                  </div>
+                </div>
+
+                {showItemPresets && (
+                  <div className="p-2.5 rounded-lg border border-line bg-amber-50/40 mt-2 space-y-2">
+                    <span className="text-[10px] font-mono text-ink-faint uppercase block">
+                      Select Devotional Preset:
+                    </span>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {OFFERING_PHOTO_PRESETS.map((preset) => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => {
+                            setItemImage(preset.url)
+                            setShowItemPresets(false)
+                          }}
+                          className={`group relative rounded overflow-hidden border aspect-video transition cursor-pointer text-left ${
+                            itemImage === preset.url
+                              ? "border-amber-600 ring-2 ring-amber-500/30"
+                              : "border-line hover:border-amber-400"
+                          }`}
+                        >
+                          <img
+                            src={preset.url}
+                            alt={preset.label}
+                            className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-black/40 flex items-end p-1">
+                            <span className="text-[9px] font-semibold text-white leading-tight line-clamp-1">
+                              {preset.label}
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

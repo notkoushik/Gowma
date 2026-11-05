@@ -47,6 +47,10 @@ import {
   getIndianLocalityFromCoords,
 } from "../hooks/useDeviceLocation"
 
+import {
+  getOfferingImage,
+  DEFAULT_OFFERING_FALLBACK_IMAGE,
+} from "../utils/offeringImages"
 import DesktopCustomer from "./customer/DesktopCustomer"
 
 import EditProfileModal from "../components/EditProfileModal"
@@ -87,7 +91,15 @@ export type BookingSummary = {
   commissionPct?: number
   customerLat?: number | null
   customerLng?: number | null
-  selectedAddons?: Array<{ id: string; name: string; qty: number; price: number; total: number }>
+  selectedAddons?: Array<{
+    id: string
+    name: string
+    qty: number
+    price: number
+    total: number
+    image?: string
+    category?: string
+  }>
   pairSurcharge?: number
   taxPct?: number
   paymentProvider?: "RAZORPAY" | "WALLET"
@@ -1104,6 +1116,43 @@ function Bookings({
                   Ground-floor portico ready, clean water bucket and sacred
                   green grass feeding protocol.
                 </div>
+
+                {Array.isArray(b.selectedAddons) && b.selectedAddons.length > 0 && (
+                  <div className="pt-2 border-t border-line/40 space-y-1.5">
+                    <div className="text-[10.5px] uppercase font-mono text-ink-faint">
+                      Sacred Offerings &amp; Add-ons ({b.selectedAddons.length})
+                    </div>
+                    <div className="space-y-1">
+                      {b.selectedAddons.map((addon: any, idx: number) => (
+                        <div
+                          key={addon.id || idx}
+                          className="flex items-center justify-between text-[11.5px] bg-card p-1.5 rounded border border-line/60"
+                        >
+                          <div className="flex items-center gap-2 min-w-0 pr-2">
+                            <img
+                              src={getOfferingImage(addon)}
+                              alt=""
+                              className="w-6 h-6 rounded object-cover border border-line/60 shrink-0 shadow-2xs"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src =
+                                  DEFAULT_OFFERING_FALLBACK_IMAGE
+                              }}
+                            />
+                            <span className="truncate text-ink font-medium">
+                              {addon.name}{" "}
+                              <span className="font-mono text-ink-faint font-normal">
+                                × {addon.qty}
+                              </span>
+                            </span>
+                          </div>
+                          <span className="font-mono font-medium text-ink tabular shrink-0">
+                            +{inr(addon.total || addon.price * addon.qty)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-line/60">
                   <div className="flex items-center gap-2">

@@ -29,6 +29,10 @@ import SevaTaxInvoiceModal from "../../components/SevaTaxInvoiceModal"
 import type { Animal, AnimalType } from "../../data/animals"
 import { type Gosala } from "../../data/customer"
 import { DEFAULT_GOSALA_OFFERINGS } from "../../data/gosalas"
+import {
+  getOfferingImage,
+  DEFAULT_OFFERING_FALLBACK_IMAGE,
+} from "../../utils/offeringImages"
 import { inr } from "../../data/mock"
 import { useStore } from "../../store/store"
 import { api, type RazorpayProof } from "../../services/api"
@@ -416,6 +420,8 @@ export default function BookingFlow({
         desc: item.desc || "Gaushala sacred offering",
         price: item.price,
         maxQty: item.maxQty || 5,
+        image: item.image || item.imageUrl,
+        category: item.category,
       }))
     }
     return DEFAULT_GOSALA_OFFERINGS.map((item) => ({
@@ -424,6 +430,8 @@ export default function BookingFlow({
       desc: item.desc,
       price: item.price,
       maxQty: item.maxQty || 5,
+      image: item.image,
+      category: item.category,
     }))
   }, [gosala])
 
@@ -473,6 +481,8 @@ export default function BookingFlow({
         qty: qty[x.id] || 1,
         price: x.price,
         total: (qty[x.id] || 1) * x.price,
+        image: x.image,
+        category: x.category,
       }))
   }, [dynamicAddons, qty])
 
@@ -1059,14 +1069,36 @@ export default function BookingFlow({
 
               {/* Selected Add-ons Itemization */}
               {selectedAddonItems.length > 0 && (
-                <div className="bg-paper/70 rounded p-2 border border-line/60 space-y-1 my-1">
-                  <div className="text-[11px] font-semibold text-ink mb-1">
-                    Selected Sacred Offerings ({selectedAddonItems.length}):
+                <div className="bg-paper/70 rounded-lg p-2.5 border border-line/60 space-y-1.5 my-1.5">
+                  <div className="text-[11px] font-semibold text-ink mb-1 flex items-center justify-between">
+                    <span>Selected Sacred Offerings ({selectedAddonItems.length}):</span>
+                    <span className="font-mono text-[10px] text-ink-faint uppercase">Itemized</span>
                   </div>
                   {selectedAddonItems.map((item) => (
-                    <div key={item.id} className="flex justify-between items-center text-[11.5px] text-ink-soft">
-                      <span>• {item.name} <span className="font-mono text-ink-faint">× {item.qty}</span></span>
-                      <span className="font-mono font-medium text-ink tabular">+{inr(item.total)}</span>
+                    <div
+                      key={item.id}
+                      className="flex justify-between items-center text-[11.5px] text-ink-soft py-0.5"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 pr-2">
+                        <img
+                          src={getOfferingImage(item)}
+                          alt=""
+                          className="w-6 h-6 rounded object-cover border border-line/60 shrink-0 shadow-2xs"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src =
+                              DEFAULT_OFFERING_FALLBACK_IMAGE
+                          }}
+                        />
+                        <span className="truncate">
+                          {item.name}{" "}
+                          <span className="font-mono text-ink-faint">
+                            × {item.qty}
+                          </span>
+                        </span>
+                      </div>
+                      <span className="font-mono font-medium text-ink tabular shrink-0">
+                        +{inr(item.total)}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1435,26 +1467,41 @@ export default function BookingFlow({
                 </div>
               )}
 
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                 {dynamicAddons.map((a) => {
                   const q = qty[a.id] || 0
+                  const photoSrc = getOfferingImage(a)
                   return (
                     <div
                       key={a.id}
-                      className="flex items-center gap-3 rounded-sm border border-line bg-card p-3.5"
+                      className="flex items-center gap-3.5 rounded-lg border border-line bg-card p-3 hover:border-forest/40 transition shadow-2xs group"
                     >
+                      {/* Photo Thumbnail */}
+                      <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-md overflow-hidden bg-paper-deep border border-line/70 shrink-0 relative">
+                        <img
+                          src={photoSrc}
+                          alt={a.name}
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src =
+                              DEFAULT_OFFERING_FALLBACK_IMAGE
+                          }}
+                        />
+                      </div>
+
                       <div className="min-w-0 flex-1">
-                        <div className="text-[13.5px] text-ink font-medium">
+                        <div className="text-[14px] text-ink font-semibold">
                           {a.name}
                         </div>
-                        <div className="text-[11px] text-ink-faint">
+                        <div className="text-[11.5px] text-ink-faint line-clamp-2 mt-0.5 leading-snug">
                           {a.desc}
                         </div>
-                        <div className="font-mono text-[12px] text-ink mt-0.5 tabular">
+                        <div className="font-mono text-[13px] text-ink font-bold mt-1 tabular">
                           {inr(a.price)}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2.5">
+
+                      <div className="flex items-center gap-2">
                         <button
                           onClick={() =>
                             setQty((p) => ({
@@ -1463,12 +1510,12 @@ export default function BookingFlow({
                             }))
                           }
                           disabled={q === 0}
-                          className="h-7 w-7 grid place-items-center rounded-sm border border-line text-ink-soft disabled:opacity-40 hover:bg-paper-deep"
+                          className="h-8 w-8 grid place-items-center rounded-md border border-line text-ink-soft disabled:opacity-30 hover:bg-paper-deep transition cursor-pointer"
                           aria-label="Decrease"
                         >
-                          <Minus size={13} />
+                          <Minus size={14} />
                         </button>
-                        <span className="font-mono text-[13px] w-4 text-center tabular">
+                        <span className="font-mono text-[14px] font-bold w-5 text-center tabular text-ink">
                           {q}
                         </span>
                         <button
@@ -1479,10 +1526,10 @@ export default function BookingFlow({
                             }))
                           }
                           disabled={q >= a.maxQty}
-                          className="h-7 w-7 grid place-items-center rounded-sm border border-line text-ink-soft disabled:opacity-40 hover:bg-paper-deep"
+                          className="h-8 w-8 grid place-items-center rounded-md bg-forest text-white disabled:opacity-30 hover:bg-forest-deep transition cursor-pointer shadow-2xs"
                           aria-label="Increase"
                         >
-                          <Plus size={13} />
+                          <Plus size={14} />
                         </button>
                       </div>
                     </div>
@@ -1959,16 +2006,30 @@ export default function BookingFlow({
                         </span>
                       </div>
                       {selectedAddonItems.length > 0 && (
-                        <div className="rounded-xs bg-paper-deep/60 px-2.5 py-2 space-y-1 border border-line text-[11.5px]">
+                        <div className="rounded-lg bg-paper-deep/60 p-2.5 space-y-1.5 border border-line text-[11.5px]">
                           {selectedAddonItems.map((item) => (
-                            <div key={item.id} className="flex justify-between text-ink-soft">
-                              <span>
-                                • {item.name}{" "}
-                                <span className="font-mono text-ink-faint">
-                                  ({inr(item.price)} × {item.qty})
+                            <div
+                              key={item.id}
+                              className="flex justify-between items-center text-ink-soft py-0.5"
+                            >
+                              <div className="flex items-center gap-2 min-w-0 pr-2">
+                                <img
+                                  src={getOfferingImage(item)}
+                                  alt=""
+                                  className="w-6 h-6 rounded object-cover border border-line/60 shrink-0 shadow-2xs"
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).src =
+                                      DEFAULT_OFFERING_FALLBACK_IMAGE
+                                  }}
+                                />
+                                <span className="truncate">
+                                  {item.name}{" "}
+                                  <span className="font-mono text-ink-faint">
+                                    ({inr(item.price)} × {item.qty})
+                                  </span>
                                 </span>
-                              </span>
-                              <span className="font-mono tabular text-ink font-medium">
+                              </div>
+                              <span className="font-mono tabular text-ink font-medium shrink-0">
                                 +{inr(item.total)}
                               </span>
                             </div>
