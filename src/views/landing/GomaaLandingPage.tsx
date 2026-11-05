@@ -245,7 +245,6 @@ export default function GomaaLandingPage({
   // UI state
   const [selectedCategory, setSelectedCategory] = useState<"ALL" | "COW" | "CALF" | "BULL" | "COW_AND_CALF">("ALL")
   const [favorites, setFavorites] = useState<Record<string, boolean>>({})
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   // Interactive Modals
   const [selectedCattleForModal, setSelectedCattleForModal] = useState<CattleItem | null>(null)
@@ -425,80 +424,6 @@ export default function GomaaLandingPage({
             </div>
           </div>
 
-          {/* Center: Navigation Anchor Links */}
-          <nav className="hidden lg:flex items-center gap-8 text-[15px] font-medium text-[#4a463e]">
-            <a
-              href="#home"
-              onClick={(e) => {
-                e.preventDefault()
-                window.scrollTo({ top: 0, behavior: "smooth" })
-              }}
-              className="text-[#132a13] font-semibold relative py-1 after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-full after:h-[2px] after:bg-[#132a13] after:rounded-full"
-            >
-              Home
-            </a>
-            <a
-              href="#gaushalas-section"
-              onClick={(e) => {
-                e.preventDefault()
-                document.getElementById("gaushalas-section")?.scrollIntoView({ behavior: "smooth" })
-              }}
-              className="hover:text-[#132a13] transition-colors"
-            >
-              Gaushalas
-            </a>
-            <a
-              href="#featured-cattle-section"
-              onClick={(e) => {
-                e.preventDefault()
-                document.getElementById("featured-cattle-section")?.scrollIntoView({ behavior: "smooth" })
-              }}
-              className="hover:text-[#132a13] transition-colors"
-            >
-              Sacred Cattle
-            </a>
-            <a
-              href="#mission-section"
-              onClick={(e) => {
-                e.preventDefault()
-                document.getElementById("mission-section")?.scrollIntoView({ behavior: "smooth" })
-              }}
-              className="hover:text-[#132a13] transition-colors"
-            >
-              Our Mission
-            </a>
-            <a
-              href="#welfare-protocols-section"
-              onClick={(e) => {
-                e.preventDefault()
-                document.getElementById("welfare-protocols-section")?.scrollIntoView({ behavior: "smooth" })
-              }}
-              className="hover:text-[#132a13] transition-colors"
-            >
-              Welfare Protocols
-            </a>
-            <a
-              href="#impact-section"
-              onClick={(e) => {
-                e.preventDefault()
-                document.getElementById("impact-section")?.scrollIntoView({ behavior: "smooth" })
-              }}
-              className="hover:text-[#132a13] transition-colors"
-            >
-              Impact
-            </a>
-            <a
-              href="#blogs-section"
-              onClick={(e) => {
-                e.preventDefault()
-                document.getElementById("blogs-section")?.scrollIntoView({ behavior: "smooth" })
-              }}
-              className="hover:text-[#132a13] transition-colors"
-            >
-              Wisdom Articles
-            </a>
-          </nav>
-
           {/* Right: Sign In Button */}
           <div className="flex items-center gap-2.5">
             <button
@@ -508,103 +433,8 @@ export default function GomaaLandingPage({
               <span>Sign In</span>
               <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
             </button>
-
-            {/* Mobile Hamburger Menu */}
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden h-10 w-10 rounded-full border border-[#d8cfbe] bg-[#fbf9f4] grid place-items-center text-[#2d2a24]"
-            >
-              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </button>
           </div>
         </div>
-
-        {/* Mobile Dropdown Menu */}
-        {mobileMenuOpen && (
-          <div className="lg:hidden bg-[#faf7f2] border-b border-[#ece6da] px-6 py-4 space-y-2">
-            <a
-              href="#home"
-              onClick={() => {
-                window.scrollTo({ top: 0, behavior: "smooth" })
-                setMobileMenuOpen(false)
-              }}
-              className="block py-2 text-sm font-medium text-[#132a13]"
-            >
-              Home
-            </a>
-            <a
-              href="#gaushalas-section"
-              onClick={() => {
-                document.getElementById("gaushalas-section")?.scrollIntoView({ behavior: "smooth" })
-                setMobileMenuOpen(false)
-              }}
-              className="block py-2 text-sm font-medium text-[#4a463e] hover:text-[#132a13]"
-            >
-              Verified Gaushalas
-            </a>
-            <a
-              href="#featured-cattle-section"
-              onClick={() => {
-                document.getElementById("featured-cattle-section")?.scrollIntoView({ behavior: "smooth" })
-                setMobileMenuOpen(false)
-              }}
-              className="block py-2 text-sm font-medium text-[#4a463e] hover:text-[#132a13]"
-            >
-              Sacred Cattle Directory
-            </a>
-            <a
-              href="#mission-section"
-              onClick={() => {
-                document.getElementById("mission-section")?.scrollIntoView({ behavior: "smooth" })
-                setMobileMenuOpen(false)
-              }}
-              className="block py-2 text-sm font-medium text-[#4a463e] hover:text-[#132a13]"
-            >
-              Our Mission (Three Pillars)
-            </a>
-            <a
-              href="#welfare-protocols-section"
-              onClick={() => {
-                document.getElementById("welfare-protocols-section")?.scrollIntoView({ behavior: "smooth" })
-                setMobileMenuOpen(false)
-              }}
-              className="block py-2 text-sm font-medium text-[#4a463e] hover:text-[#132a13]"
-            >
-              Welfare &amp; Transit Protocols
-            </a>
-            <a
-              href="#impact-section"
-              onClick={() => {
-                document.getElementById("impact-section")?.scrollIntoView({ behavior: "smooth" })
-                setMobileMenuOpen(false)
-              }}
-              className="block py-2 text-sm font-medium text-[#4a463e] hover:text-[#132a13]"
-            >
-              Platform Impact
-            </a>
-            <a
-              href="#blogs-section"
-              onClick={() => {
-                document.getElementById("blogs-section")?.scrollIntoView({ behavior: "smooth" })
-                setMobileMenuOpen(false)
-              }}
-              className="block py-2 text-sm font-medium text-[#4a463e] hover:text-[#132a13]"
-            >
-              Wisdom Articles
-            </a>
-            <div className="pt-2 border-t border-[#e2d8c9]">
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false)
-                  onSignIn()
-                }}
-                className="w-full py-2.5 rounded-full bg-[#132a13] text-white text-xs font-semibold"
-              >
-                Sign In to Workspace &rarr;
-              </button>
-            </div>
-          </div>
-        )}
       </header>
 
       {/* ----------------- Hero Section ----------------- */}
