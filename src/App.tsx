@@ -827,17 +827,19 @@ export default function App() {
       >
         <div className="flex flex-col min-h-0">
           <div className="px-5 h-16 flex items-center gap-3 border-b border-line shrink-0">
-            <div
-              className={`h-9 w-9 rounded-sm flex items-center justify-center text-white font-serif text-[18px] leading-none shadow-xs ${
-                isSuperAdmin
-                  ? "bg-gradient-to-br from-amber-500 to-amber-700"
-                  : "bg-forest"
-              }`}
-            >
-              {isSuperAdmin ? (
-                <Crown size={18} className="stroke-[2.2]" />
-              ) : (
-                "OA"
+            <div className="relative h-10 w-10 rounded-xl overflow-hidden border border-line bg-white p-1 shadow-2xs shrink-0 flex items-center justify-center">
+              <img
+                src="/logo_mini.jpg"
+                alt="GOMAA Official Sacred Emblem"
+                className="h-full w-full object-contain"
+              />
+              {isSuperAdmin && (
+                <span
+                  className="absolute -bottom-0.5 -right-0.5 bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-full p-0.5 shadow-2xs border border-white"
+                  title="Captain Supreme Authority"
+                >
+                  <Crown size={9} className="stroke-[2.5]" />
+                </span>
               )}
             </div>
             <div className="min-w-0">
@@ -1222,7 +1224,14 @@ export default function App() {
 
       {/* Main Container */}
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="sticky top-0 z-30 h-16 bg-paper/85 backdrop-blur border-b border-line flex items-center gap-4 px-5 lg:px-8">
+        <header className="sticky top-0 z-30 h-16 bg-paper/85 backdrop-blur border-b border-line flex items-center gap-3.5 px-4 lg:px-8">
+          <div className="lg:hidden h-9 w-9 rounded-xl overflow-hidden border border-line bg-white p-0.5 shadow-2xs shrink-0 flex items-center justify-center">
+            <img
+              src="/logo_mini.jpg"
+              alt="GOMAA"
+              className="h-full w-full object-contain"
+            />
+          </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="font-serif text-[19px] leading-tight text-ink truncate">

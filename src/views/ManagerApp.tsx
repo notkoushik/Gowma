@@ -679,8 +679,12 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
       <aside className="hidden lg:flex w-[240px] shrink-0 flex-col border-r border-line bg-card sticky top-0 h-screen max-h-screen justify-between overflow-hidden">
         <div className="flex flex-col min-h-0">
           <div className="px-5 h-16 flex items-center gap-3 border-b border-line shrink-0">
-            <div className="h-9 w-9 rounded-sm bg-forest flex items-center justify-center text-white font-serif text-[18px] leading-none">
-              G
+            <div className="h-10 w-10 rounded-xl overflow-hidden border border-line bg-white p-1 shadow-2xs shrink-0 flex items-center justify-center">
+              <img
+                src="/logo_mini.jpg"
+                alt="GOMAA Official Sacred Emblem"
+                className="h-full w-full object-contain"
+              />
             </div>
             <div className="min-w-0">
               <div className="font-serif text-[18px] leading-none text-ink flex items-center gap-1.5">
@@ -789,9 +793,16 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
       </aside>
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="sticky top-0 z-30 h-16 bg-paper/85 backdrop-blur border-b border-line flex items-center gap-4 px-5 lg:px-8">
+        <header className="sticky top-0 z-30 h-16 bg-paper/85 backdrop-blur border-b border-line flex items-center gap-3 px-4 lg:px-8">
+          <div className="lg:hidden h-9 w-9 rounded-xl overflow-hidden border border-line bg-white p-0.5 shadow-2xs shrink-0 flex items-center justify-center">
+            <img
+              src="/logo_mini.jpg"
+              alt="GOMAA"
+              className="h-full w-full object-contain"
+            />
+          </div>
           <div className="min-w-0">
-            <h1 className="font-serif text-[19px] leading-tight text-ink truncate flex items-center gap-2">
+            <h1 className="font-serif text-[18px] sm:text-[19px] leading-tight text-ink truncate flex items-center gap-2">
               <button
                 onClick={() => window.history.back()}
                 className="inline-flex items-center justify-center p-1 text-ink-faint hover:text-ink hover:bg-paper-deep rounded-sm transition-colors"

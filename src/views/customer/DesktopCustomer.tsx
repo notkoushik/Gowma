@@ -302,15 +302,19 @@ export default function DesktopCustomer({
               setDetail(null)
               setGosalaProfileId(null)
             }}
-            className="flex items-center gap-2.5"
+            className="flex items-center gap-2.5 cursor-pointer group"
           >
-            <div className="h-9 w-9 rounded-sm bg-saffron grid place-items-center font-serif text-[18px] text-white">
-              G
+            <div className="h-10 w-10 rounded-xl overflow-hidden border border-line bg-white p-1 shadow-2xs shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <img
+                src="/logo_mini.jpg"
+                alt="GOMAA Official Sacred Emblem"
+                className="h-full w-full object-contain"
+              />
             </div>
             <div className="text-left leading-none">
-              <div className="font-serif text-[18px]">GOMAA</div>
+              <div className="font-serif text-[18px] font-semibold text-ink">GOMAA</div>
               <div className="font-mono text-[8.5px] uppercase tracking-[0.22em] text-ink-faint mt-0.5">
-                Book a Gau Seva
+                Care for a Kinder Tomorrow
               </div>
             </div>
           </button>
@@ -801,6 +805,42 @@ export default function DesktopCustomer({
           <ProfileView onOpenEditProfile={() => setEditProfileOpen(true)} />
         )}
       </main>
+
+      {/* Devotee Portal Dignified Brand Footer */}
+      <footer className="mt-16 border-t border-line bg-card/70 py-10 text-ink">
+        <div className="max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-10 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <div className="h-11 w-11 rounded-xl overflow-hidden border border-line bg-white p-1 shadow-2xs shrink-0 flex items-center justify-center">
+              <img
+                src="/logo_mini.jpg"
+                alt="GOMAA Emblem"
+                className="h-full w-full object-contain"
+              />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-serif text-[18px] font-bold text-ink">GOMAA</span>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-forest bg-forest-soft px-2 py-0.5 rounded font-semibold border border-forest/20">
+                  Care for a Kinder Tomorrow
+                </span>
+              </div>
+              <p className="text-[12px] text-ink-faint mt-0.5">
+                Sacred Vedic Cattle Welfare, Sanctuary Darshan &amp; Ethical Transit Network
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="rounded-lg overflow-hidden border border-line bg-white px-3 py-1 shadow-2xs max-w-[190px]">
+              <img
+                src="/logo.jpg"
+                alt="GOMAA - Care for a Kinder Tomorrow"
+                className="w-full h-auto object-contain"
+              />
+            </div>
+          </div>
+        </div>
+      </footer>
 
       {flow && (
         <BookingFlow

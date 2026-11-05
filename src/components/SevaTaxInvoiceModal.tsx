@@ -321,20 +321,29 @@ export default function SevaTaxInvoiceModal({
         >
           {/* Header & Platform Credentials */}
           <div className="border-b-2 border-saffron pb-3.5 print:pb-2 flex flex-col sm:flex-row sm:items-start justify-between gap-3 print:gap-2">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-serif font-black tracking-widest text-[22px] sm:text-[24px] print:text-[20px] text-saffron-deep print:text-amber-900">
-                  GOMAA
-                </span>
-                <span className="text-[10px] uppercase tracking-wider font-mono font-bold bg-saffron-soft text-saffron-deep px-2 py-0.5 rounded border border-saffron/30">
-                  Sacred Seva Escrow
-                </span>
+            <div className="flex items-center gap-3.5">
+              <div className="h-12 w-12 rounded-xl overflow-hidden border border-line bg-white p-1 shadow-2xs shrink-0 flex items-center justify-center">
+                <img
+                  src="/logo_mini.jpg"
+                  alt="GOMAA Emblem"
+                  className="h-full w-full object-contain"
+                />
               </div>
-              <div className="text-[11.5px] sm:text-[12px] print:text-[10.5px] text-ink-soft mt-0.5">
-                Vedic Cattle Sanctuary Darshan &amp; Puja Protocol Network
-              </div>
-              <div className="text-[10.5px] font-mono text-ink-faint print:text-[9.5px]">
-                Reg: Animal Welfare Board of India (AWBI) Accredited Trust Network
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-serif font-black tracking-widest text-[22px] sm:text-[24px] print:text-[20px] text-saffron-deep print:text-amber-900">
+                    GOMAA
+                  </span>
+                  <span className="text-[10px] uppercase tracking-wider font-mono font-bold bg-saffron-soft text-saffron-deep px-2 py-0.5 rounded border border-saffron/30">
+                    Sacred Seva Escrow
+                  </span>
+                </div>
+                <div className="text-[11.5px] sm:text-[12px] print:text-[10.5px] text-ink-soft mt-0.5">
+                  Vedic Cattle Sanctuary Darshan &amp; Puja Protocol Network
+                </div>
+                <div className="text-[10.5px] font-mono text-ink-faint print:text-[9.5px]">
+                  Reg: Animal Welfare Board of India (AWBI) Accredited Trust Network
+                </div>
               </div>
             </div>
 

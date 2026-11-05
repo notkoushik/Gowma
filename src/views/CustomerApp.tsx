@@ -1377,11 +1377,15 @@ function MobileCustomer({
       <div className="w-full max-w-[440px] min-h-screen bg-paper flex flex-col shadow-xl border-x border-line relative">
         {/* App bar */}
         <header className="h-14 px-4 flex items-center gap-3 border-b border-line bg-card sticky top-0 z-20">
-          <div className="h-8 w-8 rounded-sm bg-saffron grid place-items-center font-serif text-[16px] text-white">
-            G
+          <div className="h-9 w-9 rounded-xl overflow-hidden border border-line bg-white p-1 shadow-2xs shrink-0 flex items-center justify-center">
+            <img
+              src="/logo_mini.jpg"
+              alt="GOMAA"
+              className="h-full w-full object-contain"
+            />
           </div>
           <div className="leading-none">
-            <div className="font-serif text-[16px]">GOMAA</div>
+            <div className="font-serif text-[16px] font-semibold text-ink">GOMAA</div>
             <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-ink-faint mt-0.5">
               Book a Gau Seva
             </div>

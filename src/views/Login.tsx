@@ -588,14 +588,20 @@ export default function Login({
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#201c16]/95 via-[#201c16]/50 to-[#201c16]/65" />
         <div className="absolute inset-0 flex flex-col justify-between p-12 text-paper">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-sm bg-saffron grid place-items-center font-serif text-[20px] text-white shadow-xs">
-              G
+          <div className="flex items-center gap-3.5">
+            <div className="h-12 w-12 rounded-xl overflow-hidden border border-white/20 bg-white p-1 shadow-lg shrink-0 flex items-center justify-center">
+              <img
+                src="/logo_mini.jpg"
+                alt="GOMAA Sacred Emblem"
+                className="h-full w-full object-contain"
+              />
             </div>
             <div>
-              <div className="font-serif text-[22px] leading-none">GOMAA</div>
-              <div className="font-mono text-[9.5px] uppercase tracking-[0.24em] text-paper/70 mt-1">
-                Sacred Operations &amp; Welfare Platform
+              <div className="font-serif text-[24px] leading-none text-white font-bold tracking-tight">
+                GOMAA
+              </div>
+              <div className="font-mono text-[9px] uppercase tracking-[0.24em] text-paper/80 mt-1">
+                Care for a Kinder Tomorrow
               </div>
             </div>
           </div>
@@ -639,12 +645,21 @@ export default function Login({
         <div className="w-full max-w-md mx-auto">
           {/* Mobile Brand Header */}
           <div className="lg:hidden flex items-center gap-3 mb-6">
-            <div className="h-9 w-9 rounded-sm bg-saffron grid place-items-center font-serif text-[18px] text-white">
-              G
+            <div className="h-10 w-10 rounded-xl overflow-hidden border border-line bg-white p-1 shadow-2xs shrink-0 flex items-center justify-center">
+              <img
+                src="/logo_mini.jpg"
+                alt="GOMAA"
+                className="h-full w-full object-contain"
+              />
             </div>
-            <span className="font-serif text-[20px] text-ink font-semibold">
-              GOMAA
-            </span>
+            <div>
+              <span className="font-serif text-[20px] text-ink font-semibold leading-none">
+                GOMAA
+              </span>
+              <div className="font-mono text-[8.5px] uppercase tracking-[0.2em] text-ink-faint mt-0.5">
+                Cows • Culture • Community
+              </div>
+            </div>
           </div>
 
           {/* Back to Landing Page */}
@@ -659,13 +674,22 @@ export default function Login({
             </button>
           )}
 
-          {/* Form Header */}
+          {/* Form Header with Brand Wordmark */}
           <div>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-forest-soft text-forest text-[11px] font-mono font-medium border border-forest/20">
-              <KeyRound size={12} />
-              <span>Secure Authentication Portal</span>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-forest-soft text-forest text-[11px] font-mono font-medium border border-forest/20">
+                <KeyRound size={12} />
+                <span>Secure Authentication Portal</span>
+              </div>
+              <div className="hidden sm:block h-8 w-auto">
+                <img
+                  src="/logo.jpg"
+                  alt="GOMAA - Care for a Kinder Tomorrow"
+                  className="h-8 w-auto object-contain rounded border border-line/60 bg-white px-2 py-0.5 shadow-2xs"
+                />
+              </div>
             </div>
-            <h1 className="font-serif text-[28px] text-ink mt-2.5 leading-tight font-semibold">
+            <h1 className="font-serif text-[28px] text-ink mt-1.5 leading-tight font-semibold">
               {authMode === "signIn" ? "Sign In to GOMAA" : "Join as a Devotee"}
             </h1>
             <p className="text-[13px] text-ink-faint mt-1.5 leading-relaxed">

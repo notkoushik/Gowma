@@ -89,7 +89,14 @@ export default function AdminLogin({
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between selection:bg-amber-500/30 selection:text-amber-200">
       {/* Top Security Banner */}
       <div className="bg-slate-900 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between text-xs text-slate-400">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
+          <div className="h-6 w-6 rounded-md overflow-hidden bg-white p-0.5 border border-slate-700 shrink-0 flex items-center justify-center">
+            <img
+              src="/logo_mini.jpg"
+              alt="GOMAA"
+              className="h-full w-full object-contain"
+            />
+          </div>
           <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
           <span className="font-mono uppercase tracking-wider text-slate-300">
             GOMAA Tier-0 Gateway · Zero-Trust Administrative Security Shield
@@ -112,14 +119,23 @@ export default function AdminLogin({
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-1 bg-gradient-to-r from-transparent via-amber-500 to-transparent"></div>
 
           <div className="text-center mb-6">
-            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 text-slate-950 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-amber-500/20">
-              <ShieldCheck size={28} className="stroke-[2.2]" />
+            <div className="flex justify-center mb-3.5">
+              <div className="rounded-xl overflow-hidden border border-slate-700 bg-white px-3 py-1.5 shadow-lg shadow-amber-500/10 max-w-[210px]">
+                <img
+                  src="/logo.jpg"
+                  alt="GOMAA - Care for a Kinder Tomorrow"
+                  className="w-full h-auto object-contain"
+                />
+              </div>
+            </div>
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 text-slate-950 flex items-center justify-center mx-auto mb-2.5 shadow-lg shadow-amber-500/20">
+              <ShieldCheck size={24} className="stroke-[2.2]" />
             </div>
             <h1 className="text-xl font-semibold tracking-tight text-white flex items-center justify-center gap-2">
               Administrative Control Console
             </h1>
             <p className="text-xs text-slate-400 mt-1.5">
-              Restricted to Super Admin & Regional Operations Admin Personnel
+              Restricted to Super Admin &amp; Regional Operations Admin Personnel
             </p>
           </div>
 
