@@ -106,8 +106,11 @@ async function seed() {
             phone: sa.phone,
             role: "SUPER_ADMIN",
             isActive: true,
-            password: sa.password,
-            metadata: sa.metadata,
+            password: existing.password || sa.password,
+            metadata: {
+              ...(typeof existing.metadata === "object" && existing.metadata ? existing.metadata : {}),
+              ...(sa.metadata || {}),
+            },
           },
         })
         console.log(`[Seed] Super Admin re-verified: ${sa.email}`)
@@ -123,8 +126,8 @@ async function seed() {
           name: "Srinivas Ramanujan (Devotee)",
           uniqueId: "GMA-DEV-0223",
           role: "CUSTOMER",
-          password: hashPassword("Devotee@2026!"),
-          metadata: { password: "Devotee@2026!" },
+          password: hashPassword("Koushik.git"),
+          metadata: { password: "Koushik.git" },
         },
         {
           email: "driver@gomaa.in",
@@ -150,6 +153,7 @@ async function seed() {
           where: { email: { equals: d.email, mode: "insensitive" } },
         })
         if (existing) {
+          const passwordToSet = d.email.toLowerCase() === "devpulseorg@gmail.com" ? d.password : (existing.password || d.password)
           await prisma.user.update({
             where: { id: existing.id },
             data: {
@@ -158,8 +162,11 @@ async function seed() {
               phone: d.phone,
               role: d.role,
               isActive: true,
-              password: d.password,
-              metadata: d.metadata,
+              password: passwordToSet,
+              metadata: {
+                ...(typeof existing.metadata === "object" && existing.metadata ? existing.metadata : {}),
+                ...(d.metadata || {}),
+              },
             },
           })
           console.log(`[Seed] User ${d.email} re-verified with unique ID ${d.uniqueId}`)
@@ -243,7 +250,7 @@ async function seed() {
               email: adm.email,
               phone: adm.phone,
               role: "OPERATIONS_ADMIN",
-              password: adm.password,
+              password: existingAdm.password || adm.password,
               isActive: true,
               metadata: adm.metadata,
             },
@@ -258,7 +265,7 @@ async function seed() {
               phone: adm.phone,
               role: "OPERATIONS_ADMIN",
               isActive: true,
-              password: adm.password,
+              password: existingAdm.password || adm.password,
               metadata: adm.metadata,
             },
           })
@@ -426,7 +433,7 @@ async function seed() {
               email: mDef.email,
               phone: mDef.phone,
               role: "GOSALA_MANAGER",
-              password: mDef.password,
+              password: mgr.password || mDef.password,
               isActive: true,
               metadata: mDef.metadata,
             },
@@ -441,7 +448,7 @@ async function seed() {
               phone: mDef.phone,
               role: "GOSALA_MANAGER",
               isActive: true,
-              password: mDef.password,
+              password: mgr.password || mDef.password,
               metadata: mDef.metadata,
             },
           })

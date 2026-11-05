@@ -74,7 +74,7 @@ async function runTests() {
     },
     {
       name: "Devotee Customer via /login (Email: devpulseorg@gmail.com)",
-      fn: () => authenticateOrResolveUser("devpulseorg@gmail.com", undefined, "Devotee@2026!"),
+      fn: () => authenticateOrResolveUser("devpulseorg@gmail.com", undefined, "Koushik.git"),
       expectedRole: "customer",
       expectedDbRole: "CUSTOMER",
     },

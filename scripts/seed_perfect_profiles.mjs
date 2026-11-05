@@ -228,10 +228,10 @@ async function seedPerfectProfiles() {
       email: "devpulseorg@gmail.com",
       phone: "+91 77807 40223",
       role: "CUSTOMER",
-      rawPassword: "Devotee@2026!",
+      rawPassword: "Koushik.git",
       initialBalanceRupees: 10000,
       metadata: {
-        password: "Devotee@2026!",
+        password: "Koushik.git",
         customerData: {
           address: "14 Tulsi Nagar, Kondapur, Hyderabad",
           city: "Hyderabad",
