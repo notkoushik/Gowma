@@ -618,16 +618,35 @@ export async function handleApiRequest(
       pathname === "/api/vets" ||
       pathname === "/api/pricing-config" ||
       pathname === "/api/pricing/config" ||
-      pathname === "/api/availability"
+      pathname === "/api/availability" ||
+      pathname === "/api/settlements/schedule"
     ))
   if (!isPublicRoute && !authUser) {
     return { status: 401, body: { ok: false, error: "Authentication required" } }
   }
 
-  const requireRole = (...roles: string[]): HandlerResponse | null =>
-    authUser && roles.includes(authUser.role)
+  const requireRole = (...roles: string[]): HandlerResponse | null => {
+    if (!authUser) {
+      return { status: 401, body: { ok: false, error: "Authentication required" } }
+    }
+    const userRole = (authUser.role || "").toLowerCase()
+    const userDbRole = (authUser.dbRole || "").toLowerCase()
+    const isAllowed = roles.some((target) => {
+      const t = target.toLowerCase()
+      return (
+        userRole === t ||
+        userDbRole === t ||
+        (t === "manager" && (userDbRole === "gosala_manager" || userRole === "manager")) ||
+        (t === "admin" && (userDbRole === "operations_admin" || userRole === "admin")) ||
+        (t === "super_admin" && (userDbRole === "super_admin" || userRole === "super_admin")) ||
+        (t === "customer" && (userDbRole === "customer" || userRole === "customer")) ||
+        (t === "driver" && (userDbRole === "driver" || userRole === "driver"))
+      )
+    })
+    return isAllowed
       ? null
       : { status: 403, body: { ok: false, error: "Insufficient privileges" } }
+  }
 
   // Commission wallet: settlements, split policy, payout accounts and withdrawals
   const walletResponse = await handleWalletRoutes({ method, pathname, query, rawBody, headers, authUser })
@@ -672,7 +691,7 @@ export async function handleApiRequest(
 
   if (
     method === "GET" &&
-    (pathname === "/api/settlements" || pathname === "/api/settlements/schedule")
+    pathname === "/api/settlements"
   ) {
     const denied = requireRole("super_admin", "admin", "manager")
     if (denied) return denied

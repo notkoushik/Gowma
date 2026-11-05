@@ -366,24 +366,27 @@ function toMinutes(t: string): number {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  // Ensure any stale legacy entity caches in localStorage are purged.
-  // Cache ONLY the JWT token in localStorage; treat PostgreSQL as the authoritative store.
-  if (typeof window !== "undefined" && window.localStorage) {
-    try {
-      localStorage.removeItem("gomaa_gosalas")
-      localStorage.removeItem("gomaa_sacred_animals")
-      localStorage.removeItem("gomaa_empanelled_vets")
-      localStorage.removeItem("gomaa_managers")
-      localStorage.removeItem("gomaa_settlements")
-      localStorage.removeItem("gomaa_bookings")
-      localStorage.removeItem("gomaa_role_profiles")
-      localStorage.removeItem("gomaa_pricing_config")
-      localStorage.removeItem("gomaa_active_manager_gosala")
-      localStorage.removeItem("gomaa_manager_share_policies")
-      localStorage.removeItem("gomaa_manager_withdrawals")
-      localStorage.removeItem("gomaa_animals")
-    } catch {}
-  }
+  const isFetchingBackendStateRef = useRef(false)
+
+  // Ensure any stale legacy entity caches in localStorage are purged once on app initialization
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        localStorage.removeItem("gomaa_gosalas")
+        localStorage.removeItem("gomaa_sacred_animals")
+        localStorage.removeItem("gomaa_empanelled_vets")
+        localStorage.removeItem("gomaa_managers")
+        localStorage.removeItem("gomaa_settlements")
+        localStorage.removeItem("gomaa_bookings")
+        localStorage.removeItem("gomaa_role_profiles")
+        localStorage.removeItem("gomaa_pricing_config")
+        localStorage.removeItem("gomaa_active_manager_gosala")
+        localStorage.removeItem("gomaa_manager_share_policies")
+        localStorage.removeItem("gomaa_manager_withdrawals")
+        localStorage.removeItem("gomaa_animals")
+      } catch {}
+    }
+  }, [])
 
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [isLoadingProfiles, setIsLoadingProfiles] = useState<boolean>(true)
@@ -608,6 +611,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Sync state from backend on startup and session updates
   const loadBackendState = useCallback(async () => {
+    if (isFetchingBackendStateRef.current) return
+    isFetchingBackendStateRef.current = true
     setIsLoading(true)
     setIsLoadingProfiles(true)
     try {
@@ -657,12 +662,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const meRes = await api.getMe().catch(() => null)
       if (meRes?.ok && meRes.user) {
         setAuthUser(meRes.user)
+      } else {
+        // Token was invalid or expired: clear it to prevent repeated 401/403 request storms
+        setAuthTokenState(null)
+        setAuthUser(null)
+        try {
+          if (typeof window !== "undefined" && window.localStorage) {
+            localStorage.removeItem("gomaa_auth_token")
+          }
+        } catch {}
+        setBookings([])
+        setSettlements([])
+        setManagers([])
+        setUsers([])
+        setOperationalAdmins([])
+        setMigrationHistory([])
+        return
       }
 
-      const role = meRes?.user?.role
+      const role = meRes.user.role
       const isSuper = role === "super_admin"
+      const isAdmin = role === "admin"
+      const isManager = role === "manager"
+      const canAccessSettlements = isSuper || isAdmin || isManager
+      const canAccessManagers = isSuper || isAdmin || isManager
 
-      // Step 3: Protected rosters & admin data
+      // Step 3: Protected rosters & admin data - scoped strictly to role permissions
       const [
         bkRes,
         stRes,
@@ -674,11 +699,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         migHistoryRes,
       ] = await Promise.all([
         api.getBookings().catch(() => null),
-        api.getSettlements().catch(() => null),
-        api.getManagers().catch(() => null),
+        canAccessSettlements ? api.getSettlements().catch(() => null) : Promise.resolve(null),
+        canAccessManagers ? api.getManagers().catch(() => null) : Promise.resolve(null),
         api.getProfiles().catch(() => null),
         isSuper ? api.getUsers().catch(() => null) : Promise.resolve(null),
-        api.getSettlementSchedule().catch(() => null),
+        canAccessSettlements ? api.getSettlementSchedule().catch(() => null) : Promise.resolve(null),
         isSuper
           ? api.getOperationalAdmins().catch(() => null)
           : Promise.resolve(null),
@@ -725,6 +750,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.warn("Backend state init fallback:", e)
     } finally {
+      isFetchingBackendStateRef.current = false
       setIsLoading(false)
       setIsLoadingProfiles(false)
     }

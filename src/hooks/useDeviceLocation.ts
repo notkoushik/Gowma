@@ -137,7 +137,15 @@ export async function reverseGeocodeCoords(
   }
 }
 
-// Zero-Key IP Geolocation Fallback
+// Zero-Key IP Geolocation Fallback (with in-flight single flight deduplication)
+let ipLocationPromise: Promise<{
+  lat: number
+  lng: number
+  city: string
+  state: string
+  address: string
+} | null> | null = null
+
 export async function getIpLocationFallback(): Promise<{
   lat: number
   lng: number
@@ -145,48 +153,51 @@ export async function getIpLocationFallback(): Promise<{
   state: string
   address: string
 } | null> {
-  try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 4000)
-
-    const res = await fetch("https://ipwho.is/", {
-      signal: controller.signal,
-    })
-    clearTimeout(timeout)
-
-    if (res.ok) {
-      const data = await res.json()
-      if (data.success && data.latitude && data.longitude) {
-        const lat = data.latitude
-        const lng = data.longitude
-        const city = data.city || "Hyderabad"
-        const state = data.region || "Telangana"
-        const address = `${city}, ${state}, India`
-        return { lat, lng, city, state, address }
-      }
-    }
-  } catch (err) {
-    // Secondary fallback
+  if (ipLocationPromise) return ipLocationPromise
+  ipLocationPromise = (async () => {
     try {
-      const res2 = await fetch("https://freeipapi.com/api/json")
-      if (res2.ok) {
-        const data2 = await res2.json()
-        if (data2.latitude && data2.longitude) {
-          return {
-            lat: data2.latitude,
-            lng: data2.longitude,
-            city: data2.cityName || "Hyderabad",
-            state: data2.regionName || "Telangana",
-            address: `${data2.cityName}, ${data2.regionName}, India`,
-          }
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 4000)
+
+      const res = await fetch("https://ipwho.is/", {
+        signal: controller.signal,
+      })
+      clearTimeout(timeout)
+
+      if (res.ok) {
+        const data = await res.json()
+        if (data.success && data.latitude && data.longitude) {
+          const lat = data.latitude
+          const lng = data.longitude
+          const city = data.city || "Hyderabad"
+          const state = data.region || "Telangana"
+          const address = `${city}, ${state}, India`
+          return { lat, lng, city, state, address }
         }
       }
-    } catch (e) {
-      console.warn("IP Geolocation fallbacks failed:", e)
+    } catch (err) {
+      // Secondary fallback
+      try {
+        const res2 = await fetch("https://freeipapi.com/api/json")
+        if (res2.ok) {
+          const data2 = await res2.json()
+          if (data2.latitude && data2.longitude) {
+            return {
+              lat: data2.latitude,
+              lng: data2.longitude,
+              city: data2.cityName || "Hyderabad",
+              state: data2.regionName || "Telangana",
+              address: `${data2.cityName}, ${data2.regionName}, India`,
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("IP Geolocation fallbacks failed:", e)
+      }
     }
-  }
-
-  return null
+    return null
+  })()
+  return ipLocationPromise
 }
 
 // Forward geocode address string to exact [lat, lng] using OpenStreetMap Nominatim

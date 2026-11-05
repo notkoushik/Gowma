@@ -295,10 +295,14 @@ function Discover({
   )
   const deviceLocation = useDeviceLocation()
 
-  const liveAnimals = (storeAnimals || []).filter(
-    (a) =>
-      a.approvalStatus === "APPROVED" ||
-      (!a.approvalStatus && a.status !== "Under Audit"),
+  const liveAnimals = useMemo(
+    () =>
+      (storeAnimals || []).filter(
+        (a) =>
+          a.approvalStatus === "APPROVED" ||
+          (!a.approvalStatus && a.status !== "Under Audit"),
+      ),
+    [storeAnimals],
   )
 
   const customerGosalas: Gosala[] = useMemo(() => {

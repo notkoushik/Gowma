@@ -7057,11 +7057,22 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
   const { pathname, query } = parseUrl(rawUrl);
   if (!pathname.startsWith("/api/")) return null;
   const authUser = getAuthUserFromHeader(headers?.authorization || headers?.Authorization);
-  const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/admin-login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/webhooks/razorpayx" || pathname === "/api/jobs/settlement-maturity" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/jobs/settlement-maturity" || pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/regions" || pathname === "/api/places/search" || pathname === "/api/animals" || pathname === "/api/gosalas" || pathname === "/api/vets" || pathname === "/api/pricing-config" || pathname === "/api/pricing/config" || pathname === "/api/availability");
+  const isPublicRoute = method === "POST" && (pathname === "/api/auth/login" || pathname === "/api/auth/admin-login" || pathname === "/api/auth/register" || pathname === "/api/auth/forgot-password" || pathname === "/api/auth/verify-otp" || pathname === "/api/auth/reset-password" || pathname === "/api/payments/webhook" || pathname === "/api/webhooks/razorpayx" || pathname === "/api/jobs/settlement-maturity" || pathname === "/api/places/resolve-link") || method === "GET" && (pathname === "/api/jobs/settlement-maturity" || pathname === "/api/health" || pathname === "/api/hubs" || pathname === "/api/regions" || pathname === "/api/places/search" || pathname === "/api/animals" || pathname === "/api/gosalas" || pathname === "/api/vets" || pathname === "/api/pricing-config" || pathname === "/api/pricing/config" || pathname === "/api/availability" || pathname === "/api/settlements/schedule");
   if (!isPublicRoute && !authUser) {
     return { status: 401, body: { ok: false, error: "Authentication required" } };
   }
-  const requireRole = (...roles) => authUser && roles.includes(authUser.role) ? null : { status: 403, body: { ok: false, error: "Insufficient privileges" } };
+  const requireRole = (...roles) => {
+    if (!authUser) {
+      return { status: 401, body: { ok: false, error: "Authentication required" } };
+    }
+    const userRole = (authUser.role || "").toLowerCase();
+    const userDbRole = (authUser.dbRole || "").toLowerCase();
+    const isAllowed = roles.some((target) => {
+      const t = target.toLowerCase();
+      return userRole === t || userDbRole === t || t === "manager" && (userDbRole === "gosala_manager" || userRole === "manager") || t === "admin" && (userDbRole === "operations_admin" || userRole === "admin") || t === "super_admin" && (userDbRole === "super_admin" || userRole === "super_admin") || t === "customer" && (userDbRole === "customer" || userRole === "customer") || t === "driver" && (userDbRole === "driver" || userRole === "driver");
+    });
+    return isAllowed ? null : { status: 403, body: { ok: false, error: "Insufficient privileges" } };
+  };
   const walletResponse = await handleWalletRoutes({ method, pathname, query, rawBody, headers, authUser });
   if (walletResponse) return walletResponse;
   if (method === "POST" && pathname === "/api/hold" || method === "POST" && pathname === "/api/hold/release" || method === "POST" && pathname === "/api/bookings") {
@@ -7084,7 +7095,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
     const denied = requireRole("super_admin");
     if (denied) return denied;
   }
-  if (method === "GET" && (pathname === "/api/settlements" || pathname === "/api/settlements/schedule")) {
+  if (method === "GET" && pathname === "/api/settlements") {
     const denied = requireRole("super_admin", "admin", "manager");
     if (denied) return denied;
   }
