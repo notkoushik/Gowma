@@ -201,7 +201,7 @@ export default function BookingFlow({
   ) => Promise<void>
   onComplete: () => void
 }) {
-  const { pricingConfig, checkAnimalAvailability, profiles, authUser } =
+  const { pricingConfig, checkAnimalAvailability, profiles, authUser, gosalas: storeGosalas } =
     useStore()
   const devoteeName = authUser?.name || profiles?.customer?.name || "Devotee"
   const deviceLocation = useDeviceLocation()
@@ -412,17 +412,31 @@ export default function BookingFlow({
 
   // Dynamically load add-ons/offerings from the Gaushala's inventory, or fallback to default offerings
   const dynamicAddons = useMemo(() => {
-    const gaushalaItems = (gosala as any)?.items
+    const matchedGosala = storeGosalas?.find(
+      (g) =>
+        (gosala?.id && g.id === gosala.id) ||
+        (gosala?.name && g.name?.toLowerCase().trim() === gosala.name?.toLowerCase().trim()) ||
+        (animal?.gosala && g.name?.toLowerCase().trim() === animal.gosala?.toLowerCase().trim()),
+    )
+
+    const gaushalaItems =
+      (gosala as any)?.items ||
+      (gosala as any)?.metadata?.items ||
+      matchedGosala?.items ||
+      (matchedGosala as any)?.metadata?.items
+
     if (Array.isArray(gaushalaItems) && gaushalaItems.length > 0) {
-      return gaushalaItems.map((item: any) => ({
-        id: item.id,
-        name: item.name,
-        desc: item.desc || "Gaushala sacred offering",
-        price: item.price,
-        maxQty: item.maxQty || 5,
-        image: item.image || item.imageUrl,
-        category: item.category,
-      }))
+      return gaushalaItems
+        .filter((item: any) => item.inStock !== false)
+        .map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          desc: item.desc || "Gaushala sacred offering",
+          price: item.price,
+          maxQty: item.maxQty || 5,
+          image: item.image || item.imageUrl,
+          category: item.category,
+        }))
     }
     return DEFAULT_GOSALA_OFFERINGS.map((item) => ({
       id: item.id,
@@ -433,7 +447,7 @@ export default function BookingFlow({
       image: item.image,
       category: item.category,
     }))
-  }, [gosala])
+  }, [gosala, animal, storeGosalas])
 
   // Dynamic extra-time calculation based on Super Admin pricingConfig
   const durationOptions = useMemo(() => {

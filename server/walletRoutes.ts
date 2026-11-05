@@ -508,7 +508,23 @@ export async function handleWalletRoutes(args: {
       const policies = await prisma.splitPolicy.findMany()
       const defaultPolicy = policies.find((p) => p.policyKey === "DEFAULT")
       const defaultManagerBp = defaultPolicy?.managerBp ?? DEFAULT_MANAGER_BP
-      const policyByGosala = new Map(policies.filter((p) => p.gosalaId).map((p) => [p.gosalaId!, p.managerBp]))
+      const policyByGosala = new Map<string, number>()
+      for (const p of policies) {
+        if (p.gosalaId) policyByGosala.set(p.gosalaId, p.managerBp)
+        if (p.policyKey && p.policyKey !== "DEFAULT") policyByGosala.set(p.policyKey, p.managerBp)
+      }
+      const gosalaRecords = await prisma.gosala.findMany({
+        where: { id: { in: rows.map((r) => r.gosalaId).filter(Boolean) } },
+        select: { id: true, commissionValue: true, metadata: true },
+      })
+      const gosalaCommissionMap = new Map<string, number>()
+      for (const g of gosalaRecords) {
+        if (g.commissionValue !== null && g.commissionValue !== undefined) {
+          gosalaCommissionMap.set(g.id, Math.round(Number(g.commissionValue) * 100))
+        } else if (g.metadata && typeof g.metadata === "object" && (g.metadata as any).customCommissionPct !== undefined) {
+          gosalaCommissionMap.set(g.id, Math.round(Number((g.metadata as any).customCommissionPct) * 100))
+        }
+      }
       const cfg = await getWalletConfig()
 
       const settlements = rows.map((s) => {
@@ -522,7 +538,7 @@ export async function handleWalletRoutes(args: {
         // For pending settlements, dynamically reflect active approved split policy
         if (s.status === "READY_FOR_APPROVAL" || s.status === "HELD") {
           const activeManagerBp = policyByGosala.get(s.gosalaId) ?? defaultManagerBp
-          const platformBp = s.platformBp || cfg.platformBp
+          const platformBp = gosalaCommissionMap.get(s.gosalaId) || s.platformBp || cfg.platformBp
           const effectiveManagerBp = Math.min(activeManagerBp, Math.max(0, BP_TOTAL - platformBp))
           const liveShares = computeShares(s.grossPaise, s.taxPaise, platformBp, effectiveManagerBp)
           adminRupees = rupees(liveShares.adminPaise)

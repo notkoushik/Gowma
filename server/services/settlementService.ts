@@ -89,7 +89,9 @@ export async function getWalletConfig(db: any = prisma) {
 
 /** Manager share in force for a gaushala: its own approved policy, else the default one. */
 export async function getManagerBpFor(gosalaId: string, db: any = prisma): Promise<{ managerBp: number; policyKey: string; isDefault: boolean }> {
-  const own = await db.splitPolicy.findUnique({ where: { policyKey: gosalaId } })
+  const own = await db.splitPolicy.findFirst({
+    where: { OR: [{ policyKey: gosalaId }, { gosalaId }] },
+  })
   if (own) return { managerBp: own.managerBp, policyKey: own.policyKey, isDefault: false }
   const def = await db.splitPolicy.findUnique({ where: { policyKey: "DEFAULT" } })
   return { managerBp: def?.managerBp ?? DEFAULT_MANAGER_BP, policyKey: "DEFAULT", isDefault: true }
@@ -264,6 +266,17 @@ async function recipientsFor(tx: Tx, gosalaId: string) {
       select: { id: true },
     })
     if (adminUser) adminCandidateIds.push(adminUser.id)
+  }
+  if (gosala.metadata && typeof gosala.metadata === "object") {
+    const meta = gosala.metadata as any
+    if (meta.adminId) adminCandidateIds.push(meta.adminId)
+    if (meta.governingAdminEmail) {
+      const adminUser = await tx.user.findFirst({
+        where: { email: { equals: meta.governingAdminEmail, mode: "insensitive" } },
+        select: { id: true },
+      })
+      if (adminUser) adminCandidateIds.push(adminUser.id)
+    }
   }
 
   // Filter valid admin IDs from User table (match by id or uniqueId)

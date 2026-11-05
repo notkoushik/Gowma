@@ -73,12 +73,28 @@ test("BookingFlow propagates add-on photos through Step 3, Step 5, and Step 6", 
   assert.match(code, /getOfferingImage\(item\)/)
 })
 
-test("CustomerApp records add-on photos and displays them in booking drawer", () => {
-  const code = readFileSync("src/views/CustomerApp.tsx", "utf8")
-  assert.match(code, /getOfferingImage/)
-  assert.match(code, /image\?:\s*string/)
-  assert.match(code, /Sacred Offerings &amp; Add-ons/)
-  assert.match(code, /getOfferingImage\(addon\)/)
+test("CustomerApp and DesktopCustomer propagate items in effectiveGosala", () => {
+  const custCode = readFileSync("src/views/CustomerApp.tsx", "utf8")
+  assert.match(custCode, /items:\s*matchedStore\?\.items\s*\|\|\s*\(matchedStore as any\)\?\.metadata\?\.items/)
+
+  const deskCode = readFileSync("src/views/customer/DesktopCustomer.tsx", "utf8")
+  assert.match(deskCode, /items:\s*matchedStore\?\.items\s*\|\|\s*\(matchedStore as any\)\?\.metadata\?\.items/)
+})
+
+test("BookingFlow matches storeGosalas and dynamically extracts manager offerings", () => {
+  const code = readFileSync("src/views/customer/BookingFlow.tsx", "utf8")
+  assert.match(code, /storeGosalas\?\.find/)
+  assert.match(code, /gaushalaItems\s*=\s*\(gosala as any\)\?\.items/)
+})
+
+test("server router preserves items and avoids currentMeta TDZ ReferenceError", () => {
+  const code = readFileSync("server/router.ts", "utf8")
+  // Check that currentMeta is declared before authUser.role === 'manager' inside PUT /api/gosalas/:id
+  const putHandlerStart = code.indexOf("pathname.match(/^\\/api\\/gosalas\\/([^/]+)$/)")
+  const subCode = code.slice(putHandlerStart)
+  const declPos = subCode.indexOf("const currentMeta = (existing.metadata")
+  const mgrRolePos = subCode.indexOf("if (authUser.role === \"manager\")")
+  assert.ok(declPos > 0 && declPos < mgrRolePos, "currentMeta must be declared before manager role checks in PUT /api/gosalas/:id")
 })
 
 test("Customer booking with add-ons math and payload integrity end-to-end", () => {

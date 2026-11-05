@@ -4168,6 +4168,7 @@ export async function handleApiRequest(
           adminId: g.adminId || meta.adminId || (govRole === "super_admin" ? "USER-SA-001" : ""),
           adminName: g.adminName || meta.adminName || govName,
           adminEmail: govEmail,
+          items: Array.isArray(meta.items) ? meta.items : (Array.isArray(g.items) ? g.items : undefined),
         }
       })
 
@@ -4473,6 +4474,10 @@ export async function handleApiRequest(
         return { status: 404, body: { error: "Gaushala not found" } }
       }
 
+      const currentMeta = (existing.metadata && typeof existing.metadata === "object")
+        ? { ...(existing.metadata as any) }
+        : getGosalaMeta(existing.id, existing.name)
+
       if (!authUser || (authUser.role !== "super_admin" && authUser.role !== "admin" && authUser.role !== "manager")) {
         return { status: 403, body: { ok: false, error: "Insufficient privileges to modify sanctuary records" } }
       }
@@ -4543,9 +4548,6 @@ export async function handleApiRequest(
       const finalLng = longitude !== undefined ? Number(longitude) : lng !== undefined ? Number(lng) : undefined
 
       const isSuper = authUser?.role === "super_admin"
-      const currentMeta = (existing.metadata && typeof existing.metadata === "object")
-        ? { ...(existing.metadata as any) }
-        : getGosalaMeta(existing.id, existing.name)
 
       let effectiveAdminName = existing.adminName || currentMeta.governingAdminName || "Operations Admin"
       let effectiveAdminEmail = existing.adminEmail || currentMeta.governingAdminEmail || "admin@gomaa.in"
@@ -4842,6 +4844,7 @@ export async function handleApiRequest(
         customCommissionPct: parsedCommValue !== undefined ? parsedCommValue : metaPatch.customCommissionPct,
         commissionValue: parsedCommValue !== undefined ? parsedCommValue : (updated.commissionValue !== null ? Number(updated.commissionValue) : undefined),
         managerSharePct: Number(body.managerSharePct ?? metaPatch.managerSharePct ?? 70),
+        items: Array.isArray(metaPatch.items) ? metaPatch.items : undefined,
       }
 
       return { status: 200, body: { ok: true, gosala: mergedUpdated } }

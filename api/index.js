@@ -5298,7 +5298,9 @@ async function getWalletConfig(db = prisma) {
   };
 }
 async function getManagerBpFor(gosalaId, db = prisma) {
-  const own = await db.splitPolicy.findUnique({ where: { policyKey: gosalaId } });
+  const own = await db.splitPolicy.findFirst({
+    where: { OR: [{ policyKey: gosalaId }, { gosalaId }] }
+  });
   if (own) return { managerBp: own.managerBp, policyKey: own.policyKey, isDefault: false };
   const def = await db.splitPolicy.findUnique({ where: { policyKey: "DEFAULT" } });
   return { managerBp: def?.managerBp ?? DEFAULT_MANAGER_BP, policyKey: "DEFAULT", isDefault: true };
@@ -5436,6 +5438,17 @@ async function recipientsFor(tx, gosalaId) {
       select: { id: true }
     });
     if (adminUser) adminCandidateIds.push(adminUser.id);
+  }
+  if (gosala.metadata && typeof gosala.metadata === "object") {
+    const meta = gosala.metadata;
+    if (meta.adminId) adminCandidateIds.push(meta.adminId);
+    if (meta.governingAdminEmail) {
+      const adminUser = await tx.user.findFirst({
+        where: { email: { equals: meta.governingAdminEmail, mode: "insensitive" } },
+        select: { id: true }
+      });
+      if (adminUser) adminCandidateIds.push(adminUser.id);
+    }
   }
   const validAdminUsers = await tx.user.findMany({
     where: {
@@ -6667,7 +6680,23 @@ async function handleWalletRoutes(args) {
       const policies = await prisma.splitPolicy.findMany();
       const defaultPolicy = policies.find((p) => p.policyKey === "DEFAULT");
       const defaultManagerBp = defaultPolicy?.managerBp ?? DEFAULT_MANAGER_BP;
-      const policyByGosala = new Map(policies.filter((p) => p.gosalaId).map((p) => [p.gosalaId, p.managerBp]));
+      const policyByGosala = /* @__PURE__ */ new Map();
+      for (const p of policies) {
+        if (p.gosalaId) policyByGosala.set(p.gosalaId, p.managerBp);
+        if (p.policyKey && p.policyKey !== "DEFAULT") policyByGosala.set(p.policyKey, p.managerBp);
+      }
+      const gosalaRecords = await prisma.gosala.findMany({
+        where: { id: { in: rows.map((r) => r.gosalaId).filter(Boolean) } },
+        select: { id: true, commissionValue: true, metadata: true }
+      });
+      const gosalaCommissionMap = /* @__PURE__ */ new Map();
+      for (const g of gosalaRecords) {
+        if (g.commissionValue !== null && g.commissionValue !== void 0) {
+          gosalaCommissionMap.set(g.id, Math.round(Number(g.commissionValue) * 100));
+        } else if (g.metadata && typeof g.metadata === "object" && g.metadata.customCommissionPct !== void 0) {
+          gosalaCommissionMap.set(g.id, Math.round(Number(g.metadata.customCommissionPct) * 100));
+        }
+      }
       const cfg = await getWalletConfig();
       const settlements = rows.map((s) => {
         let adminRupees = rupees(s.adminPaise);
@@ -6678,7 +6707,7 @@ async function handleWalletRoutes(args) {
         let platformPct = s.platformBp / 100;
         if (s.status === "READY_FOR_APPROVAL" || s.status === "HELD") {
           const activeManagerBp = policyByGosala.get(s.gosalaId) ?? defaultManagerBp;
-          const platformBp = s.platformBp || cfg.platformBp;
+          const platformBp = gosalaCommissionMap.get(s.gosalaId) || s.platformBp || cfg.platformBp;
           const effectiveManagerBp = Math.min(activeManagerBp, Math.max(0, BP_TOTAL - platformBp));
           const liveShares = computeShares(s.grossPaise, s.taxPaise, platformBp, effectiveManagerBp);
           adminRupees = rupees(liveShares.adminPaise);
@@ -10187,7 +10216,8 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
           governingAdminEmail: govEmail,
           adminId: g.adminId || meta.adminId || (govRole === "super_admin" ? "USER-SA-001" : ""),
           adminName: g.adminName || meta.adminName || govName,
-          adminEmail: govEmail
+          adminEmail: govEmail,
+          items: Array.isArray(meta.items) ? meta.items : Array.isArray(g.items) ? g.items : void 0
         };
       });
       let scopedGosalas = formatted;
@@ -10447,6 +10477,7 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       if (!existing) {
         return { status: 404, body: { error: "Gaushala not found" } };
       }
+      const currentMeta = existing.metadata && typeof existing.metadata === "object" ? { ...existing.metadata } : getGosalaMeta(existing.id, existing.name);
       if (!authUser || authUser.role !== "super_admin" && authUser.role !== "admin" && authUser.role !== "manager") {
         return { status: 403, body: { ok: false, error: "Insufficient privileges to modify sanctuary records" } };
       }
@@ -10498,7 +10529,6 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
       const finalLat = latitude !== void 0 ? Number(latitude) : lat !== void 0 ? Number(lat) : void 0;
       const finalLng = longitude !== void 0 ? Number(longitude) : lng !== void 0 ? Number(lng) : void 0;
       const isSuper = authUser?.role === "super_admin";
-      const currentMeta = existing.metadata && typeof existing.metadata === "object" ? { ...existing.metadata } : getGosalaMeta(existing.id, existing.name);
       let effectiveAdminName = existing.adminName || currentMeta.governingAdminName || "Operations Admin";
       let effectiveAdminEmail = existing.adminEmail || currentMeta.governingAdminEmail || "admin@gomaa.in";
       let effectiveAdminRole = currentMeta.governingAdminRole || "admin";
@@ -10768,7 +10798,8 @@ async function handleApiRequest(method, rawUrl, rawBody, headers) {
         longitude: updated.longitude,
         customCommissionPct: parsedCommValue !== void 0 ? parsedCommValue : metaPatch.customCommissionPct,
         commissionValue: parsedCommValue !== void 0 ? parsedCommValue : updated.commissionValue !== null ? Number(updated.commissionValue) : void 0,
-        managerSharePct: Number(body.managerSharePct ?? metaPatch.managerSharePct ?? 70)
+        managerSharePct: Number(body.managerSharePct ?? metaPatch.managerSharePct ?? 70),
+        items: Array.isArray(metaPatch.items) ? metaPatch.items : void 0
       };
       return { status: 200, body: { ok: true, gosala: mergedUpdated } };
     } catch (err) {

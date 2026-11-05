@@ -847,6 +847,7 @@ function AnimalDetail({
   )
 
   const effectiveGosala: Gosala = {
+    ...(matchedStore || {}),
     id: matchedStore?.id ?? "GOS-101",
     name: matchedStore?.name ?? animal.gosala,
     area:
@@ -861,6 +862,9 @@ function AnimalDetail({
       "https://images.unsplash.com/photo-1546722228-7baeca4bd0b3?w=600&h=400&fit=crop&auto=format",
     lat: matchedStore?.lat,
     lng: matchedStore?.lng,
+    items: matchedStore?.items || (matchedStore as any)?.metadata?.items,
+    taxTreatment: matchedStore?.taxTreatment,
+    customTaxPct: matchedStore?.customTaxPct,
   }
 
   return (
