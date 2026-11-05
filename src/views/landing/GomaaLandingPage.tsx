@@ -22,8 +22,6 @@ import {
   Menu,
   HeartHandshake,
   Stethoscope,
-  Eye,
-  Download,
 } from "lucide-react"
 
 import { useToast } from "../../store/store"
@@ -254,7 +252,6 @@ export default function GomaaLandingPage({
   const [selectedGosalaForModal, setSelectedGosalaForModal] = useState<GaushalaInfo | null>(null)
   const [selectedBlogArticle, setSelectedBlogArticle] = useState<BlogArticle | null>(null)
   const [showHowItWorksModal, setShowHowItWorksModal] = useState(false)
-  const [showBrandModal, setShowBrandModal] = useState(false)
 
   // Carousel ref
   const cattleCarouselRef = useRef<HTMLDivElement>(null)
@@ -409,16 +406,16 @@ export default function GomaaLandingPage({
       <header className="sticky top-0 z-40 bg-[#faf7f2]/95 backdrop-blur-md border-b border-[#ece6da]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           {/* Left: GOMAA Logo & Subtitle */}
-          <div className="flex items-center gap-3.5 cursor-pointer group" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-            <div className="h-14 w-14 sm:h-15 sm:w-15 rounded-2xl overflow-hidden shadow-sm border-2 border-[#132a13]/20 bg-white flex-shrink-0 p-1 flex items-center justify-center group-hover:scale-105 group-hover:border-[#c2611b]/40 transition-all duration-300">
+          <div className="flex items-center gap-3 cursor-pointer group" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+            <div className="h-11 w-11 sm:h-12 sm:w-12 rounded-xl overflow-hidden shadow-2xs border border-[#d8cfbe] bg-white flex-shrink-0 p-1 flex items-center justify-center group-hover:scale-105 transition-transform">
               <img src={logoMini} alt="GOMAA Official Emblem" className="h-full w-full object-contain" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-serif text-2xl sm:text-[26px] font-bold tracking-tight text-[#1b1c1b] leading-none">
+                <span className="font-serif text-2xl font-bold tracking-tight text-[#1b1c1b] leading-none">
                   GOMAA
                 </span>
-                <span className="hidden sm:inline-block px-2 py-0.5 rounded-full bg-[#faeed9] border border-[#f0dac0] text-[#a64a0e] text-[9.5px] font-bold tracking-wider uppercase">
+                <span className="hidden sm:inline-block px-2 py-0.5 rounded-full bg-[#faeed9] border border-[#f0dac0] text-[#a64a0e] text-[9px] font-bold tracking-wider uppercase">
                   Care for a Kinder Tomorrow
                 </span>
               </div>
@@ -461,6 +458,16 @@ export default function GomaaLandingPage({
               Sacred Cattle
             </a>
             <a
+              href="#mission-section"
+              onClick={(e) => {
+                e.preventDefault()
+                document.getElementById("mission-section")?.scrollIntoView({ behavior: "smooth" })
+              }}
+              className="hover:text-[#132a13] transition-colors"
+            >
+              Our Mission
+            </a>
+            <a
               href="#welfare-protocols-section"
               onClick={(e) => {
                 e.preventDefault()
@@ -481,16 +488,6 @@ export default function GomaaLandingPage({
               Impact
             </a>
             <a
-              href="#brand-identity-section"
-              onClick={(e) => {
-                e.preventDefault()
-                document.getElementById("brand-identity-section")?.scrollIntoView({ behavior: "smooth" })
-              }}
-              className="hover:text-[#132a13] transition-colors"
-            >
-              Our Brand
-            </a>
-            <a
               href="#blogs-section"
               onClick={(e) => {
                 e.preventDefault()
@@ -502,17 +499,8 @@ export default function GomaaLandingPage({
             </a>
           </nav>
 
-          {/* Right: Brand Kit & Sign In Button */}
+          {/* Right: Sign In Button */}
           <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => setShowBrandModal(true)}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#d8cfbe] bg-[#fdfbf7] hover:bg-white text-xs font-semibold text-[#132a13] transition-colors shadow-2xs cursor-pointer"
-              title="View Official High-Resolution Brand Kit"
-            >
-              <Sparkles className="h-3.5 w-3.5 text-[#c2611b]" />
-              <span>Brand Kit</span>
-            </button>
-
             <button
               onClick={onSignIn}
               className="bg-[#132a13] hover:bg-[#1b3b1b] active:scale-98 text-white px-6 py-2.5 rounded-full text-sm font-semibold transition-all shadow-xs cursor-pointer flex items-center gap-2 group"
@@ -565,6 +553,16 @@ export default function GomaaLandingPage({
               Sacred Cattle Directory
             </a>
             <a
+              href="#mission-section"
+              onClick={() => {
+                document.getElementById("mission-section")?.scrollIntoView({ behavior: "smooth" })
+                setMobileMenuOpen(false)
+              }}
+              className="block py-2 text-sm font-medium text-[#4a463e] hover:text-[#132a13]"
+            >
+              Our Mission (Three Pillars)
+            </a>
+            <a
               href="#welfare-protocols-section"
               onClick={() => {
                 document.getElementById("welfare-protocols-section")?.scrollIntoView({ behavior: "smooth" })
@@ -585,16 +583,6 @@ export default function GomaaLandingPage({
               Platform Impact
             </a>
             <a
-              href="#brand-identity-section"
-              onClick={() => {
-                document.getElementById("brand-identity-section")?.scrollIntoView({ behavior: "smooth" })
-                setMobileMenuOpen(false)
-              }}
-              className="block py-2 text-sm font-medium text-[#4a463e] hover:text-[#132a13]"
-            >
-              Our Sacred Brand &amp; Pillars
-            </a>
-            <a
               href="#blogs-section"
               onClick={() => {
                 document.getElementById("blogs-section")?.scrollIntoView({ behavior: "smooth" })
@@ -604,17 +592,7 @@ export default function GomaaLandingPage({
             >
               Wisdom Articles
             </a>
-            <div className="pt-2 border-t border-[#e2d8c9] space-y-2">
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false)
-                  setShowBrandModal(true)
-                }}
-                className="w-full py-2.5 rounded-full border border-[#d8cfbe] bg-white text-[#132a13] text-xs font-semibold flex items-center justify-center gap-2"
-              >
-                <Sparkles className="h-3.5 w-3.5 text-[#c2611b]" />
-                <span>View Official Brand Kit</span>
-              </button>
+            <div className="pt-2 border-t border-[#e2d8c9]">
               <button
                 onClick={() => {
                   setMobileMenuOpen(false)
@@ -709,36 +687,6 @@ export default function GomaaLandingPage({
                     &#9658;
                   </span>
                   <span>How it works</span>
-                </button>
-              </div>
-
-              {/* Official Brand Identity Plaque (Directly visible above the fold) */}
-              <div className="p-3 sm:p-4 rounded-2xl bg-white/85 backdrop-blur-xs border border-[#ded4c4] shadow-xs flex items-center gap-3.5 hover:border-[#132a13]/30 transition-all">
-                <div
-                  onClick={() => setShowBrandModal(true)}
-                  className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl overflow-hidden bg-white p-1.5 border border-[#cfc1ac] shadow-xs flex-shrink-0 cursor-pointer hover:scale-105 transition-transform"
-                  title="Click to view full-resolution official Gomaa brand logo"
-                >
-                  <img src={logoFull} alt="Gomaa - Care for a Kinder Tomorrow" className="h-full w-full object-contain" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-serif font-bold text-sm sm:text-base text-[#1b1c1b] truncate">
-                      Care for a Kinder Tomorrow™
-                    </span>
-                    <span className="hidden sm:inline-block px-2 py-0.5 rounded-full bg-[#132a13]/10 text-[#132a13] text-[9px] font-bold uppercase tracking-wider">
-                      Official Platform
-                    </span>
-                  </div>
-                  <p className="text-xs text-[#6e685c] mt-0.5 line-clamp-2 leading-relaxed">
-                    Dedicated to sacred bovine welfare across India — uniting <strong>Cows</strong>, <strong>Culture</strong>, and <strong>Community</strong> through verified gaushalas and humane transit.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowBrandModal(true)}
-                  className="hidden md:flex px-3 py-1.5 rounded-xl border border-[#c8beaf] bg-[#faf7f2] hover:bg-white text-xs font-semibold text-[#132a13] transition-colors whitespace-nowrap cursor-pointer shadow-2xs"
-                >
-                  View Brand
                 </button>
               </div>
 
@@ -961,130 +909,157 @@ export default function GomaaLandingPage({
         </div>
       </section>
 
-      {/* ----------------- Official Brand Identity & Core Pillars Section ----------------- */}
-      <section id="brand-identity-section" className="py-14 bg-gradient-to-b from-[#fbf8f2] via-[#f5ece0] to-[#fbf8f2] border-y border-[#e7dcce]">
+      {/* ----------------- Tri-Pillar Foundation: Cows • Culture • Community ----------------- */}
+      <section id="mission-section" className="py-16 bg-gradient-to-b from-[#fbf8f2] via-[#f5ede2] to-[#fbf8f2] border-y border-[#e7dcce]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-3xl mx-auto mb-10">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white border border-[#dec9b4] text-[#964710] text-xs font-bold tracking-wider uppercase mb-3 shadow-2xs">
+          {/* Header */}
+          <div className="text-center max-w-3xl mx-auto mb-12">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/90 border border-[#dfd2be] text-[#964710] text-xs font-bold tracking-wider uppercase mb-3.5 shadow-2xs">
               <Sparkles className="h-3.5 w-3.5 text-[#c2611b]" />
-              <span>Sacred Brand Identity &amp; Mission</span>
+              <span>Care for a Kinder Tomorrow™</span>
             </div>
-            <h2 className="font-serif text-3xl sm:text-4xl font-bold text-[#1b1c1b] tracking-tight">
-              Care for a Kinder Tomorrow
+            <h2 className="font-serif text-3xl sm:text-4xl lg:text-[42px] font-bold text-[#1b1c1b] tracking-tight leading-tight">
+              The Three Sacred Pillars of GOMAA
             </h2>
-            <p className="text-[#645e52] text-sm sm:text-base mt-2 leading-relaxed">
-              GOMAA is guided by sacred Vedic reverence, ethical bovine welfare, and community stewardship. Here are the two official brand logos that define our national commitment.
+            <p className="text-[#645e52] text-sm sm:text-base mt-3 leading-relaxed">
+              Uniting authentic Gau Seva, statutory animal welfare, and verified sanctuary stewardship to preserve India&apos;s sacred bovine heritage.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8 items-stretch">
-            {/* Brand Card 1: Official App Icon & Sacred Emblem */}
-            <div className="rounded-3xl bg-white p-6 sm:p-8 border-2 border-[#dfd4c3] shadow-md flex flex-col items-center text-center hover:shadow-xl hover:border-[#132a13]/30 transition-all duration-300 group">
-              <div className="inline-block px-3 py-1 rounded-full bg-[#faeed9] border border-[#f0dac0] text-[#a64a0e] text-[10px] font-bold uppercase tracking-wider mb-4">
-                Official App Icon &amp; Sacred Emblem
+          {/* 3 Pillar Editorial Grid */}
+          <div className="grid md:grid-cols-3 gap-6 lg:gap-8 items-stretch">
+            {/* Pillar 1: Cows */}
+            <div className="rounded-3xl bg-white p-7 sm:p-8 border border-[#dfd4c3] shadow-sm hover:shadow-md hover:border-emerald-700/30 transition-all duration-300 flex flex-col justify-between group">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="h-12 w-12 rounded-2xl bg-emerald-50 text-emerald-800 grid place-items-center shadow-2xs group-hover:scale-105 transition-transform">
+                    <Heart className="h-6 w-6 text-emerald-700" />
+                  </div>
+                  <span className="font-serif text-2xl font-bold text-[#132a13]/25">01</span>
+                </div>
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-emerald-800">First Pillar</div>
+                  <h3 className="font-serif text-2xl font-bold text-[#1b1c1b] mt-1">
+                    Cows · Lifetime Dignity
+                  </h3>
+                </div>
+                <p className="text-xs sm:text-[13px] text-[#645e52] leading-relaxed">
+                  Every indigenous cow, nandi bull, and calf is guaranteed lifetime dignified sanctuary. Protected under the statutory Prevention of Cruelty to Animals (PCA) Act, 1960 with routine veterinary care, organic feed, and hydraulic ambulance transit.
+                </p>
               </div>
 
-              {/* High-Resolution Logo Mini Viewport */}
-              <div
-                onClick={() => setShowBrandModal(true)}
-                className="relative h-48 w-48 sm:h-56 sm:w-56 rounded-3xl overflow-hidden bg-white p-2 border-2 border-[#cebfa8] shadow-md mb-5 flex items-center justify-center cursor-pointer group-hover:scale-103 group-hover:border-[#132a13]/40 transition-all duration-300"
-                title="Click to view full-resolution emblem"
-              >
-                <img
-                  src={logoMini}
-                  alt="GOMAA Official Sacred Emblem"
-                  className="w-full h-full object-contain"
-                />
-              </div>
-
-              <h3 className="font-serif text-2xl font-bold text-[#1b1c1b]">
-                The Sacred GOMAA Emblem
-              </h3>
-              <p className="text-sm text-[#645e52] mt-2 leading-relaxed max-w-md">
-                The protective green arc embraces the sacred mother cow adorned with holy saffron tilak, illuminated by the golden dawn of Vedic dharma, accompanied by GPS-tracked hydraulic safe transport.
-              </p>
-
-              <div className="grid grid-cols-2 gap-2.5 w-full mt-6 pt-5 border-t border-[#f0e8db] text-left text-xs text-[#524c42]">
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-[#faf7f2]">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-600 flex-shrink-0"></span>
-                  <span>Ahimsa &amp; Sacred Cow Care</span>
+              <div className="mt-6 pt-5 border-t border-[#f0e8db] space-y-2">
+                <div className="flex items-center gap-2 text-xs text-[#4d483e]">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>PCA Act 1960 Statutory Care</span>
                 </div>
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-[#faf7f2]">
-                  <span className="h-2.5 w-2.5 rounded-full bg-amber-500 flex-shrink-0"></span>
-                  <span>Vedic Rituals &amp; Darshan</span>
+                <div className="flex items-center gap-2 text-xs text-[#4d483e]">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>Registered Veterinary Oversight</span>
                 </div>
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-[#faf7f2]">
-                  <span className="h-2.5 w-2.5 rounded-full bg-green-700 flex-shrink-0"></span>
-                  <span>Panchagavya &amp; Pastures</span>
+                <div className="flex items-center gap-2 text-xs text-[#4d483e]">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>Hydraulic Ramp &amp; GPS Transit</span>
                 </div>
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-[#faf7f2]">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#132a13] flex-shrink-0"></span>
-                  <span>Hydraulic Humane Transit</span>
-                </div>
-              </div>
-
-              <div className="mt-5 w-full">
-                <button
-                  onClick={() => setShowBrandModal(true)}
-                  className="w-full py-2.5 rounded-xl border border-[#c8beaf] bg-[#faf7f2] hover:bg-white text-xs font-semibold text-[#132a13] transition-colors shadow-2xs flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Eye className="h-3.5 w-3.5 text-[#c2611b]" />
-                  <span>Inspect High-Resolution Emblem</span>
-                </button>
               </div>
             </div>
 
-            {/* Brand Card 2: Full Official Wordmark & Core Pillars */}
-            <div className="rounded-3xl bg-white p-6 sm:p-8 border-2 border-[#dfd4c3] shadow-md flex flex-col items-center text-center hover:shadow-xl hover:border-[#132a13]/30 transition-all duration-300 group">
-              <div className="inline-block px-3 py-1 rounded-full bg-[#132a13]/10 border border-[#132a13]/20 text-[#132a13] text-[10px] font-bold uppercase tracking-wider mb-4">
-                Full Brand Identity &amp; 3 Core Pillars
+            {/* Pillar 2: Culture */}
+            <div className="rounded-3xl bg-white p-7 sm:p-8 border border-[#dfd4c3] shadow-sm hover:shadow-md hover:border-amber-700/30 transition-all duration-300 flex flex-col justify-between group">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="h-12 w-12 rounded-2xl bg-amber-50 text-amber-800 grid place-items-center shadow-2xs group-hover:scale-105 transition-transform">
+                    <Sparkles className="h-6 w-6 text-amber-700" />
+                  </div>
+                  <span className="font-serif text-2xl font-bold text-[#964710]/25">02</span>
+                </div>
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-[#964710]">Second Pillar</div>
+                  <h3 className="font-serif text-2xl font-bold text-[#1b1c1b] mt-1">
+                    Culture · Vedic Traditions
+                  </h3>
+                </div>
+                <p className="text-xs sm:text-[13px] text-[#645e52] leading-relaxed">
+                  Connecting families and devotees with authentic Vedic ceremonies — Kamadhenu Puja, Griha Pravesh blessings, and sacred cow feeding. Rituals are performed with complete Vedic sanctity while upholding strict bovine rest buffers.
+                </p>
               </div>
 
-              {/* High-Resolution Logo Full Viewport */}
-              <div
-                onClick={() => setShowBrandModal(true)}
-                className="relative h-48 sm:h-56 w-full max-w-[320px] rounded-3xl overflow-hidden bg-white p-3 border-2 border-[#cebfa8] shadow-md mb-5 flex items-center justify-center cursor-pointer group-hover:scale-103 group-hover:border-[#132a13]/40 transition-all duration-300"
-                title="Click to view full-resolution brand mark"
-              >
-                <img
-                  src={logoFull}
-                  alt="Gomaa - Care for a Kinder Tomorrow (Cows, Culture, Community)"
-                  className="w-full h-full object-contain"
-                />
-              </div>
-
-              <h3 className="font-serif text-2xl font-bold text-[#1b1c1b]">
-                Cows • Culture • Community
-              </h3>
-              <p className="text-sm text-[#645e52] mt-2 leading-relaxed max-w-md">
-                The tri-pillar foundation uniting genuine devotees, regional gaushalas, and veterinary specialists to protect sacred bovine lineage with complete financial and transit transparency.
-              </p>
-
-              <div className="grid grid-cols-3 gap-2 w-full mt-6 pt-5 border-t border-[#f0e8db] text-center">
-                <div className="p-2.5 rounded-xl bg-[#faf7f2] border border-[#e8ded0]">
-                  <div className="font-serif font-bold text-sm text-[#132a13]">1. Cows</div>
-                  <div className="text-[11px] text-[#716b5f] mt-0.5">Lifetime Dignity</div>
+              <div className="mt-6 pt-5 border-t border-[#f0e8db] space-y-2">
+                <div className="flex items-center gap-2 text-xs text-[#4d483e]">
+                  <CheckCircle2 className="h-4 w-4 text-amber-600 shrink-0" />
+                  <span>Authentic Griha Pravesh &amp; Puja Darshan</span>
                 </div>
-                <div className="p-2.5 rounded-xl bg-[#faf7f2] border border-[#e8ded0]">
-                  <div className="font-serif font-bold text-sm text-[#964710]">2. Culture</div>
-                  <div className="text-[11px] text-[#716b5f] mt-0.5">Vedic Traditions</div>
+                <div className="flex items-center gap-2 text-xs text-[#4d483e]">
+                  <CheckCircle2 className="h-4 w-4 text-amber-600 shrink-0" />
+                  <span>Strict 90-Minute Rest &amp; Feeding Buffers</span>
                 </div>
-                <div className="p-2.5 rounded-xl bg-[#faf7f2] border border-[#e8ded0]">
-                  <div className="font-serif font-bold text-sm text-[#1b1c1b]">3. Community</div>
-                  <div className="text-[11px] text-[#716b5f] mt-0.5">Gaushala Stewardship</div>
+                <div className="flex items-center gap-2 text-xs text-[#4d483e]">
+                  <CheckCircle2 className="h-4 w-4 text-amber-600 shrink-0" />
+                  <span>Pure Vedic Mantras &amp; Ritual Protocol</span>
                 </div>
-              </div>
-
-              <div className="mt-5 w-full">
-                <button
-                  onClick={() => setShowBrandModal(true)}
-                  className="w-full py-2.5 rounded-xl border border-[#c8beaf] bg-[#faf7f2] hover:bg-white text-xs font-semibold text-[#132a13] transition-colors shadow-2xs flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Eye className="h-3.5 w-3.5 text-[#c2611b]" />
-                  <span>Inspect High-Resolution Brand Wordmark</span>
-                </button>
               </div>
             </div>
+
+            {/* Pillar 3: Community */}
+            <div className="rounded-3xl bg-white p-7 sm:p-8 border border-[#dfd4c3] shadow-sm hover:shadow-md hover:border-[#132a13]/30 transition-all duration-300 flex flex-col justify-between group">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="h-12 w-12 rounded-2xl bg-stone-100 text-[#132a13] grid place-items-center shadow-2xs group-hover:scale-105 transition-transform">
+                    <ShieldCheck className="h-6 w-6 text-[#132a13]" />
+                  </div>
+                  <span className="font-serif text-2xl font-bold text-[#1b1c1b]/25">03</span>
+                </div>
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-[#132a13]">Third Pillar</div>
+                  <h3 className="font-serif text-2xl font-bold text-[#1b1c1b] mt-1">
+                    Community · Transparent Stewardship
+                  </h3>
+                </div>
+                <p className="text-xs sm:text-[13px] text-[#645e52] leading-relaxed">
+                  Empowering rural and temple gaushalas through transparent financial operations. Seva contributions are secured in escrow, with automated revenue distribution directly to regional caretakers, veterinary doctors, and sanctuary infrastructure.
+                </p>
+              </div>
+
+              <div className="mt-6 pt-5 border-t border-[#f0e8db] space-y-2">
+                <div className="flex items-center gap-2 text-xs text-[#4d483e]">
+                  <CheckCircle2 className="h-4 w-4 text-[#132a13] shrink-0" />
+                  <span>100% Escrow &amp; OTP Handover Protection</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-[#4d483e]">
+                  <CheckCircle2 className="h-4 w-4 text-[#132a13] shrink-0" />
+                  <span>Direct Sanctuary &amp; Caretaker Wallets</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-[#4d483e]">
+                  <CheckCircle2 className="h-4 w-4 text-[#132a13] shrink-0" />
+                  <span>Audited Double-Entry Financial Ledger</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Elegant Platform Endorsement Bar */}
+          <div className="mt-10 rounded-2xl bg-white/70 border border-[#dfd4c3] p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-4 text-center sm:text-left">
+              <div className="h-12 w-12 rounded-xl bg-white border border-[#d8cfbe] p-1 shrink-0 hidden sm:grid place-items-center shadow-2xs">
+                <img src={logoMini} alt="GOMAA Emblem" className="h-full w-full object-contain" />
+              </div>
+              <div>
+                <div className="font-serif text-base sm:text-lg font-bold text-[#1b1c1b]">
+                  GOMAA · Sacred Operations &amp; Welfare Platform
+                </div>
+                <div className="text-xs text-[#6e685c] mt-0.5">
+                  Certified bovine sanctuary network adhering strictly to the Prevention of Cruelty to Animals Act, 1960.
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => document.getElementById("gaushalas-section")?.scrollIntoView({ behavior: "smooth" })}
+              className="px-5 py-2.5 rounded-full bg-[#132a13] hover:bg-[#1a381a] text-white text-xs font-semibold shadow-xs transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5"
+            >
+              <span>Explore Verified Gaushalas</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
       </section>
@@ -1579,12 +1554,8 @@ export default function GomaaLandingPage({
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-10 border-b border-[#383228]">
             {/* Brand column */}
             <div className="space-y-3">
-              <div
-                className="flex items-center gap-3 cursor-pointer group"
-                onClick={() => setShowBrandModal(true)}
-                title="Click to view official Brand Kit"
-              >
-                <div className="h-12 w-12 rounded-2xl overflow-hidden border border-[#52493d] bg-white p-1 shadow-xs flex items-center justify-center group-hover:scale-105 transition-transform">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-xl overflow-hidden border border-[#52493d] bg-white p-1 shadow-2xs flex items-center justify-center">
                   <img src={logoMini} alt="GOMAA Official Emblem" className="h-full w-full object-contain" />
                 </div>
                 <div>
@@ -1595,12 +1566,8 @@ export default function GomaaLandingPage({
                 </div>
               </div>
 
-              {/* Official Brand Badge: Gomaa - Care for a Kinder Tomorrow */}
-              <div
-                onClick={() => setShowBrandModal(true)}
-                className="rounded-2xl overflow-hidden border border-[#3e362a] bg-white p-2.5 max-w-[260px] shadow-sm cursor-pointer hover:border-[#a64a0e] transition-colors"
-                title="Click to inspect full resolution logo"
-              >
+              {/* Official Brand Wordmark */}
+              <div className="rounded-xl overflow-hidden border border-[#3e362a] bg-white p-2.5 max-w-[240px] shadow-2xs">
                 <img src={logoFull} alt="Gomaa - Care for a Kinder Tomorrow (Cows, Culture, Community)" className="w-full h-auto object-contain" />
               </div>
               <p className="text-xs text-[#a09787] leading-relaxed">
@@ -1926,90 +1893,6 @@ export default function GomaaLandingPage({
                 className="px-5 py-2.5 rounded-full bg-[#132a13] text-white text-xs font-semibold cursor-pointer"
               >
                 Understood &rarr;
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ----------------- MODAL 5: Official Brand Kit & High-Resolution Logos ----------------- */}
-      {showBrandModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#fbf9f4] rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-[#d8cfbe] space-y-6 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="px-2.5 py-0.5 rounded-md bg-[#132a13] text-white text-[10px] font-bold uppercase tracking-wider">
-                  Official Brand Assets
-                </span>
-                <h3 className="font-serif text-2xl sm:text-3xl font-bold text-[#1b1c1b] mt-1">
-                  GOMAA Official Brand Logos
-                </h3>
-                <p className="text-xs text-[#716b5f] mt-0.5">
-                  Care for a Kinder Tomorrow — Cows • Culture • Community
-                </p>
-              </div>
-              <button
-                onClick={() => setShowBrandModal(false)}
-                className="h-9 w-9 rounded-full bg-[#eee7db] hover:bg-[#ded4c4] grid place-items-center text-[#5f5b52] cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-6">
-              {/* Asset 1: App Emblem */}
-              <div className="p-4 rounded-2xl bg-white border border-[#ded5c6] flex flex-col items-center text-center">
-                <span className="text-xs font-bold uppercase tracking-wider text-[#964710] mb-3">
-                  App Icon / Sacred Emblem
-                </span>
-                <div className="h-48 w-48 rounded-2xl overflow-hidden bg-white p-2 border border-[#d8cfbe] shadow-xs flex items-center justify-center">
-                  <img src={logoMini} alt="Gomaa Emblem" className="w-full h-full object-contain" />
-                </div>
-                <div className="mt-3 text-xs text-[#524c42] font-medium">
-                  Dimensions: 1254 &times; 1254 px
-                </div>
-                <a
-                  href={logoMini}
-                  download="gomaa_logo_mini.jpg"
-                  className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#132a13] text-white text-xs font-semibold hover:bg-[#1a381a] shadow-2xs"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  <span>Download Emblem</span>
-                </a>
-              </div>
-
-              {/* Asset 2: Full Brand Wordmark */}
-              <div className="p-4 rounded-2xl bg-white border border-[#ded5c6] flex flex-col items-center text-center">
-                <span className="text-xs font-bold uppercase tracking-wider text-[#132a13] mb-3">
-                  Full Brand Identity
-                </span>
-                <div className="h-48 w-48 rounded-2xl overflow-hidden bg-white p-2 border border-[#d8cfbe] shadow-xs flex items-center justify-center">
-                  <img src={logoFull} alt="Gomaa Full Logo" className="w-full h-full object-contain" />
-                </div>
-                <div className="mt-3 text-xs text-[#524c42] font-medium">
-                  Dimensions: 1254 &times; 1254 px
-                </div>
-                <a
-                  href={logoFull}
-                  download="gomaa_logo_full.jpg"
-                  className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#132a13] text-white text-xs font-semibold hover:bg-[#1a381a] shadow-2xs"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  <span>Download Brand Logo</span>
-                </a>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-[#faf7f2] border border-[#e8ded0] text-xs text-[#6e685c] leading-relaxed">
-              <strong>Brand Usage Guidelines:</strong> These official high-resolution assets are dedicated to authentic Gau Seva, gaushala verification certificates, and devotee communication under the GOMAA platform.
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                onClick={() => setShowBrandModal(false)}
-                className="px-6 py-2.5 rounded-full bg-[#132a13] text-white text-xs font-semibold cursor-pointer"
-              >
-                Close Brand Kit
               </button>
             </div>
           </div>
