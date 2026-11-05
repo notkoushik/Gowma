@@ -1135,67 +1135,87 @@ function ManagerAppContent({ onSignOut }: { onSignOut: () => void }) {
           {view === "schedule" && <Schedule />}
           {view === "availability" && <Availability />}
           {view === "animals" && <Animals />}
-          {(view === "gosalas" || view === "offerings") && currentGosalaObj && (
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-forest-soft border border-forest/20 rounded-md text-[12.5px] text-forest">
-                <div className="flex items-center gap-2">
-                  <Building2 size={16} className="shrink-0 text-forest" />
-                  <div>
-                    <span className="font-semibold text-ink">
-                      {currentGosalaObj.name} ·{" "}
-                      {view === "offerings"
-                        ? "Sacred Add-ons & Store"
-                        : "Physical Facility Profile"}
-                    </span>
-                    <span className="text-ink-faint text-[11.5px] ml-2">
-                      (On-Site Shed Custodian:{" "}
-                      {managerProfile?.name || "Gaushala Custodian"})
+          {(view === "gosalas" || view === "offerings") && (() => {
+            const activeGosalaData: Gosala = currentGosalaObj || {
+              id: `gosala-${(currentGosala || assignedGosalaNames[0] || "my-sanctuary").replace(/\s+/g, "-").toLowerCase()}`,
+              name: currentGosala || assignedGosalaNames[0] || "My Gaushala Facility",
+              trustRegistrationNo: "AWBI-TS-2026-REG-8821",
+              region: "Telangana - Cyberabad / Gachibowli",
+              address: "Sanctuary Premises, Outer Ring Road, Hyderabad",
+              contactPhone: authUser?.phone || "+91 98000 00000",
+              email: authUser?.email || "sanctuary@gomaa.in",
+              managerId: authUser?.userId || "MGR-CURRENT",
+              managerName: authUser?.name || "Gaushala Custodian",
+              caretaker: authUser?.name || "Gaushala Custodian",
+              capacity: 40,
+              establishedYear: "2018",
+              status: "Active" as const,
+              facilities: GOSALA_FACILITY_OPTIONS.slice(0, 6),
+              items: DEFAULT_GOSALA_OFFERINGS,
+            }
+
+            return (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-forest-soft border border-forest/20 rounded-md text-[12.5px] text-forest">
+                  <div className="flex items-center gap-2">
+                    <Building2 size={16} className="shrink-0 text-forest" />
+                    <div>
+                      <span className="font-semibold text-ink">
+                        {activeGosalaData.name} ·{" "}
+                        {view === "offerings"
+                          ? "Sacred Add-ons & Store"
+                          : "Physical Facility Profile"}
+                      </span>
+                      <span className="text-ink-faint text-[11.5px] ml-2">
+                        (On-Site Shed Custodian:{" "}
+                        {managerProfile?.name || "Gaushala Custodian"})
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleSetView(
+                          view === "offerings" ? "gosalas" : "offerings",
+                        )
+                      }
+                      className="px-2.5 py-1 rounded bg-card text-forest border border-forest/30 font-medium text-[11.5px] hover:bg-paper transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                    >
+                      {view === "offerings" ? (
+                        <>
+                          <Building2 size={13} />
+                          <span>Facility Overview</span>
+                        </>
+                      ) : (
+                        <>
+                          <Tag size={13} />
+                          <span>
+                            Manage Add-ons &amp; Store (
+                            {activeGosalaData.items?.length ||
+                              DEFAULT_GOSALA_OFFERINGS.length}
+                            )
+                          </span>
+                        </>
+                      )}
+                    </button>
+                    <span className="font-mono text-[10.5px] bg-forest text-white px-2 py-0.5 rounded font-semibold self-start sm:self-auto">
+                      1:1 Custodian Lock
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleSetView(
-                        view === "offerings" ? "gosalas" : "offerings",
-                      )
-                    }
-                    className="px-2.5 py-1 rounded bg-card text-forest border border-forest/30 font-medium text-[11.5px] hover:bg-paper transition cursor-pointer flex items-center gap-1.5 shadow-xs"
-                  >
-                    {view === "offerings" ? (
-                      <>
-                        <Building2 size={13} />
-                        <span>Facility Overview</span>
-                      </>
-                    ) : (
-                      <>
-                        <Tag size={13} />
-                        <span>
-                          Manage Add-ons &amp; Store (
-                          {currentGosalaObj.items?.length ||
-                            DEFAULT_GOSALA_OFFERINGS.length}
-                          )
-                        </span>
-                      </>
-                    )}
-                  </button>
-                  <span className="font-mono text-[10.5px] bg-forest text-white px-2 py-0.5 rounded font-semibold self-start sm:self-auto">
-                    1:1 Custodian Lock
-                  </span>
-                </div>
+                <GaushalaProfileView
+                  gosala={activeGosalaData}
+                  initialTab={view === "offerings" ? "offerings" : "overview"}
+                  onBack={() => handleSetView("queue")}
+                  onEdit={() => {}}
+                  onUpdatePhotos={() => {}}
+                  onRegisterCow={() => handleSetView("animals")}
+                  onViewAnimalWelfare={() => handleSetView("animals")}
+                />
               </div>
-              <GaushalaProfileView
-                gosala={currentGosalaObj}
-                initialTab={view === "offerings" ? "offerings" : "overview"}
-                onBack={() => handleSetView("queue")}
-                onEdit={() => {}}
-                onUpdatePhotos={() => {}}
-                onRegisterCow={() => handleSetView("animals")}
-                onViewAnimalWelfare={() => handleSetView("animals")}
-              />
-            </div>
-          )}
+            )
+          })()}
           {view === "ledger" && <ManagerLedger />}
           {view === "wallet" && <WalletHub role="manager" />}
           {view === "devotees" && (

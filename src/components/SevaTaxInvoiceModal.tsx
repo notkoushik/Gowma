@@ -244,7 +244,7 @@ export default function SevaTaxInvoiceModal({
 
           @page {
             size: A4 portrait;
-            margin: 6mm 8mm 6mm 8mm;
+            margin: 5mm 7mm 5mm 7mm;
           }
 
           .invoice-card {
@@ -255,17 +255,23 @@ export default function SevaTaxInvoiceModal({
             max-width: 100% !important;
             margin: 0 !important;
             background: #ffffff !important;
+            page-break-after: avoid !important;
+            break-after: avoid !important;
           }
 
           .invoice-doc-body {
             padding: 0 !important;
-            font-size: 10.5px !important;
-            line-height: 1.25 !important;
+            font-size: 10px !important;
+            line-height: 1.2 !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
+            page-break-after: avoid !important;
+            break-after: avoid !important;
+            max-height: 280mm !important;
+            overflow: hidden !important;
           }
 
-          .invoice-doc-body * {
+          table, tr, td, th {
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }

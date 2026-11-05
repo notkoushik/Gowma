@@ -3,6 +3,16 @@ import fs from "node:fs"
 import path from "node:path"
 import crypto from "node:crypto"
 
+// CRITICAL PRODUCTION SAFEGUARD
+const dbUrl = process.env.DATABASE_URL || ""
+const isCloudOrProd = dbUrl && !dbUrl.includes("localhost") && !dbUrl.includes("127.0.0.1")
+if (process.env.NODE_ENV === "production" || isCloudOrProd || process.env.ALLOW_DATABASE_RESET !== "true") {
+  console.error("🛑 [SAFETY REFUSED] Total wipe operation blocked!")
+  console.error("This script permanently wipes database data and cannot run against cloud or production databases.")
+  console.error("To run on local development ONLY, you must explicitly set ALLOW_DATABASE_RESET=true.")
+  process.exit(1)
+}
+
 const prisma = new PrismaClient()
 
 function hashPassword(password) {

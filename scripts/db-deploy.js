@@ -32,9 +32,8 @@ if (dbUrl && !dbUrl.includes("localhost") && !dbUrl.includes("127.0.0.1")) {
       execSync("npx prisma db push --skip-generate", { stdio: "inherit" })
     }
     console.log("[Build] Cloud database schema synchronized successfully!")
-    console.log("[Build] Ensuring Super Admin account exists in cloud database...")
-    execSync("node scripts/seed-cloud-db.js", { stdio: "inherit" })
-    console.log("[Build] Super Admin account synchronized successfully!")
+    // SAFEGUARD: Never run automated seeding or data mutation during build/deploy.
+    // Live customer, manager, admin, booking, and wallet records are strictly preserved.
   } catch (err) {
     console.error("[Deploy] Cloud database sync notice:", err.message)
   }

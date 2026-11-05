@@ -3,6 +3,16 @@ import fs from "node:fs"
 import path from "node:path"
 import { hashPassword } from "../server/auth/password.ts"
 
+// CRITICAL PRODUCTION SAFEGUARD
+const dbUrl = process.env.DATABASE_URL || ""
+const isCloudOrProd = dbUrl && !dbUrl.includes("localhost") && !dbUrl.includes("127.0.0.1")
+if (process.env.NODE_ENV === "production" || isCloudOrProd || process.env.ALLOW_DATABASE_RESET !== "true") {
+  console.error("🛑 [SAFETY REFUSED] Purge junk accounts operation blocked!")
+  console.error("This script permanently deletes user accounts and cannot run against cloud or production databases.")
+  console.error("To run on local development ONLY, you must explicitly set ALLOW_DATABASE_RESET=true.")
+  process.exit(1)
+}
+
 async function purgeJunkAccounts() {
   console.log("==================================================================")
   console.log("  GOMAA POSTGRESQL CLEANUP: PURGING JUNK & TEST ACCOUNTS          ")

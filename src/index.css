@@ -145,3 +145,12 @@ button:disabled,
 [aria-disabled="true"] {
   cursor: not-allowed;
 }
+
+/* Global Print Safeguards */
+@media print {
+  body:has(#gomaa-tax-invoice-portal) #root {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}
+

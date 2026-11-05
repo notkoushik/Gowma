@@ -27,8 +27,7 @@
     "test:all": "npm run test:vitest && npm test && npm run test:integration",
     "test:rage": "python Testing/test_full_rage_financial_lifecycle.py",
     "docs:screenshots": "node scripts/capture-docs-screenshots.mjs",
-    "docs:generate": "node scripts/generate-doc.mjs && node scripts/generate-html-doc.mjs",
-    "db:reset-superadmin": "node scripts/reset-to-superadmin-only.mjs"
+    "docs:generate": "node scripts/generate-doc.mjs && node scripts/generate-html-doc.mjs"
   },
   "dependencies": {
     "@prisma/client": "6.4.1",
