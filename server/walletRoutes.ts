@@ -6,6 +6,7 @@ import { ensureSystemWallets, LedgerError, runLedgerTx } from "./services/ledger
 import {
   approveSettlement,
   backfillSettlements,
+  computeShares,
   decideSplitChange,
   getReleaseCredits,
   getManagerBpFor,
@@ -90,12 +91,18 @@ function serializeSettlement(s: any, extra: Record<string, unknown> = {}) {
 }
 
 function mapLedgerError(err: any): HandlerResponse {
-  if (err instanceof LedgerError) {
+  if (
+    err instanceof LedgerError ||
+    err?.name === "LedgerError" ||
+    err?.code === "CONFLICT" ||
+    err?.code === "INVALID" ||
+    err?.code === "INSUFFICIENT_FUNDS"
+  ) {
     const status = err.code === "INSUFFICIENT_FUNDS" ? 402 : err.code === "CONFLICT" ? 409 : 400
     return fail(status, err.message)
   }
   console.error("[wallet] unexpected error:", err)
-  return fail(500, "Something went wrong while handling the wallet request")
+  return fail(500, err?.message || "Something went wrong while handling the wallet request")
 }
 
 /** Gaushalas this user may act for. Super Admin: all. Admin: those they govern. Manager: those they manage. */
@@ -497,15 +504,49 @@ export async function handleWalletRoutes(args: {
         select: { id: true, status: true, customerName: true, bookingDate: true },
       })
       const byId = new Map(bookings.map((b) => [b.id, b]))
-      return ok({
-        settlements: rows.map((s) =>
-          serializeSettlement(s, {
-            bookingStatus: byId.get(s.bookingId)?.status ?? null,
-            customerName: byId.get(s.bookingId)?.customerName ?? null,
-            bookingDate: byId.get(s.bookingId)?.bookingDate ?? null,
-          }),
-        ),
+
+      const policies = await prisma.splitPolicy.findMany()
+      const defaultPolicy = policies.find((p) => p.policyKey === "DEFAULT")
+      const defaultManagerBp = defaultPolicy?.managerBp ?? DEFAULT_MANAGER_BP
+      const policyByGosala = new Map(policies.filter((p) => p.gosalaId).map((p) => [p.gosalaId!, p.managerBp]))
+      const cfg = await getWalletConfig()
+
+      const settlements = rows.map((s) => {
+        let adminRupees = rupees(s.adminPaise)
+        let managerRupees = rupees(s.managerPaise)
+        let adminPct = s.adminBp / 100
+        let managerPct = s.managerBp / 100
+        let platformRupees = rupees(s.platformPaise)
+        let platformPct = s.platformBp / 100
+
+        // For pending settlements, dynamically reflect active approved split policy
+        if (s.status === "READY_FOR_APPROVAL" || s.status === "HELD") {
+          const activeManagerBp = policyByGosala.get(s.gosalaId) ?? defaultManagerBp
+          const platformBp = s.platformBp || cfg.platformBp
+          const effectiveManagerBp = Math.min(activeManagerBp, Math.max(0, BP_TOTAL - platformBp))
+          const liveShares = computeShares(s.grossPaise, s.taxPaise, platformBp, effectiveManagerBp)
+          adminRupees = rupees(liveShares.adminPaise)
+          managerRupees = rupees(liveShares.managerPaise)
+          platformRupees = rupees(liveShares.platformPaise)
+          adminPct = liveShares.adminBp / 100
+          managerPct = liveShares.managerBp / 100
+          platformPct = liveShares.platformBp / 100
+        }
+
+        return serializeSettlement(s, {
+          adminRupees,
+          managerRupees,
+          platformRupees,
+          adminPct,
+          managerPct,
+          platformPct,
+          bookingStatus: byId.get(s.bookingId)?.status ?? null,
+          customerName: byId.get(s.bookingId)?.customerName ?? null,
+          bookingDate: byId.get(s.bookingId)?.bookingDate ?? null,
+        })
       })
+
+      return ok({ settlements })
     } catch (err) {
       return mapLedgerError(err)
     }
@@ -530,8 +571,9 @@ export async function handleWalletRoutes(args: {
           })()
         }
       } catch (err: any) {
-        failed.push({ id, error: err instanceof LedgerError ? err.message : "Could not release this settlement" })
-        if (!(err instanceof LedgerError)) console.error("[approve]", err)
+        const errorMsg = err?.message || String(err) || "Could not release this settlement"
+        failed.push({ id, error: errorMsg })
+        console.error("[approve] Settlement approval failed:", id, err)
       }
     }
     if (released.length) {

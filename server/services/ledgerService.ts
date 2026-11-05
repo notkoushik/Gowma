@@ -48,7 +48,9 @@ export class LedgerError extends Error {
     code: "INSUFFICIENT_FUNDS" | "WALLET_INACTIVE" | "INVALID" | "CONFLICT",
   ) {
     super(message)
+    this.name = "LedgerError"
     this.code = code
+    Object.setPrototypeOf(this, LedgerError.prototype)
   }
 }
 
@@ -92,7 +94,11 @@ export async function getSystemWallet(tx: Tx, key: SystemWalletKey) {
 export async function getUserWallet(tx: Tx, userId: string) {
   if (!userId) throw new LedgerError("User ID is required to access a wallet", "INVALID")
   // One atomic INSERT ... ON CONFLICT, so simultaneous first uses cannot collide.
-  return tx.wallet.upsert({ where: { userId }, update: {}, create: { kind: "USER", userId } })
+  return tx.wallet.upsert({
+    where: { userId },
+    update: { isActive: true },
+    create: { kind: "USER", userId, isActive: true },
+  })
 }
 
 /**

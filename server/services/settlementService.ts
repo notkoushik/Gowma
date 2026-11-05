@@ -256,7 +256,7 @@ async function recipientsFor(tx: Tx, gosalaId: string) {
   if (!gosala) throw new LedgerError("Gaushala for this booking no longer exists", "INVALID")
 
   // Discover candidate Admin IDs
-  let adminCandidateIds: string[] = []
+  const adminCandidateIds: string[] = []
   if (gosala.adminId) adminCandidateIds.push(gosala.adminId)
   if (gosala.adminEmail) {
     const adminUser = await tx.user.findFirst({
@@ -266,19 +266,37 @@ async function recipientsFor(tx: Tx, gosalaId: string) {
     if (adminUser) adminCandidateIds.push(adminUser.id)
   }
 
-  // Filter valid admin IDs from User table
-  let validAdminUsers = await tx.user.findMany({
-    where: { id: { in: adminCandidateIds } },
+  // Filter valid admin IDs from User table (match by id or uniqueId)
+  const validAdminUsers = await tx.user.findMany({
+    where: {
+      OR: [
+        { id: { in: adminCandidateIds } },
+        { uniqueId: { in: adminCandidateIds } },
+      ],
+      isActive: true,
+    },
     select: { id: true },
   })
   let adminIds: string[] = validAdminUsers.map((u) => u.id)
 
   // Discover candidate Manager IDs
+  const managerCandidateIds: string[] = []
+  if ((gosala as any).managerId) managerCandidateIds.push((gosala as any).managerId)
+  if ((gosala as any).managerEmail) {
+    const mgrUser = await tx.user.findFirst({
+      where: { email: { equals: (gosala as any).managerEmail, mode: "insensitive" } },
+      select: { id: true },
+    })
+    if (mgrUser) managerCandidateIds.push(mgrUser.id)
+  }
+
   const assignments = await tx.gosalaManagerAssignment.findMany({
     where: { gosalaId: gosala.id, status: "Active" },
     orderBy: { assignedAt: "asc" },
   })
-  let managerCandidateIds: string[] = assignments.map((a) => a.userId)
+  for (const a of assignments) {
+    if (a.userId) managerCandidateIds.push(a.userId)
+  }
 
   // Fallback metadata manager
   if (gosala.metadata && typeof gosala.metadata === "object") {
@@ -293,9 +311,15 @@ async function recipientsFor(tx: Tx, gosalaId: string) {
     }
   }
 
-  // Filter valid manager IDs from User table
-  let validManagerUsers = await tx.user.findMany({
-    where: { id: { in: managerCandidateIds } },
+  // Filter valid manager IDs from User table (match by id or uniqueId)
+  const validManagerUsers = await tx.user.findMany({
+    where: {
+      OR: [
+        { id: { in: managerCandidateIds } },
+        { uniqueId: { in: managerCandidateIds } },
+      ],
+      isActive: true,
+    },
     select: { id: true },
   })
   let managerIds: string[] = validManagerUsers.map((u) => u.id)
@@ -310,10 +334,16 @@ async function recipientsFor(tx: Tx, gosalaId: string) {
     adminIds = [...managerIds]
   }
 
-  // Ultimate fallback to active platform Admins
+  // Ultimate fallback to active platform Admins or Super Admin
   if (adminIds.length === 0 || managerIds.length === 0) {
     const fallbackOpsAdmin = await tx.user.findFirst({
-      where: { role: { in: ["OPERATIONS_ADMIN", "SUPER_ADMIN"] }, isActive: true },
+      where: {
+        OR: [
+          { role: { in: ["OPERATIONS_ADMIN", "SUPER_ADMIN"] } },
+          { email: { in: ["superadmin@gomaa.in", "admin@gomaa.in", "opsadmin@gmail.com"] } },
+        ],
+        isActive: true,
+      },
       orderBy: { createdAt: "asc" },
       select: { id: true },
     })
@@ -322,6 +352,10 @@ async function recipientsFor(tx: Tx, gosalaId: string) {
       if (managerIds.length === 0) managerIds.push(fallbackOpsAdmin.id)
     }
   }
+
+  // De-duplicate IDs
+  adminIds = Array.from(new Set(adminIds.filter(Boolean)))
+  managerIds = Array.from(new Set(managerIds.filter(Boolean)))
 
   return { gosala, admins: adminIds, managers: managerIds }
 }
@@ -518,6 +552,33 @@ export async function decideSplitChange(requestId: string, actor: Actor, approve
         update: { managerBp: req.proposedManagerBp, approvedById: actor.userId },
         create: { policyKey: req.policyKey, gosalaId: req.gosalaId, managerBp: req.proposedManagerBp, approvedById: actor.userId },
       })
+
+      // Sync all pending settlements for this gaushala to match the newly approved split
+      if (req.gosalaId) {
+        const pendingSettlements = await tx.bookingSettlement.findMany({
+          where: {
+            gosalaId: req.gosalaId,
+            status: { in: ["READY_FOR_APPROVAL", "HELD"] },
+          },
+        })
+        const cfg = await getWalletConfig()
+        for (const s of pendingSettlements) {
+          const platformBp = s.platformBp || cfg.platformBp
+          const effectiveManagerBp = Math.min(req.proposedManagerBp, Math.max(0, BP_TOTAL - platformBp))
+          const shares = computeShares(s.grossPaise, s.taxPaise, platformBp, effectiveManagerBp)
+          await tx.bookingSettlement.update({
+            where: { id: s.id },
+            data: {
+              managerBp: shares.managerBp,
+              adminBp: shares.adminBp,
+              platformBp: shares.platformBp,
+              managerPaise: shares.managerPaise,
+              adminPaise: shares.adminPaise,
+              platformPaise: shares.platformPaise,
+            },
+          })
+        }
+      }
     }
     return { id: requestId, approved: approve }
   })
@@ -531,11 +592,40 @@ export async function setSplitPolicyDirect(args: { actor: Actor; policyKey: stri
     const g = await prisma.gosala.findUnique({ where: { id: args.policyKey } })
     if (!g) throw new LedgerError("Gaushala not found", "INVALID")
   }
-  return prisma.splitPolicy.upsert({
+  const policy = await prisma.splitPolicy.upsert({
     where: { policyKey: args.policyKey },
     update: { managerBp: args.managerBp, approvedById: args.actor.userId },
     create: { policyKey: args.policyKey, gosalaId: isDefault ? null : args.policyKey, managerBp: args.managerBp, approvedById: args.actor.userId },
   })
+
+  // Sync all pending settlements if policyKey is a specific gaushala
+  if (!isDefault) {
+    const pendingSettlements = await prisma.bookingSettlement.findMany({
+      where: {
+        gosalaId: args.policyKey,
+        status: { in: ["READY_FOR_APPROVAL", "HELD"] },
+      },
+    })
+    const cfg = await getWalletConfig()
+    for (const s of pendingSettlements) {
+      const platformBp = s.platformBp || cfg.platformBp
+      const effectiveManagerBp = Math.min(args.managerBp, Math.max(0, BP_TOTAL - platformBp))
+      const shares = computeShares(s.grossPaise, s.taxPaise, platformBp, effectiveManagerBp)
+      await prisma.bookingSettlement.update({
+        where: { id: s.id },
+        data: {
+          managerBp: shares.managerBp,
+          adminBp: shares.adminBp,
+          platformBp: shares.platformBp,
+          managerPaise: shares.managerPaise,
+          adminPaise: shares.adminPaise,
+          platformPaise: shares.platformPaise,
+        },
+      })
+    }
+  }
+
+  return policy
 }
 
 /** Platform commission. Refused if it would leave an existing manager share with no room. */

@@ -1059,11 +1059,13 @@ function verifyWebhookSignature(rawBody, signature, secret) {
 }
 
 // server/services/ledgerService.ts
-var LedgerError = class extends Error {
+var LedgerError = class _LedgerError extends Error {
   code;
   constructor(message, code) {
     super(message);
+    this.name = "LedgerError";
     this.code = code;
+    Object.setPrototypeOf(this, _LedgerError.prototype);
   }
 };
 var formatRupees = (paise) => `\u20B9${(Number(paise) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
@@ -1094,7 +1096,11 @@ async function getSystemWallet(tx, key) {
 }
 async function getUserWallet(tx, userId) {
   if (!userId) throw new LedgerError("User ID is required to access a wallet", "INVALID");
-  return tx.wallet.upsert({ where: { userId }, update: {}, create: { kind: "USER", userId } });
+  return tx.wallet.upsert({
+    where: { userId },
+    update: { isActive: true },
+    create: { kind: "USER", userId, isActive: true }
+  });
 }
 async function postEntry(tx, e) {
   if (typeof e.amountPaise !== "bigint" || e.amountPaise <= 0n) {
@@ -5422,7 +5428,7 @@ async function recipientsFor(tx, gosalaId) {
     });
   }
   if (!gosala) throw new LedgerError("Gaushala for this booking no longer exists", "INVALID");
-  let adminCandidateIds = [];
+  const adminCandidateIds = [];
   if (gosala.adminId) adminCandidateIds.push(gosala.adminId);
   if (gosala.adminEmail) {
     const adminUser = await tx.user.findFirst({
@@ -5431,16 +5437,33 @@ async function recipientsFor(tx, gosalaId) {
     });
     if (adminUser) adminCandidateIds.push(adminUser.id);
   }
-  let validAdminUsers = await tx.user.findMany({
-    where: { id: { in: adminCandidateIds } },
+  const validAdminUsers = await tx.user.findMany({
+    where: {
+      OR: [
+        { id: { in: adminCandidateIds } },
+        { uniqueId: { in: adminCandidateIds } }
+      ],
+      isActive: true
+    },
     select: { id: true }
   });
   let adminIds = validAdminUsers.map((u) => u.id);
+  const managerCandidateIds = [];
+  if (gosala.managerId) managerCandidateIds.push(gosala.managerId);
+  if (gosala.managerEmail) {
+    const mgrUser = await tx.user.findFirst({
+      where: { email: { equals: gosala.managerEmail, mode: "insensitive" } },
+      select: { id: true }
+    });
+    if (mgrUser) managerCandidateIds.push(mgrUser.id);
+  }
   const assignments = await tx.gosalaManagerAssignment.findMany({
     where: { gosalaId: gosala.id, status: "Active" },
     orderBy: { assignedAt: "asc" }
   });
-  let managerCandidateIds = assignments.map((a) => a.userId);
+  for (const a of assignments) {
+    if (a.userId) managerCandidateIds.push(a.userId);
+  }
   if (gosala.metadata && typeof gosala.metadata === "object") {
     const meta = gosala.metadata;
     if (meta.managerId) managerCandidateIds.push(meta.managerId);
@@ -5452,8 +5475,14 @@ async function recipientsFor(tx, gosalaId) {
       if (mgrUser) managerCandidateIds.push(mgrUser.id);
     }
   }
-  let validManagerUsers = await tx.user.findMany({
-    where: { id: { in: managerCandidateIds } },
+  const validManagerUsers = await tx.user.findMany({
+    where: {
+      OR: [
+        { id: { in: managerCandidateIds } },
+        { uniqueId: { in: managerCandidateIds } }
+      ],
+      isActive: true
+    },
     select: { id: true }
   });
   let managerIds = validManagerUsers.map((u) => u.id);
@@ -5465,7 +5494,13 @@ async function recipientsFor(tx, gosalaId) {
   }
   if (adminIds.length === 0 || managerIds.length === 0) {
     const fallbackOpsAdmin = await tx.user.findFirst({
-      where: { role: { in: ["OPERATIONS_ADMIN", "SUPER_ADMIN"] }, isActive: true },
+      where: {
+        OR: [
+          { role: { in: ["OPERATIONS_ADMIN", "SUPER_ADMIN"] } },
+          { email: { in: ["superadmin@gomaa.in", "admin@gomaa.in", "opsadmin@gmail.com"] } }
+        ],
+        isActive: true
+      },
       orderBy: { createdAt: "asc" },
       select: { id: true }
     });
@@ -5474,6 +5509,8 @@ async function recipientsFor(tx, gosalaId) {
       if (managerIds.length === 0) managerIds.push(fallbackOpsAdmin.id);
     }
   }
+  adminIds = Array.from(new Set(adminIds.filter(Boolean)));
+  managerIds = Array.from(new Set(managerIds.filter(Boolean)));
   return { gosala, admins: adminIds, managers: managerIds };
 }
 async function approveSettlement(settlementId, actor, note) {
@@ -5646,6 +5683,31 @@ async function decideSplitChange(requestId, actor, approve, note) {
         update: { managerBp: req.proposedManagerBp, approvedById: actor.userId },
         create: { policyKey: req.policyKey, gosalaId: req.gosalaId, managerBp: req.proposedManagerBp, approvedById: actor.userId }
       });
+      if (req.gosalaId) {
+        const pendingSettlements = await tx.bookingSettlement.findMany({
+          where: {
+            gosalaId: req.gosalaId,
+            status: { in: ["READY_FOR_APPROVAL", "HELD"] }
+          }
+        });
+        const cfg = await getWalletConfig();
+        for (const s of pendingSettlements) {
+          const platformBp = s.platformBp || cfg.platformBp;
+          const effectiveManagerBp = Math.min(req.proposedManagerBp, Math.max(0, BP_TOTAL - platformBp));
+          const shares = computeShares(s.grossPaise, s.taxPaise, platformBp, effectiveManagerBp);
+          await tx.bookingSettlement.update({
+            where: { id: s.id },
+            data: {
+              managerBp: shares.managerBp,
+              adminBp: shares.adminBp,
+              platformBp: shares.platformBp,
+              managerPaise: shares.managerPaise,
+              adminPaise: shares.adminPaise,
+              platformPaise: shares.platformPaise
+            }
+          });
+        }
+      }
     }
     return { id: requestId, approved: approve };
   });
@@ -5657,11 +5719,37 @@ async function setSplitPolicyDirect(args) {
     const g = await prisma.gosala.findUnique({ where: { id: args.policyKey } });
     if (!g) throw new LedgerError("Gaushala not found", "INVALID");
   }
-  return prisma.splitPolicy.upsert({
+  const policy = await prisma.splitPolicy.upsert({
     where: { policyKey: args.policyKey },
     update: { managerBp: args.managerBp, approvedById: args.actor.userId },
     create: { policyKey: args.policyKey, gosalaId: isDefault ? null : args.policyKey, managerBp: args.managerBp, approvedById: args.actor.userId }
   });
+  if (!isDefault) {
+    const pendingSettlements = await prisma.bookingSettlement.findMany({
+      where: {
+        gosalaId: args.policyKey,
+        status: { in: ["READY_FOR_APPROVAL", "HELD"] }
+      }
+    });
+    const cfg = await getWalletConfig();
+    for (const s of pendingSettlements) {
+      const platformBp = s.platformBp || cfg.platformBp;
+      const effectiveManagerBp = Math.min(args.managerBp, Math.max(0, BP_TOTAL - platformBp));
+      const shares = computeShares(s.grossPaise, s.taxPaise, platformBp, effectiveManagerBp);
+      await prisma.bookingSettlement.update({
+        where: { id: s.id },
+        data: {
+          managerBp: shares.managerBp,
+          adminBp: shares.adminBp,
+          platformBp: shares.platformBp,
+          managerPaise: shares.managerPaise,
+          adminPaise: shares.adminPaise,
+          platformPaise: shares.platformPaise
+        }
+      });
+    }
+  }
+  return policy;
 }
 async function setPlatformBp(platformBp, actor) {
   if (!Number.isInteger(platformBp) || platformBp < 0 || platformBp > BP_TOTAL) {
@@ -6222,12 +6310,12 @@ function serializeSettlement(s, extra = {}) {
   };
 }
 function mapLedgerError(err) {
-  if (err instanceof LedgerError) {
+  if (err instanceof LedgerError || err?.name === "LedgerError" || err?.code === "CONFLICT" || err?.code === "INVALID" || err?.code === "INSUFFICIENT_FUNDS") {
     const status = err.code === "INSUFFICIENT_FUNDS" ? 402 : err.code === "CONFLICT" ? 409 : 400;
     return fail(status, err.message);
   }
   console.error("[wallet] unexpected error:", err);
-  return fail(500, "Something went wrong while handling the wallet request");
+  return fail(500, err?.message || "Something went wrong while handling the wallet request");
 }
 async function gosalasFor(user) {
   const r = (user.role || "").toLowerCase() === "gosala_manager" ? "manager" : (user.role || "").toLowerCase() === "operations_admin" ? "admin" : (user.role || "").toLowerCase();
@@ -6576,15 +6664,43 @@ async function handleWalletRoutes(args) {
         select: { id: true, status: true, customerName: true, bookingDate: true }
       });
       const byId = new Map(bookings.map((b) => [b.id, b]));
-      return ok({
-        settlements: rows.map(
-          (s) => serializeSettlement(s, {
-            bookingStatus: byId.get(s.bookingId)?.status ?? null,
-            customerName: byId.get(s.bookingId)?.customerName ?? null,
-            bookingDate: byId.get(s.bookingId)?.bookingDate ?? null
-          })
-        )
+      const policies = await prisma.splitPolicy.findMany();
+      const defaultPolicy = policies.find((p) => p.policyKey === "DEFAULT");
+      const defaultManagerBp = defaultPolicy?.managerBp ?? DEFAULT_MANAGER_BP;
+      const policyByGosala = new Map(policies.filter((p) => p.gosalaId).map((p) => [p.gosalaId, p.managerBp]));
+      const cfg = await getWalletConfig();
+      const settlements = rows.map((s) => {
+        let adminRupees = rupees(s.adminPaise);
+        let managerRupees = rupees(s.managerPaise);
+        let adminPct = s.adminBp / 100;
+        let managerPct = s.managerBp / 100;
+        let platformRupees = rupees(s.platformPaise);
+        let platformPct = s.platformBp / 100;
+        if (s.status === "READY_FOR_APPROVAL" || s.status === "HELD") {
+          const activeManagerBp = policyByGosala.get(s.gosalaId) ?? defaultManagerBp;
+          const platformBp = s.platformBp || cfg.platformBp;
+          const effectiveManagerBp = Math.min(activeManagerBp, Math.max(0, BP_TOTAL - platformBp));
+          const liveShares = computeShares(s.grossPaise, s.taxPaise, platformBp, effectiveManagerBp);
+          adminRupees = rupees(liveShares.adminPaise);
+          managerRupees = rupees(liveShares.managerPaise);
+          platformRupees = rupees(liveShares.platformPaise);
+          adminPct = liveShares.adminBp / 100;
+          managerPct = liveShares.managerBp / 100;
+          platformPct = liveShares.platformBp / 100;
+        }
+        return serializeSettlement(s, {
+          adminRupees,
+          managerRupees,
+          platformRupees,
+          adminPct,
+          managerPct,
+          platformPct,
+          bookingStatus: byId.get(s.bookingId)?.status ?? null,
+          customerName: byId.get(s.bookingId)?.customerName ?? null,
+          bookingDate: byId.get(s.bookingId)?.bookingDate ?? null
+        });
       });
+      return ok({ settlements });
     } catch (err) {
       return mapLedgerError(err);
     }
@@ -6608,8 +6724,9 @@ async function handleWalletRoutes(args) {
           })();
         }
       } catch (err) {
-        failed.push({ id, error: err instanceof LedgerError ? err.message : "Could not release this settlement" });
-        if (!(err instanceof LedgerError)) console.error("[approve]", err);
+        const errorMsg = err?.message || String(err) || "Could not release this settlement";
+        failed.push({ id, error: errorMsg });
+        console.error("[approve] Settlement approval failed:", id, err);
       }
     }
     if (released.length) {
