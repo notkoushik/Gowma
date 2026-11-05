@@ -241,7 +241,15 @@ export default function AddressMapPicker({
           </div>
         )}
       </div>
-      {picked && <p className="text-[11px] text-ink-faint">Drag the pin to adjust the exact spot. The address below updates.</p>}
+      {picked ? (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 p-2 rounded bg-forest/10 border border-forest/20 text-[11.5px] text-forest font-medium animate-fade-in">
+          <span className="flex items-center gap-1.5 font-mono">
+            <MapPin size={13} className="text-forest shrink-0" />
+            📍 Pointed Location Saved: {picked.lat.toFixed(5)}° N, {picked.lng.toFixed(5)}° E
+          </span>
+          <span className="text-[10.5px] text-ink-faint">Drag the pin to adjust the exact spot</span>
+        </div>
+      ) : null}
     </div>
   )
 }

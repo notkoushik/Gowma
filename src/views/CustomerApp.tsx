@@ -245,8 +245,16 @@ export function toMyBooking(b: Booking): MyBooking {
     managerRemark: b.managerRemark,
     bovineHandedOver: b.bovineHandedOver,
     bovineHandedOverAt: b.bovineHandedOverAt,
-    customerLat: b.customerLat,
-    customerLng: b.customerLng,
+    customerLat:
+      b.customerLat ??
+      (b.address?.match(/[?&]q=(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/)
+        ? parseFloat(b.address.match(/[?&]q=(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/)![1])
+        : null),
+    customerLng:
+      b.customerLng ??
+      (b.address?.match(/[?&]q=(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/)
+        ? parseFloat(b.address.match(/[?&]q=(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/)![2])
+        : null),
     selectedAddons: b.selectedAddons,
     base: b.base,
     extraTime: b.extraTime,

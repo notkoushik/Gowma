@@ -711,6 +711,7 @@ export default function BookingFlow({
     street: string,
     mark: string,
     city: string,
+    overrideCoords?: { lat: number; lng: number } | null,
   ) => {
     setHouseFlatNo(flat)
     setBuildingName(bld)
@@ -718,14 +719,15 @@ export default function BookingFlow({
     setLandmark(mark)
     setCityPincode(city)
     setHasUserEditedAddress(true)
+    const coords = overrideCoords !== undefined ? overrideCoords : (pinRef.current || (venueLat && venueLng ? { lat: venueLat, lng: venueLng } : null))
     const parts = [
       flat ? `Flat/House: ${flat}` : "",
       bld,
       street,
       mark ? `Landmark: ${mark}` : "",
       city,
-      pinRef.current
-        ? `Map: https://www.google.com/maps?q=${pinRef.current.lat.toFixed(6)},${pinRef.current.lng.toFixed(6)}`
+      coords
+        ? `Map: https://www.google.com/maps?q=${coords.lat.toFixed(6)},${coords.lng.toFixed(6)}`
         : "",
     ].filter(Boolean)
     setAddress(parts.join(", "))
@@ -744,21 +746,46 @@ export default function BookingFlow({
   }
 
   const handleMapPick = (place: PickedPlace) => {
+    // 1. Pointed location is saved directly as the official coordinates
     pinRef.current = { lat: place.lat, lng: place.lng }
+    setVenueLat(place.lat)
+    setVenueLng(place.lng)
+
+    // 2. Recalculate road distance based on user's exact pinned location on the map
+    const originLat = gosala.latitude || 17.4401
+    const originLng = gosala.longitude || 78.3489
+    const roadDist = Math.max(
+      1.5,
+      calculateRoadDistanceKm(originLat, originLng, place.lat, place.lng),
+    )
+    setDistanceKm(roadDist)
     setSelectedLocIndex(null)
+
+    // 3. Update structured address with coordinates embedded
     updateAddressFields(
       houseFlatNo,
       place.building || buildingName,
       place.street || streetArea,
       landmark,
       place.cityPincode || cityPincode,
+      { lat: place.lat, lng: place.lng },
     )
   }
 
   const handleUseGps = () => {
     setHasUserEditedAddress(true)
-    if (deviceLocation.lat) setVenueLat(deviceLocation.lat)
-    if (deviceLocation.lng) setVenueLng(deviceLocation.lng)
+    if (deviceLocation.lat && deviceLocation.lng) {
+      setVenueLat(deviceLocation.lat)
+      setVenueLng(deviceLocation.lng)
+      pinRef.current = { lat: deviceLocation.lat, lng: deviceLocation.lng }
+      const originLat = gosala.latitude || 17.4401
+      const originLng = gosala.longitude || 78.3489
+      const roadDist = Math.max(
+        1.5,
+        calculateRoadDistanceKm(originLat, originLng, deviceLocation.lat, deviceLocation.lng),
+      )
+      setDistanceKm(roadDist)
+    }
     const detectedCity = deviceLocation.city || gosala.region || "Local Area"
     const detectedStreet = deviceLocation.address || "Devotee Live Location"
     updateAddressFields(
@@ -767,6 +794,7 @@ export default function BookingFlow({
       detectedStreet,
       landmark,
       detectedCity,
+      deviceLocation.lat && deviceLocation.lng ? { lat: deviceLocation.lat, lng: deviceLocation.lng } : undefined,
     )
   }
 
@@ -785,18 +813,25 @@ export default function BookingFlow({
     setHasUserEditedAddress(true)
     const venue = venueOptions[idx]
     if (venue) {
-      if ((venue as any).lat) setVenueLat((venue as any).lat)
-      if ((venue as any).lng) setVenueLng((venue as any).lng)
+      if ((venue as any).lat && (venue as any).lng) {
+        setVenueLat((venue as any).lat)
+        setVenueLng((venue as any).lng)
+        pinRef.current = { lat: (venue as any).lat, lng: (venue as any).lng }
+      }
       updateAddressFields(
         houseFlatNo,
         buildingName,
         venue.name,
         landmark,
         cityPincode,
+        (venue as any).lat && (venue as any).lng ? { lat: (venue as any).lat, lng: (venue as any).lng } : undefined,
       )
       setDistanceKm(venue.distanceKm)
     }
   }
+
+  const effectivePointedLat = pinRef.current?.lat ?? venueLat
+  const effectivePointedLng = pinRef.current?.lng ?? venueLng
 
   const buildSummary = (): import("../CustomerApp").BookingSummary => ({
     animal: `${effectiveAnimalName} · ${effectiveAnimalType}`,
@@ -810,8 +845,8 @@ export default function BookingFlow({
     durationMin: duration,
     address,
     distanceKm,
-    customerLat: venueLat,
-    customerLng: venueLng,
+    customerLat: effectivePointedLat,
+    customerLng: effectivePointedLng,
     selectedAddons: selectedAddonItems,
     pairSurcharge,
     base: backendPricing?.base ?? animal.price,
@@ -986,12 +1021,12 @@ export default function BookingFlow({
               <div className="flex justify-between items-center text-[11px] pt-0.5">
                 <span className="text-ink-faint">GPS Pinpoint Coordinates</span>
                 <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${venueLat},${venueLng}`}
+                  href={`https://www.google.com/maps/search/?api=1&query=${effectivePointedLat},${effectivePointedLng}`}
                   target="_blank"
                   rel="noreferrer"
                   className="text-forest hover:underline font-mono font-semibold inline-flex items-center gap-1"
                 >
-                  📍 {venueLat.toFixed(4)}° N, {venueLng.toFixed(4)}° E ↗
+                  📍 {effectivePointedLat.toFixed(4)}° N, {effectivePointedLng.toFixed(4)}° E ↗
                 </a>
               </div>
             </div>
@@ -1492,7 +1527,7 @@ export default function BookingFlow({
               </div>
 
               {/* Search any place in India, or drop a pin on the map */}
-              <AddressMapPicker onPick={handleMapPick} />
+              <AddressMapPicker near={[venueLat, venueLng]} onPick={handleMapPick} />
 
               {/* Landmark / Area Presets */}
               <div>
@@ -1851,6 +1886,17 @@ export default function BookingFlow({
                     </span>
                   </div>
                 ))}
+                <div className="flex justify-between items-center text-[12px] pt-1 border-t border-line/60">
+                  <span className="text-ink-faint">Pointed GPS Pin</span>
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${effectivePointedLat},${effectivePointedLng}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-forest hover:underline font-mono font-semibold inline-flex items-center gap-1"
+                  >
+                    📍 {effectivePointedLat.toFixed(4)}° N, {effectivePointedLng.toFixed(4)}° E ↗
+                  </a>
+                </div>
               </div>
 
               {/* Razorpay Checkout offers UPI, cards, netbanking and wallets itself */}

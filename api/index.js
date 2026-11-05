@@ -6850,6 +6850,30 @@ function expandDateCandidates(input) {
   }
   return Array.from(set).filter(Boolean);
 }
+function extractBookingCoords(b) {
+  if (typeof b?.customerLat === "number" && !isNaN(b.customerLat) && b.customerLat !== 0) {
+    return {
+      lat: b.customerLat,
+      lng: typeof b.customerLng === "number" && !isNaN(b.customerLng) && b.customerLng !== 0 ? b.customerLng : 78.3772
+    };
+  }
+  if (typeof b?.venueLat === "number" && !isNaN(b.venueLat) && b.venueLat !== 0) {
+    return {
+      lat: b.venueLat,
+      lng: typeof b.venueLng === "number" && !isNaN(b.venueLng) && b.venueLng !== 0 ? b.venueLng : 78.3772
+    };
+  }
+  const addr = String(b?.address || "");
+  const match = addr.match(/[?&]q=(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/) || addr.match(/@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/);
+  if (match) {
+    const parsedLat = parseFloat(match[1]);
+    const parsedLng = parseFloat(match[2]);
+    if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+      return { lat: parsedLat, lng: parsedLng };
+    }
+  }
+  return { lat: 17.4435, lng: 78.3772 };
+}
 function formatBooking(b) {
   const mgrApproval = b.auditTrails?.find(
     (a) => a.action === "MANAGER_CONFIRMED" || a.actorRole === "GOSALA_MANAGER"
@@ -6959,8 +6983,8 @@ function formatBooking(b) {
     paymentId: b.paymentId || void 0,
     walletTxId: b.walletTxId || void 0,
     // Exact Devotee GPS Coordinates and Offerings Items
-    customerLat: b.customerLat ?? b.venueLat ?? 17.4435,
-    customerLng: b.customerLng ?? b.venueLng ?? 78.3772,
+    customerLat: extractBookingCoords(b).lat,
+    customerLng: extractBookingCoords(b).lng,
     selectedAddons: b.selectedAddons ?? [],
     bovineHandedOver: Boolean(
       b.bovineHandedOver || b.auditTrails?.some(
