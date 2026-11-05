@@ -101,7 +101,7 @@ export default function TreasuryApprovals() {
     treasury?.byStatus.find((b) => b.status === st)?.count ?? 0
   const selectable = rows.filter(
     (r) =>
-      r.status === "READY_FOR_APPROVAL" &&
+      (r.status === "READY_FOR_APPROVAL" || r.status === "HELD") &&
       r.bookingStatus !== "REJECTED" &&
       r.bookingStatus !== "CANCELLED",
   )
@@ -332,7 +332,9 @@ export default function TreasuryApprovals() {
                 return (
                   <tr key={r.id} className="border-t border-line align-top">
                     <td className="px-5 py-2">
-                      {r.status === "READY_FOR_APPROVAL" && !blocked && (
+                      {(r.status === "READY_FOR_APPROVAL" ||
+                        r.status === "HELD") &&
+                        !blocked && (
                         <input
                           type="checkbox"
                           aria-label={`Select ${r.bookingId}`}
@@ -400,7 +402,9 @@ export default function TreasuryApprovals() {
                       </div>
                     </td>
                     <td className="px-5 py-2 text-right whitespace-nowrap">
-                      {r.status === "READY_FOR_APPROVAL" && !blocked && (
+                      {(r.status === "READY_FOR_APPROVAL" ||
+                        r.status === "HELD") &&
+                        !blocked && (
                         <button
                           disabled={busy}
                           onClick={() => approve([r.id])}

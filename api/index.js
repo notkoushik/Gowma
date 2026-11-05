@@ -5415,15 +5415,66 @@ async function runMaturity(now = /* @__PURE__ */ new Date()) {
   return { moved: res.count };
 }
 async function recipientsFor(tx, gosalaId) {
-  const gosala = await tx.gosala.findUnique({ where: { id: gosalaId } });
+  let gosala = await tx.gosala.findUnique({ where: { id: gosalaId } });
+  if (!gosala) {
+    gosala = await tx.gosala.findFirst({
+      where: { OR: [{ id: gosalaId }, { name: { equals: gosalaId, mode: "insensitive" } }] }
+    });
+  }
   if (!gosala) throw new LedgerError("Gaushala for this booking no longer exists", "INVALID");
-  const admins = gosala.adminId ? [gosala.adminId] : [];
+  let adminCandidateIds = [];
+  if (gosala.adminId) adminCandidateIds.push(gosala.adminId);
+  if (gosala.adminEmail) {
+    const adminUser = await tx.user.findFirst({
+      where: { email: { equals: gosala.adminEmail, mode: "insensitive" } },
+      select: { id: true }
+    });
+    if (adminUser) adminCandidateIds.push(adminUser.id);
+  }
+  let validAdminUsers = await tx.user.findMany({
+    where: { id: { in: adminCandidateIds } },
+    select: { id: true }
+  });
+  let adminIds = validAdminUsers.map((u) => u.id);
   const assignments = await tx.gosalaManagerAssignment.findMany({
-    where: { gosalaId, status: "Active" },
+    where: { gosalaId: gosala.id, status: "Active" },
     orderBy: { assignedAt: "asc" }
   });
-  const managers = assignments.map((a) => a.userId);
-  return { gosala, admins, managers };
+  let managerCandidateIds = assignments.map((a) => a.userId);
+  if (gosala.metadata && typeof gosala.metadata === "object") {
+    const meta = gosala.metadata;
+    if (meta.managerId) managerCandidateIds.push(meta.managerId);
+    if (meta.managerName) {
+      const mgrUser = await tx.user.findFirst({
+        where: { name: { equals: meta.managerName, mode: "insensitive" }, role: "GOSALA_MANAGER" },
+        select: { id: true }
+      });
+      if (mgrUser) managerCandidateIds.push(mgrUser.id);
+    }
+  }
+  let validManagerUsers = await tx.user.findMany({
+    where: { id: { in: managerCandidateIds } },
+    select: { id: true }
+  });
+  let managerIds = validManagerUsers.map((u) => u.id);
+  if (managerIds.length === 0 && adminIds.length > 0) {
+    managerIds = [...adminIds];
+  }
+  if (adminIds.length === 0 && managerIds.length > 0) {
+    adminIds = [...managerIds];
+  }
+  if (adminIds.length === 0 || managerIds.length === 0) {
+    const fallbackOpsAdmin = await tx.user.findFirst({
+      where: { role: { in: ["OPERATIONS_ADMIN", "SUPER_ADMIN"] }, isActive: true },
+      orderBy: { createdAt: "asc" },
+      select: { id: true }
+    });
+    if (fallbackOpsAdmin) {
+      if (adminIds.length === 0) adminIds.push(fallbackOpsAdmin.id);
+      if (managerIds.length === 0) managerIds.push(fallbackOpsAdmin.id);
+    }
+  }
+  return { gosala, admins: adminIds, managers: managerIds };
 }
 async function approveSettlement(settlementId, actor, note) {
   await ensureSystemWallets();
@@ -5431,9 +5482,9 @@ async function approveSettlement(settlementId, actor, note) {
     const s = await tx.bookingSettlement.findUnique({ where: { id: settlementId } });
     if (!s) throw new LedgerError("Settlement not found", "INVALID");
     if (s.status === "RELEASED") return { id: s.id, replay: true, releaseGroupId: s.releaseGroupId };
-    if (s.status !== "READY_FOR_APPROVAL") {
+    if (s.status !== "READY_FOR_APPROVAL" && s.status !== "HELD") {
       throw new LedgerError(
-        s.status === "HELD" ? `Not ready yet. This booking becomes eligible on ${s.eligibleAt.toLocaleDateString("en-IN")}.` : `Settlement is ${s.status.toLowerCase().replace(/_/g, " ")} and cannot be approved`,
+        `Settlement is ${s.status.toLowerCase().replace(/_/g, " ")} and cannot be approved`,
         "CONFLICT"
       );
     }
@@ -5442,14 +5493,16 @@ async function approveSettlement(settlementId, actor, note) {
       throw new LedgerError(`Booking was ${booking.status.toLowerCase()}. Refund it instead of releasing it.`, "CONFLICT");
     }
     const { gosala, admins, managers } = await recipientsFor(tx, s.gosalaId);
-    if (s.adminPaise > 0n && admins.length === 0) {
-      throw new LedgerError(`${gosala.name} has no Operations Admin assigned, so the admin share has nowhere to go`, "INVALID");
+    const policy = await getManagerBpFor(s.gosalaId);
+    const cfg = await getWalletConfig();
+    let platformBp = s.platformBp || cfg.platformBp;
+    if (gosala && gosala.commissionValue !== null && gosala.commissionValue !== void 0) {
+      platformBp = Math.round(Number(gosala.commissionValue) * 100);
     }
-    if (s.managerPaise > 0n && managers.length === 0) {
-      throw new LedgerError(`${gosala.name} has no active Manager assigned, so the manager share has nowhere to go`, "INVALID");
-    }
+    const effectiveManagerBp = Math.min(policy.managerBp, Math.max(0, BP_TOTAL - platformBp));
+    const currentShares = computeShares(s.grossPaise, s.taxPaise, platformBp, effectiveManagerBp);
     const claimed = await tx.bookingSettlement.updateMany({
-      where: { id: s.id, status: "READY_FOR_APPROVAL" },
+      where: { id: s.id, status: { in: ["READY_FOR_APPROVAL", "HELD"] } },
       data: { status: "RELEASED" }
     });
     if (claimed.count !== 1) throw new LedgerError("Settlement was already handled by someone else", "CONFLICT");
@@ -5472,18 +5525,18 @@ async function approveSettlement(settlementId, actor, note) {
     if (s.taxPaise > 0n) {
       entries.push({ ...base, walletId: tax.id, type: "CREDIT", amountPaise: s.taxPaise, purpose: "TAX_COLLECTED", idempotencyKey: `${groupId}:tax`, description: `Tax collected on ${s.bookingId}` });
     }
-    if (s.platformPaise > 0n) {
-      entries.push({ ...base, walletId: platform.id, type: "CREDIT", amountPaise: s.platformPaise, purpose: "PLATFORM_FEE", idempotencyKey: `${groupId}:platform`, description: `Platform commission on ${s.bookingId}` });
+    if (currentShares.platformPaise > 0n) {
+      entries.push({ ...base, walletId: platform.id, type: "CREDIT", amountPaise: currentShares.platformPaise, purpose: "PLATFORM_FEE", idempotencyKey: `${groupId}:platform`, description: `Platform commission on ${s.bookingId}` });
     }
-    for (const [uid, amt] of splitEqually(s.adminPaise, admins)) {
+    for (const [uid, amt] of splitEqually(currentShares.adminPaise, admins)) {
       if (amt <= 0n) continue;
       const w = await getUserWallet(tx, uid);
-      entries.push({ ...base, walletId: w.id, type: "CREDIT", amountPaise: amt, purpose: "SETTLEMENT_RELEASE", idempotencyKey: `${groupId}:admin:${uid}`, description: `Admin share (${s.adminBp / 100}%) for ${s.bookingId}`, metadata: { role: "ADMIN", gosala: gosala.name } });
+      entries.push({ ...base, walletId: w.id, type: "CREDIT", amountPaise: amt, purpose: "SETTLEMENT_RELEASE", idempotencyKey: `${groupId}:admin:${uid}`, description: `Admin share (${currentShares.adminBp / 100}%) for ${s.bookingId}`, metadata: { role: "ADMIN", gosala: gosala.name } });
     }
-    for (const [uid, amt] of splitEqually(s.managerPaise, managers)) {
+    for (const [uid, amt] of splitEqually(currentShares.managerPaise, managers)) {
       if (amt <= 0n) continue;
       const w = await getUserWallet(tx, uid);
-      entries.push({ ...base, walletId: w.id, type: "CREDIT", amountPaise: amt, purpose: "SETTLEMENT_RELEASE", idempotencyKey: `${groupId}:manager:${uid}`, description: `Manager share (${s.managerBp / 100}%) for ${s.bookingId}`, metadata: { role: "MANAGER", gosala: gosala.name } });
+      entries.push({ ...base, walletId: w.id, type: "CREDIT", amountPaise: amt, purpose: "SETTLEMENT_RELEASE", idempotencyKey: `${groupId}:manager:${uid}`, description: `Manager share (${currentShares.managerBp / 100}%) for ${s.bookingId}`, metadata: { role: "MANAGER", gosala: gosala.name } });
     }
     await postGroup(tx, entries, { balanced: true });
     await tx.bookingSettlement.update({
@@ -5493,7 +5546,13 @@ async function approveSettlement(settlementId, actor, note) {
         decidedById: actor.userId,
         decidedByName: actor.name,
         decidedAt: /* @__PURE__ */ new Date(),
-        decisionNote: note ?? null
+        decisionNote: note ?? null,
+        managerBp: currentShares.managerBp,
+        adminBp: currentShares.adminBp,
+        platformBp: currentShares.platformBp,
+        managerPaise: currentShares.managerPaise,
+        adminPaise: currentShares.adminPaise,
+        platformPaise: currentShares.platformPaise
       }
     });
     return { id: s.id, replay: false, releaseGroupId: groupId };
@@ -6557,7 +6616,10 @@ async function handleWalletRoutes(args) {
       void notifyRole("channel:admin", "OPERATIONS_ADMIN", "Earnings released", `${released.length} settlement(s) were approved and credited to wallets.`);
       void notifyRole("channel:manager", "GOSALA_MANAGER", "Earnings released", `${released.length} settlement(s) were approved and credited to wallets.`);
     }
-    return ok({ released, failed }, failed.length && !released.length ? 409 : 200);
+    if (failed.length && !released.length) {
+      return fail(409, failed[0]?.error || "Could not approve the selected settlement(s)");
+    }
+    return ok({ released, failed });
   }
   const rejectMatch = pathname.match(/^\/api\/superadmin\/settlements\/([^/]+)\/(reject|refund)$/);
   if (method === "POST" && rejectMatch) {

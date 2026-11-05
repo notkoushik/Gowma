@@ -538,7 +538,10 @@ export async function handleWalletRoutes(args: {
       void notifyRole("channel:admin", "OPERATIONS_ADMIN", "Earnings released", `${released.length} settlement(s) were approved and credited to wallets.`)
       void notifyRole("channel:manager", "GOSALA_MANAGER", "Earnings released", `${released.length} settlement(s) were approved and credited to wallets.`)
     }
-    return ok({ released, failed }, failed.length && !released.length ? 409 : 200)
+    if (failed.length && !released.length) {
+      return fail(409, failed[0]?.error || "Could not approve the selected settlement(s)")
+    }
+    return ok({ released, failed })
   }
 
   const rejectMatch = pathname.match(/^\/api\/superadmin\/settlements\/([^/]+)\/(reject|refund)$/)
