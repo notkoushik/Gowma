@@ -668,10 +668,7 @@ export default function GomaaLandingPage({
                   className="w-full h-[380px] sm:h-[430px] lg:h-[460px] object-cover object-center scale-[1.02] hover:scale-105 transition-transform duration-700"
                 />
 
-                {/* Sanskrit calligraphy watermark text in top right */}
-                <div className="absolute top-4 right-5 font-serif italic text-amber-100/90 drop-shadow-md text-xs sm:text-sm font-medium tracking-wide">
-                  Gau Seva Gaurav Dharma
-                </div>
+                
 
                 {/* Floating Sanctuary Card (Bottom Right of visual) */}
                 <div
@@ -687,7 +684,7 @@ export default function GomaaLandingPage({
                         <h4 className="font-bold text-xs sm:text-sm text-[#1b1c1b] truncate">
                           Sri Venkateswara Gaushala
                         </h4>
-                        <span className="h-2 w-2 rounded-full bg-emerald-500 flex-shrink-0" title="Verified Sanctuary" />
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
                       </div>
                       <div className="flex items-center gap-1 text-[11px] text-[#716b5f] mt-0.5">
                         <MapPin className="h-3 w-3 text-[#c2611b]" />
@@ -729,24 +726,28 @@ export default function GomaaLandingPage({
             {/* Card 1: Sponsor Cattle Feed */}
             <div
               onClick={() => setShowFeedModal(true)}
-              className="md:col-span-5 relative rounded-2xl overflow-hidden bg-[#132a13] text-white p-6 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col justify-between min-h-[145px] group border border-[#234223]"
+              className="md:col-span-5 relative rounded-2xl overflow-hidden bg-[#0a261c] text-white p-5 sm:p-6 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer flex items-center justify-between min-h-[145px] group border border-[#16382a]"
             >
-              <div className="absolute inset-0 pointer-events-none">
-                <img src={bannerFeed} alt="Cattle Feed" className="w-full h-full object-cover object-center" />
+              {/* Left visual: Authentic brass pot with sprouts and grains bowl */}
+              <div className="absolute left-0 top-0 bottom-0 w-[42%] overflow-hidden pointer-events-none">
+                <img src={bannerFeed} alt="Cattle Feed" className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500" />
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#0a261c]/40 to-[#0a261c]" />
               </div>
-              <div className="relative z-10">
-                <span className="inline-block px-3 py-1 rounded-full bg-[#fbf8f2] text-[#132a13] text-[10.5px] font-bold uppercase tracking-wider mb-2.5 shadow-2xs">
+
+              <div className="relative z-10 ml-auto w-[62%] pl-2">
+                <span className="inline-block px-3 py-1 rounded-full bg-[#fbf8f2] text-[#0a261c] text-[10px] font-bold uppercase tracking-wider mb-2 shadow-2xs">
                   Support Nutrition
                 </span>
-                <h3 className="font-serif text-2xl font-bold text-white leading-tight drop-shadow-xs">
+                <h3 className="font-serif text-xl sm:text-2xl font-bold text-white leading-tight">
                   Sponsor Cattle Feed
                 </h3>
-                <p className="text-white/90 text-xs mt-1 max-w-xs drop-shadow-xs">
+                <p className="text-white/85 text-xs mt-1 leading-snug">
                   Help us provide nutritious feed to gaushalas in need.
                 </p>
               </div>
-              <div className="relative z-10 self-end mt-4">
-                <div className="h-9 w-9 rounded-full bg-white text-[#132a13] grid place-items-center group-hover:scale-110 transition-transform shadow-md">
+
+              <div className="relative z-10 self-center ml-2 flex-shrink-0">
+                <div className="h-9 w-9 rounded-full bg-white text-[#0a261c] grid place-items-center group-hover:scale-110 transition-transform shadow-md">
                   <ArrowRight className="h-4 w-4" />
                 </div>
               </div>
@@ -755,21 +756,25 @@ export default function GomaaLandingPage({
             {/* Card 2: Special Seva Packages */}
             <div
               onClick={() => setShowSevaPackagesModal(true)}
-              className="md:col-span-4 relative rounded-2xl overflow-hidden bg-[#241f19] text-white p-6 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col justify-between min-h-[145px] group border border-[#443a2f]"
+              className="md:col-span-4 relative rounded-2xl overflow-hidden bg-[#181e1c] text-white p-5 sm:p-6 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer flex items-center justify-between min-h-[145px] group border border-[#2b3531]"
             >
-              <div className="absolute inset-0 pointer-events-none">
-                <img src={bannerSevaPackages} alt="Special Seva Packages" className="w-full h-full object-cover object-center" />
-              </div>
-              <div className="relative z-10">
-                <h3 className="font-serif text-2xl font-bold text-white leading-tight drop-shadow-xs">
+              <div className="relative z-10 max-w-[58%]">
+                <h3 className="font-serif text-xl sm:text-2xl font-bold text-white leading-tight">
                   Special Seva Packages
                 </h3>
-                <p className="text-white/90 text-xs mt-1.5 drop-shadow-xs">
+                <p className="text-[#d8cfbe] text-xs mt-1.5 leading-snug font-serif italic">
                   for festivals &amp; auspicious occasions
                 </p>
               </div>
-              <div className="relative z-10 self-end mt-4">
-                <div className="h-9 w-9 rounded-full bg-white text-[#1b1c1b] grid place-items-center group-hover:scale-110 transition-transform shadow-md">
+
+              {/* Center/Right temple & cow visual */}
+              <div className="absolute right-12 top-0 bottom-0 w-[46%] pointer-events-none overflow-hidden opacity-95">
+                <img src={bannerSevaPackages} alt="Special Seva Packages" className="w-full h-full object-cover object-left group-hover:scale-105 transition-transform duration-500" />
+                <div className="absolute inset-0 bg-gradient-to-r from-[#181e1c] via-transparent to-transparent" />
+              </div>
+
+              <div className="relative z-10 self-center flex-shrink-0">
+                <div className="h-9 w-9 rounded-full bg-white text-[#181e1c] grid place-items-center group-hover:scale-110 transition-transform shadow-md">
                   <ArrowRight className="h-4 w-4" />
                 </div>
               </div>
@@ -778,21 +783,23 @@ export default function GomaaLandingPage({
             {/* Card 3: Corporate Partnerships */}
             <div
               onClick={() => setShowCorporateModal(true)}
-              className="md:col-span-3 relative rounded-2xl overflow-hidden bg-[#f1ebe0] text-[#1b1c1b] p-6 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col justify-between min-h-[145px] group border border-[#ded5c6]"
+              className="md:col-span-3 relative rounded-2xl overflow-hidden bg-[#eee5d8] text-[#1b1c1b] p-5 sm:p-6 shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer flex items-center justify-between min-h-[145px] group border border-[#dfd4c4]"
             >
-              <div className="absolute inset-0 pointer-events-none">
-                <img src={bannerCorporate} alt="Corporate Partnerships" className="w-full h-full object-cover object-center" />
-              </div>
-              <div className="relative z-10">
-                <h3 className="font-serif text-2xl font-bold text-[#1b1c1b] leading-tight">
+              <div className="relative z-10 max-w-[70%]">
+                <h3 className="font-serif text-xl sm:text-2xl font-bold text-[#1b1c1b] leading-tight">
                   Corporate Partnerships
                 </h3>
-                <p className="text-[#524b3f] text-xs mt-1.5 font-medium">
+                <p className="text-[#645e52] text-xs mt-1.5 font-medium leading-snug">
                   Support gaushalas with your organization
                 </p>
               </div>
-              <div className="relative z-10 self-end mt-4">
-                <div className="h-9 w-9 rounded-full bg-[#1b1c1b] text-white grid place-items-center group-hover:scale-110 transition-transform shadow-md">
+
+              <div className="absolute right-8 top-1 bottom-1 w-24 opacity-35 pointer-events-none">
+                <img src={bannerCorporate} alt="" className="w-full h-full object-contain" />
+              </div>
+
+              <div className="relative z-10 self-center flex-shrink-0">
+                <div className="h-9 w-9 rounded-full bg-white text-[#1b1c1b] grid place-items-center group-hover:scale-110 transition-transform shadow-sm">
                   <ArrowRight className="h-4 w-4" />
                 </div>
               </div>
@@ -884,8 +891,14 @@ export default function GomaaLandingPage({
                       className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-500"
                     />
 
-                    {/* Category Badge */}
-                    <span className="absolute top-3 left-3 px-2 py-0.5 rounded-md bg-[#132a13]/85 backdrop-blur-xs text-white font-mono text-[9.5px] font-bold uppercase tracking-wider">
+                    {/* Category Badge matching authentic reference */}
+                    <span className={`absolute top-3 left-3 px-2.5 py-0.5 rounded-md text-white font-mono text-[9px] font-bold uppercase tracking-wider shadow-xs ${
+                      cow.category === 'COW'
+                        ? 'bg-[#7a4820]'
+                        : cow.category === 'CALF'
+                        ? 'bg-[#254a23]'
+                        : 'bg-[#272b2e]'
+                    }`}>
                       {cow.category}
                     </span>
 
@@ -895,11 +908,11 @@ export default function GomaaLandingPage({
                         e.stopPropagation()
                         toggleFavorite(cow.id, cow.name)
                       }}
-                      className="absolute top-2.5 right-2.5 h-8 w-8 rounded-full bg-white/80 backdrop-blur-xs grid place-items-center shadow-xs hover:bg-white transition-all cursor-pointer"
+                      className="absolute top-2.5 right-2.5 h-7 w-7 rounded-full bg-black/25 hover:bg-black/40 backdrop-blur-xs grid place-items-center transition-all cursor-pointer"
                     >
                       <Heart
-                        className={`h-4 w-4 transition-colors ${
-                          isFav ? "fill-rose-500 text-rose-500" : "text-[#716b5f] hover:text-rose-500"
+                        className={`h-3.5 w-3.5 transition-colors ${
+                          isFav ? "fill-rose-500 text-rose-500" : "text-white hover:text-rose-300"
                         }`}
                       />
                     </button>
