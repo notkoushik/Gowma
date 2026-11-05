@@ -43,6 +43,8 @@ import {
   gomaaLogoEmblem,
   heroSacredCow,
   impactCowPortrait,
+  logoFull,
+  logoMini,
 } from "../../assets/landing/imagesData"
 
 export interface GomaaLandingPageProps {
@@ -405,8 +407,8 @@ export default function GomaaLandingPage({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           {/* Left: GOMAA Logo & Subtitle */}
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-            <div className="h-11 w-11 rounded-full overflow-hidden shadow-xs border border-[#d8cfbe] bg-[#f2ecdf] flex-shrink-0 grid place-items-center">
-              <img src={gomaaLogoEmblem} alt="GOMAA Seal" className="h-full w-full object-cover scale-105" />
+            <div className="h-12 w-12 rounded-2xl overflow-hidden shadow-xs border border-[#d8cfbe] bg-white flex-shrink-0 grid place-items-center group-hover:scale-105 transition-transform">
+              <img src={logoMini} alt="GOMAA Emblem" className="h-full w-full object-cover" />
             </div>
             <div>
               <div className="font-serif text-2xl font-bold tracking-tight text-[#1b1c1b] leading-none flex items-center gap-1.5">
@@ -1352,16 +1354,21 @@ export default function GomaaLandingPage({
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-10 border-b border-[#383228]">
             {/* Brand column */}
             <div className="space-y-3">
-              <div className="flex items-center gap-2.5">
-                <div className="h-9 w-9 rounded-full overflow-hidden border border-[#d8cfbe] bg-[#f2ecdf]">
-                  <img src={gomaaLogoEmblem} alt="GOMAA" className="h-full w-full object-cover" />
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-2xl overflow-hidden border border-[#52493d] bg-white shadow-xs">
+                  <img src={logoMini} alt="GOMAA" className="h-full w-full object-cover" />
                 </div>
                 <div>
-                  <span className="font-serif text-xl font-bold text-white">GOMAA</span>
+                  <span className="font-serif text-xl font-bold text-white tracking-tight">GOMAA</span>
                   <div className="font-mono text-[8px] uppercase tracking-[0.2em] text-[#9c9384]">
                     Sacred Operations &amp; Welfare
                   </div>
                 </div>
+              </div>
+
+              {/* Official Brand Badge: Gomaa - Care for a Kinder Tomorrow */}
+              <div className="rounded-xl overflow-hidden border border-[#3e362a] bg-white p-2.5 max-w-[260px] shadow-sm">
+                <img src={logoFull} alt="Gomaa - Care for a Kinder Tomorrow (Cows, Culture, Community)" className="w-full h-auto object-contain" />
               </div>
               <p className="text-xs text-[#a09787] leading-relaxed">
                 Empowering ethical bovine care, temple darshan, and transparent cow seva nationwide with verified gaushalas and hydraulic ambulance transit.
