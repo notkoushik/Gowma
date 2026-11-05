@@ -77,8 +77,8 @@ function envDelayDays(): number | null {
   return Number.isInteger(n) && n >= 0 && n <= 30 ? n : null
 }
 
-export async function getWalletConfig() {
-  const row = await prisma.walletConfig.findUnique({ where: { id: 1 } })
+export async function getWalletConfig(db: any = prisma) {
+  const row = await db.walletConfig.findUnique({ where: { id: 1 } })
   return {
     platformBp: row?.platformBp ?? DEFAULT_PLATFORM_BP,
     // GOMAA_SETTLEMENT_DELAY_DAYS lets a test environment release earnings straight away (0).
@@ -88,10 +88,10 @@ export async function getWalletConfig() {
 }
 
 /** Manager share in force for a gaushala: its own approved policy, else the default one. */
-export async function getManagerBpFor(gosalaId: string): Promise<{ managerBp: number; policyKey: string; isDefault: boolean }> {
-  const own = await prisma.splitPolicy.findUnique({ where: { policyKey: gosalaId } })
+export async function getManagerBpFor(gosalaId: string, db: any = prisma): Promise<{ managerBp: number; policyKey: string; isDefault: boolean }> {
+  const own = await db.splitPolicy.findUnique({ where: { policyKey: gosalaId } })
   if (own) return { managerBp: own.managerBp, policyKey: own.policyKey, isDefault: false }
-  const def = await prisma.splitPolicy.findUnique({ where: { policyKey: "DEFAULT" } })
+  const def = await db.splitPolicy.findUnique({ where: { policyKey: "DEFAULT" } })
   return { managerBp: def?.managerBp ?? DEFAULT_MANAGER_BP, policyKey: "DEFAULT", isDefault: true }
 }
 
@@ -384,8 +384,8 @@ export async function approveSettlement(settlementId: string, actor: Actor, note
     const { gosala, admins, managers } = await recipientsFor(tx, s.gosalaId)
 
     // Dynamically apply the Super Admin approved split policy for this gaushala
-    const policy = await getManagerBpFor(s.gosalaId)
-    const cfg = await getWalletConfig()
+    const policy = await getManagerBpFor(s.gosalaId, tx)
+    const cfg = await getWalletConfig(tx)
     let platformBp = s.platformBp || cfg.platformBp
     if (gosala && (gosala as any).commissionValue !== null && (gosala as any).commissionValue !== undefined) {
       platformBp = Math.round(Number((gosala as any).commissionValue) * 100)
@@ -561,7 +561,7 @@ export async function decideSplitChange(requestId: string, actor: Actor, approve
             status: { in: ["READY_FOR_APPROVAL", "HELD"] },
           },
         })
-        const cfg = await getWalletConfig()
+        const cfg = await getWalletConfig(tx)
         for (const s of pendingSettlements) {
           const platformBp = s.platformBp || cfg.platformBp
           const effectiveManagerBp = Math.min(req.proposedManagerBp, Math.max(0, BP_TOTAL - platformBp))
