@@ -15,12 +15,14 @@ import {
   Sparkles,
   KeyRound,
   FileCheck2,
+  Receipt,
 } from "lucide-react"
 import { drivers, inr, type Booking, type BookingStatus } from "../data/mock"
 import { useStore, useToast } from "../store/store"
 import { Skeleton, TableRowSkeleton } from "../components/common/Skeleton"
 import { Eyebrow, Panel, StatusPill, Tag } from "../lib/ui"
 import CustomerDetailsModal from "../components/CustomerDetailsModal"
+import SevaTaxInvoiceModal from "../components/SevaTaxInvoiceModal"
 import {
   normalizeDateStr,
   isSameDate,
@@ -90,6 +92,7 @@ function Drawer({
   onActingManagerDecide: (b: Booking, confirm: boolean, remark?: string) => void
   onAssign: (b: Booking, driver: string) => void
   onOpenCustomerModal: (b: Booking) => void
+  onOpenInvoiceModal: (b: Booking) => void
 }) {
   const { managers } = useStore()
   const b = booking
@@ -150,9 +153,20 @@ function Drawer({
           </div>
 
           <div className="px-5 py-4 space-y-5">
-            <div className="flex items-center justify-between">
-              <StatusPill status={b.status} />
-              {b.paid && <Tag tone="ok">Payment verified · server-side</Tag>}
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <StatusPill status={b.status} />
+                {b.paid && <Tag tone="ok">Payment verified</Tag>}
+              </div>
+              <button
+                type="button"
+                onClick={() => onOpenInvoiceModal(b)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11.5px] font-medium text-ink bg-paper hover:bg-paper-deep border border-line rounded transition-colors cursor-pointer shadow-2xs"
+                title="View & Print Official Tax Invoice"
+              >
+                <Receipt size={13} className="text-saffron-deep" />
+                <span>Tax Invoice</span>
+              </button>
             </div>
 
             {/* Acting Manager Notice Banner if shelter is unassigned and awaiting feasibility */}
@@ -429,7 +443,18 @@ function Drawer({
         </div>
 
         {/* Action Button Strip */}
-        <div className="sticky bottom-0 bg-card/95 backdrop-blur border-t border-line px-5 py-4">
+        <div className="sticky bottom-0 bg-card/95 backdrop-blur border-t border-line px-5 py-4 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11.5px] text-ink-faint">Audited Seva Record</span>
+            <button
+              type="button"
+              onClick={() => onOpenInvoiceModal(b)}
+              className="inline-flex items-center gap-1.5 px-3 py-1 text-[11.5px] font-medium text-ink bg-paper hover:bg-paper-deep border border-line rounded transition-colors cursor-pointer shadow-2xs"
+            >
+              <Receipt size={12} className="text-saffron-deep" />
+              <span>Print Tax Invoice</span>
+            </button>
+          </div>
           {/* Case 0: Cancelled or Declined Booking - Permanently Locked */}
           {isClosed && (
             <div className="p-3 bg-paper-deep rounded border border-line text-center text-[12px] text-ink-soft space-y-1">
@@ -536,6 +561,8 @@ export default function Bookings() {
   const [q, setQ] = useState("")
   const [openId, setOpenId] = useState<string | null>(null)
   const [customerModalBooking, setCustomerModalBooking] =
+    useState<Booking | null>(null)
+  const [selectedInvoiceBooking, setSelectedInvoiceBooking] =
     useState<Booking | null>(null)
 
   const registeredOpsAdmins = useMemo(
@@ -712,6 +739,7 @@ export default function Bookings() {
                   "Distance",
                   "Total",
                   "Status & Governance",
+                  "Invoice",
                 ].map((h) => (
                   <th
                     key={h}
@@ -725,11 +753,11 @@ export default function Bookings() {
             <tbody>
               {isLoading ? (
                 <>
-                  <TableRowSkeleton cols={7} />
-                  <TableRowSkeleton cols={7} />
-                  <TableRowSkeleton cols={7} />
-                  <TableRowSkeleton cols={7} />
-                  <TableRowSkeleton cols={7} />
+                  <TableRowSkeleton cols={8} />
+                  <TableRowSkeleton cols={8} />
+                  <TableRowSkeleton cols={8} />
+                  <TableRowSkeleton cols={8} />
+                  <TableRowSkeleton cols={8} />
                 </>
               ) : (
                 visible.map((b) => {
@@ -816,6 +844,20 @@ export default function Bookings() {
                           )}
                         </div>
                       </td>
+                      <td className="px-5 py-3.5 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedInvoiceBooking(b)
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-ink bg-paper hover:bg-saffron-soft hover:text-saffron-deep border border-line rounded transition-colors cursor-pointer shadow-2xs"
+                          title="View and print official tax invoice"
+                        >
+                          <Receipt size={12} className="text-saffron-deep" />
+                          <span>Invoice</span>
+                        </button>
+                      </td>
                     </tr>
                   )
                 })
@@ -823,7 +865,7 @@ export default function Bookings() {
               {!isLoading && visible.length === 0 && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-5 py-16 text-center text-[13px] text-ink-faint"
                   >
                     No bookings match the current filter.
@@ -843,6 +885,7 @@ export default function Bookings() {
           onActingManagerDecide={actingManagerDecide}
           onAssign={assign}
           onOpenCustomerModal={(b) => setCustomerModalBooking(b)}
+          onOpenInvoiceModal={(b) => setSelectedInvoiceBooking(b)}
         />
       )}
 
@@ -854,6 +897,16 @@ export default function Bookings() {
         onAssignDriver={(b) => {
           setOpenId(b.id)
         }}
+        onOpenInvoice={(b) => {
+          setSelectedInvoiceBooking(b)
+        }}
+      />
+
+      {/* Official Tax Invoice & Sacred Seva Receipt Modal */}
+      <SevaTaxInvoiceModal
+        booking={selectedInvoiceBooking}
+        isOpen={Boolean(selectedInvoiceBooking)}
+        onClose={() => setSelectedInvoiceBooking(null)}
       />
     </>
   )

@@ -43,6 +43,7 @@ import {
 import type { Gosala } from "../../data/gosalas"
 import type { RoleProfile } from "../../data/profiles"
 import EditProfileModal from "../../components/EditProfileModal"
+import SevaTaxInvoiceModal from "../../components/SevaTaxInvoiceModal"
 import { useStore, useToast } from "../../store/store"
 import { Panel, PanelHead, Tag, Eyebrow } from "../../lib/ui"
 
@@ -236,6 +237,7 @@ export default function ManagerLedger() {
   const [statusFilter, setStatusFilter] =
     useState<"all" | "completed" | "confirmed" | "in_service">("all")
   const [receiptBooking, setReceiptBooking] = useState<Booking | null>(null)
+  const [taxInvoiceBooking, setTaxInvoiceBooking] = useState<Booking | null>(null)
 
   // Current Gaushala Information (Zero-leakage manager isolation)
   const currentGosalaName =
@@ -1517,13 +1519,19 @@ export default function ManagerLedger() {
                                     </div>
                                   </div>
 
-                                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                                  <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+                                    <button
+                                      onClick={() => setTaxInvoiceBooking(b)}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-saffron/40 bg-saffron-soft/60 hover:bg-saffron hover:text-white text-saffron-deep text-[12px] font-medium transition cursor-pointer shadow-2xs"
+                                      title="View print-ready official tax invoice with GST, 80G tax exemption, GPS & itemized breakdown"
+                                    >
+                                      <Receipt size={13} /> Official Tax Invoice
+                                    </button>
                                     <button
                                       onClick={() => setReceiptBooking(b)}
                                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-forest/30 bg-forest-soft hover:bg-forest hover:text-white text-forest text-[12px] font-medium transition cursor-pointer shadow-2xs"
                                     >
-                                      <FileText size={13} /> View Official
-                                      Voucher
+                                      <FileText size={13} /> Trust Voucher
                                     </button>
                                     <button
                                       onClick={() =>
@@ -3330,6 +3338,13 @@ export default function ManagerLedger() {
           onClose={() => setIsEditBankModalOpen(false)}
         />
       )}
+
+      {/* Official Tax Invoice & Sacred Seva Receipt Modal */}
+      <SevaTaxInvoiceModal
+        booking={taxInvoiceBooking}
+        isOpen={Boolean(taxInvoiceBooking)}
+        onClose={() => setTaxInvoiceBooking(null)}
+      />
     </div>
   )
 }

@@ -16,6 +16,7 @@ import {
   Sparkles,
   KeyRound,
   FileCheck2,
+  Receipt,
 } from "lucide-react"
 import type { Booking } from "../data/mock"
 import { inr } from "../data/mock"
@@ -27,6 +28,7 @@ export type CustomerDetailsModalProps = {
   isOpen: boolean
   onClose: () => void
   onAssignDriver?: (b: Booking) => void
+  onOpenInvoice?: (b: Booking) => void
 }
 
 export default function CustomerDetailsModal({
@@ -34,6 +36,7 @@ export default function CustomerDetailsModal({
   isOpen,
   onClose,
   onAssignDriver,
+  onOpenInvoice,
 }: CustomerDetailsModalProps) {
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [detailsData, setDetailsData] = useState<any | null>(null)
@@ -465,7 +468,20 @@ export default function CustomerDetailsModal({
           </div>
 
           {/* Action Footer */}
-          <div className="flex justify-end gap-3 pt-3 border-t border-line">
+          <div className="flex justify-between items-center gap-3 pt-3 border-t border-line flex-wrap">
+            {onOpenInvoice ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenInvoice(b)
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-ink bg-paper hover:bg-paper-deep border border-line rounded transition-colors cursor-pointer shadow-2xs"
+              >
+                <Receipt size={13} className="text-saffron-deep" />
+                <span>View Tax Invoice</span>
+              </button>
+            ) : <div />}
+            <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={onClose}
@@ -485,6 +501,7 @@ export default function CustomerDetailsModal({
                 <Truck size={15} /> Transport Allocation
               </button>
             )}
+            </div>
           </div>
         </div>
       </div>

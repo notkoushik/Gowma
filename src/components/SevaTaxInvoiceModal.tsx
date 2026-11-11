@@ -10,6 +10,9 @@ import {
   CheckCircle2,
   FileText,
   Lock,
+  Building2,
+  Truck,
+  UserCheck,
 } from "lucide-react"
 import { logoMini } from "../assets/landing/imagesData"
 
@@ -112,6 +115,18 @@ export interface InvoiceBookingData {
   taxPct?: number
   discount?: number
   total?: number
+  commissionPct?: number
+  driver?: string | null
+  status?: string
+  isPorter?: boolean
+  porterBookingId?: string
+  porterVehicleType?: string
+  porterFare?: number
+  managerApproval?: { name?: string; timestamp?: string; remark?: string; userId?: string }
+  adminApproval?: { name?: string; timestamp?: string; remark?: string; userId?: string }
+  managerRemark?: string
+  adminRemark?: string
+  governingAdminName?: string
   holdId?: string
   quoteToken?: string
   customerLat?: number | null
@@ -132,7 +147,7 @@ export interface InvoiceBookingData {
 }
 
 interface SevaTaxInvoiceModalProps {
-  booking: InvoiceBookingData
+  booking: InvoiceBookingData | null | undefined
   isOpen: boolean
   onClose: () => void
 }
@@ -165,7 +180,7 @@ export default function SevaTaxInvoiceModal({
 }: SevaTaxInvoiceModalProps) {
   const printRef = useRef<HTMLDivElement>(null)
 
-  if (!isOpen) return null
+  if (!isOpen || !booking) return null
 
   const bookingId = booking.id || "GMA-" + Math.floor(10000 + Math.random() * 90000)
   const invoiceNumber = `INV-${bookingId.replace(/[^A-Z0-9-]/gi, "")}`
@@ -202,6 +217,14 @@ export default function SevaTaxInvoiceModal({
 
   const is80gExempt = booking.taxPct === 0 || taxAmount === 0
   const taxRateDisplay = is80gExempt ? "0% (Section 80G Exempt)" : `${booking.taxPct || 12}% GST`
+
+  const commPct = typeof booking.commissionPct === "number" ? booking.commissionPct : 20
+  const gaushalaPct = 100 - commPct
+  const ritualBaseTotal = (basePrice || 0) + (extraTimePrice || 0)
+  const gaushalaBaseShare = Math.round(ritualBaseTotal * (gaushalaPct / 100))
+  const samagriShare = Math.round(addonsTotal * 0.9)
+  const gaushalaNetDisbursement = gaushalaBaseShare + samagriShare + transportPrice
+  const platformFee = Math.round(ritualBaseTotal * (commPct / 100)) + Math.round(addonsTotal * 0.1)
 
   const handlePrint = () => {
     window.print()
@@ -618,6 +641,67 @@ export default function SevaTaxInvoiceModal({
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Gaushala Settlement & Institutional Audit Trail */}
+          <div className="p-3 sm:p-3.5 print:p-2 rounded-lg bg-paper/60 print:bg-stone-50 border border-line print:border-stone-300 space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-line/60 pb-1.5">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-forest font-bold flex items-center gap-1.5">
+                <Building2 size={12} className="text-forest" />
+                <span>Gaushala Trust Payout &amp; Operations Governance</span>
+              </div>
+              <div className="text-[10.5px] font-mono text-ink-faint">
+                Status: <span className="font-semibold text-ink">{booking.status || "Confirmed"}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] print:text-[9.5px]">
+              <div className="bg-card print:bg-white p-2 rounded border border-line/60">
+                <div className="text-ink-faint text-[9.5px] uppercase font-mono">Gaushala Trust Net Share</div>
+                <div className="text-[13px] font-bold text-forest font-mono mt-0.5">{inr(gaushalaNetDisbursement)}</div>
+                <div className="text-ink-faint text-[9.5px]">({gaushalaPct}% Base + 90% Samagri + Logistics)</div>
+              </div>
+
+              <div className="bg-card print:bg-white p-2 rounded border border-line/60">
+                <div className="text-ink-faint text-[9.5px] uppercase font-mono">Platform Escrow Reserve</div>
+                <div className="text-[13px] font-bold text-ink font-mono mt-0.5">{inr(platformFee)}</div>
+                <div className="text-ink-faint text-[9.5px]">({commPct}% Ops, Tech &amp; PCA Compliance)</div>
+              </div>
+
+              <div className="bg-card print:bg-white p-2 rounded border border-line/60">
+                <div className="text-ink-faint text-[9.5px] uppercase font-mono">Transit Logistics Dispatch</div>
+                <div className="text-[12px] font-semibold text-ink truncate mt-0.5">
+                  {booking.isPorter
+                    ? `Porter ${booking.porterVehicleType || "Carrier"} (${booking.porterBookingId || "Active"})`
+                    : booking.driver
+                      ? `${booking.driver} (In-House)`
+                      : "Gaushala Cattle Van"}
+                </div>
+                <div className="text-ink-faint text-[9.5px]">AWBI Compliant Non-Slip Ramp Transit</div>
+              </div>
+            </div>
+
+            {/* Manager and Admin Signoffs if present */}
+            {(booking.managerApproval || booking.adminApproval) && (
+              <div className="flex flex-col sm:flex-row gap-2 pt-1 border-t border-line/50 text-[10.5px] print:text-[9px] text-ink-soft">
+                {booking.managerApproval && (
+                  <div className="flex-1 flex items-center gap-1">
+                    <UserCheck size={11} className="text-saffron-deep shrink-0" />
+                    <span>
+                      <strong>Manager Verified:</strong> {booking.managerApproval.name} ({booking.managerApproval.timestamp})
+                    </span>
+                  </div>
+                )}
+                {booking.adminApproval && (
+                  <div className="flex-1 flex items-center gap-1">
+                    <CheckCircle2 size={11} className="text-forest shrink-0" />
+                    <span>
+                      <strong>Admin Confirmed:</strong> {booking.adminApproval.name} ({booking.adminApproval.timestamp})
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Legal Compliance and Certification Footer */}

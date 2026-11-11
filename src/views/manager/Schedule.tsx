@@ -22,11 +22,13 @@ import {
   ArrowRight,
   User,
   Phone,
+  Receipt,
 } from "lucide-react"
 import { inr, type Booking } from "../../data/mock"
 import { useStore, useToast } from "../../store/store"
 import { Panel, PanelHead, StatusPill, Eyebrow } from "../../lib/ui"
 import CustomerDetailsModal from "../../components/CustomerDetailsModal"
+import SevaTaxInvoiceModal from "../../components/SevaTaxInvoiceModal"
 import {
   normalizeDateStr,
   getTodayReference,
@@ -89,6 +91,8 @@ export default function Schedule() {
   const [selectedDate, setSelectedDate] = useState(TODAY_REFERENCE)
   const [selectedAnimal, setSelectedAnimal] = useState<string>("ALL")
   const [customerModalBooking, setCustomerModalBooking] =
+    useState<Booking | null>(null)
+  const [invoiceModalBooking, setInvoiceModalBooking] =
     useState<Booking | null>(null)
 
   // Hover Popover State for Date Strip
@@ -778,6 +782,16 @@ export default function Schedule() {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto flex-wrap">
+                    {/* View Official Tax Invoice */}
+                    <button
+                      onClick={() => setInvoiceModalBooking(b)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-medium rounded border border-line bg-card hover:bg-paper-deep text-ink transition-colors cursor-pointer shadow-2xs"
+                      title="View & Print Official Tax Invoice / Sacred Receipt"
+                    >
+                      <Receipt size={13} className="text-saffron-deep" />
+                      <span>Tax Invoice</span>
+                    </button>
+
                     {/* View Complete Devotee Dossier & KYC */}
                     <button
                       onClick={() => setCustomerModalBooking(b)}
@@ -1057,6 +1071,14 @@ export default function Schedule() {
         booking={customerModalBooking}
         isOpen={Boolean(customerModalBooking)}
         onClose={() => setCustomerModalBooking(null)}
+        onOpenInvoice={(b) => setInvoiceModalBooking(b)}
+      />
+
+      {/* Official Tax Invoice & Sacred Seva Receipt Modal */}
+      <SevaTaxInvoiceModal
+        booking={invoiceModalBooking}
+        isOpen={Boolean(invoiceModalBooking)}
+        onClose={() => setInvoiceModalBooking(null)}
       />
     </div>
   )

@@ -43,6 +43,7 @@ import { useStore, useToast } from "../../store/store"
 import { Eyebrow, Panel, StatusPill, Tag } from "../../lib/ui"
 import { api } from "../../services/api"
 import CustomerDetailsModal from "../../components/CustomerDetailsModal"
+import SevaTaxInvoiceModal from "../../components/SevaTaxInvoiceModal"
 import {
   calculatePorterQuotes,
   parseCleanCustomerLocation,
@@ -101,6 +102,7 @@ function ReviewCard({
   onOpenCustomerModal,
   onOpenDriverModal,
   onConfirmBovineHandover,
+  onOpenInvoiceModal,
   isHighlighted,
 }: {
   b: Booking
@@ -252,8 +254,20 @@ function ReviewCard({
             {inr(b.total)}
           </div>
 
-          <div className="flex items-center justify-between sm:justify-start gap-3 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-0 border-line/40">
+          <div className="flex items-center justify-between sm:justify-start gap-2.5 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-0 border-line/40">
             <StatusPill status={b.status} />
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpenInvoiceModal(b)
+              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-ink bg-paper hover:bg-paper-deep border border-line rounded transition-colors cursor-pointer shadow-2xs"
+              title="View & Print Official Tax Invoice"
+            >
+              <Receipt size={12} className="text-saffron-deep" />
+              <span>Invoice</span>
+            </button>
             <button
               onClick={(e) => {
                 e.stopPropagation()
@@ -309,19 +323,33 @@ function ReviewCard({
                   </div>
                 </div>
 
-                {/* Efficiently Placed Customer Details Button */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onOpenCustomerModal(b)
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-medium text-forest bg-forest-soft hover:bg-forest/20 border border-forest/25 rounded-md transition-all self-start sm:self-auto shrink-0 shadow-xs cursor-pointer"
-                  title="View full customer dossier, booking history, and submitted identity documents"
-                >
-                  <User size={13} />
-                  <span>Full Customer Dossier & KYC →</span>
-                </button>
+                {/* Efficiently Placed Tax Invoice & Customer Details Buttons */}
+                <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpenInvoiceModal(b)
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-ink bg-paper hover:bg-paper-deep border border-line rounded-md transition-all shadow-xs cursor-pointer"
+                    title="View & Print Official Tax Invoice / Seva Receipt"
+                  >
+                    <Receipt size={13} className="text-saffron-deep" />
+                    <span>Official Tax Invoice →</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpenCustomerModal(b)
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-medium text-forest bg-forest-soft hover:bg-forest/20 border border-forest/25 rounded-md transition-all shadow-xs cursor-pointer"
+                    title="View full customer dossier, booking history, and submitted identity documents"
+                  >
+                    <User size={13} />
+                    <span>Full Customer Dossier & KYC →</span>
+                  </button>
+                </div>
               </div>
 
               {/* Quick-Access Customer Credentials Grid */}
@@ -513,7 +541,19 @@ function ReviewCard({
                 )}
               </div>
 
-              <div className="flex items-center gap-2 self-start md:self-auto">
+              <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onOpenInvoiceModal(b)
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-line rounded bg-paper hover:bg-paper-deep text-ink transition-colors cursor-pointer"
+                  title="View Official Tax Invoice"
+                >
+                  <Receipt size={13} className="text-saffron-deep" />
+                  <span>Tax Invoice</span>
+                </button>
                 {b.status === "Rejected" || b.status === "Cancelled" || b.status === "Refunded" ? (
                   <div className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] font-medium border border-line rounded bg-paper-deep text-ink-faint">
                     <X size={13} className="text-danger" />
@@ -724,6 +764,8 @@ export default function Queue({
   const [customDeclineRemark, setCustomDeclineRemark] = useState("")
 
   const [customerModalBooking, setCustomerModalBooking] =
+    useState<Booking | null>(null)
+  const [invoiceModalBooking, setInvoiceModalBooking] =
     useState<Booking | null>(null)
   const [customerDetailsData, setCustomerDetailsData] = useState<any | null>(
     null,
@@ -1298,6 +1340,7 @@ export default function Queue({
                   onConfirm={handleConfirm}
                   onOpenRejectModal={handleOpenReject}
                   onOpenCustomerModal={handleOpenCustomerModal}
+                  onOpenInvoiceModal={(bk) => setInvoiceModalBooking(bk)}
                   onOpenDriverModal={(bk) => setDriverAssignBooking(bk)}
                   onConfirmBovineHandover={confirmBovineHandover}
                   isHighlighted={b.id === highlightedBookingId}
@@ -1343,6 +1386,7 @@ export default function Queue({
                   onConfirm={handleConfirm}
                   onOpenRejectModal={handleOpenReject}
                   onOpenCustomerModal={handleOpenCustomerModal}
+                  onOpenInvoiceModal={(bk) => setInvoiceModalBooking(bk)}
                   onOpenDriverModal={(bk) => setDriverAssignBooking(bk)}
                   onConfirmBovineHandover={confirmBovineHandover}
                   isHighlighted={b.id === highlightedBookingId}
@@ -1374,6 +1418,7 @@ export default function Queue({
                     onConfirm={handleConfirm}
                     onOpenRejectModal={handleOpenReject}
                     onOpenCustomerModal={handleOpenCustomerModal}
+                  onOpenInvoiceModal={(bk) => setInvoiceModalBooking(bk)}
                     onOpenDriverModal={(bk) => setDriverAssignBooking(bk)}
                     onConfirmBovineHandover={confirmBovineHandover}
                     isHighlighted={b.id === highlightedBookingId}
@@ -1391,6 +1436,7 @@ export default function Queue({
         isOpen={Boolean(customerModalBooking)}
         onClose={() => setCustomerModalBooking(null)}
         onAssignDriver={(b) => setDriverAssignBooking(b)}
+        onOpenInvoice={(b) => setInvoiceModalBooking(b)}
       />
 
       {/* ----------------- MODAL 2: High-Level UI for Driver Assignment & Porter Fallback ----------------- */}
@@ -2349,6 +2395,13 @@ export default function Queue({
           </div>
         </div>
       )}
+
+      {/* Official Tax Invoice & Sacred Seva Receipt Modal */}
+      <SevaTaxInvoiceModal
+        booking={invoiceModalBooking}
+        isOpen={Boolean(invoiceModalBooking)}
+        onClose={() => setInvoiceModalBooking(null)}
+      />
     </div>
   )
 }
