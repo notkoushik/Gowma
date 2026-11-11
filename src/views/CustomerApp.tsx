@@ -38,6 +38,7 @@ import BookingFlow from "./customer/BookingFlow"
 import { MobileGosalaProfile, EnRouteModal } from "./customer/GosalaProfile"
 import { fetchRoadRoute } from "../services/routing"
 import LiveTripMap from "../components/LiveTripMap"
+import { logoMini } from "../assets/landing/imagesData"
 import LocationPromptBanner from "../components/LocationPromptBanner"
 import CattleAndShelterGallery from "../components/CattleAndShelterGallery"
 import CustomerTrackingDossier from "../components/CustomerTrackingDossier"
@@ -1379,7 +1380,7 @@ function MobileCustomer({
         <header className="h-14 px-4 flex items-center gap-3 border-b border-line bg-card sticky top-0 z-20">
           <div className="h-9 w-9 rounded-xl overflow-hidden border border-line bg-white p-1 shadow-2xs shrink-0 flex items-center justify-center">
             <img
-              src="/logo_mini.jpg"
+              src={logoMini}
               alt="GOMAA"
               className="h-full w-full object-contain"
             />

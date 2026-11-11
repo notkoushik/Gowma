@@ -51,6 +51,7 @@ import { useStore, useToast } from "./store/store"
 import { useRealtime } from "./hooks/useRealtime"
 import type { RoleId } from "./data/roles"
 import { api } from "./services/api"
+import { logoMini } from "./assets/landing/imagesData"
 
 type View = "overview" | "gosalas" | "managers" | "bookings" | "tracking" | "animals" | "ledger" | "availability" | "pricing" | "settlements" | "wallet" | "regions"
 
@@ -829,7 +830,7 @@ export default function App() {
           <div className="px-5 h-16 flex items-center gap-3 border-b border-line shrink-0">
             <div className="relative h-10 w-10 rounded-xl overflow-hidden border border-line bg-white p-1 shadow-2xs shrink-0 flex items-center justify-center">
               <img
-                src="/logo_mini.jpg"
+                src={logoMini}
                 alt="GOMAA Official Sacred Emblem"
                 className="h-full w-full object-contain"
               />
@@ -1227,7 +1228,7 @@ export default function App() {
         <header className="sticky top-0 z-30 h-16 bg-paper/85 backdrop-blur border-b border-line flex items-center gap-3.5 px-4 lg:px-8">
           <div className="lg:hidden h-9 w-9 rounded-xl overflow-hidden border border-line bg-white p-0.5 shadow-2xs shrink-0 flex items-center justify-center">
             <img
-              src="/logo_mini.jpg"
+              src={logoMini}
               alt="GOMAA"
               className="h-full w-full object-contain"
             />

@@ -28,6 +28,7 @@ import {
   Check,
 } from "lucide-react"
 import { tripStages, type Trip } from "../data/driver"
+import { logoMini } from "../assets/landing/imagesData"
 import { inr, type Booking } from "../data/mock"
 import { useStore } from "../store/store"
 import { Skeleton } from "../components/common/Skeleton"
@@ -648,7 +649,7 @@ function DriverAppContent({ onSignOut }: { onSignOut: () => void }) {
         <header className="h-14 px-4 flex items-center gap-3 border-b border-line bg-card sticky top-0 z-20">
           <div className="h-9 w-9 rounded-xl overflow-hidden border border-line bg-white p-1 shadow-2xs shrink-0 flex items-center justify-center">
             <img
-              src="/logo_mini.jpg"
+              src={logoMini}
               alt="GOMAA"
               className="h-full w-full object-contain"
             />

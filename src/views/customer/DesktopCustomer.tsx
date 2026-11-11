@@ -35,6 +35,7 @@ import { statusTone, type BookingSummary, type MyBooking } from "../CustomerApp"
 import LiveTripMap from "../../components/LiveTripMap"
 import LocationPromptBanner from "../../components/LocationPromptBanner"
 import CustomerTrackingDossier from "../../components/CustomerTrackingDossier"
+import { logoMini, logoFull } from "../../assets/landing/imagesData"
 import {
   useDeviceLocation,
   getIndianLocalityFromCoords,
@@ -306,7 +307,7 @@ export default function DesktopCustomer({
           >
             <div className="h-10 w-10 rounded-xl overflow-hidden border border-line bg-white p-1 shadow-2xs shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform">
               <img
-                src="/logo_mini.jpg"
+                src={logoMini}
                 alt="GOMAA Official Sacred Emblem"
                 className="h-full w-full object-contain"
               />
@@ -812,7 +813,7 @@ export default function DesktopCustomer({
           <div className="flex items-center gap-4">
             <div className="h-11 w-11 rounded-xl overflow-hidden border border-line bg-white p-1 shadow-2xs shrink-0 flex items-center justify-center">
               <img
-                src="/logo_mini.jpg"
+                src={logoMini}
                 alt="GOMAA Emblem"
                 className="h-full w-full object-contain"
               />
@@ -833,7 +834,7 @@ export default function DesktopCustomer({
           <div className="flex items-center gap-4">
             <div className="rounded-lg overflow-hidden border border-line bg-white px-3 py-1 shadow-2xs max-w-[190px]">
               <img
-                src="/logo.jpg"
+                src={logoFull}
                 alt="GOMAA - Care for a Kinder Tomorrow"
                 className="w-full h-auto object-contain"
               />

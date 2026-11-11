@@ -11,6 +11,7 @@ import {
   FileText,
   Lock,
 } from "lucide-react"
+import { logoMini } from "../assets/landing/imagesData"
 
 // Helper to format rupees in Indian numbering standard
 function inr(n: number = 0): string {
@@ -324,7 +325,7 @@ export default function SevaTaxInvoiceModal({
             <div className="flex items-center gap-3.5">
               <div className="h-12 w-12 rounded-xl overflow-hidden border border-line bg-white p-1 shadow-2xs shrink-0 flex items-center justify-center">
                 <img
-                  src="/logo_mini.jpg"
+                  src={logoMini}
                   alt="GOMAA Emblem"
                   className="h-full w-full object-contain"
                 />

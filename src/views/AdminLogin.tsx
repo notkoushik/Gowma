@@ -15,6 +15,7 @@ import {
 import { type RoleId } from "../data/roles"
 import { useStore } from "../store/store"
 import { api } from "../services/api"
+import { logoMini, logoFull } from "../assets/landing/imagesData"
 
 export default function AdminLogin({
   onSignIn,
@@ -92,7 +93,7 @@ export default function AdminLogin({
         <div className="flex items-center gap-2.5">
           <div className="h-6 w-6 rounded-md overflow-hidden bg-white p-0.5 border border-slate-700 shrink-0 flex items-center justify-center">
             <img
-              src="/logo_mini.jpg"
+              src={logoMini}
               alt="GOMAA"
               className="h-full w-full object-contain"
             />
@@ -122,7 +123,7 @@ export default function AdminLogin({
             <div className="flex justify-center mb-3.5">
               <div className="rounded-xl overflow-hidden border border-slate-700 bg-white px-3 py-1.5 shadow-lg shadow-amber-500/10 max-w-[210px]">
                 <img
-                  src="/logo.jpg"
+                  src={logoFull}
                   alt="GOMAA - Care for a Kinder Tomorrow"
                   className="w-full h-auto object-contain"
                 />

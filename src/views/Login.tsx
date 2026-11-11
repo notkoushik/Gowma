@@ -21,6 +21,7 @@ import { type RoleId } from "../data/roles"
 import { initialProfiles } from "../data/profiles"
 import { useStore } from "../store/store"
 import { api } from "../services/api"
+import { logoMini, logoFull } from "../assets/landing/imagesData"
 
 const flow = [
   "Slot held",
@@ -591,7 +592,7 @@ export default function Login({
           <div className="flex items-center gap-3.5">
             <div className="h-12 w-12 rounded-xl overflow-hidden border border-white/20 bg-white p-1 shadow-lg shrink-0 flex items-center justify-center">
               <img
-                src="/logo_mini.jpg"
+                src={logoMini}
                 alt="GOMAA Sacred Emblem"
                 className="h-full w-full object-contain"
               />
@@ -647,7 +648,7 @@ export default function Login({
           <div className="lg:hidden flex items-center gap-3 mb-6">
             <div className="h-10 w-10 rounded-xl overflow-hidden border border-line bg-white p-1 shadow-2xs shrink-0 flex items-center justify-center">
               <img
-                src="/logo_mini.jpg"
+                src={logoMini}
                 alt="GOMAA"
                 className="h-full w-full object-contain"
               />
@@ -683,7 +684,7 @@ export default function Login({
               </div>
               <div className="hidden sm:block h-8 w-auto">
                 <img
-                  src="/logo.jpg"
+                  src={logoFull}
                   alt="GOMAA - Care for a Kinder Tomorrow"
                   className="h-8 w-auto object-contain rounded border border-line/60 bg-white px-2 py-0.5 shadow-2xs"
                 />
