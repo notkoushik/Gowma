@@ -43,6 +43,13 @@ import { useStore, useToast } from "../../store/store"
 import { Eyebrow, Panel, StatusPill, Tag } from "../../lib/ui"
 import { api } from "../../services/api"
 import CustomerDetailsModal from "../../components/CustomerDetailsModal"
+import {
+  calculatePorterQuotes,
+  parseCleanCustomerLocation,
+  dispatchPorterRide,
+  type PorterQuote,
+  type CleanCustomerLocation,
+} from "../../services/porterService"
 
 const reviewable: BookingStatus[] = ["Payment Verified", "Manager Review"]
 
@@ -729,9 +736,48 @@ export default function Queue({
   const [selectedInHouseDriver, setSelectedInHouseDriver] = useState<string>(
     profiles?.driver?.name || "Transit Driver",
   )
-  const [porterVehicle, setPorterVehicle] = useState<string>(
-    "Tata 407 (8ft Open Ramp)",
-  )
+  const [selectedPorterVehicleId, setSelectedPorterVehicleId] =
+    useState<string>("TATA_407_RAMP")
+  const [isConnectingPorter, setIsConnectingPorter] = useState<boolean>(false)
+
+  // Dynamic Porter Calculation and Clean Customer Location
+  const cleanCustomerLoc: CleanCustomerLocation | null = useMemo(() => {
+    if (!driverAssignBooking) return null
+    return parseCleanCustomerLocation(
+      driverAssignBooking.address,
+      driverAssignBooking.distanceKm,
+      driverAssignBooking.customerLat,
+      driverAssignBooking.customerLng,
+    )
+  }, [driverAssignBooking])
+
+  const porterQuotes: PorterQuote[] = useMemo(() => {
+    if (!driverAssignBooking) return []
+    return calculatePorterQuotes(driverAssignBooking.distanceKm)
+  }, [driverAssignBooking])
+
+  // Select best default vehicle based on animal type
+  useEffect(() => {
+    if (driverAssignBooking) {
+      const type = (driverAssignBooking.animalType || "").toLowerCase()
+      if (type.includes("calf") || type.includes("dwarf")) {
+        setSelectedPorterVehicleId("TATA_ACE_GOLD")
+      } else if (type.includes("bull") || type.includes("nandi")) {
+        setSelectedPorterVehicleId("BOLERO_MAXI_TRUCK")
+      } else {
+        setSelectedPorterVehicleId("TATA_407_RAMP")
+      }
+    }
+  }, [driverAssignBooking])
+
+  // Simulate quick Porter connection check when switching to Porter
+  useEffect(() => {
+    if (driverMode === "porter") {
+      setIsConnectingPorter(true)
+      const t = setTimeout(() => setIsConnectingPorter(false), 300)
+      return () => clearTimeout(t)
+    }
+  }, [driverMode])
   const [expandedCardIds, setExpandedCardIds] =
     useState<Record<string, boolean>>({})
 
@@ -950,12 +996,39 @@ export default function Queue({
     if (driverMode === "inhouse") {
       assignDriver(driverAssignBooking.id, selectedInHouseDriver)
     } else {
-      // Porter 3rd-party dispatch
+      // Find selected quote
+      const activeQuote =
+        porterQuotes.find((q) => q.vehicleId === selectedPorterVehicleId) ||
+        porterQuotes[0]
+
+      const dispatchResult = dispatchPorterRide({
+        bookingId: driverAssignBooking.id,
+        gaushalaName: driverAssignBooking.gosala,
+        pickupAddress: `${driverAssignBooking.gosala} Main Gate, Transit Bay`,
+        pickupPhone: profiles?.manager?.phone || "+91 94220 11920",
+        customerName: driverAssignBooking.customer,
+        customerPhone: driverAssignBooking.phone,
+        customerAddress: cleanCustomerLoc?.fullAddress || driverAssignBooking.address,
+        customerLat: driverAssignBooking.customerLat,
+        customerLng: driverAssignBooking.customerLng,
+        distanceKm: driverAssignBooking.distanceKm,
+        vehicleId: activeQuote ? activeQuote.vehicleId : "TATA_407_RAMP",
+        vehicleName: activeQuote ? activeQuote.vehicleName : "Tata 407 (8ft Open Bed + Ramp)",
+        fare: activeQuote ? activeQuote.totalFare : 420,
+      })
+
       assignPorterTransport(driverAssignBooking.id, {
-        vehicleType: porterVehicle,
-        fare: 420,
-        driverName: "Rajesh Shinde",
-        driverPhone: "+91 98230 44910",
+        vehicleType: dispatchResult.vehicleType,
+        fare: dispatchResult.fare,
+        driverName: dispatchResult.driver.name,
+        driverPhone: dispatchResult.driver.phone,
+        driverPlate: dispatchResult.driver.vehiclePlate,
+        porterBookingId: dispatchResult.porterBookingId,
+        trackingUrl: dispatchResult.trackingUrl,
+        pickupAddress: dispatchResult.pickupAddress,
+        dropAddress: dispatchResult.dropAddress,
+        estimatedPickupMin: dispatchResult.estimatedArrivalMins,
+        estimatedDropMin: activeQuote?.estimatedDurationMin || 25,
       })
     }
     setDriverAssignBooking(null)
@@ -1479,86 +1552,181 @@ export default function Queue({
 
               {/* Mode 2: Porter 3rd-Party Logistics Integration */}
               {driverMode === "porter" && (
-                <div className="bg-amber-50/70 border border-amber-300 rounded-md p-4 space-y-3.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-7 w-7 rounded bg-blue-600 text-white flex items-center justify-center font-bold text-[12px]">
+                <div className="space-y-3.5 animate-fade-in">
+                  {/* Porter Enterprise Connection Header */}
+                  <div className="flex items-center justify-between bg-blue-50/80 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-8 w-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
                         P
                       </div>
                       <div>
-                        <div className="font-semibold text-ink text-[13px]">
-                          Porter On-Demand Cattle Truck
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-ink text-[13px]">
+                            Porter Enterprise On-Demand Fleet
+                          </span>
+                          {isConnectingPorter ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-blue-700 bg-blue-100 px-2 py-0.5 rounded font-mono animate-pulse">
+                              <Loader2 size={10} className="animate-spin" /> Connecting...
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10.5px] font-mono text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full font-semibold">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+                              Live Connected ({cleanCustomerLoc?.city || "Hyderabad"})
+                            </span>
+                          )}
                         </div>
-                        <div className="text-[11px] text-ink-faint">
-                          3 verified mini-trucks nearby · Estimated pickup in 7
-                          mins
+                        <div className="text-[11px] text-ink-faint mt-0.5">
+                          Direct Cattle Carrier Serviceability · AWBI Certified Transit
                         </div>
                       </div>
                     </div>
-                    <span className="font-mono font-bold text-ink text-[14px]">
-                      ₹420
-                    </span>
+                    <div className="text-right">
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-ink-faint block">
+                        Calculated Fare
+                      </span>
+                      <span className="font-mono font-bold text-saffron-deep text-[15px]">
+                        {inr(
+                          porterQuotes.find((q) => q.vehicleId === selectedPorterVehicleId)
+                            ?.totalFare || 420,
+                        )}
+                      </span>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[11.5px] font-medium text-ink mb-1.5">
-                      Select Porter Vehicle Type
-                    </label>
-                    <div className="grid grid-cols-2 gap-2 text-[12px]">
-                      {[
-                        {
-                          id: "Tata 407 (8ft Open Ramp)",
-                          label: "Tata 407 (Open Bed)",
-                          fare: 420,
-                          desc: "Equipped with safety rails & low ramp",
-                        },
-                        {
-                          id: "Mahindra Bolero Maxi Truck",
-                          label: "Bolero Maxi Truck",
-                          fare: 510,
-                          desc: "Heavy duty non-slip cattle carrier",
-                        },
-                      ].map((v) => (
-                        <button
-                          key={v.id}
-                          type="button"
-                          onClick={() => setPorterVehicle(v.id)}
-                          className={`p-2.5 rounded border text-left transition-all ${
-                            porterVehicle === v.id
-                              ? "border-saffron bg-card ring-1 ring-saffron text-ink"
-                              : "border-line bg-card/60 hover:bg-card text-ink-soft"
-                          }`}
+                  {/* Clean Customer Location & Transit Route Handover Card */}
+                  <div className="bg-card rounded-lg border border-line p-3.5 space-y-2.5 shadow-2xs">
+                    <div className="flex items-center justify-between text-[11.5px] border-b border-line/60 pb-2">
+                      <span className="font-semibold text-ink flex items-center gap-1.5">
+                        <MapPin size={13} className="text-saffron-deep" />
+                        Customer Location &amp; Destination Details
+                      </span>
+                      {cleanCustomerLoc && (
+                        <a
+                          href={cleanCustomerLoc.googleMapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] text-forest hover:text-forest-deep font-medium hover:underline"
                         >
-                          <div className="font-semibold text-[12px] flex items-center justify-between">
-                            <span>{v.label}</span>
-                            <span className="font-mono text-saffron-deep font-bold">
-                              ₹{v.fare}
-                            </span>
+                          <span>Open in Google Maps</span>
+                          <ExternalLink size={11} />
+                        </a>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[12px]">
+                      {/* Pickup */}
+                      <div className="p-2.5 rounded bg-paper border border-line/70">
+                        <div className="text-[10.5px] uppercase font-mono tracking-wider text-ink-faint flex items-center gap-1">
+                          <span>● Pickup (Gaushala Gate)</span>
+                        </div>
+                        <div className="font-semibold text-ink mt-0.5 truncate">
+                          {driverAssignBooking.gosala}
+                        </div>
+                        <div className="text-[11px] text-ink-soft mt-0.5">
+                          Hydraulic Ramp Loading Bay · Custodian Handover
+                        </div>
+                      </div>
+
+                      {/* Destination Drop */}
+                      <div className="p-2.5 rounded bg-paper border border-line/70">
+                        <div className="text-[10.5px] uppercase font-mono tracking-wider text-forest flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <span>● Customer Drop (Altar)</span>
+                          </span>
+                          <span className="text-ink-faint font-mono font-normal">
+                            {driverAssignBooking.distanceKm} km (~{cleanCustomerLoc?.estimatedTransitMin || 25}m)
+                          </span>
+                        </div>
+                        <div className="font-semibold text-ink mt-0.5 truncate">
+                          {driverAssignBooking.customer} ({driverAssignBooking.phone})
+                        </div>
+                        <div className="text-[11px] text-ink-soft mt-0.5 line-clamp-2">
+                          {cleanCustomerLoc?.fullAddress || driverAssignBooking.address}
+                        </div>
+                        {cleanCustomerLoc?.landmark && (
+                          <div className="mt-1 inline-block text-[10px] font-mono text-saffron-deep bg-saffron/10 px-1.5 py-0.2 rounded border border-saffron/20">
+                            {cleanCustomerLoc.landmark}
                           </div>
-                          <div className="text-[10.5px] text-ink-faint mt-0.5">
-                            {v.desc}
-                          </div>
-                        </button>
-                      ))}
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Porter Receiver Details Box */}
-                  <div className="bg-card p-3 rounded border border-line text-[11.5px] space-y-1">
-                    <div className="font-medium text-ink flex items-center gap-1">
-                      <CheckCircle2 size={13} className="text-forest" />{" "}
-                      Receiver Details Transferred to Porter:
+                  {/* Vehicle Catalog with Dynamic Distance-Based Rates */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-[12px] font-semibold text-ink">
+                        Select Porter Vehicle &amp; Rate Card
+                      </label>
+                      <span className="text-[11px] font-mono text-ink-faint">
+                        Distance: {driverAssignBooking.distanceKm} km (5% GST included)
+                      </span>
                     </div>
-                    <div>
-                      • Receiver:{" "}
-                      <strong>{driverAssignBooking.customer}</strong> (
-                      {driverAssignBooking.phone})
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {porterQuotes.map((q) => {
+                        const isSelected = selectedPorterVehicleId === q.vehicleId
+                        return (
+                          <button
+                            key={q.vehicleId}
+                            type="button"
+                            onClick={() => setSelectedPorterVehicleId(q.vehicleId)}
+                            className={`p-3 rounded-lg border text-left transition-all cursor-pointer relative ${
+                              isSelected
+                                ? "border-saffron bg-saffron-soft/30 ring-2 ring-saffron/40 text-ink shadow-xs"
+                                : "border-line bg-card hover:border-line-strong text-ink-soft hover:bg-paper"
+                            }`}
+                          >
+                            {isSelected && (
+                              <span className="absolute top-2 right-2 text-saffron-deep">
+                                <CheckCircle2 size={15} />
+                              </span>
+                            )}
+                            <div className="font-semibold text-[12.5px] text-ink pr-5">
+                              {q.shortLabel}
+                            </div>
+                            <div className="text-[10px] font-mono text-ink-faint mt-0.5">
+                              {q.availableCount} vehicles nearby · ETA {q.estimatedPickupMin}m
+                            </div>
+                            <div className="mt-2 font-mono font-bold text-[14.5px] text-saffron-deep">
+                              {inr(q.totalFare)}
+                            </div>
+                            <div className="text-[10px] text-ink-faint mt-1 leading-snug">
+                              Base {inr(q.baseFare)} + Road {inr(q.distanceFare)} + Ramp {inr(q.handlingFee)}
+                            </div>
+                            <div className="mt-2 pt-1.5 border-t border-line/60 flex items-center gap-1 text-[10px] text-forest">
+                              <ShieldCheck size={11} />
+                              <span className="truncate">Cattle Ramp Included</span>
+                            </div>
+                          </button>
+                        )
+                      })}
                     </div>
-                    <div>• Drop Address: {driverAssignBooking.address}</div>
-                    <div className="text-ink-faint text-[10.5px] pt-0.5">
-                      Driver instructions: "Handle sacred animal with reverence.
-                      Ground-floor delivery only."
+                  </div>
+
+                  {/* Pre-Matched Standby Porter Driver Preview */}
+                  <div className="bg-paper-deep rounded-lg p-3 border border-line text-[11.5px] space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-ink flex items-center gap-1.5">
+                        <Car size={13} className="text-forest" />
+                        Pre-Matched Standby Porter Driver
+                      </span>
+                      <span className="text-[10.5px] font-mono text-forest bg-forest-soft px-1.5 py-0.2 rounded border border-forest/20">
+                        GPS Ready
+                      </span>
                     </div>
+                    <div className="flex items-center justify-between text-[12px]">
+                      <div>
+                        <strong className="text-ink">Rajesh Shinde</strong> ·{" "}
+                        <span className="font-mono text-ink-soft">+91 98230 44910</span>
+                      </div>
+                      <div className="font-mono text-ink-soft text-[11px]">
+                        ★ 4.88 · MH 12 QX 4821
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-ink-faint italic">
+                      "Handle sacred animal with reverence. Ground-floor delivery only. Pre-dispatch vitals checked."
+                    </p>
                   </div>
                 </div>
               )}
@@ -1583,7 +1751,10 @@ export default function Queue({
                   <Check size={15} />
                   <span>
                     {driverMode === "porter"
-                      ? "Dispatch via Porter (₹420 Pass-through)"
+                      ? `Dispatch via Porter (${inr(
+                          porterQuotes.find((q) => q.vehicleId === selectedPorterVehicleId)
+                            ?.totalFare || 420,
+                        )})`
                       : `Assign ${selectedInHouseDriver}`}
                   </span>
                 </button>

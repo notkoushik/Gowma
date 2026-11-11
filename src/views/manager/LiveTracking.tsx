@@ -22,6 +22,7 @@ import {
   Eye,
   Droplets,
   Thermometer,
+  ExternalLink,
 } from "lucide-react"
 import { inr, type Booking } from "../../data/mock"
 import { type Animal } from "../../data/animals"
@@ -1405,31 +1406,51 @@ export default function LiveTracking() {
                         <Truck size={14} /> Driver &amp; Cow Transport Vehicle
                       </span>
                       <span className="text-[11px] font-mono text-ink-faint">
-                        {matchedBooking?.driver?.includes("Porter")
-                          ? "Partner Vehicle"
-                          : "In-House Van"}
+                        {matchedBooking?.isPorter
+                          ? "Porter Partner Fleet"
+                          : matchedBooking?.driver?.includes("Porter")
+                            ? "Partner Vehicle"
+                            : "In-House Van"}
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between bg-paper p-2.5 rounded border border-line">
                       <div>
                         <div className="font-serif text-[14.5px] font-semibold text-ink">
-                          {matchedBooking?.driver || "Transit Driver"}
+                          {matchedBooking?.isPorter
+                            ? matchedBooking?.porterDriverName || matchedBooking?.driver || "Porter Driver"
+                            : matchedBooking?.driver || "Transit Driver"}
                         </div>
                         <div className="font-mono text-[11px] text-ink-faint mt-0.5">
                           Vehicle:{" "}
-                          <strong className="text-ink">MH 12 RN 4402</strong>{" "}
-                          (Tata 407 Padded Ramp)
+                          <strong className="text-ink">
+                            {matchedBooking?.driverVehiclePlate || "MH 12 RN 4402"}
+                          </strong>{" "}
+                          ({matchedBooking?.porterVehicleType || "Tata 407 Padded Ramp"})
                         </div>
                       </div>
 
-                      <a
-                        href={`tel:${matchedBooking?.phone || "+919823044910"}`}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-forest text-white text-[11px] font-medium rounded hover:bg-forest-deep transition-colors shadow-2xs"
-                      >
-                        <Phone size={12} />
-                        <span>Call Driver</span>
-                      </a>
+                      <div className="flex items-center gap-1.5">
+                        {matchedBooking?.isPorter && (
+                          <a
+                            href={matchedBooking?.porterTrackingUrl || "https://porter.in"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 text-white text-[11px] font-medium rounded hover:bg-blue-700 transition-colors shadow-2xs"
+                            title="Open Porter Live Tracking"
+                          >
+                            <ExternalLink size={12} />
+                            <span>Porter Live</span>
+                          </a>
+                        )}
+                        <a
+                          href={`tel:${matchedBooking?.porterDriverPhone || matchedBooking?.driverPhone || matchedBooking?.phone || "+919823044910"}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-forest text-white text-[11px] font-medium rounded hover:bg-forest-deep transition-colors shadow-2xs"
+                        >
+                          <Phone size={12} />
+                          <span>Call Driver</span>
+                        </a>
+                      </div>
                     </div>
 
                     <div className="text-[12px] space-y-1 text-ink-soft">
@@ -1439,6 +1460,14 @@ export default function LiveTracking() {
                           Live &amp; Connected
                         </span>
                       </div>
+                      {matchedBooking?.porterBookingId && (
+                        <div className="flex justify-between">
+                          <span>Porter Order ID:</span>
+                          <span className="font-mono font-medium text-blue-700">
+                            {matchedBooking.porterBookingId}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex justify-between">
                         <span>Direction:</span>
                         <span className="font-mono text-ink text-[11px] truncate max-w-[190px]">
@@ -1448,7 +1477,7 @@ export default function LiveTracking() {
                       <div className="flex justify-between">
                         <span>Driver Phone:</span>
                         <span className="font-mono text-ink">
-                          +91 98230 44910
+                          {matchedBooking?.porterDriverPhone || "+91 98230 44910"}
                         </span>
                       </div>
                     </div>
@@ -1501,8 +1530,21 @@ export default function LiveTracking() {
                           {matchedBooking?.address ||
                             "14 Tulsi Nagar, Kondapur, Hyderabad"}
                         </div>
-                        <div className="text-[11px] text-forest font-medium">
-                          Ground Floor Puja Spot Verified
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[11px] text-forest font-medium">
+                            Ground Floor Puja Spot Verified
+                          </span>
+                          {matchedBooking?.address && (
+                            <a
+                              href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(matchedBooking.address)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-0.5 text-[10.5px] text-forest hover:underline font-medium"
+                            >
+                              <span>Maps</span>
+                              <ExternalLink size={10} />
+                            </a>
+                          )}
                         </div>
                       </div>
                     </div>

@@ -248,6 +248,13 @@ type Store = {
       fare: number
       driverName: string
       driverPhone: string
+      driverPlate?: string
+      porterBookingId?: string
+      trackingUrl?: string
+      pickupAddress?: string
+      dropAddress?: string
+      estimatedPickupMin?: number
+      estimatedDropMin?: number
     },
   ) => void
   confirmBovineHandover: (id: string, managerName?: string) => void
@@ -1593,6 +1600,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         fare: number
         driverName: string
         driverPhone: string
+        driverPlate?: string
+        porterBookingId?: string
+        trackingUrl?: string
+        pickupAddress?: string
+        dropAddress?: string
+        estimatedPickupMin?: number
+        estimatedDropMin?: number
       },
     ) => {
       const target = bookings.find((b) => b.id === bookingId)
@@ -1604,10 +1618,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      const porterBookingId = `POR-PUN-${Math.floor(10000 + Math.random() * 90000)}`
+      const cityCode = target?.address?.toLowerCase().includes("hyderabad")
+        ? "HYD"
+        : target?.address?.toLowerCase().includes("pune")
+          ? "PUN"
+          : target?.address?.toLowerCase().includes("bengaluru") ||
+              target?.address?.toLowerCase().includes("bangalore")
+            ? "BLR"
+            : "HYD"
+
+      const porterBookingId =
+        porterData.porterBookingId ||
+        `POR-${cityCode}-${Math.floor(10000 + Math.random() * 90000)}`
+      const trackingUrl =
+        porterData.trackingUrl || `https://porter.in/track?order_id=${porterBookingId}`
+      const driverPlate = porterData.driverPlate || "MH 12 QX 4821"
+
       patch(bookingId, (b) => ({
         ...b,
         driver: `Porter (${porterData.driverName})`,
+        driverPhone: porterData.driverPhone,
+        driverVehiclePlate: driverPlate,
+        driverVehicleModel: porterData.vehicleType,
         driverStage: 1,
         isPorter: true,
         porterBookingId,
@@ -1615,14 +1647,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         porterFare: porterData.fare,
         porterDriverName: porterData.driverName,
         porterDriverPhone: porterData.driverPhone,
+        porterDriverPlate: driverPlate,
+        porterTrackingUrl: trackingUrl,
+        porterPickupAddress: porterData.pickupAddress || b.gosala,
+        porterDropAddress: porterData.dropAddress || b.address,
+        porterEstimatedPickupMin: porterData.estimatedPickupMin || 8,
+        porterEstimatedDropMin: porterData.estimatedDropMin || 25,
         porterStatus: "Dispatched",
       }))
       notify(
-        `🚀 Porter 3rd-Party Transport Dispatched (${porterBookingId}) · ${porterData.driverName} (${porterData.vehicleType})`,
+        `🚀 Porter 3rd-Party Transport Dispatched (${porterBookingId}) · ${porterData.driverName} (${driverPlate})`,
         "ok",
       )
     },
-    [notify],
+    [notify, bookings],
   )
 
   const confirmBovineHandover = useCallback(

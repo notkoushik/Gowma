@@ -63,6 +63,12 @@ export type Booking = {
   porterFare?: number
   porterDriverName?: string
   porterDriverPhone?: string
+  porterDriverPlate?: string
+  porterTrackingUrl?: string
+  porterPickupAddress?: string
+  porterDropAddress?: string
+  porterEstimatedPickupMin?: number
+  porterEstimatedDropMin?: number
   porterStatus?: string
 
   // Dynamic Customer Animal Received & Handover OTP Security
